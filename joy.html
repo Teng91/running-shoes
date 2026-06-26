@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>跑鞋追蹤 Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4" onerror="console.error('Chart.js CDN failed')"></script>
+<style>
+:root {
+  --bg: #0f1117;
+  --card: #1a1d2e;
+  --border: #2a2d3e;
+  --text: #e4e4e7;
+  --text-dim: #8b8d9a;
+  --accent: #6366f1;
+  --accent-light: #818cf8;
+  --green: #22c55e;
+  --yellow: #eab308;
+  --orange: #f97316;
+  --red: #ef4444;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+.container { max-width: 1400px; margin: 0 auto; padding: 24px; }
+h1 { font-size: 28px; font-weight: 700; margin-bottom: 4px; }
+.subtitle { color: var(--text-dim); font-size: 14px; margin-bottom: 24px; }
+
+/* Summary Cards */
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 28px; }
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+.card-label { font-size: 12px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+.card-value { font-size: 28px; font-weight: 700; }
+.card-sub { font-size: 12px; color: var(--text-dim); margin-top: 4px; }
+
+/* Charts */
+.charts { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 28px; }
+.chart-box { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+.chart-box h3 { font-size: 14px; color: var(--text-dim); margin-bottom: 12px; font-weight: 500; }
+.chart-box canvas { max-height: 240px; }
+
+/* Table */
+.table-section { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 28px; }
+.table-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+.table-header h2 { font-size: 16px; font-weight: 600; }
+.btn { padding: 8px 16px; border: none; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 500; transition: all 0.2s; }
+.btn-primary { background: var(--accent); color: white; }
+.btn-primary:hover { background: var(--accent-light); }
+.btn-sm { padding: 4px 10px; font-size: 12px; }
+.btn-edit { background: #334155; color: var(--text); }
+.btn-edit:hover { background: #475569; }
+.btn-delete { background: #7f1d1d; color: #fca5a5; }
+.btn-delete:hover { background: #991b1b; }
+
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { text-align: left; padding: 10px 8px; color: var(--text-dim); font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+td { padding: 10px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+tr:hover td { background: rgba(99,102,241,0.05); }
+.brand { font-weight: 600; color: var(--accent-light); }
+
+/* Editable cell */
+.editable { cursor: pointer; border-radius: 4px; padding: 2px 4px; transition: background 0.2s; }
+.editable:hover { background: rgba(99,102,241,0.15); }
+
+/* Modal */
+.modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 100; align-items: center; justify-content: center; }
+.modal-overlay.active { display: flex; }
+.modal { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 28px; width: 480px; max-height: 90vh; overflow-y: auto; }
+.modal h2 { font-size: 18px; margin-bottom: 20px; }
+.form-group { margin-bottom: 14px; }
+.form-group label { display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 4px; }
+.form-group input, .form-group select { width: 100%; padding: 8px 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px; }
+.form-group input:focus { outline: none; border-color: var(--accent); }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+.btn-cancel { background: #334155; color: var(--text); }
+
+/* Inline edit */
+.inline-input { width: 70px; padding: 2px 6px; background: var(--bg); border: 1px solid var(--accent); border-radius: 4px; color: var(--text); font-size: 13px; text-align: right; }
+
+/* Color dots for brands */
+.brand-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+
+@media (max-width: 900px) {
+  .charts { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>跑鞋追蹤 Dashboard</h1>
+  <p class="subtitle" id="today-label"></p>
+
+  <div class="cards" id="summary-cards"></div>
+  <div class="charts">
+    <div class="chart-box"><h3>生命進度</h3><canvas id="chart-progress"></canvas></div>
+    <div class="chart-box"><h3>每 km 成本比較</h3><canvas id="chart-cost"></canvas></div>
+    <div class="chart-box"><h3>退役時間軸</h3><canvas id="chart-retire"></canvas></div>
+    <div class="chart-box"><h3>月跑量佔比</h3><canvas id="chart-value"></canvas></div>
+  </div>
+
+  <div class="table-section">
+    <div class="table-header">
+      <h2>現役跑鞋</h2>
+      <button class="btn btn-primary" onclick="openAddModal()">+ 新增跑鞋</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>品牌</th><th>鞋款</th><th>購買日期</th>
+            <th>跑鞋里程</th><th>每km成本</th><th>預期里程</th><th>預期成本</th><th>生命進度</th>
+            <th>月跑量</th><th>預估退役</th>
+            <th>尺寸</th><th>買價</th><th>原價</th><th>折數</th><th></th>
+          </tr>
+        </thead>
+        <tbody id="shoe-table"></tbody>
+      </table>
+    </div>
+  </div>
+  <div class="table-section">
+    <div class="table-header">
+      <h2>退役跑鞋</h2>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>品牌</th><th>鞋款</th><th>購買日期</th>
+            <th>跑鞋里程</th><th>每km成本</th><th>預期里程</th><th>預期成本</th><th>生命進度</th>
+            <th>月跑量</th><th>預估退役</th>
+            <th>尺寸</th><th>買價</th><th>原價</th><th>折數</th><th></th>
+          </tr>
+        </thead>
+        <tbody id="retired-table"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Add/Edit Modal -->
+<div class="modal-overlay" id="modal">
+  <div class="modal">
+    <h2 id="modal-title">新增跑鞋</h2>
+    <div class="form-row">
+      <div class="form-group"><label>品牌</label><input id="f-brand" placeholder="Mizuno"></div>
+      <div class="form-group"><label>鞋款</label><input id="f-model" placeholder="Wave Sky 7"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>購買日期</label><input id="f-date" type="date"></div>
+      <div class="form-group"><label>尺寸</label><input id="f-size" placeholder="us13/31cm"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>買價</label><input id="f-price" type="number" placeholder="2390"></div>
+      <div class="form-group"><label>原價</label><input id="f-orig" type="number" placeholder="4780"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>跑鞋里程 (km)</label><input id="f-mileage" type="number" placeholder="0"></div>
+      <div class="form-group"><label>預期里程 (km)</label><input id="f-expected" type="number" placeholder="800"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>月跑量 (km)</label><input id="f-monthly" type="number" placeholder="60"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-sm btn-delete" id="btn-delete" style="display:none" onclick="deleteFromModal()">刪除</button>
+      <button class="btn btn-sm btn-edit" id="btn-move" style="display:none" onclick="moveShoe()">移動</button>
+      <span style="flex:1"></span>
+      <button class="btn btn-cancel" onclick="closeModal()">取消</button>
+      <button class="btn btn-primary" onclick="saveShoe()">儲存</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ====== Data Layer ======
+const STORAGE_KEY = 'shoes-dashboard';
+const STORAGE_VERSION = 'v2';
+const BRAND_COLORS = {
+  'Mizuno':        ['#38BDF8', '#7DD3FC', '#0EA5E9'],
+  'New Balance':   ['#F87171', '#FCA5A5', '#EF4444'],
+  'Adidas':        ['#FACC15', '#FDE047', '#EAB308'],
+  'PUMA':          ['#4ADE80', '#86EFAC', '#22C55E'],
+  'Nike':          ['#FB923C', '#FDBA74', '#F97316'],
+  'Asics':         ['#A78BFA', '#C4B5FD', '#8B5CF6'],
+  'Saucony':       ['#F472B6', '#F9A8D4', '#EC4899'],
+  'Hoka':          ['#2DD4BF', '#5EEAD4', '#14B8A6'],
+  'FILA':          ['#FB7185', '#FDA4AF', '#F43F5E'],
+  'On':            ['#C084FC', '#D8B4FE', '#A855F7'],
+  'Brooks':        ['#34D399', '#6EE7B7', '#10B981'],
+  'Skechers':      ['#FBBF24', '#FDE68A', '#F59E0B'],
+  'Under Armour':  ['#94A3B8', '#CBD5E1', '#64748B'],
+  'Salomon':       ['#F97316', '#FDBA74', '#EA580C'],
+};
+
+const byDate = (a, b) => new Date(a.date) - new Date(b.date);
+
+function getDefaultShoes() {
+  return [
+    { brand:'Mizuno', model:'Wave Sky 7', date:'2024-09-15', size:'us13/31cm', price:2390, origPrice:4780, mileage:540, expectedMileage:800, monthlyKm:60 },
+    { brand:'Mizuno', model:'Wave Rider 29', date:'2025-12-12', size:'us12/30cm', price:2505, origPrice:3980, mileage:293, expectedMileage:800, monthlyKm:60 },
+    { brand:'Mizuno', model:'Wave Sky 9', date:'2025-12-30', size:'us13/31cm', price:3080, origPrice:4980, mileage:125, expectedMileage:800, monthlyKm:60 },
+    { brand:'New Balance', model:'Rebel v5', date:'2026-02-20', size:'us11/29cm', price:2300, origPrice:4280, mileage:102, expectedMileage:500, monthlyKm:30 },
+    { brand:'Adidas', model:'Boston 12', date:'2026-04-21', size:'us11.5/29.5cm', price:1680, origPrice:4290, mileage:61, expectedMileage:800, monthlyKm:30 },
+    { brand:'PUMA', model:'Nitro Elite 3', date:'2026-06-25', size:'us11.5/29.5cm', price:3310, origPrice:5980, mileage:0, expectedMileage:500, monthlyKm:20 },
+  ];
+}
+
+function getDefaultRetired() {
+  return [
+    { brand:'Asics', model:'Gel-Excite 8', date:'2024-01-05', size:'us11/29cm', price:1780, origPrice:2280, mileage:625, expectedMileage:600, monthlyKm:0 },
+    { brand:'FILA', model:'Bon Voyage', date:'2025-08-10', size:'us11/29cm', price:2200, origPrice:2880, mileage:418, expectedMileage:400, monthlyKm:0 },
+  ];
+}
+
+function loadRetired() {
+  const raw = localStorage.getItem(STORAGE_KEY + '-retired');
+  if (!raw) return getDefaultRetired();
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed) || parsed.length === 0) return getDefaultRetired();
+    return parsed;
+  } catch { return getDefaultRetired(); }
+}
+
+function saveRetiredToStorage(data) {
+  localStorage.setItem(STORAGE_KEY + '-retired', JSON.stringify(data));
+}
+
+let retiredShoes = loadRetired();
+
+function loadShoes() {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (!raw) return getDefaultShoes();
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed) || parsed.length === 0) return getDefaultShoes();
+    return parsed.map(s => ({
+      brand: s.brand || '',
+      model: s.model || '',
+      date: s.date || '',
+      size: s.size || '',
+      price: Number.isFinite(Number(s.price)) ? Number(s.price) : 0,
+      origPrice: Number.isFinite(Number(s.origPrice)) ? Number(s.origPrice) : 0,
+      mileage: Number.isFinite(Number(s.mileage)) ? Number(s.mileage) : 0,
+      expectedMileage: Number.isFinite(Number(s.expectedMileage)) ? Number(s.expectedMileage) : 800,
+      monthlyKm: Number.isFinite(Number(s.monthlyKm)) ? Number(s.monthlyKm) : 60,
+    }));
+  } catch { return getDefaultShoes(); }
+}
+
+function saveShoesToStorage(arr) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(arr));
+}
+
+let shoes = loadShoes();
+
+// ====== Calculations ======
+function calc(shoe) {
+  const { price, origPrice, mileage, expectedMileage, monthlyKm } = shoe;
+  const discount = origPrice > 0 ? price / origPrice : 0;
+  const costPerKm = mileage > 0 ? price / mileage : null;
+  const expectedCost = expectedMileage > 0 ? price / expectedMileage : 0;
+  const lifeProgress = expectedMileage > 0 ? mileage / expectedMileage : 0;
+  const remainingMileage = Math.max(0, expectedMileage - mileage);
+  const remainingMonths = monthlyKm > 0 ? remainingMileage / monthlyKm : null;
+  const today = new Date();
+  let retireDate = null;
+  if (remainingMonths !== null) {
+    const remainDays = remainingMonths * 30;
+    retireDate = new Date(today.getTime() + remainDays * 86400000);
+  }
+  return { discount, costPerKm, expectedCost, lifeProgress, remainingMileage, remainingMonths, retireDate };
+}
+
+// ====== Formatting ======
+function fmtPct(v) { return (v * 100).toFixed(2) + '%'; }
+function fmtMoney(v) { return '$' + Math.round(v).toLocaleString(); }
+function fmtKm(v) { return v + ' km'; }
+function fmtDate(d) { if (!d) return '-'; return d.toISOString().slice(0, 10).replace(/-/g, '/'); }
+function fmtCostPerKm(v) { return v !== null ? '$' + v.toFixed(2) : '-'; }
+function fmtMonths(v) { return v !== null ? v.toFixed(1) : '-'; }
+
+function progressColor(pct) {
+  // 5-tier: deep-green -> green -> yellow -> orange -> red
+  if (pct < 0.2) return '#16a34a'; // deep green
+  if (pct < 0.4) return '#4ade80'; // green
+  if (pct < 0.6) return '#eab308'; // yellow
+  if (pct < 0.8) return '#f97316'; // orange
+  return '#ef4444';                // red
+}
+
+function brandColor(brand, seq) {
+  const palette = BRAND_COLORS[brand];
+  if (!palette) return '#6366f1';
+  return palette[seq % palette.length] || palette[0];
+}
+
+// ====== Render ======
+function render() {
+  const now = new Date();
+  const todayStr = `${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}/${String(now.getDate()).padStart(2,'0')}`;
+  document.getElementById('today-label').textContent = '資料日期：' + todayStr;
+
+  // 只在渲染時排序，不動持久層
+  shoes.sort(byDate);
+  retiredShoes.sort(byDate);
+
+  renderCards();
+  renderTable();
+  renderRetiredTable();
+  if (typeof Chart !== 'undefined') {
+    renderCharts();
+  }
+}
+
+function renderCards() {
+  const activeShoes = shoes;
+  const allShoes = [...activeShoes, ...retiredShoes];
+
+  let totalMileage = 0, totalPrice = 0;
+  allShoes.forEach(s => {
+    totalMileage += s.mileage;
+    totalPrice += s.price;
+  });
+  const avgCostPerKm = totalMileage > 0 ? totalPrice / totalMileage : 0;
+
+  const cards = [
+    { label: '現役跑鞋', value: activeShoes.length + '/' + allShoes.length, sub: '雙' },
+    { label: '總里程', value: totalMileage.toLocaleString(), sub: 'km' },
+    { label: '總花費', value: '$' + totalPrice.toLocaleString(), sub: '花費合計' },
+    { label: '平均每km成本', value: '$' + avgCostPerKm.toFixed(2), sub: '總花費 / 總里程' },
+  ];
+  document.getElementById('summary-cards').innerHTML = cards.map(c =>
+    `<div class="card"><div class="card-label">${c.label}</div><div class="card-value">${c.value}</div><div class="card-sub">${c.sub}</div></div>`
+  ).join('');
+}
+
+function renderTable() {
+  const tbody = document.getElementById('shoe-table');
+  let brandSeq = {};
+  tbody.innerHTML = shoes.map((s, i) => {
+    const c = calc(s);
+    const pc = progressColor(c.lifeProgress);
+    brandSeq[s.brand] = (brandSeq[s.brand] || 0);
+    const bc = brandColor(s.brand, brandSeq[s.brand]);
+    brandSeq[s.brand]++;
+    return `<tr>
+      <td><span class="brand-dot" style="background:${bc}"></span><span class="brand">${s.brand}</span></td>
+      <td>${s.model}</td>
+      <td>${s.date.replace(/-/g,'/')}</td>
+      <td class="editable" ondblclick="inlineEdit(${i},'mileage',this)">${s.mileage}</td>
+      <td>${fmtCostPerKm(c.costPerKm)}</td>
+      <td class="editable" ondblclick="inlineEdit(${i},'expectedMileage',this)">${s.expectedMileage}</td>
+      <td>${fmtCostPerKm(c.expectedCost)}</td>
+      <td style="color:${pc}">${fmtPct(c.lifeProgress)}</td>
+      <td class="editable" ondblclick="inlineEdit(${i},'monthlyKm',this)">${s.monthlyKm}</td>
+      <td>${fmtDate(c.retireDate)}</td>
+      <td>${s.size}</td>
+      <td>${fmtMoney(s.price)}</td>
+      <td>${fmtMoney(s.origPrice)}</td>
+      <td>${fmtPct(c.discount)}</td>
+      <td>
+        <button class="btn btn-sm btn-edit" onclick="openEditModal(${i})">編輯</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function renderRetiredTable() {
+  const tbody = document.getElementById('retired-table');
+  let brandSeq = {};
+  tbody.innerHTML = retiredShoes.map((s, i) => {
+    const c = calc(s);
+    const pc = progressColor(c.lifeProgress);
+    brandSeq[s.brand] = (brandSeq[s.brand] || 0);
+    const bc = brandColor(s.brand, brandSeq[s.brand]);
+    brandSeq[s.brand]++;
+    return `<tr>
+      <td><span class="brand-dot" style="background:${bc}"></span><span class="brand">${s.brand}</span></td>
+      <td>${s.model}</td>
+      <td>${s.date.replace(/-/g,'/')}</td>
+      <td class="editable" ondblclick="inlineEditRetired(${i},'mileage',this)">${s.mileage}</td>
+      <td>${fmtCostPerKm(c.costPerKm)}</td>
+      <td class="editable" ondblclick="inlineEditRetired(${i},'expectedMileage',this)">${s.expectedMileage}</td>
+      <td>${fmtCostPerKm(c.expectedCost)}</td>
+      <td style="color:${pc}">${fmtPct(c.lifeProgress)}</td>
+      <td>-</td>
+      <td>已退役</td>
+      <td>${s.size}</td>
+      <td>${fmtMoney(s.price)}</td>
+      <td>${fmtMoney(s.origPrice)}</td>
+      <td>${fmtPct(c.discount)}</td>
+      <td><button class="btn btn-sm btn-edit" onclick="openRetiredEditModal(${i})">編輯</button></td>
+    </tr>`;
+  }).join('');
+}
+
+// ====== Charts ======
+let chartInstances = {};
+
+function renderCharts() {
+  // Destroy old charts
+  Object.values(chartInstances).forEach(c => c.destroy());
+  chartInstances = {};
+
+  const labels = shoes.map(s => s.brand + ' ' + s.model);
+  let brandSeq = {};
+  const colors = shoes.map(s => {
+    brandSeq[s.brand] = (brandSeq[s.brand] || 0);
+    const c = brandColor(s.brand, brandSeq[s.brand]);
+    brandSeq[s.brand]++;
+    return c;
+  });
+  const calcs = shoes.map(s => calc(s));
+
+  // 1. Life Progress (stacked horizontal bar: used km + remaining km, x-axis shows km)
+  chartInstances.progress = new Chart(document.getElementById('chart-progress'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: '已跑里程',
+        data: shoes.map(s => s.mileage),
+        backgroundColor: calcs.map(c => progressColor(c.lifeProgress)),
+        borderRadius: 4,
+      }, {
+        label: '剩餘里程',
+        data: calcs.map(c => c.remainingMileage),
+        backgroundColor: '#22c55e44',
+        borderColor: '#22c55e',
+        borderWidth: 1,
+        borderRadius: 4,
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      plugins: {
+        legend: { labels: { color: '#8b8d9a', font: { size: 11 } } },
+        tooltip: {
+          callbacks: {
+            label: ctx => {
+              const shoe = shoes[ctx.dataIndex];
+              const c = calcs[ctx.dataIndex];
+              if (ctx.datasetIndex === 0) {
+                return `已跑 ${shoe.mileage} km (${(c.lifeProgress * 100).toFixed(1)}%)`;
+              }
+              return `剩餘 ${c.remainingMileage} km`;
+            }
+          }
+        }
+      },
+      scales: {
+        x: { stacked: true, grid: { color: '#2a2d3e' }, ticks: { color: '#8b8d9a', callback: v => v + ' km' } },
+        y: { stacked: true, grid: { display: false }, ticks: { color: '#8b8d9a', font: { size: 11 } } }
+      }
+    }
+  });
+
+  // 2. Cost per km (bar)
+  chartInstances.cost = new Chart(document.getElementById('chart-cost'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: '每km成本',
+        data: calcs.map(c => c.costPerKm ?? 0),
+        backgroundColor: colors,
+        borderRadius: 4,
+      }, {
+        label: '預期成本',
+        data: calcs.map(c => c.expectedCost),
+        backgroundColor: colors.map(c => c + '44'),
+        borderColor: colors,
+        borderWidth: 1,
+        borderRadius: 4,
+      }]
+    },
+    options: {
+      plugins: { legend: { labels: { color: '#8b8d9a', font: { size: 11 } } }, tooltip: { callbacks: { label: ctx => '$' + ctx.raw.toFixed(2) + '/km' } } },
+      scales: {
+        x: { grid: { display: false }, ticks: { color: '#8b8d9a', font: { size: 10 } } },
+        y: { grid: { color: '#2a2d3e' }, ticks: { color: '#8b8d9a', callback: v => '$' + v } }
+      }
+    }
+  });
+
+  // 3. Retirement Timeline (scatter with date axis)
+  const retireData = calcs.map((c, i) => ({
+    x: c.retireDate ? c.retireDate.getTime() : null,
+    y: i,
+    label: labels[i]
+  })).filter(d => d.x !== null);
+
+  chartInstances.retire = new Chart(document.getElementById('chart-retire'), {
+    type: 'scatter',
+    data: {
+      datasets: [{
+        data: retireData.map(d => ({ x: d.x, y: d.y })),
+        backgroundColor: retireData.map((d, i) => {
+          const origIdx = calcs.findIndex((c, ci) => ci === shoes.findIndex(s => s.brand + ' ' + s.model === d.label));
+          return colors[origIdx >= 0 ? origIdx : i] || '#6366f1';
+        }),
+        pointRadius: 10,
+        pointHoverRadius: 14,
+      }]
+    },
+    options: {
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => {
+              const d = new Date(ctx.raw.x);
+              return retireData[ctx.dataIndex].label + ': ' + fmtDate(d);
+            }
+          }
+        }
+      },
+      scales: {
+        x: {
+          type: 'linear',
+          grid: { color: '#2a2d3e' },
+          ticks: {
+            color: '#8b8d9a',
+            callback: v => {
+              const d = new Date(v);
+              return d.getFullYear() + '/' + (d.getMonth()+1);
+            }
+          }
+        },
+        y: {
+          min: -1,
+          max: shoes.length,
+          reverse: true,
+          grid: { display: false },
+          ticks: {
+            color: '#8b8d9a',
+            callback: v => {
+              if (v >= 0 && v < labels.length) return labels[v];
+              return '';
+            },
+            font: { size: 10 }
+          }
+        }
+      }
+    }
+  });
+
+  // 4. Monthly Km (doughnut)
+  const totalMonthlyKm = shoes.reduce((sum, s) => sum + s.monthlyKm, 0);
+  chartInstances.value = new Chart(document.getElementById('chart-value'), {
+    type: 'doughnut',
+    data: {
+      labels,
+      datasets: [{
+        data: shoes.map(s => s.monthlyKm),
+        backgroundColor: colors,
+        borderWidth: 0,
+      }]
+    },
+    options: {
+      cutout: '60%',
+      plugins: {
+        legend: { position: 'right', labels: { color: '#8b8d9a', font: { size: 11 }, padding: 12 } },
+        tooltip: { callbacks: { label: ctx => ctx.raw + ' km/月' } }
+      }
+    },
+    plugins: [{
+      id: 'centerText',
+      afterDraw(chart) {
+        const { ctx, chartArea: { top, bottom, left, right } } = chart;
+        const cx = (left + right) / 2;
+        const cy = (top + bottom) / 2;
+        ctx.save();
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        const h1 = 13, gap = 4, h2 = 24;
+        const y0 = cy - (h1 + gap + h2) / 2;
+        ctx.fillStyle = '#8b8d9a';
+        ctx.font = '13px "Segoe UI", system-ui, sans-serif';
+        ctx.fillText('總月跑量', cx, y0);
+        ctx.fillStyle = '#e4e4e7';
+        ctx.font = 'bold 24px "Segoe UI", system-ui, sans-serif';
+        ctx.fillText(totalMonthlyKm + ' km', cx, y0 + h1 + gap);
+        ctx.restore();
+      }
+    }]
+  });
+}
+
+// ====== Inline Edit (double-click) ======
+function inlineEdit(idx, field, el) {
+  const current = shoes[idx][field];
+  const input = document.createElement('input');
+  input.type = 'number';
+  input.className = 'inline-input';
+  input.value = current;
+  input.focus();
+  const commit = () => {
+    const val = parseFloat(input.value);
+    if (!isNaN(val) && val >= 0) {
+      shoes[idx][field] = val;
+      saveShoesToStorage(shoes);
+    }
+    render();
+  };
+  input.addEventListener('blur', commit);
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') render(); });
+  el.innerHTML = '';
+  el.appendChild(input);
+  input.focus();
+}
+
+function inlineEditRetired(idx, field, el) {
+  const current = retiredShoes[idx][field];
+  const input = document.createElement('input');
+  input.type = 'number';
+  input.className = 'inline-input';
+  input.value = current;
+  input.focus();
+  const commit = () => {
+    const val = parseFloat(input.value);
+    if (!isNaN(val) && val >= 0) {
+      retiredShoes[idx][field] = val;
+      saveRetiredToStorage(retiredShoes);
+    }
+    render();
+  };
+  input.addEventListener('blur', commit);
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') render(); });
+  el.innerHTML = '';
+  el.appendChild(input);
+  input.focus();
+}
+
+// ====== Modal ======
+let editingIdx = -1;
+let editingRetiredIdx = -1;
+let isRetiredEdit = false;
+
+function openRetiredEditModal(idx) {
+  isRetiredEdit = true;
+  editingRetiredIdx = idx;
+  const s = retiredShoes[idx];
+  document.getElementById('modal-title').textContent = '編輯退役跑鞋';
+  document.getElementById('btn-delete').style.display = 'inline-block';
+  document.getElementById('btn-move').style.display = 'inline-block';
+  document.getElementById('btn-move').textContent = '移至現役';
+  document.getElementById('f-brand').value = s.brand;
+  document.getElementById('f-model').value = s.model;
+  document.getElementById('f-date').value = s.date;
+  document.getElementById('f-size').value = s.size;
+  document.getElementById('f-price').value = s.price;
+  document.getElementById('f-orig').value = s.origPrice;
+  document.getElementById('f-mileage').value = s.mileage;
+  document.getElementById('f-expected').value = s.expectedMileage;
+  document.getElementById('f-monthly').value = 0;
+  document.getElementById('f-monthly').parentElement.style.display = 'none';
+  document.getElementById('modal').classList.add('active');
+}
+
+function openAddModal() {
+  isRetiredEdit = false;
+  editingRetiredIdx = -1;
+  editingIdx = -1;
+  document.getElementById('modal-title').textContent = '新增跑鞋';
+  document.getElementById('btn-delete').style.display = 'none';
+  document.getElementById('btn-move').style.display = 'none';
+  ['f-brand','f-model','f-size'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('f-date').value = new Date().toISOString().slice(0,10);
+  ['f-price','f-orig','f-mileage','f-expected','f-monthly'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('f-expected').value = 800;
+  document.getElementById('f-monthly').value = 60;
+  document.getElementById('f-monthly').parentElement.style.display = '';
+  document.getElementById('modal').classList.add('active');
+}
+
+function openEditModal(idx) {
+  isRetiredEdit = false;
+  editingRetiredIdx = -1;
+  editingIdx = idx;
+  const s = shoes[idx];
+  document.getElementById('modal-title').textContent = '編輯跑鞋';
+  document.getElementById('btn-delete').style.display = 'inline-block';
+  document.getElementById('btn-move').style.display = 'inline-block';
+  document.getElementById('btn-move').textContent = '移至退役';
+  document.getElementById('f-brand').value = s.brand;
+  document.getElementById('f-model').value = s.model;
+  document.getElementById('f-date').value = s.date;
+  document.getElementById('f-size').value = s.size;
+  document.getElementById('f-price').value = s.price;
+  document.getElementById('f-orig').value = s.origPrice;
+  document.getElementById('f-mileage').value = s.mileage;
+  document.getElementById('f-expected').value = s.expectedMileage;
+  document.getElementById('f-monthly').value = s.monthlyKm;
+  document.getElementById('f-monthly').parentElement.style.display = '';
+  document.getElementById('modal').classList.add('active');
+}
+
+function closeModal() {
+  document.getElementById('modal').classList.remove('active');
+}
+
+function saveShoe() {
+  const brand = document.getElementById('f-brand').value.trim();
+  const model = document.getElementById('f-model').value.trim();
+  const date = document.getElementById('f-date').value;
+  const size = document.getElementById('f-size').value.trim();
+  const price = parseFloat(document.getElementById('f-price').value);
+  const origPrice = parseFloat(document.getElementById('f-orig').value);
+  const rawMileage = parseFloat(document.getElementById('f-mileage').value);
+  const rawExpected = parseFloat(document.getElementById('f-expected').value);
+  const monthlyInput = document.getElementById('f-monthly').parentElement.style.display;
+  const rawMonthly = monthlyInput === 'none' ? 0 : parseFloat(document.getElementById('f-monthly').value);
+  const mileage = Number.isFinite(rawMileage) ? rawMileage : 0;
+  const expectedMileage = Number.isFinite(rawExpected) ? rawExpected : 800;
+  const monthlyKm = Number.isFinite(rawMonthly) ? rawMonthly : 60;
+
+  if (!brand || !model || !date || isNaN(price) || isNaN(origPrice)) {
+    alert('請填寫品牌、鞋款、日期、買價、原價');
+    return;
+  }
+
+  const shoe = { brand, model, date, size, price, origPrice, mileage, expectedMileage, monthlyKm };
+
+  if (isRetiredEdit) {
+    if (editingRetiredIdx >= 0) {
+      retiredShoes[editingRetiredIdx] = shoe;
+      saveRetiredToStorage(retiredShoes);
+    }
+  } else {
+    if (editingIdx >= 0) {
+      shoes[editingIdx] = shoe;
+    } else {
+      shoes.push(shoe);
+    }
+    saveShoesToStorage(shoes);
+  }
+  closeModal();
+  render();
+}
+
+function moveShoe() {
+  if (isRetiredEdit) {
+    if (editingRetiredIdx < 0) return;
+    const s = retiredShoes[editingRetiredIdx];
+    if (!confirm(`確定要把 ${s.brand} ${s.model} 移回現役？`)) return;
+    s.monthlyKm = 60;
+    shoes.push(s);
+    retiredShoes.splice(editingRetiredIdx, 1);
+    saveShoesToStorage(shoes);
+    saveRetiredToStorage(retiredShoes);
+  } else {
+    if (editingIdx < 0) return;
+    const s = shoes[editingIdx];
+    if (!confirm(`確定要把 ${s.brand} ${s.model} 移至退役？`)) return;
+    s.monthlyKm = 0;
+    retiredShoes.push(s);
+    shoes.splice(editingIdx, 1);
+    saveShoesToStorage(shoes);
+    saveRetiredToStorage(retiredShoes);
+  }
+  closeModal();
+  render();
+}
+
+function deleteFromModal() {
+  if (isRetiredEdit) {
+    if (editingRetiredIdx < 0) return;
+    const s = retiredShoes[editingRetiredIdx];
+    if (confirm(`確定要刪除 ${s.brand} ${s.model}？此動作無法復原。`)) {
+      retiredShoes.splice(editingRetiredIdx, 1);
+      saveRetiredToStorage(retiredShoes);
+      closeModal();
+      render();
+    }
+  } else {
+    if (editingIdx < 0) return;
+    const s = shoes[editingIdx];
+    if (confirm(`確定要刪除 ${s.brand} ${s.model}？此動作無法復原。`)) {
+      shoes.splice(editingIdx, 1);
+      saveShoesToStorage(shoes);
+      closeModal();
+      render();
+    }
+  }
+}
+
+// ====== Init ======
+document.getElementById('modal').addEventListener('click', e => {
+  if (e.target.id === 'modal') closeModal();
+});
+
+render();
+</script>
+</body>
+</html>
