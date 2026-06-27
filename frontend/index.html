@@ -172,9 +172,10 @@ tr:hover td { background: rgba(99,102,241,0.05); }
 </div>
 
 <script>
-// ====== Data Layer ======
-const STORAGE_KEY = 'shoes-dashboard';
-const STORAGE_VERSION = 'v2';
+// ====== API Base ======
+const API_BASE = window.location.origin + '/api';
+
+// ====== Brand Colors ======
 const BRAND_COLORS = {
   'Mizuno':        ['#38BDF8', '#7DD3FC', '#0EA5E9'],
   'New Balance':   ['#F87171', '#FCA5A5', '#EF4444'],
@@ -194,75 +195,68 @@ const BRAND_COLORS = {
 
 const byDate = (a, b) => new Date(a.date) - new Date(b.date);
 
-function getDefaultShoes() {
-  return [
-    { brand:'Mizuno', model:'Wave Sky 7', date:'2024-09-15', size:'us13/31cm', price:2390, origPrice:4780, mileage:540, expectedMileage:800, monthlyKm:60 },
-    { brand:'Mizuno', model:'Wave Rider 29', date:'2025-12-12', size:'us12/30cm', price:2505, origPrice:3980, mileage:293, expectedMileage:800, monthlyKm:60 },
-    { brand:'Mizuno', model:'Wave Sky 9', date:'2025-12-30', size:'us13/31cm', price:3080, origPrice:4980, mileage:125, expectedMileage:800, monthlyKm:60 },
-    { brand:'New Balance', model:'Rebel v5', date:'2026-02-20', size:'us11/29cm', price:2300, origPrice:4280, mileage:102, expectedMileage:500, monthlyKm:30 },
-    { brand:'Adidas', model:'Boston 12', date:'2026-04-21', size:'us11.5/29.5cm', price:1680, origPrice:4290, mileage:61, expectedMileage:800, monthlyKm:30 },
-    { brand:'PUMA', model:'Nitro Elite 3', date:'2026-06-25', size:'us11.5/29.5cm', price:3310, origPrice:5980, mileage:0, expectedMileage:500, monthlyKm:20 },
-  ];
+// ====== API Calls ======
+async function apiGet(url) {
+  const res = await fetch(API_BASE + url);
+  if (!res.ok) throw new Error('GET ' + url + ' failed: ' + res.status);
+  return res.json();
 }
 
-function getDefaultRetired() {
-  return [
-    { brand:'Asics', model:'Gel-Excite 8', date:'2024-01-05', size:'us11/29cm', price:1780, origPrice:2280, mileage:625, expectedMileage:600, monthlyKm:0 },
-    { brand:'FILA', model:'Bon Voyage', date:'2025-08-10', size:'us11/29cm', price:2200, origPrice:2880, mileage:418, expectedMileage:400, monthlyKm:0 },
-  ];
+async function apiPost(url, body) {
+  const res = await fetch(API_BASE + url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error('POST ' + url + ' failed: ' + res.status);
+  return res.json();
 }
 
-function loadRetired() {
-  const raw = localStorage.getItem(STORAGE_KEY + '-retired');
-  if (!raw) return getDefaultRetired();
+async function apiPut(url, body) {
+  const res = await fetch(API_BASE + url, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error('PUT ' + url + ' failed: ' + res.status);
+  return res.json();
+}
+
+async function apiDelete(url) {
+  const res = await fetch(API_BASE + url, { method: 'DELETE' });
+  if (!res.ok) throw new Error('DELETE ' + url + ' failed: ' + res.status);
+  return res.json();
+}
+
+// ====== Data State ======
+let shoes = [];
+let retiredShoes = [];
+
+async function loadData() {
   try {
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed) || parsed.length === 0) return getDefaultRetired();
-    return parsed;
-  } catch { return getDefaultRetired(); }
+    const [active, retired] = await Promise.all([
+      apiGet('/shoes/active'),
+      apiGet('/shoes/retired'),
+    ]);
+    shoes = active;
+    retiredShoes = retired;
+  } catch (e) {
+    console.error('載入資料失敗:', e);
+    shoes = [];
+    retiredShoes = [];
+  }
+  render();
 }
-
-function saveRetiredToStorage(data) {
-  localStorage.setItem(STORAGE_KEY + '-retired', JSON.stringify(data));
-}
-
-let retiredShoes = loadRetired();
-
-function loadShoes() {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (!raw) return getDefaultShoes();
-  try {
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed) || parsed.length === 0) return getDefaultShoes();
-    return parsed.map(s => ({
-      brand: s.brand || '',
-      model: s.model || '',
-      date: s.date || '',
-      size: s.size || '',
-      price: Number.isFinite(Number(s.price)) ? Number(s.price) : 0,
-      origPrice: Number.isFinite(Number(s.origPrice)) ? Number(s.origPrice) : 0,
-      mileage: Number.isFinite(Number(s.mileage)) ? Number(s.mileage) : 0,
-      expectedMileage: Number.isFinite(Number(s.expectedMileage)) ? Number(s.expectedMileage) : 800,
-      monthlyKm: Number.isFinite(Number(s.monthlyKm)) ? Number(s.monthlyKm) : 60,
-    }));
-  } catch { return getDefaultShoes(); }
-}
-
-function saveShoesToStorage(arr) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(arr));
-}
-
-let shoes = loadShoes();
 
 // ====== Calculations ======
 function calc(shoe) {
-  const { price, origPrice, mileage, expectedMileage, monthlyKm } = shoe;
-  const discount = origPrice > 0 ? price / origPrice : 0;
+  const { price, orig_price, mileage, expected_mileage, monthly_km } = shoe;
+  const discount = orig_price > 0 ? price / orig_price : 0;
   const costPerKm = mileage > 0 ? price / mileage : null;
-  const expectedCost = expectedMileage > 0 ? price / expectedMileage : 0;
-  const lifeProgress = expectedMileage > 0 ? mileage / expectedMileage : 0;
-  const remainingMileage = Math.max(0, expectedMileage - mileage);
-  const remainingMonths = monthlyKm > 0 ? remainingMileage / monthlyKm : null;
+  const expectedCost = expected_mileage > 0 ? price / expected_mileage : 0;
+  const lifeProgress = expected_mileage > 0 ? mileage / expected_mileage : 0;
+  const remainingMileage = Math.max(0, expected_mileage - mileage);
+  const remainingMonths = monthly_km > 0 ? remainingMileage / monthly_km : null;
   const today = new Date();
   let retireDate = null;
   if (remainingMonths !== null) {
@@ -281,12 +275,11 @@ function fmtCostPerKm(v) { return v !== null ? '$' + v.toFixed(2) : '-'; }
 function fmtMonths(v) { return v !== null ? v.toFixed(1) : '-'; }
 
 function progressColor(pct) {
-  // 5-tier: deep-green -> green -> yellow -> orange -> red
-  if (pct < 0.2) return '#16a34a'; // deep green
-  if (pct < 0.4) return '#4ade80'; // green
-  if (pct < 0.6) return '#eab308'; // yellow
-  if (pct < 0.8) return '#f97316'; // orange
-  return '#ef4444';                // red
+  if (pct < 0.2) return '#16a34a';
+  if (pct < 0.4) return '#4ade80';
+  if (pct < 0.6) return '#eab308';
+  if (pct < 0.8) return '#f97316';
+  return '#ef4444';
 }
 
 function brandColor(brand, seq) {
@@ -301,7 +294,6 @@ function render() {
   const todayStr = `${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}/${String(now.getDate()).padStart(2,'0')}`;
   document.getElementById('today-label').textContent = '資料日期：' + todayStr;
 
-  // 只在渲染時排序，不動持久層
   shoes.sort(byDate);
   retiredShoes.sort(byDate);
 
@@ -314,9 +306,7 @@ function render() {
 }
 
 function renderCards() {
-  const activeShoes = shoes;
-  const allShoes = [...activeShoes, ...retiredShoes];
-
+  const allShoes = [...shoes, ...retiredShoes];
   let totalMileage = 0, totalPrice = 0;
   allShoes.forEach(s => {
     totalMileage += s.mileage;
@@ -325,7 +315,7 @@ function renderCards() {
   const avgCostPerKm = totalMileage > 0 ? totalPrice / totalMileage : 0;
 
   const cards = [
-    { label: '現役跑鞋', value: activeShoes.length + '/' + allShoes.length, sub: '雙' },
+    { label: '現役跑鞋', value: shoes.length + '/' + allShoes.length, sub: '雙' },
     { label: '總里程', value: totalMileage.toLocaleString(), sub: 'km' },
     { label: '總花費', value: '$' + totalPrice.toLocaleString(), sub: '花費合計' },
     { label: '平均每km成本', value: '$' + avgCostPerKm.toFixed(2), sub: '總花費 / 總里程' },
@@ -350,14 +340,14 @@ function renderTable() {
       <td>${s.date.replace(/-/g,'/')}</td>
       <td class="editable" ondblclick="inlineEdit(${i},'mileage',this)">${s.mileage}</td>
       <td>${fmtCostPerKm(c.costPerKm)}</td>
-      <td class="editable" ondblclick="inlineEdit(${i},'expectedMileage',this)">${s.expectedMileage}</td>
+      <td class="editable" ondblclick="inlineEdit(${i},'expected_mileage',this)">${s.expected_mileage}</td>
       <td>${fmtCostPerKm(c.expectedCost)}</td>
       <td style="color:${pc}">${fmtPct(c.lifeProgress)}</td>
-      <td class="editable" ondblclick="inlineEdit(${i},'monthlyKm',this)">${s.monthlyKm}</td>
+      <td class="editable" ondblclick="inlineEdit(${i},'monthly_km',this)">${s.monthly_km}</td>
       <td>${fmtDate(c.retireDate)}</td>
       <td>${s.size}</td>
       <td>${fmtMoney(s.price)}</td>
-      <td>${fmtMoney(s.origPrice)}</td>
+      <td>${fmtMoney(s.orig_price)}</td>
       <td>${fmtPct(c.discount)}</td>
       <td>
         <button class="btn btn-sm btn-edit" onclick="openEditModal(${i})">編輯</button>
@@ -381,14 +371,14 @@ function renderRetiredTable() {
       <td>${s.date.replace(/-/g,'/')}</td>
       <td class="editable" ondblclick="inlineEditRetired(${i},'mileage',this)">${s.mileage}</td>
       <td>${fmtCostPerKm(c.costPerKm)}</td>
-      <td class="editable" ondblclick="inlineEditRetired(${i},'expectedMileage',this)">${s.expectedMileage}</td>
+      <td class="editable" ondblclick="inlineEditRetired(${i},'expected_mileage',this)">${s.expected_mileage}</td>
       <td>${fmtCostPerKm(c.expectedCost)}</td>
       <td style="color:${pc}">${fmtPct(c.lifeProgress)}</td>
       <td>-</td>
       <td>已退役</td>
       <td>${s.size}</td>
       <td>${fmtMoney(s.price)}</td>
-      <td>${fmtMoney(s.origPrice)}</td>
+      <td>${fmtMoney(s.orig_price)}</td>
       <td>${fmtPct(c.discount)}</td>
       <td><button class="btn btn-sm btn-edit" onclick="openRetiredEditModal(${i})">編輯</button></td>
     </tr>`;
@@ -399,7 +389,6 @@ function renderRetiredTable() {
 let chartInstances = {};
 
 function renderCharts() {
-  // Destroy old charts
   Object.values(chartInstances).forEach(c => c.destroy());
   chartInstances = {};
 
@@ -413,7 +402,6 @@ function renderCharts() {
   });
   const calcs = shoes.map(s => calc(s));
 
-  // 1. Life Progress (stacked horizontal bar: used km + remaining km, x-axis shows km)
   chartInstances.progress = new Chart(document.getElementById('chart-progress'), {
     type: 'bar',
     data: {
@@ -456,7 +444,6 @@ function renderCharts() {
     }
   });
 
-  // 2. Cost per km (bar)
   chartInstances.cost = new Chart(document.getElementById('chart-cost'), {
     type: 'bar',
     data: {
@@ -484,7 +471,6 @@ function renderCharts() {
     }
   });
 
-  // 3. Retirement Timeline (scatter with date axis)
   const retireData = calcs.map((c, i) => ({
     x: c.retireDate ? c.retireDate.getTime() : null,
     y: i,
@@ -497,7 +483,7 @@ function renderCharts() {
       datasets: [{
         data: retireData.map(d => ({ x: d.x, y: d.y })),
         backgroundColor: retireData.map((d, i) => {
-          const origIdx = calcs.findIndex((c, ci) => ci === shoes.findIndex(s => s.brand + ' ' + s.model === d.label));
+          const origIdx = shoes.findIndex(s => s.brand + ' ' + s.model === d.label);
           return colors[origIdx >= 0 ? origIdx : i] || '#6366f1';
         }),
         pointRadius: 10,
@@ -546,14 +532,13 @@ function renderCharts() {
     }
   });
 
-  // 4. Monthly Km (doughnut)
-  const totalMonthlyKm = shoes.reduce((sum, s) => sum + s.monthlyKm, 0);
+  const totalMonthlyKm = shoes.reduce((sum, s) => sum + s.monthly_km, 0);
   chartInstances.value = new Chart(document.getElementById('chart-value'), {
     type: 'doughnut',
     data: {
       labels,
       datasets: [{
-        data: shoes.map(s => s.monthlyKm),
+        data: shoes.map(s => s.monthly_km),
         backgroundColor: colors,
         borderWidth: 0,
       }]
@@ -589,18 +574,22 @@ function renderCharts() {
 }
 
 // ====== Inline Edit (double-click) ======
-function inlineEdit(idx, field, el) {
+async function inlineEdit(idx, field, el) {
   const current = shoes[idx][field];
   const input = document.createElement('input');
   input.type = 'number';
   input.className = 'inline-input';
   input.value = current;
   input.focus();
-  const commit = () => {
+  const commit = async () => {
     const val = parseFloat(input.value);
     if (!isNaN(val) && val >= 0) {
       shoes[idx][field] = val;
-      saveShoesToStorage(shoes);
+      try {
+        await apiPut('/shoes/' + shoes[idx].id, shoes[idx]);
+      } catch (e) {
+        console.error('更新失敗:', e);
+      }
     }
     render();
   };
@@ -611,18 +600,22 @@ function inlineEdit(idx, field, el) {
   input.focus();
 }
 
-function inlineEditRetired(idx, field, el) {
+async function inlineEditRetired(idx, field, el) {
   const current = retiredShoes[idx][field];
   const input = document.createElement('input');
   input.type = 'number';
   input.className = 'inline-input';
   input.value = current;
   input.focus();
-  const commit = () => {
+  const commit = async () => {
     const val = parseFloat(input.value);
     if (!isNaN(val) && val >= 0) {
       retiredShoes[idx][field] = val;
-      saveRetiredToStorage(retiredShoes);
+      try {
+        await apiPut('/shoes/' + retiredShoes[idx].id, retiredShoes[idx]);
+      } catch (e) {
+        console.error('更新失敗:', e);
+      }
     }
     render();
   };
@@ -651,9 +644,9 @@ function openRetiredEditModal(idx) {
   document.getElementById('f-date').value = s.date;
   document.getElementById('f-size').value = s.size;
   document.getElementById('f-price').value = s.price;
-  document.getElementById('f-orig').value = s.origPrice;
+  document.getElementById('f-orig').value = s.orig_price;
   document.getElementById('f-mileage').value = s.mileage;
-  document.getElementById('f-expected').value = s.expectedMileage;
+  document.getElementById('f-expected').value = s.expected_mileage;
   document.getElementById('f-monthly').value = 0;
   document.getElementById('f-monthly').parentElement.style.display = 'none';
   document.getElementById('modal').classList.add('active');
@@ -689,10 +682,10 @@ function openEditModal(idx) {
   document.getElementById('f-date').value = s.date;
   document.getElementById('f-size').value = s.size;
   document.getElementById('f-price').value = s.price;
-  document.getElementById('f-orig').value = s.origPrice;
+  document.getElementById('f-orig').value = s.orig_price;
   document.getElementById('f-mileage').value = s.mileage;
-  document.getElementById('f-expected').value = s.expectedMileage;
-  document.getElementById('f-monthly').value = s.monthlyKm;
+  document.getElementById('f-expected').value = s.expected_mileage;
+  document.getElementById('f-monthly').value = s.monthly_km;
   document.getElementById('f-monthly').parentElement.style.display = '';
   document.getElementById('modal').classList.add('active');
 }
@@ -701,7 +694,7 @@ function closeModal() {
   document.getElementById('modal').classList.remove('active');
 }
 
-function saveShoe() {
+async function saveShoe() {
   const brand = document.getElementById('f-brand').value.trim();
   const model = document.getElementById('f-model').value.trim();
   const date = document.getElementById('f-date').value;
@@ -721,68 +714,82 @@ function saveShoe() {
     return;
   }
 
-  const shoe = { brand, model, date, size, price, origPrice, mileage, expectedMileage, monthlyKm };
+  const shoeData = {
+    brand, model, date, size,
+    price, orig_price: origPrice,
+    mileage, expected_mileage: expectedMileage,
+    monthly_km: monthlyKm,
+    is_retired: isRetiredEdit,
+  };
 
-  if (isRetiredEdit) {
-    if (editingRetiredIdx >= 0) {
-      retiredShoes[editingRetiredIdx] = shoe;
-      saveRetiredToStorage(retiredShoes);
-    }
-  } else {
-    if (editingIdx >= 0) {
-      shoes[editingIdx] = shoe;
+  try {
+    if (isRetiredEdit) {
+      if (editingRetiredIdx >= 0) {
+        const id = retiredShoes[editingRetiredIdx].id;
+        await apiPut('/shoes/' + id, shoeData);
+      }
     } else {
-      shoes.push(shoe);
+      if (editingIdx >= 0) {
+        const id = shoes[editingIdx].id;
+        await apiPut('/shoes/' + id, shoeData);
+      } else {
+        await apiPost('/shoes', shoeData);
+      }
     }
-    saveShoesToStorage(shoes);
+  } catch (e) {
+    console.error('儲存失敗:', e);
+    alert('儲存失敗，請確認後端服務有啟動');
+    return;
   }
+
   closeModal();
-  render();
+  await loadData();
 }
 
-function moveShoe() {
-  if (isRetiredEdit) {
-    if (editingRetiredIdx < 0) return;
-    const s = retiredShoes[editingRetiredIdx];
-    if (!confirm(`確定要把 ${s.brand} ${s.model} 移回現役？`)) return;
-    s.monthlyKm = 60;
-    shoes.push(s);
-    retiredShoes.splice(editingRetiredIdx, 1);
-    saveShoesToStorage(shoes);
-    saveRetiredToStorage(retiredShoes);
-  } else {
-    if (editingIdx < 0) return;
-    const s = shoes[editingIdx];
-    if (!confirm(`確定要把 ${s.brand} ${s.model} 移至退役？`)) return;
-    s.monthlyKm = 0;
-    retiredShoes.push(s);
-    shoes.splice(editingIdx, 1);
-    saveShoesToStorage(shoes);
-    saveRetiredToStorage(retiredShoes);
+async function moveShoe() {
+  try {
+    if (isRetiredEdit) {
+      if (editingRetiredIdx < 0) return;
+      const s = retiredShoes[editingRetiredIdx];
+      if (!confirm(`確定要把 ${s.brand} ${s.model} 移回現役？`)) return;
+      await apiPut('/shoes/' + s.id, { ...s, is_retired: false, monthly_km: 60 });
+    } else {
+      if (editingIdx < 0) return;
+      const s = shoes[editingIdx];
+      if (!confirm(`確定要把 ${s.brand} ${s.model} 移至退役？`)) return;
+      await apiPut('/shoes/' + s.id, { ...s, is_retired: true, monthly_km: 0 });
+    }
+  } catch (e) {
+    console.error('移動失敗:', e);
+    alert('移動失敗');
+    return;
   }
   closeModal();
-  render();
+  await loadData();
 }
 
-function deleteFromModal() {
-  if (isRetiredEdit) {
-    if (editingRetiredIdx < 0) return;
-    const s = retiredShoes[editingRetiredIdx];
-    if (confirm(`確定要刪除 ${s.brand} ${s.model}？此動作無法復原。`)) {
-      retiredShoes.splice(editingRetiredIdx, 1);
-      saveRetiredToStorage(retiredShoes);
-      closeModal();
-      render();
+async function deleteFromModal() {
+  try {
+    if (isRetiredEdit) {
+      if (editingRetiredIdx < 0) return;
+      const s = retiredShoes[editingRetiredIdx];
+      if (confirm(`確定要刪除 ${s.brand} ${s.model}？此動作無法復原。`)) {
+        await apiDelete('/shoes/' + s.id);
+        closeModal();
+        await loadData();
+      }
+    } else {
+      if (editingIdx < 0) return;
+      const s = shoes[editingIdx];
+      if (confirm(`確定要刪除 ${s.brand} ${s.model}？此動作無法復原。`)) {
+        await apiDelete('/shoes/' + s.id);
+        closeModal();
+        await loadData();
+      }
     }
-  } else {
-    if (editingIdx < 0) return;
-    const s = shoes[editingIdx];
-    if (confirm(`確定要刪除 ${s.brand} ${s.model}？此動作無法復原。`)) {
-      shoes.splice(editingIdx, 1);
-      saveShoesToStorage(shoes);
-      closeModal();
-      render();
-    }
+  } catch (e) {
+    console.error('刪除失敗:', e);
+    alert('刪除失敗');
   }
 }
 
@@ -791,7 +798,7 @@ document.getElementById('modal').addEventListener('click', e => {
   if (e.target.id === 'modal') closeModal();
 });
 
-render();
+loadData();
 </script>
 </body>
 </html>
