@@ -1,0 +1,31 @@
+# Database
+shoes.db
+*.db
+
+# Python
+__pycache__/
+*.py[cod]
+venv/
+.env
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Server logs
+server.log
+*.log
+
+# Docker volumes (not the code itself)
+/data/
+
+# Original static HTML (moved to frontend/)
+joy.html
+xuan.html
