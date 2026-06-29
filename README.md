@@ -6,15 +6,20 @@
 
 ```
 running-shoes/
-├── backend/           # FastAPI 後端
-│   ├── main.py        # API 路由 + 靜態檔案服務
-│   ├── database.py    # SQLite 資料庫連線
-│   ├── models.py      # 資料表定義
-│   ├── schemas.py     # Pydantic schema
-├── requirements.txt
+├── backend/              # FastAPI 後端
+│   ├── main.py           # API 路由 + 靜態檔案服務
+│   ├── auth.py           # JWT 認證 + 密碼雜湊
+│   ├── database.py       # SQLite 資料庫連線
+│   ├── models.py         # 資料表定義
+│   ├── schemas.py        # Pydantic schema
+│   └── run.py            # 本機開發啟動入口
 ├── frontend/
-│   └── index.html     # Dashboard 前端（Chart.js）
-├── Dockerfile         # Docker 部署用
+│   ├── index.html        # Dashboard 前端（Chart.js）
+│   └── favicon.svg
+├── unit_tests/           # Pytest 測試
+├── requirements.txt      # Python 依賴
+├── Dockerfile            # Docker 部署用
+├── fly.toml              # Fly.io 部署設定
 └── .gitignore
 ```
 
