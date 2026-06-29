@@ -11,7 +11,7 @@ running-shoes/
 │   ├── database.py    # SQLite 資料庫連線
 │   ├── models.py      # 資料表定義
 │   ├── schemas.py     # Pydantic schema
-│   └── requirements.txt
+├── requirements.txt
 ├── frontend/
 │   └── index.html     # Dashboard 前端（Chart.js）
 ├── Dockerfile         # Docker 部署用
@@ -24,7 +24,7 @@ running-shoes/
 
 ```bash
 # 1. 安裝依賴
-pip install -r backend/requirements.txt
+pip install -r requirements.txt
 
 # 2. 啟動伺服器
 python -m backend.run

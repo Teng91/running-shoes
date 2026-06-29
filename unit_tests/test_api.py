@@ -154,4 +154,4 @@ def test_shoe_isolation_between_users(client, db):
 
 def test_unauthenticated_access(client):
     res = client.get("/api/shoes/active")
-    assert res.status_code == 403  # No credentials provided
+    assert res.status_code == 401  # No credentials provided
