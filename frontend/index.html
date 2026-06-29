@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>跑鞋追蹤 Dashboard</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" onerror="console.error('Chart.js CDN failed')"></script>
 <style>
 :root {
@@ -425,6 +426,7 @@ const ERROR_ZH = {
   'Incorrect password': '密碼不正確',
   'Username already registered': '帳號已被註冊',
   'Password must be at least 4 characters': '密碼至少 4 個字元',
+  'Shoe not found': '跑鞋不存在',
 };
 function translateError(detail) {
   return ERROR_ZH[detail] || detail;
