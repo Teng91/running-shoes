@@ -8,4 +8,4 @@ RUN useradd --create-home appuser && mkdir -p /data && chown appuser:appuser /da
 ENV DB_DIR=/data
 USER appuser
 EXPOSE 8000
-CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "uvicorn backend.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
