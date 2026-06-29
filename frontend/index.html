@@ -25,6 +25,11 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
 h1 { font-size: 28px; font-weight: 700; margin-bottom: 4px; }
 .subtitle { color: var(--text-dim); font-size: 14px; margin-bottom: 24px; }
 
+/* Auth View */
+.auth-box { max-width: 360px; margin: 80px auto; }
+.auth-box h1 { text-align: center; margin-bottom: 24px; }
+.auth-error { color: var(--red); font-size: 13px; margin: 8px 0; display: none; }
+
 /* Summary Cards */
 .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 28px; }
 .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
@@ -81,14 +86,97 @@ tr:hover td { background: rgba(99,102,241,0.05); }
 /* Color dots for brands */
 .brand-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
 
+/* Header with logout */
+.app-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+.app-header h1 { margin-bottom: 0; }
+.user-info { display: flex; align-items: center; gap: 12px; }
+.user-name { color: var(--text-dim); font-size: 14px; }
+
 @media (max-width: 900px) {
   .charts { grid-template-columns: 1fr; }
 }
 </style>
 </head>
 <body>
-<div class="container">
-  <h1>跑鞋追蹤 Dashboard</h1>
+
+<!-- Auth View -->
+<div class="container" id="auth-view">
+
+  <!-- Login Form -->
+  <div class="auth-box" id="login-form">
+    <h1>跑鞋追蹤</h1>
+    <div class="form-group">
+      <label>帳號</label>
+      <input id="login-username" placeholder="Username">
+    </div>
+    <div class="form-group">
+      <label>密碼</label>
+      <input id="login-password" type="password" placeholder="Password">
+    </div>
+    <div class="auth-error" id="auth-error"></div>
+    <button class="btn btn-primary" style="width:100%;margin-top:8px;" onclick="handleLogin()">登入</button>
+    <div style="text-align:center;margin-top:12px;">
+      <a href="#" onclick="showResetForm();return false;" style="color:var(--text-dim);font-size:13px;">忘記密碼？</a>
+      <span style="color:var(--border);margin:0 8px;">|</span>
+      <a href="#" onclick="showRegisterForm();return false;" style="color:var(--accent-light);font-size:13px;">註冊</a>
+    </div>
+  </div>
+
+  <!-- Register Form -->
+  <div class="auth-box" id="register-form" style="display:none;">
+    <h1>註冊帳號</h1>
+    <div class="form-group">
+      <label>帳號</label>
+      <input id="reg-username" placeholder="Username">
+    </div>
+    <div class="form-group">
+      <label>密碼</label>
+      <input id="reg-password" type="password" placeholder="Password">
+    </div>
+    <div class="form-group">
+      <label>確認密碼</label>
+      <input id="reg-password2" type="password" placeholder="Confirm Password">
+    </div>
+    <div class="auth-error" id="reg-error"></div>
+    <button class="btn btn-primary" style="width:100%;margin-top:8px;" onclick="handleRegister()">註冊</button>
+    <div style="text-align:center;margin-top:12px;">
+      <a href="#" onclick="showLoginForm();return false;" style="color:var(--accent-light);font-size:13px;">已有帳號？登入</a>
+    </div>
+  </div>
+
+  <!-- Reset Password Form -->
+  <div class="auth-box" id="reset-form" style="display:none;">
+    <h1>重設密碼</h1>
+    <div class="form-group">
+      <label>帳號</label>
+      <input id="reset-username" placeholder="Username">
+    </div>
+    <div class="form-group">
+      <label>新密碼</label>
+      <input id="reset-password" type="password" placeholder="New Password">
+    </div>
+    <div class="form-group">
+      <label>確認新密碼</label>
+      <input id="reset-password2" type="password" placeholder="Confirm New Password">
+    </div>
+    <div class="auth-error" id="reset-error"></div>
+    <button class="btn btn-primary" style="width:100%;margin-top:8px;" onclick="handleResetPassword()">重設密碼</button>
+    <div style="text-align:center;margin-top:12px;">
+      <a href="#" onclick="showLoginForm();return false;" style="color:var(--accent-light);font-size:13px;">回登入頁</a>
+    </div>
+  </div>
+
+</div>
+
+<!-- App View -->
+<div class="container" id="app-view" style="display:none;">
+  <div class="app-header">
+    <h1>跑鞋追蹤 Dashboard</h1>
+    <div class="user-info">
+      <span class="user-name" id="user-label"></span>
+      <button class="btn btn-sm btn-edit" onclick="handleLogout()">登出</button>
+    </div>
+  </div>
   <p class="subtitle" id="today-label"></p>
 
   <div class="cards" id="summary-cards"></div>
@@ -182,6 +270,42 @@ function esc(str) {
 // ====== API Base ======
 const API_BASE = window.location.origin + '/api';
 
+// ====== Auth State ======
+let authToken = localStorage.getItem('token');
+let currentUser = localStorage.getItem('username');
+
+function setAuth(token, username) {
+  authToken = token;
+  currentUser = username;
+  localStorage.setItem('token', token);
+  localStorage.setItem('username', username);
+}
+
+function clearAuth() {
+  authToken = null;
+  currentUser = null;
+  localStorage.removeItem('token');
+  localStorage.removeItem('username');
+}
+
+function authHeaders() {
+  const h = { 'Content-Type': 'application/json' };
+  if (authToken) h['Authorization'] = 'Bearer ' + authToken;
+  return h;
+}
+
+function showLoginView() {
+  document.getElementById('auth-view').style.display = '';
+  document.getElementById('app-view').style.display = 'none';
+  showLoginForm();
+}
+
+function showAppView() {
+  document.getElementById('auth-view').style.display = 'none';
+  document.getElementById('app-view').style.display = '';
+  document.getElementById('user-label').textContent = currentUser || '';
+}
+
 // ====== Brand Colors ======
 const BRAND_COLORS = {
   'Mizuno':        ['#38BDF8', '#7DD3FC', '#0EA5E9'],
@@ -202,9 +326,10 @@ const BRAND_COLORS = {
 
 const byDate = (a, b) => new Date(a.date) - new Date(b.date);
 
-// ====== API Calls ======
+// ====== API Calls (with auth) ======
 async function apiGet(url) {
-  const res = await fetch(API_BASE + url);
+  const res = await fetch(API_BASE + url, { headers: authHeaders() });
+  if (res.status === 401) { clearAuth(); showLoginView(); throw new Error('Unauthorized'); }
   if (!res.ok) throw new Error('GET ' + url + ' failed: ' + res.status);
   return res.json();
 }
@@ -212,27 +337,183 @@ async function apiGet(url) {
 async function apiPost(url, body) {
   const res = await fetch(API_BASE + url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders(),
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error('POST ' + url + ' failed: ' + res.status);
+  if (res.status === 401) { clearAuth(); showLoginView(); throw new Error('Unauthorized'); }
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || ('POST ' + url + ' failed: ' + res.status));
+  }
   return res.json();
 }
 
 async function apiPut(url, body) {
   const res = await fetch(API_BASE + url, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders(),
     body: JSON.stringify(body),
   });
+  if (res.status === 401) { clearAuth(); showLoginView(); throw new Error('Unauthorized'); }
   if (!res.ok) throw new Error('PUT ' + url + ' failed: ' + res.status);
   return res.json();
 }
 
 async function apiDelete(url) {
-  const res = await fetch(API_BASE + url, { method: 'DELETE' });
+  const res = await fetch(API_BASE + url, { method: 'DELETE', headers: authHeaders() });
+  if (res.status === 401) { clearAuth(); showLoginView(); throw new Error('Unauthorized'); }
   if (!res.ok) throw new Error('DELETE ' + url + ' failed: ' + res.status);
   return res.json();
+}
+
+// ====== Auth Handlers ======
+function showLoginForm() {
+  document.getElementById('login-form').style.display = '';
+  document.getElementById('register-form').style.display = 'none';
+  document.getElementById('reset-form').style.display = 'none';
+  hideAuthError();
+}
+
+function showRegisterForm() {
+  document.getElementById('login-form').style.display = 'none';
+  document.getElementById('register-form').style.display = '';
+  document.getElementById('reset-form').style.display = 'none';
+  hideRegError();
+}
+
+function showResetForm() {
+  document.getElementById('login-form').style.display = 'none';
+  document.getElementById('register-form').style.display = 'none';
+  document.getElementById('reset-form').style.display = '';
+  hideResetError();
+}
+
+function showAuthError(msg) {
+  const el = document.getElementById('auth-error');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+function hideAuthError() {
+  document.getElementById('auth-error').style.display = 'none';
+}
+
+function showRegError(msg) {
+  const el = document.getElementById('reg-error');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+function hideRegError() {
+  document.getElementById('reg-error').style.display = 'none';
+}
+
+function showResetError(msg) {
+  const el = document.getElementById('reset-error');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+function hideResetError() {
+  document.getElementById('reset-error').style.display = 'none';
+}
+
+async function handleLogin() {
+  hideAuthError();
+  const username = document.getElementById('login-username').value.trim();
+  const password = document.getElementById('login-password').value;
+  if (!username || !password) { showAuthError('請輸入帳號和密碼'); return; }
+  try {
+    const res = await fetch(API_BASE + '/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+    if (!res.ok) {
+      let msg = '登入失敗';
+      try { const err = await res.json(); msg = err.detail || msg; } catch {}
+      if (res.status === 500) msg = '伺服器錯誤，請稍後再試';
+      throw new Error(msg);
+    }
+    const data = await res.json();
+    setAuth(data.access_token, username);
+    showAppView();
+    loadData();
+  } catch (e) {
+    showAuthError(e.message);
+  }
+}
+
+async function handleRegister() {
+  hideRegError();
+  const username = document.getElementById('reg-username').value.trim();
+  const password = document.getElementById('reg-password').value;
+  const password2 = document.getElementById('reg-password2').value;
+  if (!username || !password) { showRegError('請輸入帳號和密碼'); return; }
+  if (password.length < 4) { showRegError('密碼至少 4 個字元'); return; }
+  if (password !== password2) { showRegError('兩次密碼不一致'); return; }
+  try {
+    const regRes = await fetch(API_BASE + '/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+    if (!regRes.ok) {
+      let msg = '註冊失敗';
+      try { const err = await regRes.json(); msg = err.detail || msg; } catch {}
+      if (regRes.status === 500) msg = '伺服器錯誤，請稍後再試';
+      throw new Error(msg);
+    }
+    // Auto-login after registration
+    const loginRes = await fetch(API_BASE + '/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+    if (!loginRes.ok) {
+      showLoginForm();
+      showAuthError('註冊成功！請登入');
+      return;
+    }
+    const data = await loginRes.json();
+    setAuth(data.access_token, username);
+    showAppView();
+    loadData();
+  } catch (e) {
+    showRegError(e.message);
+  }
+}
+
+function handleLogout() {
+  clearAuth();
+  showLoginView();
+}
+
+async function handleResetPassword() {
+  hideResetError();
+  const username = document.getElementById('reset-username').value.trim();
+  const password = document.getElementById('reset-password').value;
+  const password2 = document.getElementById('reset-password2').value;
+  if (!username) { showResetError('請輸入帳號'); return; }
+  if (!password) { showResetError('請輸入新密碼'); return; }
+  if (password.length < 4) { showResetError('密碼至少 4 個字元'); return; }
+  if (password !== password2) { showResetError('兩次密碼不一致'); return; }
+  try {
+    const res = await fetch(API_BASE + '/auth/reset-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, new_password: password }),
+    });
+    if (!res.ok) {
+      let msg = '重設失敗';
+      try { const err = await res.json(); msg = err.detail || msg; } catch {}
+      throw new Error(msg);
+    }
+    showLoginForm();
+    showAuthError('密碼已重設，請重新登入');
+  } catch (e) {
+    showResetError(e.message);
+  }
 }
 
 // ====== Data State ======
@@ -805,7 +1086,23 @@ document.getElementById('modal').addEventListener('click', e => {
   if (e.target.id === 'modal') closeModal();
 });
 
-loadData();
+// Check stored token on load
+async function init() {
+  if (authToken) {
+    try {
+      await fetch(API_BASE + '/auth/me', { headers: authHeaders() });
+      showAppView();
+      loadData();
+    } catch {
+      clearAuth();
+      showLoginView();
+    }
+  } else {
+    showLoginView();
+  }
+}
+
+init();
 </script>
 </body>
 </html>
