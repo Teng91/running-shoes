@@ -4,10 +4,8 @@ from pathlib import Path
 
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import inspect
+from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
-
-import click
 
 from backend.database import engine, Base, SessionLocal, get_db
 from backend import models, schemas
@@ -71,16 +69,8 @@ async def lifespan(app: FastAPI):
 
             # Add user_id column (SQLite allows ALTER TABLE ADD COLUMN without FK)
             with engine.connect() as conn:
-                conn.execute(
-                    __import__("sqlalchemy").text(
-                        "ALTER TABLE shoes ADD COLUMN user_id INTEGER"
-                    )
-                )
-                conn.execute(
-                    __import__("sqlalchemy").text(
-                        f"UPDATE shoes SET user_id = {joy_user.id}"
-                    )
-                )
+                conn.execute(text("ALTER TABLE shoes ADD COLUMN user_id INTEGER"))
+                conn.execute(text(f"UPDATE shoes SET user_id = {joy_user.id}"))
                 conn.commit()
         finally:
             db.close()
@@ -160,7 +150,7 @@ def read_current_user(current_user: models.User = Depends(get_current_user)):
 def reset_password(payload: schemas.UserResetPassword, db: Session = Depends(get_db)):
     user = db.query(models.User).filter(models.User.username == payload.username).first()
     if not user:
-        raise HTTPException(status_code=404, detail="帳號不存在")
+        raise HTTPException(status_code=404, detail="User not found")
     user.hashed_password = get_password_hash(payload.new_password)
     db.commit()
     return {"ok": True}
@@ -250,26 +240,3 @@ def delete_shoe(
         db.rollback()
         raise
     return {"ok": True}
-
-
-# ── CLI: reset password ────────────────────────────────────────
-@click.command()
-@click.argument("username")
-@click.argument("new_password")
-def reset_password(username, new_password):
-    """Reset a user's password. Usage: python -m backend.main reset-password <username> <new_password>"""
-    db = SessionLocal()
-    try:
-        user = db.query(models.User).filter(models.User.username == username).first()
-        if not user:
-            click.echo(f"User '{username}' not found.")
-            return
-        user.hashed_password = get_password_hash(new_password)
-        db.commit()
-        click.echo(f"Password for '{username}' has been reset.")
-    finally:
-        db.close()
-
-
-if __name__ == "__main__":
-    reset_password()
