@@ -68,7 +68,7 @@ open http://你的IP:8000
 ## Fly.io 部署流程
 
 ```
-git push (local) ──→ GitHub ──→ fly deploy ──→ Fly.io Builder
+git push (local) ──> GitHub ──> fly deploy ──> Fly.io Builder
                                                     │
                                               Dockerfile 建置
                                                     │
@@ -90,7 +90,7 @@ git push (local) ──→ GitHub ──→ fly deploy ──→ Fly.io Builder
                                         └───────────┬───────────┘
                                                     │
                                               使用者瀏覽器
-                                         https://你的app.fly.dev
+                                     https://<yourhostname>.fly.dev
 ```
 
 ## 多使用者
