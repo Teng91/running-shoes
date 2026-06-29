@@ -2,6 +2,36 @@ from typing import Optional
 from pydantic import BaseModel, ConfigDict
 
 
+# ── Auth Schemas ──────────────────────────────────────────────
+
+class UserCreate(BaseModel):
+    username: str
+    password: str
+
+
+class UserLogin(BaseModel):
+    username: str
+    password: str
+
+
+class UserOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    username: str
+
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+
+
+class UserResetPassword(BaseModel):
+    username: str
+    new_password: str
+
+
+# ── Shoe Schemas ──────────────────────────────────────────────
+
 class ShoeBase(BaseModel):
     brand: str
     model: str
@@ -16,7 +46,7 @@ class ShoeBase(BaseModel):
 
 
 class ShoeCreate(ShoeBase):
-    pass
+    pass  # user_id is set by the backend, never by the client
 
 
 class ShoeUpdate(BaseModel):
@@ -35,3 +65,4 @@ class ShoeUpdate(BaseModel):
 class ShoeOut(ShoeBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
+    user_id: int

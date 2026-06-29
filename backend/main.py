@@ -1,28 +1,45 @@
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import inspect
 from sqlalchemy.orm import Session
+
+import click
 
 from backend.database import engine, Base, SessionLocal, get_db
 from backend import models, schemas
+from backend.auth import (
+    verify_password, get_password_hash,
+    create_access_token, get_current_user,
+)
 
 
-# ── Seed default data if DB is empty ──────────────────────────
+# ── Seed default data (only when SEED_DATA=true) ──────────────
 def seed_default_data():
+    if os.environ.get("SEED_DATA", "").lower() != "true":
+        return
     db = SessionLocal()
     try:
         if db.query(models.Shoe).count() == 0:
+            # Create a dev user for seed data
+            dev_user = db.query(models.User).filter(models.User.username == "dev").first()
+            if not dev_user:
+                dev_user = models.User(username="dev", hashed_password=get_password_hash("dev"))
+                db.add(dev_user)
+                db.commit()
+                db.refresh(dev_user)
             defaults = [
-                models.Shoe(brand="Mizuno", model="Wave Sky 7", date="2024-09-15", size="us13/31cm", price=2390, orig_price=4780, mileage=540, expected_mileage=800, monthly_km=60),
-                models.Shoe(brand="Mizuno", model="Wave Rider 29", date="2025-12-12", size="us12/30cm", price=2505, orig_price=3980, mileage=293, expected_mileage=800, monthly_km=60),
-                models.Shoe(brand="Mizuno", model="Wave Sky 9", date="2025-12-30", size="us13/31cm", price=3080, orig_price=4980, mileage=125, expected_mileage=800, monthly_km=60),
-                models.Shoe(brand="New Balance", model="Rebel v5", date="2026-02-20", size="us11/29cm", price=2300, orig_price=4280, mileage=102, expected_mileage=500, monthly_km=30),
-                models.Shoe(brand="Adidas", model="Boston 12", date="2026-04-21", size="us11.5/29.5cm", price=1680, orig_price=4290, mileage=61, expected_mileage=800, monthly_km=30),
-                models.Shoe(brand="PUMA", model="Nitro Elite 3", date="2026-06-25", size="us11.5/29.5cm", price=3310, orig_price=5980, mileage=0, expected_mileage=500, monthly_km=20),
-                models.Shoe(brand="Asics", model="Gel-Excite 8", date="2024-01-05", size="us11/29cm", price=1780, orig_price=2280, mileage=625, expected_mileage=600, monthly_km=0, is_retired=True),
-                models.Shoe(brand="FILA", model="Bon Voyage", date="2025-08-10", size="us11/29cm", price=2200, orig_price=2880, mileage=418, expected_mileage=400, monthly_km=0, is_retired=True),
+                models.Shoe(user_id=dev_user.id, brand="Mizuno", model="Wave Sky 7", date="2024-09-15", size="us13/31cm", price=2390, orig_price=4780, mileage=540, expected_mileage=800, monthly_km=60),
+                models.Shoe(user_id=dev_user.id, brand="Mizuno", model="Wave Rider 29", date="2025-12-12", size="us12/30cm", price=2505, orig_price=3980, mileage=293, expected_mileage=800, monthly_km=60),
+                models.Shoe(user_id=dev_user.id, brand="Mizuno", model="Wave Sky 9", date="2025-12-30", size="us13/31cm", price=3080, orig_price=4980, mileage=125, expected_mileage=800, monthly_km=60),
+                models.Shoe(user_id=dev_user.id, brand="New Balance", model="Rebel v5", date="2026-02-20", size="us11/29cm", price=2300, orig_price=4280, mileage=102, expected_mileage=500, monthly_km=30),
+                models.Shoe(user_id=dev_user.id, brand="Adidas", model="Boston 12", date="2026-04-21", size="us11.5/29.5cm", price=1680, orig_price=4290, mileage=61, expected_mileage=800, monthly_km=30),
+                models.Shoe(user_id=dev_user.id, brand="PUMA", model="Nitro Elite 3", date="2026-06-25", size="us11.5/29.5cm", price=3310, orig_price=5980, mileage=0, expected_mileage=500, monthly_km=20),
+                models.Shoe(user_id=dev_user.id, brand="Asics", model="Gel-Excite 8", date="2024-01-05", size="us11/29cm", price=1780, orig_price=2280, mileage=625, expected_mileage=600, monthly_km=0, is_retired=True),
+                models.Shoe(user_id=dev_user.id, brand="FILA", model="Bon Voyage", date="2025-08-10", size="us11/29cm", price=2200, orig_price=2880, mileage=418, expected_mileage=400, monthly_km=0, is_retired=True),
             ]
             db.add_all(defaults)
             db.commit()
@@ -30,9 +47,44 @@ def seed_default_data():
         db.close()
 
 
-# ── Lifespan: create tables & seed on startup ─────────────────
+# ── Lifespan: create tables & migrate ─────────────────────────
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # One-time migration: if old schema exists (shoes table without user_id), migrate
+    inspector = inspect(engine)
+    existing_tables = inspector.get_table_names()
+
+    if "shoes" in existing_tables and "users" not in existing_tables:
+        # Old schema: create users table, add user_id to shoes, assign to "Joy"
+        Base.metadata.create_all(bind=engine, tables=[models.User.__table__])
+
+        migration_password = os.environ.get("MIGRATION_PASSWORD", "1130")
+        db = SessionLocal()
+        try:
+            joy_user = models.User(
+                username="Joy",
+                hashed_password=get_password_hash(migration_password),
+            )
+            db.add(joy_user)
+            db.commit()
+            db.refresh(joy_user)
+
+            # Add user_id column (SQLite allows ALTER TABLE ADD COLUMN without FK)
+            with engine.connect() as conn:
+                conn.execute(
+                    __import__("sqlalchemy").text(
+                        "ALTER TABLE shoes ADD COLUMN user_id INTEGER"
+                    )
+                )
+                conn.execute(
+                    __import__("sqlalchemy").text(
+                        f"UPDATE shoes SET user_id = {joy_user.id}"
+                    )
+                )
+                conn.commit()
+        finally:
+            db.close()
+
     Base.metadata.create_all(bind=engine)
     seed_default_data()
     yield
@@ -57,34 +109,91 @@ frontend_dir.mkdir(exist_ok=True)
 
 
 @app.exception_handler(StarletteHTTPException)
-async def not_found_handler(request, exc):
-    """Return index.html for any 404 so SPA-style routing works,
-    but still 404 for /api/* paths."""
+async def http_exception_handler(request, exc):
+    """Return index.html for 404s so SPA-style routing works,
+    but return proper JSON for API errors (4xx/5xx)."""
     if exc.status_code == 404:
         path = request.url.path
         if path.startswith("/api/") or path.startswith("/docs") or path.startswith("/openapi.json"):
-            return JSONResponse({"detail": "Not Found"}, status_code=404)
+            return JSONResponse({"detail": exc.detail}, status_code=404)
         file = frontend_dir / path.lstrip("/")
         if file.is_file():
             return FileResponse(file)
         return FileResponse(frontend_dir / "index.html")
-    raise exc
+    return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
 
 
-# ── API Routes ────────────────────────────────────────────────
+# ── Auth Routes ───────────────────────────────────────────────
+@app.post("/api/auth/register", response_model=schemas.UserOut)
+def register(payload: schemas.UserCreate, db: Session = Depends(get_db)):
+    if len(payload.password) < 4:
+        raise HTTPException(status_code=400, detail="Password must be at least 4 characters")
+    if db.query(models.User).filter(models.User.username == payload.username).first():
+        raise HTTPException(status_code=400, detail="Username already registered")
+    user = models.User(
+        username=payload.username,
+        hashed_password=get_password_hash(payload.password),
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+@app.post("/api/auth/login", response_model=schemas.Token)
+def login(payload: schemas.UserLogin, db: Session = Depends(get_db)):
+    user = db.query(models.User).filter(models.User.username == payload.username).first()
+    if not user or not verify_password(payload.password, user.hashed_password):
+        raise HTTPException(status_code=401, detail="Incorrect username or password")
+    token = create_access_token(data={"sub": user.username})
+    return {"access_token": token, "token_type": "bearer"}
+
+
+@app.get("/api/auth/me", response_model=schemas.UserOut)
+def read_current_user(current_user: models.User = Depends(get_current_user)):
+    return current_user
+
+
+@app.post("/api/auth/reset-password")
+def reset_password(payload: schemas.UserResetPassword, db: Session = Depends(get_db)):
+    user = db.query(models.User).filter(models.User.username == payload.username).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="帳號不存在")
+    user.hashed_password = get_password_hash(payload.new_password)
+    db.commit()
+    return {"ok": True}
+
+
+# ── Shoe Routes ───────────────────────────────────────────────
 @app.get("/api/shoes/active", response_model=list[schemas.ShoeOut])
-def list_active(db: Session = Depends(get_db)):
-    return db.query(models.Shoe).filter(models.Shoe.is_retired == False).all()
+def list_active(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return db.query(models.Shoe).filter(
+        models.Shoe.is_retired == False,
+        models.Shoe.user_id == current_user.id,
+    ).all()
 
 
 @app.get("/api/shoes/retired", response_model=list[schemas.ShoeOut])
-def list_retired(db: Session = Depends(get_db)):
-    return db.query(models.Shoe).filter(models.Shoe.is_retired == True).all()
+def list_retired(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return db.query(models.Shoe).filter(
+        models.Shoe.is_retired == True,
+        models.Shoe.user_id == current_user.id,
+    ).all()
 
 
 @app.post("/api/shoes", response_model=schemas.ShoeOut)
-def create_shoe(payload: schemas.ShoeCreate, db: Session = Depends(get_db)):
-    shoe = models.Shoe(**payload.model_dump())
+def create_shoe(
+    payload: schemas.ShoeCreate,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    shoe = models.Shoe(**payload.model_dump(), user_id=current_user.id)
     db.add(shoe)
     try:
         db.commit()
@@ -96,8 +205,16 @@ def create_shoe(payload: schemas.ShoeCreate, db: Session = Depends(get_db)):
 
 
 @app.put("/api/shoes/{shoe_id}", response_model=schemas.ShoeOut)
-def update_shoe(shoe_id: int, payload: schemas.ShoeUpdate, db: Session = Depends(get_db)):
-    shoe = db.query(models.Shoe).filter(models.Shoe.id == shoe_id).first()
+def update_shoe(
+    shoe_id: int,
+    payload: schemas.ShoeUpdate,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    shoe = db.query(models.Shoe).filter(
+        models.Shoe.id == shoe_id,
+        models.Shoe.user_id == current_user.id,
+    ).first()
     if not shoe:
         raise HTTPException(status_code=404, detail="Shoe not found")
     update_data = payload.model_dump(exclude_unset=True)
@@ -113,8 +230,15 @@ def update_shoe(shoe_id: int, payload: schemas.ShoeUpdate, db: Session = Depends
 
 
 @app.delete("/api/shoes/{shoe_id}")
-def delete_shoe(shoe_id: int, db: Session = Depends(get_db)):
-    shoe = db.query(models.Shoe).filter(models.Shoe.id == shoe_id).first()
+def delete_shoe(
+    shoe_id: int,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    shoe = db.query(models.Shoe).filter(
+        models.Shoe.id == shoe_id,
+        models.Shoe.user_id == current_user.id,
+    ).first()
     if not shoe:
         raise HTTPException(status_code=404, detail="Shoe not found")
     db.delete(shoe)
@@ -124,3 +248,26 @@ def delete_shoe(shoe_id: int, db: Session = Depends(get_db)):
         db.rollback()
         raise
     return {"ok": True}
+
+
+# ── CLI: reset password ────────────────────────────────────────
+@click.command()
+@click.argument("username")
+@click.argument("new_password")
+def reset_password(username, new_password):
+    """Reset a user's password. Usage: python -m backend.main reset-password <username> <new_password>"""
+    db = SessionLocal()
+    try:
+        user = db.query(models.User).filter(models.User.username == username).first()
+        if not user:
+            click.echo(f"User '{username}' not found.")
+            return
+        user.hashed_password = get_password_hash(new_password)
+        db.commit()
+        click.echo(f"Password for '{username}' has been reset.")
+    finally:
+        db.close()
+
+
+if __name__ == "__main__":
+    reset_password()
