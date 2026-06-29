@@ -2,5 +2,7 @@ venv/
 .git/
 __pycache__/
 *.pyc
-shoes.db
+*.db
+*.log
+unit_tests/
 .claude/
