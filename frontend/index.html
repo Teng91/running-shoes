@@ -172,6 +172,13 @@ tr:hover td { background: rgba(99,102,241,0.05); }
 </div>
 
 <script>
+// ====== HTML Escape (XSS protection) ======
+function esc(str) {
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
+}
+
 // ====== API Base ======
 const API_BASE = window.location.origin + '/api';
 
@@ -270,7 +277,7 @@ function calc(shoe) {
 function fmtPct(v) { return (v * 100).toFixed(2) + '%'; }
 function fmtMoney(v) { return '$' + Math.round(v).toLocaleString(); }
 function fmtKm(v) { return v + ' km'; }
-function fmtDate(d) { if (!d) return '-'; return d.toISOString().slice(0, 10).replace(/-/g, '/'); }
+function fmtDate(d) { if (!d) return '-'; return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`; }
 function fmtCostPerKm(v) { return v !== null ? '$' + v.toFixed(2) : '-'; }
 function fmtMonths(v) { return v !== null ? v.toFixed(1) : '-'; }
 
@@ -335,9 +342,9 @@ function renderTable() {
     const bc = brandColor(s.brand, brandSeq[s.brand]);
     brandSeq[s.brand]++;
     return `<tr>
-      <td><span class="brand-dot" style="background:${bc}"></span><span class="brand">${s.brand}</span></td>
-      <td>${s.model}</td>
-      <td>${s.date.replace(/-/g,'/')}</td>
+      <td><span class="brand-dot" style="background:${bc}"></span><span class="brand">${esc(s.brand)}</span></td>
+      <td>${esc(s.model)}</td>
+      <td>${esc(s.date.replace(/-/g,'/'))}</td>
       <td class="editable" ondblclick="inlineEdit(${i},'mileage',this)">${s.mileage}</td>
       <td>${fmtCostPerKm(c.costPerKm)}</td>
       <td class="editable" ondblclick="inlineEdit(${i},'expected_mileage',this)">${s.expected_mileage}</td>
@@ -345,7 +352,7 @@ function renderTable() {
       <td style="color:${pc}">${fmtPct(c.lifeProgress)}</td>
       <td class="editable" ondblclick="inlineEdit(${i},'monthly_km',this)">${s.monthly_km}</td>
       <td>${fmtDate(c.retireDate)}</td>
-      <td>${s.size}</td>
+      <td>${esc(s.size)}</td>
       <td>${fmtMoney(s.price)}</td>
       <td>${fmtMoney(s.orig_price)}</td>
       <td>${fmtPct(c.discount)}</td>
@@ -366,9 +373,9 @@ function renderRetiredTable() {
     const bc = brandColor(s.brand, brandSeq[s.brand]);
     brandSeq[s.brand]++;
     return `<tr>
-      <td><span class="brand-dot" style="background:${bc}"></span><span class="brand">${s.brand}</span></td>
-      <td>${s.model}</td>
-      <td>${s.date.replace(/-/g,'/')}</td>
+      <td><span class="brand-dot" style="background:${bc}"></span><span class="brand">${esc(s.brand)}</span></td>
+      <td>${esc(s.model)}</td>
+      <td>${esc(s.date.replace(/-/g,'/'))}</td>
       <td class="editable" ondblclick="inlineEditRetired(${i},'mileage',this)">${s.mileage}</td>
       <td>${fmtCostPerKm(c.costPerKm)}</td>
       <td class="editable" ondblclick="inlineEditRetired(${i},'expected_mileage',this)">${s.expected_mileage}</td>
@@ -376,7 +383,7 @@ function renderRetiredTable() {
       <td style="color:${pc}">${fmtPct(c.lifeProgress)}</td>
       <td>-</td>
       <td>已退役</td>
-      <td>${s.size}</td>
+      <td>${esc(s.size)}</td>
       <td>${fmtMoney(s.price)}</td>
       <td>${fmtMoney(s.orig_price)}</td>
       <td>${fmtPct(c.discount)}</td>
@@ -392,7 +399,7 @@ function renderCharts() {
   Object.values(chartInstances).forEach(c => c.destroy());
   chartInstances = {};
 
-  const labels = shoes.map(s => s.brand + ' ' + s.model);
+  const labels = shoes.map(s => esc(s.brand) + ' ' + esc(s.model));
   let brandSeq = {};
   const colors = shoes.map(s => {
     brandSeq[s.brand] = (brandSeq[s.brand] || 0);
