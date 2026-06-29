@@ -1,3 +1,4 @@
+from typing import Optional
 from pydantic import BaseModel, ConfigDict
 
 
@@ -18,8 +19,17 @@ class ShoeCreate(ShoeBase):
     pass
 
 
-class ShoeUpdate(ShoeBase):
-    pass
+class ShoeUpdate(BaseModel):
+    brand: Optional[str] = None
+    model: Optional[str] = None
+    date: Optional[str] = None
+    size: Optional[str] = None
+    price: Optional[float] = None
+    orig_price: Optional[float] = None
+    mileage: Optional[float] = None
+    expected_mileage: Optional[float] = None
+    monthly_km: Optional[float] = None
+    is_retired: Optional[bool] = None
 
 
 class ShoeOut(ShoeBase):
