@@ -12,24 +12,7 @@
 
 ### 自己部署
 
-開源專案，歡迎 clone 下來自己跑：
-
-```bash
-# 1. Clone
-git clone https://github.com/你的帳號/running-shoes.git
-cd running-shoes
-
-# 2. 安裝依賴
-pip install -r requirements.txt
-
-# 3. 啟動伺服器
-python -m backend.run
-
-# 4. 開啟瀏覽器
-open http://localhost:8000
-```
-
-也可以部署到自己的 Fly.io 帳號或其他平台，完全獨立運作。
+開源專案，歡迎 clone 下來自己跑，也可以部署到自己的 Fly.io 帳號或其他平台，完全獨立運作。
 
 ## 目錄結構
 
