@@ -20,7 +20,7 @@
   --red: #ef4444;
 }
 * { margin:0; padding:0; box-sizing:border-box; }
-body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; opacity: 0; transition: opacity 0.15s; }
 .container { max-width: 1400px; margin: 0 auto; padding: 24px; }
 h1 { font-size: 28px; font-weight: 700; margin-bottom: 4px; }
 .subtitle { color: var(--text-dim); font-size: 14px; margin-bottom: 24px; }
@@ -100,7 +100,7 @@ tr:hover td { background: rgba(99,102,241,0.05); }
 <body>
 
 <!-- Auth View -->
-<div class="container" id="auth-view">
+<div class="container" id="auth-view" style="display:none;">
 
   <!-- Login Form -->
   <div class="auth-box" id="login-form">
@@ -298,12 +298,14 @@ function showLoginView() {
   document.getElementById('auth-view').style.display = '';
   document.getElementById('app-view').style.display = 'none';
   showLoginForm();
+  document.body.style.opacity = '1';
 }
 
 function showAppView() {
   document.getElementById('auth-view').style.display = 'none';
   document.getElementById('app-view').style.display = '';
   document.getElementById('user-label').textContent = currentUser || '';
+  document.body.style.opacity = '1';
 }
 
 // ====== Brand Colors ======
@@ -418,6 +420,16 @@ function hideResetError() {
   document.getElementById('reset-error').style.display = 'none';
 }
 
+const ERROR_ZH = {
+  'User not found': '帳號不存在',
+  'Incorrect password': '密碼不正確',
+  'Username already registered': '帳號已被註冊',
+  'Password must be at least 4 characters': '密碼至少 4 個字元',
+};
+function translateError(detail) {
+  return ERROR_ZH[detail] || detail;
+}
+
 async function handleLogin() {
   hideAuthError();
   const username = document.getElementById('login-username').value.trim();
@@ -431,7 +443,7 @@ async function handleLogin() {
     });
     if (!res.ok) {
       let msg = '登入失敗';
-      try { const err = await res.json(); msg = err.detail || msg; } catch {}
+      try { const err = await res.json(); msg = translateError(err.detail) || msg; } catch {}
       if (res.status === 500) msg = '伺服器錯誤，請稍後再試';
       throw new Error(msg);
     }
@@ -460,7 +472,7 @@ async function handleRegister() {
     });
     if (!regRes.ok) {
       let msg = '註冊失敗';
-      try { const err = await regRes.json(); msg = err.detail || msg; } catch {}
+      try { const err = await regRes.json(); msg = translateError(err.detail) || msg; } catch {}
       if (regRes.status === 500) msg = '伺服器錯誤，請稍後再試';
       throw new Error(msg);
     }
@@ -506,7 +518,7 @@ async function handleResetPassword() {
     });
     if (!res.ok) {
       let msg = '重設失敗';
-      try { const err = await res.json(); msg = err.detail || msg; } catch {}
+      try { const err = await res.json(); msg = translateError(err.detail) || msg; } catch {}
       throw new Error(msg);
     }
     showLoginForm();
@@ -1100,6 +1112,7 @@ async function init() {
   } else {
     showLoginView();
   }
+  document.body.style.opacity = '1';
 }
 
 init();
