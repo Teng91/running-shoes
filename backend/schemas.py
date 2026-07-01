@@ -27,6 +27,7 @@ class Token(BaseModel):
 
 class UserResetPassword(BaseModel):
     username: str
+    old_password: str
     new_password: str
 
 

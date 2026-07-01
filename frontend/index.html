@@ -153,6 +153,10 @@ tr:hover td { background: rgba(99,102,241,0.05); }
       <input id="reset-username" placeholder="Username">
     </div>
     <div class="form-group">
+      <label>舊密碼</label>
+      <input id="reset-old-password" type="password" placeholder="Old Password">
+    </div>
+    <div class="form-group">
       <label>新密碼</label>
       <input id="reset-password" type="password" placeholder="New Password">
     </div>
@@ -330,44 +334,23 @@ const BRAND_COLORS = {
 const byDate = (a, b) => new Date(a.date) - new Date(b.date);
 
 // ====== API Calls (with auth) ======
-async function apiGet(url) {
-  const res = await fetch(API_BASE + url, { headers: authHeaders() });
-  if (res.status === 401) { clearAuth(); showLoginView(); throw new Error('Unauthorized'); }
-  if (!res.ok) throw new Error('GET ' + url + ' failed: ' + res.status);
-  return res.json();
-}
-
-async function apiPost(url, body) {
+async function apiFetch(url, options = {}) {
   const res = await fetch(API_BASE + url, {
-    method: 'POST',
-    headers: authHeaders(),
-    body: JSON.stringify(body),
+    headers: { 'Content-Type': 'application/json', ...authHeaders(), ...options.headers },
+    ...options,
   });
   if (res.status === 401) { clearAuth(); showLoginView(); throw new Error('Unauthorized'); }
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || ('POST ' + url + ' failed: ' + res.status));
+    throw new Error(err.detail || `${options.method || 'GET'} ${url} failed: ${res.status}`);
   }
   return res.json();
 }
 
-async function apiPut(url, body) {
-  const res = await fetch(API_BASE + url, {
-    method: 'PUT',
-    headers: authHeaders(),
-    body: JSON.stringify(body),
-  });
-  if (res.status === 401) { clearAuth(); showLoginView(); throw new Error('Unauthorized'); }
-  if (!res.ok) throw new Error('PUT ' + url + ' failed: ' + res.status);
-  return res.json();
-}
-
-async function apiDelete(url) {
-  const res = await fetch(API_BASE + url, { method: 'DELETE', headers: authHeaders() });
-  if (res.status === 401) { clearAuth(); showLoginView(); throw new Error('Unauthorized'); }
-  if (!res.ok) throw new Error('DELETE ' + url + ' failed: ' + res.status);
-  return res.json();
-}
+const apiGet = url => apiFetch(url);
+const apiPost = (url, body) => apiFetch(url, { method: 'POST', body: JSON.stringify(body) });
+const apiPut = (url, body) => apiFetch(url, { method: 'PUT', body: JSON.stringify(body) });
+const apiDelete = url => apiFetch(url, { method: 'DELETE' });
 
 // ====== Auth Handlers ======
 function showLoginForm() {
@@ -506,9 +489,11 @@ function handleLogout() {
 async function handleResetPassword() {
   hideResetError();
   const username = document.getElementById('reset-username').value.trim();
+  const oldPassword = document.getElementById('reset-old-password').value;
   const password = document.getElementById('reset-password').value;
   const password2 = document.getElementById('reset-password2').value;
   if (!username) { showResetError('請輸入帳號'); return; }
+  if (!oldPassword) { showResetError('請輸入舊密碼'); return; }
   if (!password) { showResetError('請輸入新密碼'); return; }
   if (password.length < 4) { showResetError('密碼至少 4 個字元'); return; }
   if (password !== password2) { showResetError('兩次密碼不一致'); return; }
@@ -516,11 +501,12 @@ async function handleResetPassword() {
     const res = await fetch(API_BASE + '/auth/reset-password', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, new_password: password }),
+      body: JSON.stringify({ username, old_password: oldPassword, new_password: password }),
     });
     if (!res.ok) {
       let msg = '重設失敗';
       try { const err = await res.json(); msg = translateError(err.detail) || msg; } catch {}
+      if (res.status === 401) msg = '舊密碼不正確';
       throw new Error(msg);
     }
     showLoginForm();
@@ -533,6 +519,8 @@ async function handleResetPassword() {
 // ====== Data State ======
 let shoes = [];
 let retiredShoes = [];
+let shoeCalcs = [];
+let retiredCalcs = [];
 
 async function loadData() {
   try {
@@ -571,7 +559,6 @@ function calc(shoe) {
 // ====== Formatting ======
 function fmtPct(v) { return (v * 100).toFixed(2) + '%'; }
 function fmtMoney(v) { return '$' + Math.round(v).toLocaleString(); }
-function fmtKm(v) { return v + ' km'; }
 function fmtDate(d) { if (!d) return '-'; return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`; }
 function fmtCostPerKm(v) { return v !== null ? '$' + v.toFixed(2) : '-'; }
 function fmtMonths(v) { return v !== null ? v.toFixed(1) : '-'; }
@@ -598,6 +585,8 @@ function render() {
 
   shoes.sort(byDate);
   retiredShoes.sort(byDate);
+  shoeCalcs = shoes.map(s => calc(s));
+  retiredCalcs = retiredShoes.map(s => calc(s));
 
   renderCards();
   renderTable();
@@ -631,7 +620,7 @@ function renderTable() {
   const tbody = document.getElementById('shoe-table');
   let brandSeq = {};
   tbody.innerHTML = shoes.map((s, i) => {
-    const c = calc(s);
+    const c = shoeCalcs[i];
     const pc = progressColor(c.lifeProgress);
     brandSeq[s.brand] = (brandSeq[s.brand] || 0);
     const bc = brandColor(s.brand, brandSeq[s.brand]);
@@ -662,7 +651,7 @@ function renderRetiredTable() {
   const tbody = document.getElementById('retired-table');
   let brandSeq = {};
   tbody.innerHTML = retiredShoes.map((s, i) => {
-    const c = calc(s);
+    const c = retiredCalcs[i];
     const pc = progressColor(c.lifeProgress);
     brandSeq[s.brand] = (brandSeq[s.brand] || 0);
     const bc = brandColor(s.brand, brandSeq[s.brand]);
@@ -676,7 +665,7 @@ function renderRetiredTable() {
       <td class="editable" ondblclick="inlineEditRetired(${i},'expected_mileage',this)">${s.expected_mileage}</td>
       <td>${fmtCostPerKm(c.expectedCost)}</td>
       <td style="color:${pc}">${fmtPct(c.lifeProgress)}</td>
-      <td>-</td>
+      <td>${s.monthly_km}</td>
       <td>已退役</td>
       <td>${esc(s.size)}</td>
       <td>${fmtMoney(s.price)}</td>
@@ -694,7 +683,7 @@ function renderCharts() {
   Object.values(chartInstances).forEach(c => c.destroy());
   chartInstances = {};
 
-  const labels = shoes.map(s => esc(s.brand) + ' ' + esc(s.model));
+  const labels = shoes.map(s => s.brand + ' ' + s.model);
   let brandSeq = {};
   const colors = shoes.map(s => {
     brandSeq[s.brand] = (brandSeq[s.brand] || 0);
@@ -702,7 +691,7 @@ function renderCharts() {
     brandSeq[s.brand]++;
     return c;
   });
-  const calcs = shoes.map(s => calc(s));
+  const calcs = shoeCalcs;
 
   chartInstances.progress = new Chart(document.getElementById('chart-progress'), {
     type: 'bar',
@@ -888,7 +877,7 @@ async function inlineEdit(idx, field, el) {
     if (!isNaN(val) && val >= 0) {
       shoes[idx][field] = val;
       try {
-        await apiPut('/shoes/' + shoes[idx].id, shoes[idx]);
+        await apiPut('/shoes/' + shoes[idx].id, { [field]: val });
       } catch (e) {
         console.error('更新失敗:', e);
       }
@@ -914,7 +903,7 @@ async function inlineEditRetired(idx, field, el) {
     if (!isNaN(val) && val >= 0) {
       retiredShoes[idx][field] = val;
       try {
-        await apiPut('/shoes/' + retiredShoes[idx].id, retiredShoes[idx]);
+        await apiPut('/shoes/' + retiredShoes[idx].id, { [field]: val });
       } catch (e) {
         console.error('更新失敗:', e);
       }
@@ -1054,12 +1043,12 @@ async function moveShoe() {
       if (editingRetiredIdx < 0) return;
       const s = retiredShoes[editingRetiredIdx];
       if (!confirm(`確定要把 ${s.brand} ${s.model} 移回現役？`)) return;
-      await apiPut('/shoes/' + s.id, { ...s, is_retired: false, monthly_km: 60 });
+      await apiPut('/shoes/' + s.id, { is_retired: false, monthly_km: 60 });
     } else {
       if (editingIdx < 0) return;
       const s = shoes[editingIdx];
       if (!confirm(`確定要把 ${s.brand} ${s.model} 移至退役？`)) return;
-      await apiPut('/shoes/' + s.id, { ...s, is_retired: true, monthly_km: 0 });
+      await apiPut('/shoes/' + s.id, { is_retired: true, monthly_km: 0 });
     }
   } catch (e) {
     console.error('移動失敗:', e);

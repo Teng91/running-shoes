@@ -41,6 +41,9 @@ def seed_default_data():
             ]
             db.add_all(defaults)
             db.commit()
+    except Exception:
+        db.rollback()
+        raise
     finally:
         db.close()
 
@@ -72,6 +75,9 @@ async def lifespan(app: FastAPI):
                 conn.execute(text("ALTER TABLE shoes ADD COLUMN user_id INTEGER"))
                 conn.execute(text(f"UPDATE shoes SET user_id = {joy_user.id}"))
                 conn.commit()
+        except Exception:
+            db.rollback()
+            raise
         finally:
             db.close()
 
@@ -82,9 +88,15 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Running Shoes API", lifespan=lifespan)
 
+CORS_ORIGINS = os.environ.get(
+    "CORS_ORIGINS",
+    "https://running-shoes.fly.dev,http://localhost:8000,http://127.0.0.1:8000",
+    # Multiple origins can be comma-separated
+).split(",")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=CORS_ORIGINS,
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -151,6 +163,10 @@ def reset_password(payload: schemas.UserResetPassword, db: Session = Depends(get
     user = db.query(models.User).filter(models.User.username == payload.username).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    if not verify_password(payload.old_password, user.hashed_password):
+        raise HTTPException(status_code=401, detail="Incorrect password")
+    if len(payload.new_password) < 4:
+        raise HTTPException(status_code=400, detail="Password must be at least 4 characters")
     user.hashed_password = get_password_hash(payload.new_password)
     db.commit()
     return {"ok": True}
