@@ -6,6 +6,7 @@ primary_region = "sin"
 
 [env]
   DB_DIR = "/data"
+  SEED_DATA = "true"
 
 [mount]
   source = "shoes_data"
