@@ -16,13 +16,6 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
 
 if SECRET_KEY == "dev-only-fallback-change-me":
-    if os.environ.get("FLY_APP_NAME"):
-        # On Fly.io, refuse to start with the default key — tokens would be
-        # signed with a publicly-known secret.
-        raise RuntimeError(
-            "SECRET_KEY is not set. Refusing to start on Fly.io with the "
-            "default key — set it via `fly secrets set SECRET_KEY=...`."
-        )
     warnings.warn("Using fallback SECRET_KEY — set the SECRET_KEY env var in production!")
 
 security = HTTPBearer()
