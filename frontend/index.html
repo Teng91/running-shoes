@@ -867,7 +867,7 @@ function populateAddSelects() {
   const monthSel = document.getElementById('add-month');
   yearSel.innerHTML = '';
   const startY = now.getFullYear() - 5;
-  const endY = now.getFullYear() + 2;
+  const endY = now.getFullYear() + 5; // 往未來延伸 5 年
   for (let y = endY; y >= startY; y--) {
     const opt = document.createElement('option');
     opt.value = y;
@@ -926,6 +926,10 @@ function populateMonthlyEditSelects(year, month) {
   const years = new Set(monthlyMileages.map(m => m.year));
   years.add(now.getFullYear());
   years.add(now.getFullYear() + 1);
+  years.add(now.getFullYear() + 2);
+  years.add(now.getFullYear() + 3);
+  years.add(now.getFullYear() + 4);
+  years.add(now.getFullYear() + 5);
   years.add(now.getFullYear() - 1);
   [...years].sort((a, b) => b - a).forEach(y => {
     const opt = document.createElement('option');
