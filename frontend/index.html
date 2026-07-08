@@ -172,6 +172,10 @@ tr:hover td { background: rgba(99,102,241,0.05); }
       <input id="reset-username" placeholder="Username">
     </div>
     <div class="form-group">
+      <label>舊密碼</label>
+      <input id="reset-old-password" type="password" placeholder="Old Password">
+    </div>
+    <div class="form-group">
       <label>新密碼</label>
       <input id="reset-password" type="password" placeholder="New Password">
     </div>
@@ -602,17 +606,19 @@ function handleLogout() {
 async function handleResetPassword() {
   hideResetError();
   const username = document.getElementById('reset-username').value.trim();
+  const oldPassword = document.getElementById('reset-old-password').value;
   const password = document.getElementById('reset-password').value;
   const password2 = document.getElementById('reset-password2').value;
   if (!username) { showResetError('請輸入帳號'); return; }
+  if (!oldPassword) { showResetError('請輸入舊密碼'); return; }
   if (!password) { showResetError('請輸入新密碼'); return; }
   if (password.length < 4) { showResetError('密碼至少 4 個字元'); return; }
   if (password !== password2) { showResetError('兩次密碼不一致'); return; }
   try {
-    const res = await fetch(API_BASE + '/auth/reset-password', {
+    const res = await fetch(API_BASE + '/auth/change-password', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, new_password: password }),
+      body: JSON.stringify({ username, old_password: oldPassword, new_password: password }),
     });
     if (!res.ok) {
       let msg = '重設失敗';
