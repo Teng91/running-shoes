@@ -82,14 +82,10 @@ open http://你的IP:8000
 
 ## Fly.io 部署流程
 
-第一次部署前需先設定必要的 secrets（沒設會啟動失敗）：
+第一次部署需要設定 MIGRATION_PASSWORD（seed 給 Joy 帳號的初始密碼，沒設會啟動失敗）：
 
 ```bash
-# 產生隨機 SECRET_KEY
-python -c "import secrets; print(secrets.token_urlsafe(32))"
-
-# 設定 secrets（MIGRATION_PASSWORD 是 seed 給 Joy 帳號的初始密碼）
-fly secrets set SECRET_KEY=<上面的隨機字串> MIGRATION_PASSWORD=<你想設的密碼>
+fly secrets set MIGRATION_PASSWORD=<你想設的密碼>
 ```
 
 之後每次部署只要：
