@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import Integer, String, Float, Boolean, ForeignKey, DateTime
+from sqlalchemy import Integer, String, Float, Boolean, ForeignKey, DateTime, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from backend.database import Base
 
@@ -16,6 +16,7 @@ class User(Base):
     )
 
     shoes: Mapped[list["Shoe"]] = relationship(back_populates="owner")
+    monthly_mileages: Mapped[list["MonthlyMileage"]] = relationship(back_populates="owner")
 
 
 class Shoe(Base):
@@ -36,3 +37,16 @@ class Shoe(Base):
     is_retired: Mapped[bool] = mapped_column(Boolean, default=False)
 
     owner: Mapped["User"] = relationship(back_populates="shoes")
+
+
+class MonthlyMileage(Base):
+    __tablename__ = "monthly_mileages"
+    __table_args__ = (UniqueConstraint("user_id", "year", "month", name="uq_user_year_month"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
+    year: Mapped[int] = mapped_column(Integer, nullable=False)
+    month: Mapped[int] = mapped_column(Integer, nullable=False)
+    km: Mapped[float] = mapped_column(Float, default=0)
+
+    owner: Mapped["User"] = relationship(back_populates="monthly_mileages")

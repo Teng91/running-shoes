@@ -2,7 +2,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend.database import get_db
-from backend.models import User, Shoe
+from backend.models import User, Shoe, MonthlyMileage
 from backend.auth import get_password_hash
 from backend.main import app
 
@@ -155,3 +155,114 @@ def test_shoe_isolation_between_users(client, db):
 def test_unauthenticated_access(client):
     res = client.get("/api/shoes/active")
     assert res.status_code == 401  # No credentials provided
+
+
+# ── Monthly Mileage CRUD Tests ────────────────────────────────
+
+def test_list_monthly_mileage_empty(client, user_with_token):
+    user, token = user_with_token
+    res = client.get("/api/monthly-mileage", headers=_auth_header(token))
+    assert res.status_code == 200
+    assert res.json() == []
+
+
+def test_create_monthly_mileage(client, db, user_with_token):
+    user, token = user_with_token
+    res = client.post("/api/monthly-mileage", headers=_auth_header(token), json={
+        "year": 2026, "month": 7, "km": 100.5,
+    })
+    assert res.status_code == 200
+    data = res.json()
+    assert data["year"] == 2026
+    assert data["month"] == 7
+    assert data["km"] == 100.5
+    assert data["user_id"] == user.id
+
+
+def test_create_monthly_mileage_invalid_month(client, user_with_token):
+    user, token = user_with_token
+    res = client.post("/api/monthly-mileage", headers=_auth_header(token), json={
+        "year": 2026, "month": 13, "km": 10,
+    })
+    assert res.status_code == 400
+
+
+def test_create_monthly_mileage_duplicate(client, db, user_with_token):
+    user, token = user_with_token
+    db.add(MonthlyMileage(user_id=user.id, year=2026, month=7, km=50))
+    db.commit()
+    res = client.post("/api/monthly-mileage", headers=_auth_header(token), json={
+        "year": 2026, "month": 7, "km": 100,
+    })
+    assert res.status_code == 400
+    assert "已有紀錄" in res.json()["detail"]
+
+
+def test_update_monthly_mileage(client, db, user_with_token):
+    user, token = user_with_token
+    entry = MonthlyMileage(user_id=user.id, year=2026, month=7, km=50)
+    db.add(entry)
+    db.commit()
+    db.refresh(entry)
+    res = client.put(f"/api/monthly-mileage/{entry.id}", headers=_auth_header(token), json={"km": 75.5})
+    assert res.status_code == 200
+    assert res.json()["km"] == 75.5
+
+
+def test_update_monthly_mileage_not_found(client, user_with_token):
+    user, token = user_with_token
+    res = client.put("/api/monthly-mileage/99999", headers=_auth_header(token), json={"km": 10})
+    assert res.status_code == 404
+
+
+def test_update_monthly_mileage_clash(client, db, user_with_token):
+    user, token = user_with_token
+    e1 = MonthlyMileage(user_id=user.id, year=2026, month=7, km=50)
+    e2 = MonthlyMileage(user_id=user.id, year=2026, month=8, km=60)
+    db.add_all([e1, e2])
+    db.commit()
+    db.refresh(e1)
+    res = client.put(f"/api/monthly-mileage/{e1.id}", headers=_auth_header(token), json={"month": 8})
+    assert res.status_code == 400
+
+
+def test_delete_monthly_mileage(client, db, user_with_token):
+    user, token = user_with_token
+    entry = MonthlyMileage(user_id=user.id, year=2026, month=7, km=50)
+    db.add(entry)
+    db.commit()
+    db.refresh(entry)
+    res = client.delete(f"/api/monthly-mileage/{entry.id}", headers=_auth_header(token))
+    assert res.status_code == 200
+    # Verify it's gone
+    res = client.get("/api/monthly-mileage", headers=_auth_header(token))
+    assert res.json() == []
+
+
+def test_monthly_mileage_isolation_between_users(client, db):
+    user_a = User(username="alice", hashed_password=get_password_hash("pass1234"))
+    user_b = User(username="bob", hashed_password=get_password_hash("pass1234"))
+    db.add_all([user_a, user_b])
+    db.commit()
+    db.refresh(user_a)
+    db.refresh(user_b)
+    entry = MonthlyMileage(user_id=user_a.id, year=2026, month=7, km=50)
+    db.add(entry)
+    db.commit()
+    db.refresh(entry)
+
+    from backend.auth import create_access_token
+    token_b = create_access_token(data={"sub": "bob"})
+
+    # Bob cannot see Alice's monthly mileage
+    res = client.get("/api/monthly-mileage", headers=_auth_header(token_b))
+    assert res.json() == []
+
+    # Bob cannot delete Alice's monthly mileage
+    res = client.delete(f"/api/monthly-mileage/{entry.id}", headers=_auth_header(token_b))
+    assert res.status_code == 404
+
+
+def test_monthly_mileage_unauthenticated(client):
+    res = client.get("/api/monthly-mileage")
+    assert res.status_code == 401

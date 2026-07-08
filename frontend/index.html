@@ -43,6 +43,18 @@ h1 { font-size: 28px; font-weight: 700; margin-bottom: 4px; }
 .chart-box { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
 .chart-box h3 { font-size: 14px; color: var(--text-dim); margin-bottom: 12px; font-weight: 500; }
 .chart-box canvas { max-height: 240px; }
+.chart-title-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.chart-title-row h3 { margin-bottom: 0; }
+.year-select { background: var(--bg); border: 1px solid var(--border); color: var(--text); font-size: 12px; padding: 4px 8px; border-radius: 6px; cursor: pointer; }
+.year-select:focus { outline: none; border-color: var(--accent); }
+.year-total { font-size: 12px; color: var(--text-dim); margin-left: 10px; }
+
+/* Inline add row */
+.inline-add { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+.inline-add select, .inline-add input { background: var(--bg); border: 1px solid var(--border); color: var(--text); font-size: 13px; padding: 6px 8px; border-radius: 6px; }
+.inline-add input { width: 100px; }
+.inline-add select:focus, .inline-add input:focus { outline: none; border-color: var(--accent); }
+.inline-error { color: var(--red); font-size: 12px; width: 100%; }
 
 /* Table */
 .table-section { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 28px; }
@@ -95,6 +107,13 @@ tr:hover td { background: rgba(99,102,241,0.05); }
 
 @media (max-width: 900px) {
   .charts { grid-template-columns: 1fr; }
+}
+.charts-3col { grid-template-columns: repeat(3, 1fr); }
+@media (max-width: 1100px) {
+  .charts-3col { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 700px) {
+  .charts-3col { grid-template-columns: 1fr; }
 }
 </style>
 </head>
@@ -225,6 +244,56 @@ tr:hover td { background: rgba(99,102,241,0.05); }
       </table>
     </div>
   </div>
+
+  <div class="charts charts-3col">
+    <div class="chart-box">
+      <div class="chart-title-row">
+        <h3>年度總跑量</h3>
+      </div>
+      <canvas id="chart-yearly-total"></canvas>
+    </div>
+    <div class="chart-box">
+      <div class="chart-title-row">
+        <h3>年度月跑量</h3>
+        <select id="year-select" class="year-select" onchange="onYearChange()"></select>
+      </div>
+      <canvas id="chart-monthly-year"></canvas>
+    </div>
+    <div class="chart-box">
+      <div class="chart-title-row">
+        <h3>滾動平均</h3>
+        <select id="rolling-window" class="year-select" onchange="renderRollingAvgChart()">
+          <option value="3">3 個月</option>
+          <option value="6">6 個月</option>
+          <option value="12" selected>12 個月</option>
+        </select>
+      </div>
+      <canvas id="chart-rolling"></canvas>
+    </div>
+  </div>
+
+  <div class="table-section">
+    <div class="table-header">
+      <h2>月跑量紀錄</h2>
+    </div>
+    <div class="inline-add">
+      <select id="add-year"></select>
+      <select id="add-month"></select>
+      <input id="add-km" type="number" min="0" step="0.01" placeholder="km">
+      <button class="btn btn-sm btn-primary" onclick="addMonthlyMileage()">新增</button>
+      <span class="inline-error" id="add-error"></span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>年份</th><th>月份</th><th>跑量 (km)</th><th></th>
+          </tr>
+        </thead>
+        <tbody id="monthly-table"></tbody>
+      </table>
+    </div>
+  </div>
 </div>
 
 <!-- Add/Edit Modal -->
@@ -256,6 +325,33 @@ tr:hover td { background: rgba(99,102,241,0.05); }
       <span style="flex:1"></span>
       <button class="btn btn-cancel" onclick="closeModal()">取消</button>
       <button class="btn btn-primary" onclick="saveShoe()">儲存</button>
+    </div>
+  </div>
+</div>
+
+<!-- Monthly Mileage Modal -->
+<div class="modal-overlay" id="monthly-modal">
+  <div class="modal" style="width: 360px;">
+    <h2 id="monthly-modal-title">新增月份</h2>
+    <div class="form-row">
+      <div class="form-group">
+        <label>年份</label>
+        <select id="m-year"></select>
+      </div>
+      <div class="form-group">
+        <label>月份</label>
+        <select id="m-month"></select>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>跑量 (km)</label>
+      <input id="m-km" type="number" placeholder="0" min="0" step="0.01">
+    </div>
+    <div class="auth-error" id="monthly-error"></div>
+    <div class="modal-actions">
+      <span style="flex:1"></span>
+      <button class="btn btn-cancel" onclick="closeMonthlyModal()">取消</button>
+      <button class="btn btn-primary" onclick="saveMonthlyMileage()">儲存</button>
     </div>
   </div>
 </div>
@@ -533,19 +629,33 @@ async function handleResetPassword() {
 // ====== Data State ======
 let shoes = [];
 let retiredShoes = [];
+let monthlyMileages = [];
+let selectedYear = null;
 
 async function loadData() {
   try {
-    const [active, retired] = await Promise.all([
+    const [active, retired, monthly] = await Promise.all([
       apiGet('/shoes/active'),
       apiGet('/shoes/retired'),
+      apiGet('/monthly-mileage'),
     ]);
     shoes = active;
     retiredShoes = retired;
+    monthlyMileages = monthly;
   } catch (e) {
     console.error('載入資料失敗:', e);
     shoes = [];
     retiredShoes = [];
+    monthlyMileages = [];
+  }
+  // Default selected year to the most recent year present
+  if (monthlyMileages.length > 0) {
+    const years = [...new Set(monthlyMileages.map(m => m.year))].sort((a, b) => b - a);
+    if (!selectedYear || !years.includes(selectedYear)) {
+      selectedYear = years[0];
+    }
+  } else {
+    selectedYear = new Date().getFullYear();
   }
   render();
 }
@@ -602,8 +712,10 @@ function render() {
   renderCards();
   renderTable();
   renderRetiredTable();
+  renderMonthlyTable();
   if (typeof Chart !== 'undefined') {
     renderCharts();
+    renderMonthlyCharts();
   }
 }
 
@@ -685,6 +797,180 @@ function renderRetiredTable() {
       <td><button class="btn btn-sm btn-edit" onclick="openRetiredEditModal(${i})">編輯</button></td>
     </tr>`;
   }).join('');
+}
+
+// ====== Monthly Mileage Table ======
+function renderMonthlyTable() {
+  const tbody = document.getElementById('monthly-table');
+  if (monthlyMileages.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--text-dim);padding:24px;">尚無月跑量紀錄，使用上方表單新增</td></tr>';
+    return;
+  }
+  tbody.innerHTML = monthlyMileages.map((m, i) => `
+    <tr>
+      <td>${m.year}</td>
+      <td>${m.month}</td>
+      <td class="editable" ondblclick="inlineEditMonthly(${i},'km',this)">${m.km.toFixed(2)}</td>
+      <td>
+        <button class="btn btn-sm btn-edit" onclick="editMonthlyMileage(${i})">編輯</button>
+        <button class="btn btn-sm btn-delete" onclick="deleteMonthlyMileage(${i})">刪除</button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+async function inlineEditMonthly(idx, field, el) {
+  const current = monthlyMileages[idx][field];
+  const input = document.createElement('input');
+  input.type = 'number';
+  input.className = 'inline-input';
+  input.step = '0.01';
+  input.min = '0';
+  input.value = current;
+  input.focus();
+  const commit = async () => {
+    const val = parseFloat(input.value);
+    if (!isNaN(val) && val >= 0) {
+      monthlyMileages[idx][field] = val;
+      try {
+        await apiPut('/monthly-mileage/' + monthlyMileages[idx].id, { km: val });
+      } catch (e) {
+        console.error('更新失敗:', e);
+      }
+    }
+    render();
+  };
+  input.addEventListener('blur', commit);
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') render(); });
+  el.innerHTML = '';
+  el.appendChild(input);
+  input.focus();
+}
+
+async function deleteMonthlyMileage(idx) {
+  const m = monthlyMileages[idx];
+  if (!confirm(`確定要刪除 ${m.year} 年 ${m.month} 月的紀錄？`)) return;
+  try {
+    await apiDelete('/monthly-mileage/' + m.id);
+  } catch (e) {
+    console.error('刪除失敗:', e);
+    alert('刪除失敗');
+    return;
+  }
+  await loadData();
+}
+
+// ====== Monthly Mileage: inline add form ======
+function populateAddSelects() {
+  const now = new Date();
+  const yearSel = document.getElementById('add-year');
+  const monthSel = document.getElementById('add-month');
+  yearSel.innerHTML = '';
+  const startY = now.getFullYear() - 5;
+  const endY = now.getFullYear() + 2;
+  for (let y = endY; y >= startY; y--) {
+    const opt = document.createElement('option');
+    opt.value = y;
+    opt.textContent = y;
+    if (y === now.getFullYear()) opt.selected = true;
+    yearSel.appendChild(opt);
+  }
+  monthSel.innerHTML = '';
+  for (let m = 1; m <= 12; m++) {
+    const opt = document.createElement('option');
+    opt.value = m;
+    opt.textContent = m + ' 月';
+    if (m === now.getMonth() + 1) opt.selected = true;
+    monthSel.appendChild(opt);
+  }
+}
+
+async function addMonthlyMileage() {
+  const year = parseInt(document.getElementById('add-year').value, 10);
+  const month = parseInt(document.getElementById('add-month').value, 10);
+  const rawKm = parseFloat(document.getElementById('add-km').value);
+  const km = Number.isFinite(rawKm) ? rawKm : 0;
+  const errEl = document.getElementById('add-error');
+  errEl.style.display = 'none';
+
+  try {
+    await apiPost('/monthly-mileage', { year, month, km });
+  } catch (e) {
+    errEl.textContent = translateError(e.message) || '儲存失敗';
+    errEl.style.display = '';
+    return;
+  }
+  document.getElementById('add-km').value = '';
+  await loadData();
+}
+
+// ====== Monthly Mileage: edit modal ======
+let editingMonthlyIdx = -1;
+
+function editMonthlyMileage(idx) {
+  editingMonthlyIdx = idx;
+  const m = monthlyMileages[idx];
+  populateMonthlyEditSelects(m.year, m.month);
+  document.getElementById('monthly-modal-title').textContent = '編輯月份';
+  document.getElementById('m-km').value = m.km;
+  document.getElementById('monthly-error').style.display = 'none';
+  document.getElementById('monthly-modal').classList.add('active');
+}
+
+function populateMonthlyEditSelects(year, month) {
+  const now = new Date();
+  const yearSel = document.getElementById('m-year');
+  const monthSel = document.getElementById('m-month');
+  yearSel.innerHTML = '';
+  // Range that covers both existing data and future additions
+  const years = new Set(monthlyMileages.map(m => m.year));
+  years.add(now.getFullYear());
+  years.add(now.getFullYear() + 1);
+  years.add(now.getFullYear() - 1);
+  [...years].sort((a, b) => b - a).forEach(y => {
+    const opt = document.createElement('option');
+    opt.value = y;
+    opt.textContent = y;
+    if (y === year) opt.selected = true;
+    yearSel.appendChild(opt);
+  });
+  monthSel.innerHTML = '';
+  for (let m = 1; m <= 12; m++) {
+    const opt = document.createElement('option');
+    opt.value = m;
+    opt.textContent = m + ' 月';
+    if (m === month) opt.selected = true;
+    monthSel.appendChild(opt);
+  }
+}
+
+function closeMonthlyModal() {
+  document.getElementById('monthly-modal').classList.remove('active');
+  editingMonthlyIdx = -1;
+}
+
+async function saveMonthlyMileage() {
+  const year = parseInt(document.getElementById('m-year').value, 10);
+  const month = parseInt(document.getElementById('m-month').value, 10);
+  const rawKm = parseFloat(document.getElementById('m-km').value);
+  const km = Number.isFinite(rawKm) ? rawKm : 0;
+  const errEl = document.getElementById('monthly-error');
+  errEl.style.display = 'none';
+
+  try {
+    if (editingMonthlyIdx >= 0) {
+      const id = monthlyMileages[editingMonthlyIdx].id;
+      await apiPut('/monthly-mileage/' + id, { year, month, km });
+    } else {
+      await apiPost('/monthly-mileage', { year, month, km });
+    }
+  } catch (e) {
+    errEl.textContent = translateError(e.message) || '儲存失敗';
+    errEl.style.display = 'block';
+    return;
+  }
+  closeMonthlyModal();
+  await loadData();
 }
 
 // ====== Charts ======
@@ -869,6 +1155,201 @@ function renderCharts() {
         ctx.fillStyle = '#e4e4e7';
         ctx.font = 'bold 24px "Segoe UI", system-ui, sans-serif';
         ctx.fillText(totalMonthlyKm + ' km', cx, y0 + h1 + gap);
+        ctx.restore();
+      }
+    }]
+  });
+}
+
+// ====== Monthly Mileage Charts ======
+function renderMonthlyCharts() {
+  if (chartInstances.monthlyYear) { chartInstances.monthlyYear.destroy(); delete chartInstances.monthlyYear; }
+  if (chartInstances.rolling) { chartInstances.rolling.destroy(); delete chartInstances.rolling; }
+  if (chartInstances.yearlyTotal) { chartInstances.yearlyTotal.destroy(); delete chartInstances.yearlyTotal; }
+  populateYearSelect();
+  renderMonthlyYearChart();
+  renderRollingAvgChart();
+  renderYearlyTotalChart();
+}
+
+function populateYearSelect() {
+  const sel = document.getElementById('year-select');
+  const years = [...new Set(monthlyMileages.map(m => m.year))].sort((a, b) => b - a);
+  if (years.length === 0) {
+    sel.innerHTML = '<option value="">無資料</option>';
+    selectedYear = null;
+    return;
+  }
+  if (!selectedYear || !years.includes(selectedYear)) {
+    selectedYear = years[0];
+  }
+  sel.innerHTML = years.map(y => `<option value="${y}" ${y === selectedYear ? 'selected' : ''}>${y}</option>`).join('');
+}
+
+function onYearChange() {
+  const sel = document.getElementById('year-select');
+  selectedYear = parseInt(sel.value, 10) || null;
+  renderMonthlyYearChart();
+}
+
+function renderRollingAvgChart() {
+  if (chartInstances.rolling) { chartInstances.rolling.destroy(); delete chartInstances.rolling; }
+  if (monthlyMileages.length === 0) return;
+
+  const sel = document.getElementById('rolling-window');
+  const windowSize = parseInt(sel.value, 10) || 12;
+
+  const sorted = [...monthlyMileages].sort((a, b) => (a.year - b.year) || (a.month - b.month));
+  const labels = sorted.map(m => `${m.year}/${String(m.month).padStart(2, '0')}`);
+
+  // Trailing N-month rolling average (only computed once window has N months of data)
+  const rolling = sorted.map((m, i) => {
+    if (i < windowSize - 1) return null;
+    const start = i - windowSize + 1;
+    const win = sorted.slice(start, i + 1);
+    const sum = win.reduce((s, w) => s + w.km, 0);
+    return parseFloat((sum / win.length).toFixed(2));
+  });
+
+  chartInstances.rolling = new Chart(document.getElementById('chart-rolling'), {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: `${windowSize} 個月滾動平均 (km)`,
+        data: rolling,
+        borderColor: '#22c55e',
+        backgroundColor: 'rgba(34, 197, 94, 0.15)',
+        fill: true,
+        tension: 0.3,
+        pointRadius: 2,
+        pointHoverRadius: 5,
+        pointBackgroundColor: '#22c55e',
+        borderWidth: 2,
+        spanGaps: false,
+      }]
+    },
+    options: {
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => `平均 ${ctx.raw.toFixed(2)} km` } }
+      },
+      scales: {
+        x: { grid: { display: false }, ticks: { color: '#8b8d9a', font: { size: 10 }, maxRotation: 45, minRotation: 45 } },
+        y: { grid: { color: '#2a2d3e' }, ticks: { color: '#8b8d9a', callback: v => v + ' km' }, beginAtZero: true }
+      }
+    }
+  });
+}
+
+function renderYearlyTotalChart() {
+  if (chartInstances.yearlyTotal) { chartInstances.yearlyTotal.destroy(); delete chartInstances.yearlyTotal; }
+  if (monthlyMileages.length === 0) return;
+
+  const yearMap = new Map();
+  monthlyMileages.forEach(m => {
+    yearMap.set(m.year, (yearMap.get(m.year) || 0) + m.km);
+  });
+  const years = [...yearMap.keys()].sort((a, b) => a - b);
+  const totals = years.map(y => parseFloat(yearMap.get(y).toFixed(2)));
+
+  chartInstances.yearlyTotal = new Chart(document.getElementById('chart-yearly-total'), {
+    type: 'bar',
+    data: {
+      labels: years.map(String),
+      datasets: [{
+        label: '年總跑量',
+        data: totals,
+        backgroundColor: '#6366f1',
+        borderRadius: 4,
+      }]
+    },
+    options: {
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => ctx.raw.toFixed(2) + ' km' } }
+      },
+      scales: {
+        x: { grid: { display: false }, ticks: { color: '#8b8d9a' } },
+        y: { grid: { color: '#2a2d3e' }, ticks: { color: '#8b8d9a', callback: v => v + ' km' }, beginAtZero: true }
+      }
+    },
+    plugins: [{
+      id: 'valueOnTop',
+      afterDatasetsDraw(chart) {
+        const { ctx } = chart;
+        const meta = chart.getDatasetMeta(0);
+        meta.data.forEach((bar, i) => {
+          const v = totals[i];
+          if (!bar) return;
+          ctx.save();
+          ctx.fillStyle = '#e4e4e7';
+          ctx.font = 'bold 11px "Segoe UI", system-ui, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText(v.toFixed(0), bar.x, bar.y - 6);
+          ctx.restore();
+        });
+      }
+    }]
+  });
+}
+
+function renderMonthlyYearChart() {
+  if (chartInstances.monthlyYear) { chartInstances.monthlyYear.destroy(); delete chartInstances.monthlyYear; }
+  const sel = document.getElementById('year-select');
+  const year = parseInt(sel.value, 10);
+  if (!year) return;
+
+  const yearData = monthlyMileages.filter(m => m.year === year);
+  const monthMap = new Map(yearData.map(m => [m.month, m.km]));
+  const labels = Array.from({length: 12}, (_, i) => (i + 1) + '月');
+  const values = Array.from({length: 12}, (_, i) => monthMap.get(i + 1) ?? 0);
+
+  const total = values.reduce((a, b) => a + b, 0);
+  // Divide by months that actually have a record (user logs 0 for inactive months)
+  const monthsWithData = yearData.length;
+  const avg = monthsWithData > 0 ? total / monthsWithData : 0;
+
+  chartInstances.monthlyYear = new Chart(document.getElementById('chart-monthly-year'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: year + ' 年月跑量 (km)',
+        data: values,
+        backgroundColor: '#22c55e',
+        borderRadius: 4,
+      }]
+    },
+    options: {
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => ctx.raw.toFixed(2) + ' km' } }
+      },
+      scales: {
+        x: { grid: { display: false }, ticks: { color: '#8b8d9a', font: { size: 11 } } },
+        y: { grid: { color: '#2a2d3e' }, ticks: { color: '#8b8d9a', callback: v => v + ' km' }, beginAtZero: true }
+      }
+    },
+    plugins: [{
+      id: 'avgLine',
+      afterDraw(chart) {
+        const { ctx, chartArea, scales: { y } } = chart;
+        if (avg <= 0) return;
+        const yPx = y.getPixelForValue(avg);
+        if (yPx < chartArea.top || yPx > chartArea.bottom) return;
+        ctx.save();
+        ctx.strokeStyle = '#eab308';
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([5, 4]);
+        ctx.beginPath();
+        ctx.moveTo(chartArea.left, yPx);
+        ctx.lineTo(chartArea.right, yPx);
+        ctx.stroke();
+        ctx.fillStyle = '#eab308';
+        ctx.font = '11px "Segoe UI", system-ui, sans-serif';
+        ctx.textAlign = 'right';
+        ctx.fillText('月均 ' + avg.toFixed(1) + ' km', chartArea.right - 6, yPx - 6);
         ctx.restore();
       }
     }]
@@ -1099,9 +1580,13 @@ async function deleteFromModal() {
 document.getElementById('modal').addEventListener('click', e => {
   if (e.target.id === 'modal') closeModal();
 });
+document.getElementById('monthly-modal').addEventListener('click', e => {
+  if (e.target.id === 'monthly-modal') closeMonthlyModal();
+});
 
 // Check stored token on load
 async function init() {
+  populateAddSelects();
   if (authToken) {
     try {
       await fetch(API_BASE + '/auth/me', { headers: authHeaders() });

@@ -66,3 +66,27 @@ class ShoeOut(ShoeBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
     user_id: int
+
+
+# ── Monthly Mileage Schemas ───────────────────────────────────
+
+class MonthlyMileageBase(BaseModel):
+    year: int
+    month: int
+    km: float = 0
+
+
+class MonthlyMileageCreate(MonthlyMileageBase):
+    pass  # user_id is set by the backend, never by the client
+
+
+class MonthlyMileageUpdate(BaseModel):
+    year: Optional[int] = None
+    month: Optional[int] = None
+    km: Optional[float] = None
+
+
+class MonthlyMileageOut(MonthlyMileageBase):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    user_id: int
