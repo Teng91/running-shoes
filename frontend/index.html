@@ -136,7 +136,7 @@ tr:hover td { background: rgba(99,102,241,0.05); }
     <div class="auth-error" id="auth-error"></div>
     <button class="btn btn-primary" style="width:100%;margin-top:8px;" onclick="handleLogin()">登入</button>
     <div style="text-align:center;margin-top:12px;">
-      <a href="#" onclick="showResetForm();return false;" style="color:var(--text-dim);font-size:13px;">忘記密碼？</a>
+      <a href="#" onclick="showChangeForm();return false;" style="color:var(--text-dim);font-size:13px;">更改密碼</a>
       <span style="color:var(--border);margin:0 8px;">|</span>
       <a href="#" onclick="showRegisterForm();return false;" style="color:var(--accent-light);font-size:13px;">註冊</a>
     </div>
@@ -164,27 +164,27 @@ tr:hover td { background: rgba(99,102,241,0.05); }
     </div>
   </div>
 
-  <!-- Reset Password Form -->
-  <div class="auth-box" id="reset-form" style="display:none;">
-    <h1>重設密碼</h1>
+  <!-- Change Password Form -->
+  <div class="auth-box" id="change-form" style="display:none;">
+    <h1>更改密碼</h1>
     <div class="form-group">
       <label>帳號</label>
-      <input id="reset-username" placeholder="Username">
+      <input id="change-username" placeholder="Username">
     </div>
     <div class="form-group">
       <label>舊密碼</label>
-      <input id="reset-old-password" type="password" placeholder="Old Password">
+      <input id="change-old-password" type="password" placeholder="Old Password">
     </div>
     <div class="form-group">
       <label>新密碼</label>
-      <input id="reset-password" type="password" placeholder="New Password">
+      <input id="change-new-password" type="password" placeholder="New Password">
     </div>
     <div class="form-group">
       <label>確認新密碼</label>
-      <input id="reset-password2" type="password" placeholder="Confirm New Password">
+      <input id="change-new-password2" type="password" placeholder="Confirm New Password">
     </div>
-    <div class="auth-error" id="reset-error"></div>
-    <button class="btn btn-primary" style="width:100%;margin-top:8px;" onclick="handleResetPassword()">重設密碼</button>
+    <div class="auth-error" id="change-error"></div>
+    <button class="btn btn-primary" style="width:100%;margin-top:8px;" onclick="handleChangePassword()">更改密碼</button>
     <div style="text-align:center;margin-top:12px;">
       <a href="#" onclick="showLoginForm();return false;" style="color:var(--accent-light);font-size:13px;">回登入頁</a>
     </div>
@@ -473,22 +473,22 @@ async function apiDelete(url) {
 function showLoginForm() {
   document.getElementById('login-form').style.display = '';
   document.getElementById('register-form').style.display = 'none';
-  document.getElementById('reset-form').style.display = 'none';
+  document.getElementById('change-form').style.display = 'none';
   hideAuthError();
 }
 
 function showRegisterForm() {
   document.getElementById('login-form').style.display = 'none';
   document.getElementById('register-form').style.display = '';
-  document.getElementById('reset-form').style.display = 'none';
+  document.getElementById('change-form').style.display = 'none';
   hideRegError();
 }
 
-function showResetForm() {
+function showChangeForm() {
   document.getElementById('login-form').style.display = 'none';
   document.getElementById('register-form').style.display = 'none';
-  document.getElementById('reset-form').style.display = '';
-  hideResetError();
+  document.getElementById('change-form').style.display = '';
+  hideChangeError();
 }
 
 function showAuthError(msg) {
@@ -511,14 +511,14 @@ function hideRegError() {
   document.getElementById('reg-error').style.display = 'none';
 }
 
-function showResetError(msg) {
-  const el = document.getElementById('reset-error');
+function showChangeError(msg) {
+  const el = document.getElementById('change-error');
   el.textContent = msg;
   el.style.display = 'block';
 }
 
-function hideResetError() {
-  document.getElementById('reset-error').style.display = 'none';
+function hideChangeError() {
+  document.getElementById('change-error').style.display = 'none';
 }
 
 const ERROR_ZH = {
@@ -603,17 +603,17 @@ function handleLogout() {
   showLoginView();
 }
 
-async function handleResetPassword() {
-  hideResetError();
-  const username = document.getElementById('reset-username').value.trim();
-  const oldPassword = document.getElementById('reset-old-password').value;
-  const password = document.getElementById('reset-password').value;
-  const password2 = document.getElementById('reset-password2').value;
-  if (!username) { showResetError('請輸入帳號'); return; }
-  if (!oldPassword) { showResetError('請輸入舊密碼'); return; }
-  if (!password) { showResetError('請輸入新密碼'); return; }
-  if (password.length < 4) { showResetError('密碼至少 4 個字元'); return; }
-  if (password !== password2) { showResetError('兩次密碼不一致'); return; }
+async function handleChangePassword() {
+  hideChangeError();
+  const username = document.getElementById('change-username').value.trim();
+  const oldPassword = document.getElementById('change-old-password').value;
+  const password = document.getElementById('change-new-password').value;
+  const password2 = document.getElementById('change-new-password2').value;
+  if (!username) { showChangeError('請輸入帳號'); return; }
+  if (!oldPassword) { showChangeError('請輸入舊密碼'); return; }
+  if (!password) { showChangeError('請輸入新密碼'); return; }
+  if (password.length < 4) { showChangeError('密碼至少 4 個字元'); return; }
+  if (password !== password2) { showChangeError('兩次密碼不一致'); return; }
   try {
     const res = await fetch(API_BASE + '/auth/change-password', {
       method: 'POST',
@@ -628,7 +628,7 @@ async function handleResetPassword() {
     showLoginForm();
     showAuthError('密碼已重設，請重新登入');
   } catch (e) {
-    showResetError(e.message);
+    showChangeError(e.message);
   }
 }
 
