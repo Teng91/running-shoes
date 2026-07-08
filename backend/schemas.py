@@ -25,8 +25,9 @@ class Token(BaseModel):
     token_type: str = "bearer"
 
 
-class UserResetPassword(BaseModel):
+class UserChangePassword(BaseModel):
     username: str
+    old_password: str
     new_password: str
 
 
