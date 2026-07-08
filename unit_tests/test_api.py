@@ -63,19 +63,42 @@ def test_login_wrong_password(client, db):
     assert res.json()["detail"] == "Incorrect password"
 
 
-def test_reset_password(client, db):
+def test_change_password(client, db):
     db.add(User(username="alice", hashed_password=get_password_hash("oldpass")))
     db.commit()
-    res = client.post("/api/auth/reset-password", json={"username": "alice", "new_password": "newpass1"})
+    res = client.post("/api/auth/change-password", json={
+        "username": "alice", "old_password": "oldpass", "new_password": "newpass1",
+    })
     assert res.status_code == 200
     # Verify new password works
     res = client.post("/api/auth/login", json={"username": "alice", "password": "newpass1"})
     assert res.status_code == 200
 
 
-def test_reset_password_user_not_found(client):
-    res = client.post("/api/auth/reset-password", json={"username": "nobody", "new_password": "newpass1"})
+def test_change_password_user_not_found(client):
+    res = client.post("/api/auth/change-password", json={
+        "username": "nobody", "old_password": "oldpass", "new_password": "newpass1",
+    })
     assert res.status_code == 404
+
+
+def test_change_password_wrong_old(client, db):
+    db.add(User(username="alice", hashed_password=get_password_hash("oldpass")))
+    db.commit()
+    res = client.post("/api/auth/change-password", json={
+        "username": "alice", "old_password": "wrong", "new_password": "newpass1",
+    })
+    assert res.status_code == 401
+    assert res.json()["detail"] == "Incorrect old password"
+
+
+def test_change_password_short_new(client, db):
+    db.add(User(username="alice", hashed_password=get_password_hash("oldpass")))
+    db.commit()
+    res = client.post("/api/auth/change-password", json={
+        "username": "alice", "old_password": "oldpass", "new_password": "ab",
+    })
+    assert res.status_code == 400
 
 
 # ── Shoe CRUD Tests ───────────────────────────────────────────

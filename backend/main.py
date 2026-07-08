@@ -24,7 +24,12 @@ def seed_default_data():
         # Ensure Joy exists (so seed data always belongs to her)
         joy_user = db.query(models.User).filter(models.User.username == "Joy").first()
         if not joy_user:
-            migration_password = os.environ.get("MIGRATION_PASSWORD", "1130")
+            migration_password = os.environ.get("MIGRATION_PASSWORD")
+            if not migration_password:
+                raise RuntimeError(
+                    "MIGRATION_PASSWORD must be set when SEED_DATA=true so the "
+                    "Joy account has a known password."
+                )
             joy_user = models.User(username="Joy", hashed_password=get_password_hash(migration_password))
             db.add(joy_user)
             db.commit()
@@ -79,7 +84,12 @@ async def lifespan(app: FastAPI):
         # Old schema: create users table, add user_id to shoes, assign to "Joy"
         Base.metadata.create_all(bind=engine, tables=[models.User.__table__])
 
-        migration_password = os.environ.get("MIGRATION_PASSWORD", "1130")
+        migration_password = os.environ.get("MIGRATION_PASSWORD")
+        if not migration_password:
+            raise RuntimeError(
+                "MIGRATION_PASSWORD must be set to run the schema migration; "
+                "it becomes the password for the legacy 'Joy' account."
+            )
         db = SessionLocal()
         try:
             joy_user = models.User(
@@ -93,7 +103,10 @@ async def lifespan(app: FastAPI):
             # Add user_id column (SQLite allows ALTER TABLE ADD COLUMN without FK)
             with engine.connect() as conn:
                 conn.execute(text("ALTER TABLE shoes ADD COLUMN user_id INTEGER"))
-                conn.execute(text(f"UPDATE shoes SET user_id = {joy_user.id}"))
+                conn.execute(
+                    text("UPDATE shoes SET user_id = :uid"),
+                    {"uid": joy_user.id},
+                )
                 conn.commit()
         finally:
             db.close()
@@ -129,9 +142,14 @@ async def http_exception_handler(request, exc):
         path = request.url.path
         if path.startswith("/api/") or path.startswith("/docs") or path.startswith("/openapi.json"):
             return JSONResponse({"detail": exc.detail}, status_code=404)
-        file = frontend_dir / path.lstrip("/")
-        if file.is_file():
-            return FileResponse(file)
+        # Resolve and ensure the file lives inside frontend_dir — otherwise
+        # a path like "/../shoes.db" could escape and serve arbitrary files.
+        try:
+            candidate = (frontend_dir / path.lstrip("/")).resolve()
+        except (OSError, ValueError):
+            return FileResponse(frontend_dir / "index.html")
+        if frontend_dir.resolve() in candidate.parents and candidate.is_file():
+            return FileResponse(candidate)
         return FileResponse(frontend_dir / "index.html")
     return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
 
@@ -169,11 +187,15 @@ def read_current_user(current_user: models.User = Depends(get_current_user)):
     return current_user
 
 
-@app.post("/api/auth/reset-password")
-def reset_password(payload: schemas.UserResetPassword, db: Session = Depends(get_db)):
+@app.post("/api/auth/change-password")
+def change_password(payload: schemas.UserChangePassword, db: Session = Depends(get_db)):
+    if len(payload.new_password) < 4:
+        raise HTTPException(status_code=400, detail="Password must be at least 4 characters")
     user = db.query(models.User).filter(models.User.username == payload.username).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    if not verify_password(payload.old_password, user.hashed_password):
+        raise HTTPException(status_code=401, detail="Incorrect old password")
     user.hashed_password = get_password_hash(payload.new_password)
     db.commit()
     return {"ok": True}

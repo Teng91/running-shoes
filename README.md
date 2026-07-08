@@ -65,7 +65,7 @@ python -m backend.run
 open http://localhost:8000
 ```
 
-第一次啟動會自動建立 `shoes.db` 並寫入預設的範例資料。
+第一次啟動會自動建立 `shoes.db`（資料表結構）。預設範例資料只在 `SEED_DATA=true` 時才會寫入（Fly.io 部署預設會 seed，本機開發則不會）。
 
 ## Docker 部署
 
@@ -81,6 +81,24 @@ open http://你的IP:8000
 ```
 
 ## Fly.io 部署流程
+
+第一次部署前需先設定必要的 secrets（沒設會啟動失敗）：
+
+```bash
+# 產生隨機 SECRET_KEY
+python -c "import secrets; print(secrets.token_urlsafe(32))"
+
+# 設定 secrets（MIGRATION_PASSWORD 是 seed 給 Joy 帳號的初始密碼）
+fly secrets set SECRET_KEY=<上面的隨機字串> MIGRATION_PASSWORD=<你想設的密碼>
+```
+
+之後每次部署只要：
+
+```bash
+fly deploy
+```
+
+部署架構：
 
 ```
 git push (local) ──→ GitHub ──→ fly deploy ──→ Fly.io Builder
