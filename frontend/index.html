@@ -26,6 +26,24 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
 h1 { font-size: 28px; font-weight: 700; margin-bottom: 4px; }
 .subtitle { color: var(--text-dim); font-size: 14px; margin-bottom: 24px; }
 
+/* Tabs */
+.tabs { display: flex; gap: 8px; margin-bottom: 24px; }
+.tab {
+  padding: 8px 20px;
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 500;
+  transition: background 0.15s, color 0.15s;
+}
+.tab:hover { color: var(--text); }
+.tab.active { background: var(--accent); color: white; }
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
 /* Auth View */
 .auth-box { max-width: 360px; margin: 80px auto; }
 .auth-box h1 { text-align: center; margin-bottom: 24px; }
@@ -203,6 +221,13 @@ tr:hover td { background: rgba(99,102,241,0.05); }
   </div>
   <p class="subtitle" id="today-label"></p>
 
+  <div class="tabs">
+    <button class="tab active" data-tab="shoes" onclick="switchTab('shoes')">跑鞋</button>
+    <button class="tab" data-tab="monthly" onclick="switchTab('monthly')">月跑量</button>
+  </div>
+
+  <div class="tab-panel active" data-panel="shoes">
+
   <div class="cards" id="summary-cards"></div>
   <div class="charts">
     <div class="chart-box"><h3>生命進度</h3><canvas id="chart-progress"></canvas></div>
@@ -248,6 +273,10 @@ tr:hover td { background: rgba(99,102,241,0.05); }
       </table>
     </div>
   </div>
+
+  </div><!-- /tab-panel shoes -->
+
+  <div class="tab-panel" data-panel="monthly">
 
   <div class="charts charts-3col">
     <div class="chart-box">
@@ -297,6 +326,8 @@ tr:hover td { background: rgba(99,102,241,0.05); }
         <tbody id="monthly-table"></tbody>
       </table>
     </div>
+
+    </div><!-- /tab-panel monthly -->
   </div>
 </div>
 
@@ -519,6 +550,11 @@ function showChangeError(msg) {
 
 function hideChangeError() {
   document.getElementById('change-error').style.display = 'none';
+}
+
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.dataset.panel === name));
 }
 
 const ERROR_ZH = {
