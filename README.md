@@ -122,6 +122,31 @@ git push (local) ──→ GitHub ──→ fly deploy ──→ Fly.io Builder
                                          https://你的app.fly.dev
 ```
 
+### 同步雲端資料到本地
+
+雲端是 source of truth。本地開發想用最新資料時：
+
+```bash
+# 1. 停掉本地 server（避免 SQLite 檔案被鎖）
+#    Ctrl+C 結束 python -m backend.run
+
+# 2. 備份本地（建議，覆蓋前留個底）
+cp shoes.db shoes.db.local.bak
+
+# 3. 從 Fly.io 抓最新的 shoes.db
+fly ssh sftp get /data/shoes.db ./shoes.db
+
+# 4. 重新啟動本地 server
+python -m backend.run
+```
+
+**注意**：
+- 本地 server 必須先停，否則 SQLite 鎖住會抓不下來
+- 雲端是 source of truth — 本地被覆蓋後，本地的未同步更動會被洗掉
+- 免費方案機器會自動休眠，若 `fly ssh sftp get` 報「no started VMs」先跑 `fly machine start <id>` 叫醒（ID 從 `fly status` 查到）
+
+反向同步（local → 雲端）目前沒有自動化流程，直接對雲端 UI 操作即可。
+
 ## 多使用者
 
 任何人都可以在登入頁面註冊帳號，每個使用者的跑鞋資料完全隔離，互看不到。
