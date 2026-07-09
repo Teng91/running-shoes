@@ -101,6 +101,90 @@ def test_change_password_short_new(client, db):
     assert res.status_code == 400
 
 
+def test_change_password_empty_old(client, db):
+    """Empty old_password should be treated as wrong password (401), not crash."""
+    db.add(User(username="alice", hashed_password=get_password_hash("oldpass")))
+    db.commit()
+    res = client.post("/api/auth/change-password", json={
+        "username": "alice", "old_password": "", "new_password": "newpass1",
+    })
+    assert res.status_code == 401
+    assert res.json()["detail"] == "Incorrect old password"
+
+
+def test_change_password_empty_new(client, db):
+    """Empty new_password should fail the length check (400)."""
+    db.add(User(username="alice", hashed_password=get_password_hash("oldpass")))
+    db.commit()
+    res = client.post("/api/auth/change-password", json={
+        "username": "alice", "old_password": "oldpass", "new_password": "",
+    })
+    assert res.status_code == 400
+    assert "4 characters" in res.json()["detail"]
+
+
+def test_change_password_same_as_old(client, db):
+    """Changing to the same password is allowed (no-op effectively)."""
+    db.add(User(username="alice", hashed_password=get_password_hash("oldpass")))
+    db.commit()
+    res = client.post("/api/auth/change-password", json={
+        "username": "alice", "old_password": "oldpass", "new_password": "oldpass",
+    })
+    assert res.status_code == 200
+
+
+def test_change_password_chained(client, db):
+    """After changing password, the new password works as old_password for subsequent changes."""
+    db.add(User(username="alice", hashed_password=get_password_hash("pass1")))
+    db.commit()
+    # First change
+    res = client.post("/api/auth/change-password", json={
+        "username": "alice", "old_password": "pass1", "new_password": "pass2",
+    })
+    assert res.status_code == 200
+    # Second change must use pass2 as old_password
+    res = client.post("/api/auth/change-password", json={
+        "username": "alice", "old_password": "pass1", "new_password": "pass3",
+    })
+    assert res.status_code == 401  # pass1 no longer valid
+    res = client.post("/api/auth/change-password", json={
+        "username": "alice", "old_password": "pass2", "new_password": "pass3",
+    })
+    assert res.status_code == 200
+
+
+# ── Static File / Path Traversal Tests ───────────────────────
+
+def test_path_traversal_returns_spa_fallback(client):
+    """Malicious paths must not leak files outside frontend_dir.
+
+    The 404 handler should resolve the path and check it's inside frontend_dir;
+    if not, fall back to index.html instead of serving arbitrary files.
+    """
+    for path in [
+        "/../backend/main.py",   # try to escape to backend source
+        "/../../etc/passwd",     # try system file
+        "/../shoes.db",          # try the DB file
+    ]:
+        res = client.get(path)
+        # Either properly rejected with 404, OR served the SPA fallback (index.html).
+        # What it MUST NOT do: serve the requested file's content.
+        if res.status_code == 200:
+            # If 200, response should be index.html (HTML), not the target file
+            assert "text/html" in res.headers.get("content-type", ""), \
+                f"{path} returned 200 with non-HTML content-type"
+        else:
+            assert res.status_code == 404, f"{path} returned unexpected {res.status_code}"
+
+
+def test_api_404_returns_json_not_html(client):
+    """Unknown /api/* paths should return JSON 404, not the SPA fallback."""
+    res = client.get("/api/nonexistent-endpoint")
+    assert res.status_code == 404
+    assert "application/json" in res.headers.get("content-type", "")
+    assert "detail" in res.json()
+
+
 # ── Shoe CRUD Tests ───────────────────────────────────────────
 
 def _auth_header(token):
