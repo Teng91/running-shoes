@@ -228,107 +228,107 @@ tr:hover td { background: rgba(99,102,241,0.05); }
 
   <div class="tab-panel active" data-panel="shoes">
 
-  <div class="cards" id="summary-cards"></div>
-  <div class="charts">
-    <div class="chart-box"><h3>生命進度</h3><canvas id="chart-progress"></canvas></div>
-    <div class="chart-box"><h3>每 km 成本比較</h3><canvas id="chart-cost"></canvas></div>
-    <div class="chart-box"><h3>退役時間軸</h3><canvas id="chart-retire"></canvas></div>
-    <div class="chart-box"><h3>月跑量佔比</h3><canvas id="chart-value"></canvas></div>
-  </div>
+    <div class="cards" id="summary-cards"></div>
+    <div class="charts">
+      <div class="chart-box"><h3>生命進度</h3><canvas id="chart-progress"></canvas></div>
+      <div class="chart-box"><h3>每 km 成本比較</h3><canvas id="chart-cost"></canvas></div>
+      <div class="chart-box"><h3>退役時間軸</h3><canvas id="chart-retire"></canvas></div>
+      <div class="chart-box"><h3>月跑量佔比</h3><canvas id="chart-value"></canvas></div>
+    </div>
 
-  <div class="table-section">
-    <div class="table-header">
-      <h2>現役跑鞋</h2>
-      <button class="btn btn-primary" onclick="openAddModal()">+ 新增跑鞋</button>
+    <div class="table-section">
+      <div class="table-header">
+        <h2>現役跑鞋</h2>
+        <button class="btn btn-primary" onclick="openAddModal()">+ 新增跑鞋</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>品牌</th><th>鞋款</th><th>購買日期</th>
+              <th>跑鞋里程</th><th>每km成本</th><th>預期里程</th><th>預期成本</th><th>生命進度</th>
+              <th>月跑量</th><th>預估退役</th>
+              <th>尺寸</th><th>買價</th><th>原價</th><th>折數</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="shoe-table"></tbody>
+        </table>
+      </div>
     </div>
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>品牌</th><th>鞋款</th><th>購買日期</th>
-            <th>跑鞋里程</th><th>每km成本</th><th>預期里程</th><th>預期成本</th><th>生命進度</th>
-            <th>月跑量</th><th>預估退役</th>
-            <th>尺寸</th><th>買價</th><th>原價</th><th>折數</th><th></th>
-          </tr>
-        </thead>
-        <tbody id="shoe-table"></tbody>
-      </table>
+    <div class="table-section">
+      <div class="table-header">
+        <h2>退役跑鞋</h2>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>品牌</th><th>鞋款</th><th>購買日期</th>
+              <th>跑鞋里程</th><th>每km成本</th><th>預期里程</th><th>預期成本</th><th>生命進度</th>
+              <th>月跑量</th><th>預估退役</th>
+              <th>尺寸</th><th>買價</th><th>原價</th><th>折數</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="retired-table"></tbody>
+        </table>
+      </div>
     </div>
-  </div>
-  <div class="table-section">
-    <div class="table-header">
-      <h2>退役跑鞋</h2>
-    </div>
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>品牌</th><th>鞋款</th><th>購買日期</th>
-            <th>跑鞋里程</th><th>每km成本</th><th>預期里程</th><th>預期成本</th><th>生命進度</th>
-            <th>月跑量</th><th>預估退役</th>
-            <th>尺寸</th><th>買價</th><th>原價</th><th>折數</th><th></th>
-          </tr>
-        </thead>
-        <tbody id="retired-table"></tbody>
-      </table>
-    </div>
-  </div>
 
   </div><!-- /tab-panel shoes -->
 
   <div class="tab-panel" data-panel="monthly">
 
-  <div class="charts charts-3col">
-    <div class="chart-box">
-      <div class="chart-title-row">
-        <h3>年度總跑量</h3>
+    <div class="charts charts-3col">
+      <div class="chart-box">
+        <div class="chart-title-row">
+          <h3>年度總跑量</h3>
+        </div>
+        <canvas id="chart-yearly-total"></canvas>
       </div>
-      <canvas id="chart-yearly-total"></canvas>
-    </div>
-    <div class="chart-box">
-      <div class="chart-title-row">
-        <h3>年度月跑量</h3>
-        <select id="year-select" class="year-select" onchange="onYearChange()"></select>
+      <div class="chart-box">
+        <div class="chart-title-row">
+          <h3>年度月跑量</h3>
+          <select id="year-select" class="year-select" onchange="onYearChange()"></select>
+        </div>
+        <canvas id="chart-monthly-year"></canvas>
       </div>
-      <canvas id="chart-monthly-year"></canvas>
-    </div>
-    <div class="chart-box">
-      <div class="chart-title-row">
-        <h3>滾動平均</h3>
-        <select id="rolling-window" class="year-select" onchange="renderRollingAvgChart()">
-          <option value="3">3 個月</option>
-          <option value="6">6 個月</option>
-          <option value="12" selected>12 個月</option>
-        </select>
+      <div class="chart-box">
+        <div class="chart-title-row">
+          <h3>滾動平均</h3>
+          <select id="rolling-window" class="year-select" onchange="renderRollingAvgChart()">
+            <option value="3">3 個月</option>
+            <option value="6">6 個月</option>
+            <option value="12" selected>12 個月</option>
+          </select>
+        </div>
+        <canvas id="chart-rolling"></canvas>
       </div>
-      <canvas id="chart-rolling"></canvas>
-    </div>
-  </div>
-
-  <div class="table-section">
-    <div class="table-header">
-      <h2>月跑量紀錄</h2>
-    </div>
-    <div class="inline-add">
-      <select id="add-year"></select>
-      <select id="add-month"></select>
-      <input id="add-km" type="number" min="0" step="0.01" placeholder="km">
-      <button class="btn btn-sm btn-primary" onclick="addMonthlyMileage()">新增</button>
-      <span class="inline-error" id="add-error"></span>
-    </div>
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>年份</th><th>月份</th><th>跑量 (km)</th><th></th>
-          </tr>
-        </thead>
-        <tbody id="monthly-table"></tbody>
-      </table>
     </div>
 
-    </div><!-- /tab-panel monthly -->
-  </div>
+    <div class="table-section">
+      <div class="table-header">
+        <h2>月跑量紀錄</h2>
+      </div>
+      <div class="inline-add">
+        <select id="add-year"></select>
+        <select id="add-month"></select>
+        <input id="add-km" type="number" min="0" step="0.01" placeholder="km">
+        <button class="btn btn-sm btn-primary" onclick="addMonthlyMileage()">新增</button>
+        <span class="inline-error" id="add-error"></span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>年份</th><th>月份</th><th>跑量 (km)</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="monthly-table"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div><!-- /tab-panel monthly -->
 </div>
 
 <!-- Add/Edit Modal -->
@@ -555,6 +555,12 @@ function hideChangeError() {
 function switchTab(name) {
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.dataset.panel === name));
+  if (name === 'monthly') {
+    // Re-render charts after the panel becomes visible — Chart.js needs
+    // real dimensions to size correctly (initial render runs while the
+    // panel is display:none, leaving canvases at 0x0).
+    requestAnimationFrame(() => renderMonthlyCharts());
+  }
 }
 
 const ERROR_ZH = {
