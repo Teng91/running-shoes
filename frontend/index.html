@@ -1317,7 +1317,7 @@ function renderYearlyTotalChart() {
       },
       scales: {
         x: { grid: { display: false }, ticks: { color: '#8b8d9a' } },
-        y: { grid: { color: '#2a2d3e' }, ticks: { color: '#8b8d9a', callback: v => v + ' km' }, beginAtZero: true }
+        y: { grid: { color: '#2a2d3e' }, ticks: { color: '#8b8d9a', callback: v => v + ' km' }, beginAtZero: true, suggestedMax: Math.ceil(Math.max(...totals) * 1.15 / 50) * 50 }
       }
     },
     plugins: [{
