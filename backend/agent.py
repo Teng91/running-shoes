@@ -123,9 +123,12 @@ def run_agent(
         tool_calls = db_tools.parse_tool_calls(content)
 
         if tool_calls:
-            # 先把推理文字切成小塊逐字串流，讓使用者看到 LLM 是
-            # 「怎麼想的」，而不是一次跳出來
-            reasoning = db_tools.strip_tool_markers(content).strip()
+            # 推理文字只取「第一個工具標記之前」的內容。標記之後的文字通常
+            # 是弱模型自導自演、憑空捏造的「工具結果」（工具其實還沒執行），
+            # 顯示出來會誤導使用者，故一律丟棄。
+            reasoning = db_tools.strip_tool_markers(
+                content.split("<tool>", 1)[0]
+            ).strip()
             if not reasoning:
                 # 如果 LLM 沒給推理文字，根據工具名稱自動產生描述
                 tool_desc = {
@@ -140,8 +143,13 @@ def run_agent(
             for i in range(0, len(reasoning), 4):
                 yield _sse({"type": "reasoning", "text": reasoning[i : i + 4]})
 
-            # 把這輪含標記的回覆也留給 LLM 當上下文（標記本身無害）
-            messages.append({"role": "assistant", "content": content})
+            # 把這輪回覆留給 LLM 當上下文，但截掉最後一個工具標記之後的內容，
+            # 避免模型自己捏造的假結果污染下一輪的上下文（保留推理 + 工具標記即可）。
+            _last_close = content.rfind("</tool>")
+            clean_content = (
+                content[: _last_close + len("</tool>")] if _last_close != -1 else content
+            )
+            messages.append({"role": "assistant", "content": clean_content})
             for tc in tool_calls:
                 yield _sse({"type": "tool", "name": tc["name"], "args": tc["arguments"]})
                 tool_output = _execute_tool(tc["name"], tc["arguments"], db, user_id)
