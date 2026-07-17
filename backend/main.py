@@ -135,6 +135,15 @@ frontend_dir = Path(__file__).resolve().parent.parent / "frontend"
 frontend_dir.mkdir(exist_ok=True)
 
 
+# index.html 內含 inline JS，必須用 no-cache 讓瀏覽器每次都向伺服器
+# 驗證（有 ETag，未變更會回 304 很省），否則使用者會一直卡在舊版前端。
+def _index_response():
+    return FileResponse(
+        frontend_dir / "index.html",
+        headers={"Cache-Control": "no-cache"},
+    )
+
+
 @app.exception_handler(StarletteHTTPException)
 async def http_exception_handler(request, exc):
     """Return index.html for 404s so SPA-style routing works,
@@ -148,10 +157,10 @@ async def http_exception_handler(request, exc):
         try:
             candidate = (frontend_dir / path.lstrip("/")).resolve()
         except (OSError, ValueError):
-            return FileResponse(frontend_dir / "index.html")
+            return _index_response()
         if frontend_dir.resolve() in candidate.parents and candidate.is_file():
             return FileResponse(candidate)
-        return FileResponse(frontend_dir / "index.html")
+        return _index_response()
     return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
 
 
