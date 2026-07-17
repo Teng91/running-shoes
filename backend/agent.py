@@ -44,11 +44,16 @@ SYSTEM_PROMPT = """你是「跑鞋推薦助手」，服務一位熱愛跑步的�
 - **說明你的推理過程**：在呼叫工具之前，先用一段簡短文字說明你為什麼要查這個、你預期找到什麼。例如：「讓我先查查你的跑鞋清單，看看目前的鞋況。」
 - **多輪分析**：不要只查一輪就給結論。先查鞋況，再查跑量趨勢，再查快退役的鞋，最後上網搜尋具體推薦款。像一個真正的分析師一樣，逐步深入。
 - **當使用者要求看資料時，直接呼叫工具顯示**：不要只說「我來查一下」卻沒有實際 call tool。如果使用者說「查給我看」、「結果呢」、「資料在哪」，你必須呼叫對應的工具並把結果呈現出來。
+- **上網搜尋要節制**：web_search 最多呼叫 2~3 次，且只為了補充具體鞋款推薦。若某次 web_search 回傳「沒有找到結果」或「搜尋失敗」，代表這次查不到，**不要重複狂 call 同一類搜尋**——立刻改用你已經讀到的跑鞋/跑量資料給出建議，並誠實說明「網路搜尋暫時查不到，以下依你的現有資料分析」。
 
 {tools}
 """.format(tools=db_tools.TOOL_SPEC_TEXT)
 
-MAX_TURNS = 5  # 防止 tool loop 失控
+MAX_TURNS = 6  # 防止 tool loop 失控（多留一輪給模型收斂）
+
+# web_search 連續失敗達此次數後，強制提醒模型改用現有資料收斂，
+# 避免免費模型一直重 call 搜尋把回合數耗光。
+WEB_SEARCH_FAIL_LIMIT = 3
 
 
 def _sse(event: dict) -> str:
@@ -102,6 +107,8 @@ def run_agent(
 
     messages = _build_messages(history, user_message)
 
+    web_search_fails = 0  # 累計 web_search 沒查到/失敗的次數
+
     for _ in range(MAX_TURNS):
         try:
             result = llm.call_llm(prov, model, messages)
@@ -140,9 +147,22 @@ def run_agent(
                 tool_output = _execute_tool(tc["name"], tc["arguments"], db, user_id)
                 # 每個工具執行完立刻通知前端打勾
                 yield _sse({"type": "tool_done", "name": tc["name"]})
+                # 追蹤 web_search 是否查無結果／失敗（回傳文字以「（」開頭代表非正常結果）
+                if tc["name"] == "web_search" and tool_output.lstrip().startswith("（"):
+                    web_search_fails += 1
                 messages.append({
                     "role": "user",
                     "content": f"[工具 {tc['name']} 的結果]\n{tool_output}",
+                })
+            # web_search 連續失敗過多 → 強制要求模型停止搜尋、改用現有資料收斂
+            if web_search_fails >= WEB_SEARCH_FAIL_LIMIT:
+                messages.append({
+                    "role": "user",
+                    "content": (
+                        "[系統提示] 網路搜尋已多次查不到結果，請**不要**再呼叫 web_search。"
+                        "直接根據前面已讀到的跑鞋清單、剩餘壽命與跑量資料，給出最終建議，"
+                        "並說明網路搜尋暫時無法取得市售鞋款資訊。"
+                    ),
                 })
             # 回到迴圈頂端，讓 LLM 根據工具結果繼續
             continue
