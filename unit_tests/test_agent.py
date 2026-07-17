@@ -105,3 +105,33 @@ def test_agent_respects_user_isolation(seeded_db):
         ))
     answer = "".join(e["text"] for e in events if e["type"] == "token")
     assert "沒有任何跑鞋" in answer
+
+
+def test_agent_forces_answer_on_last_turn(seeded_db):
+    """就算模型每輪都硬要呼叫工具，最後一輪也會被強制收斂成最終答案，
+    而不是丟出「多次呼叫仍未給結論」的錯誤。"""
+    db, uid = seeded_db
+
+    def stubborn_llm(provider, model, messages):
+        # 收到「最後一輪」的系統提示才勉強給結論
+        if any("這是最後一輪" in m["content"] for m in messages if m["role"] == "user"):
+            return {"content": "根據你的資料，暫時不需要買鞋。", "finish_reason": "stop"}
+        return {
+            "content": "我再查一下。\n<tool>web_search {\"query\": \"跑鞋\"}</tool>",
+            "finish_reason": "stop",
+        }
+
+    with patch("backend.agent.llm.call_llm", side_effect=stubborn_llm), \
+         patch("backend.agent._execute_tool", return_value="（沒有找到結果）"):
+        events = _collect(run_agent(
+            user_message="我要買鞋嗎？",
+            provider="openrouter",
+            db=db,
+            user_id=uid,
+        ))
+
+    types = [e["type"] for e in events]
+    answer = "".join(e["text"] for e in events if e["type"] == "token")
+    assert "error" not in types           # 不再報「未給結論」的錯
+    assert "不需要買鞋" in answer          # 最後一輪被逼出真正的答案
+    assert types[-1] == "done"
