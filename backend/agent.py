@@ -109,7 +109,20 @@ def run_agent(
 
     web_search_fails = 0  # 累計 web_search 沒查到/失敗的次數
 
-    for _ in range(MAX_TURNS):
+    for turn in range(MAX_TURNS):
+        is_last_turn = turn == MAX_TURNS - 1
+        if is_last_turn:
+            # 最後一輪：強制模型停手，直接用已有資料給結論，避免它一直
+            # 重試工具（雲端搜尋/免費模型偶發失敗時特別容易發生），
+            # 讓使用者至少拿到一個真正的答案而不是錯誤訊息。
+            messages.append({
+                "role": "user",
+                "content": (
+                    "[系統提示] 這是最後一輪，請「不要」再呼叫任何工具，"
+                    "直接根據上面已取得的跑鞋、跑量與搜尋資料，給出完整的最終建議。"
+                    "若某些市售鞋款資訊沒查到，就用你現有的資料分析並誠實說明。"
+                ),
+            })
         try:
             result = llm.call_llm(prov, model, messages)
         except llm.LLMError as exc:
@@ -122,7 +135,8 @@ def run_agent(
         content = result["content"]
         tool_calls = db_tools.parse_tool_calls(content)
 
-        if tool_calls:
+        # 最後一輪不再執行工具（即使模型還想 call），一律當成最終回覆處理。
+        if tool_calls and not is_last_turn:
             # 推理文字只取「第一個工具標記之前」的內容。標記之後的文字通常
             # 是弱模型自導自演、憑空捏造的「工具結果」（工具其實還沒執行），
             # 顯示出來會誤導使用者，故一律丟棄。
@@ -182,7 +196,5 @@ def run_agent(
         for i in range(0, len(final_text), 4):
             yield _sse({"type": "token", "text": final_text[i : i + 4]})
         break
-    else:
-        yield _sse({"type": "error", "text": "（模型在多次工具呼叫後仍未給出結論，請簡化你的問題。）"})
 
     yield _sse({"type": "done"})
