@@ -6,6 +6,7 @@
 <title>跑鞋追蹤 Dashboard</title>
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" onerror="console.error('Chart.js CDN failed')"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked@15/marked.min.js" onerror="console.error('marked.js CDN failed')"></script>
 <style>
 :root {
   --bg: #0f1117;
@@ -43,6 +44,7 @@ h1 { font-size: 28px; font-weight: 700; margin-bottom: 4px; }
 .tab.active { background: var(--accent); color: white; }
 .tab-panel { display: none; }
 .tab-panel.active { display: block; }
+.tab-panel.agent-panel.active { display: flex; }
 
 /* Auth View */
 .auth-box { max-width: 360px; margin: 80px auto; }
@@ -65,7 +67,6 @@ h1 { font-size: 28px; font-weight: 700; margin-bottom: 4px; }
 .chart-title-row h3 { margin-bottom: 0; }
 .year-select { background: var(--bg); border: 1px solid var(--border); color: var(--text); font-size: 12px; padding: 4px 8px; border-radius: 6px; cursor: pointer; }
 .year-select:focus { outline: none; border-color: var(--accent); }
-.year-total { font-size: 12px; color: var(--text-dim); margin-left: 10px; }
 
 /* Inline add row */
 .inline-add { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
@@ -133,6 +134,96 @@ tr:hover td { background: rgba(99,102,241,0.05); }
 @media (max-width: 700px) {
   .charts-3col { grid-template-columns: 1fr; }
 }
+
+/* Agent Chat styles */
+.agent-panel { flex-direction: column; flex: 1; min-height: 0; }
+.agent-config { display: flex; gap: 8px; margin-bottom: 16px; align-items: center; flex-shrink: 0; }
+.agent-config select { background: var(--bg); border: 1px solid var(--border); color: var(--text); font-size: 13px; padding: 6px 10px; border-radius: 8px; cursor: pointer; }
+.agent-config select:focus { outline: none; border-color: var(--accent); }
+.agent-messages { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; flex: 1; min-height: 0; overflow-y: auto; margin-bottom: 12px; display: flex; flex-direction: column; gap: 8px; }
+.agent-message { display: flex; flex-shrink: 0; }
+.agent-message.user { justify-content: flex-end; }
+.agent-message.bot { justify-content: flex-start; }
+.agent-msg-content { padding: 10px 14px; border-radius: 12px; font-size: 14px; line-height: 1.7; word-wrap: break-word; overflow-wrap: break-word; }
+.agent-msg-content p { margin: 6px 0; }
+.agent-msg-content h1, .agent-msg-content h2, .agent-msg-content h3,
+.agent-msg-content h4 { margin: 12px 0 6px; font-weight: 600; line-height: 1.3; }
+.agent-msg-content h1 { font-size: 18px; }
+.agent-msg-content h2 { font-size: 16px; }
+.agent-msg-content h3, .agent-msg-content h4 { font-size: 15px; }
+.agent-msg-content ul, .agent-msg-content ol { padding-left: 20px; margin: 4px 0; }
+.agent-msg-content li { margin: 2px 0; }
+.agent-msg-content table { border-collapse: collapse; margin: 8px 0; font-size: 13px; width: 100%; display: block; overflow-x: auto; }
+.agent-msg-content th, .agent-msg-content td { border: 1px solid var(--border); padding: 6px 8px; text-align: left; white-space: nowrap; }
+.agent-msg-content th { background: rgba(99,102,241,0.1); font-weight: 600; }
+.agent-msg-content hr { border: none; border-top: 1px solid var(--border); margin: 12px 0; }
+.agent-msg-content strong { font-weight: 600; }
+.agent-msg-content em { font-style: italic; }
+.agent-msg-content a { color: var(--accent-light); text-decoration: underline; }
+.agent-msg-content code { background: rgba(99,102,241,0.15); padding: 1px 4px; border-radius: 4px; font-size: 13px; }
+.agent-msg-content pre { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px; overflow-x: auto; margin: 8px 0; }
+.agent-msg-content pre code { background: none; padding: 0; }
+.agent-msg-content blockquote { border-left: 3px solid var(--accent); padding-left: 12px; margin: 8px 0; color: var(--text-dim); }
+.agent-message.user .agent-msg-content { max-width: 80%; background: var(--accent); color: white; border-bottom-right-radius: 4px; }
+.agent-message.bot .agent-msg-content { background: var(--bg); color: var(--text); border-bottom-left-radius: 4px; }
+.agent-input-area { display: flex; gap: 8px; align-items: flex-end; flex-shrink: 0; }
+.agent-input-area textarea { flex: 1; background: var(--card); border: 1px solid var(--border); color: var(--text); font-size: 14px; padding: 10px 14px; border-radius: 12px; resize: none; font-family: inherit; }
+.agent-input-area textarea:focus { outline: none; border-color: var(--accent); }
+.agent-input-area button { padding: 10px 24px; background: var(--accent); color: white; border: none; border-radius: 12px; font-size: 14px; font-weight: 500; cursor: pointer; transition: background 0.2s; }
+.agent-input-area button:hover { background: var(--accent-light); }
+.agent-input-area button:disabled { opacity: 0.5; cursor: not-allowed; }
+.agent-typing .agent-msg-content::after { content: '▍'; animation: blink 1s step-end infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+
+/* Agent reasoning / thinking bubble */
+.agent-thinking {
+  font-size: 13px;
+  color: var(--text-dim);
+  font-style: italic;
+  padding: 8px 14px;
+  margin: 2px 0 2px 16px;
+  background: rgba(99,102,241,0.06);
+  border-left: 2px solid var(--accent);
+  border-radius: 6px;
+  line-height: 1.5;
+  word-wrap: break-word;
+  flex-shrink: 0;
+}
+
+/* Tool status container — groups all tool calls in one round */
+.agent-tools {
+  margin: 0 0 0 16px;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+.agent-tools .tool-item {
+  padding: 3px 0;
+  color: var(--text-dim);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.agent-tools .tool-item .tool-icon { display: inline-block; width: 14px; text-align: center; }
+.agent-tools .tool-item.done { color: var(--green); }
+.agent-tools .tool-item.done .tool-name { text-decoration: line-through; opacity: 0.7; }
+
+/* Retry button — small inline icon like ChatGPT */
+.agent-retry-btn {
+  font-size: 12px;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 2px 8px;
+  margin: 2px 0 2px 16px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  display: inline-block;
+  align-self: flex-start;
+  background: transparent;
+  transition: all 0.15s;
+  flex-shrink: 0;
+  line-height: 1.6;
+}
+.agent-retry-btn:hover { color: var(--text); border-color: var(--accent); background: rgba(99,102,241,0.08); }
 </style>
 </head>
 <body>
@@ -224,6 +315,7 @@ tr:hover td { background: rgba(99,102,241,0.05); }
   <div class="tabs">
     <button class="tab active" data-tab="shoes" onclick="switchTab('shoes')">跑鞋</button>
     <button class="tab" data-tab="monthly" onclick="switchTab('monthly')">月跑量</button>
+    <button class="tab" data-tab="agent" onclick="switchTab('agent')">AI 助手</button>
   </div>
 
   <div class="tab-panel active" data-panel="shoes">
@@ -329,6 +421,24 @@ tr:hover td { background: rgba(99,102,241,0.05); }
     </div>
 
   </div><!-- /tab-panel monthly -->
+
+  <!-- Agent Chat Panel -->
+  <div class="tab-panel agent-panel" data-panel="agent">
+    <div class="agent-config">
+      <label style="font-size:13px;color:var(--text-dim);white-space:nowrap;">Model Provider</label>
+      <select id="agent-model"></select>
+    </div>
+    <div class="agent-messages" id="agent-messages">
+      <div class="agent-message bot">
+        <div class="agent-msg-content">你好！我是跑鞋助手，可以幫你查詢跑鞋資料、分析跑量、推薦新鞋。有什麼想問的嗎？</div>
+      </div>
+    </div>
+    <div class="agent-input-area">
+      <textarea id="agent-input" rows="2" placeholder="問問你的跑鞋資料..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendAgentMessage()}"></textarea>
+      <button id="agent-send-btn" onclick="sendAgentMessage()">送出</button>
+    </div>
+  </div><!-- /tab-panel agent -->
+
 </div>
 
 <!-- Add/Edit Modal -->
@@ -561,6 +671,19 @@ function switchTab(name) {
     // panel is display:none, leaving canvases at 0x0).
     requestAnimationFrame(() => renderMonthlyCharts());
   }
+  // Agent tab: fill viewport height; other tabs: natural scroll
+  const appView = document.getElementById('app-view');
+  if (name === 'agent') {
+    appView.style.height = '100vh';
+    appView.style.overflow = 'hidden';
+    appView.style.display = 'flex';
+    appView.style.flexDirection = 'column';
+  } else {
+    appView.style.height = '';
+    appView.style.overflow = '';
+    appView.style.display = '';
+    appView.style.flexDirection = '';
+  }
 }
 
 const ERROR_ZH = {
@@ -729,10 +852,8 @@ function calc(shoe) {
 // ====== Formatting ======
 function fmtPct(v) { return (v * 100).toFixed(2) + '%'; }
 function fmtMoney(v) { return '$' + Math.round(v).toLocaleString(); }
-function fmtKm(v) { return v + ' km'; }
 function fmtDate(d) { if (!d) return '-'; return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`; }
 function fmtCostPerKm(v) { return v !== null ? '$' + v.toFixed(2) : '-'; }
-function fmtMonths(v) { return v !== null ? v.toFixed(1) : '-'; }
 
 function progressColor(pct) {
   if (pct < 0.2) return '#16a34a';
@@ -1409,19 +1530,18 @@ function renderMonthlyYearChart() {
 }
 
 // ====== Inline Edit (double-click) ======
-async function inlineEdit(idx, field, el) {
-  const current = shoes[idx][field];
+// 現役與退役共用的表格內即時編輯：差別只在操作哪個陣列（arr）
+async function inlineEditRow(arr, idx, field, el) {
   const input = document.createElement('input');
   input.type = 'number';
   input.className = 'inline-input';
-  input.value = current;
-  input.focus();
+  input.value = arr[idx][field];
   const commit = async () => {
     const val = parseFloat(input.value);
     if (!isNaN(val) && val >= 0) {
-      shoes[idx][field] = val;
+      arr[idx][field] = val;
       try {
-        await apiPut('/shoes/' + shoes[idx].id, shoes[idx]);
+        await apiPut('/shoes/' + arr[idx].id, arr[idx]);
       } catch (e) {
         console.error('更新失敗:', e);
       }
@@ -1435,36 +1555,25 @@ async function inlineEdit(idx, field, el) {
   input.focus();
 }
 
-async function inlineEditRetired(idx, field, el) {
-  const current = retiredShoes[idx][field];
-  const input = document.createElement('input');
-  input.type = 'number';
-  input.className = 'inline-input';
-  input.value = current;
-  input.focus();
-  const commit = async () => {
-    const val = parseFloat(input.value);
-    if (!isNaN(val) && val >= 0) {
-      retiredShoes[idx][field] = val;
-      try {
-        await apiPut('/shoes/' + retiredShoes[idx].id, retiredShoes[idx]);
-      } catch (e) {
-        console.error('更新失敗:', e);
-      }
-    }
-    render();
-  };
-  input.addEventListener('blur', commit);
-  input.addEventListener('keydown', e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') render(); });
-  el.innerHTML = '';
-  el.appendChild(input);
-  input.focus();
-}
+async function inlineEdit(idx, field, el) { return inlineEditRow(shoes, idx, field, el); }
+async function inlineEditRetired(idx, field, el) { return inlineEditRow(retiredShoes, idx, field, el); }
 
 // ====== Modal ======
 let editingIdx = -1;
 let editingRetiredIdx = -1;
 let isRetiredEdit = false;
+
+// 把一雙鞋的共同欄位（品牌～預期里程）填進 modal 表單
+function fillShoeForm(s) {
+  document.getElementById('f-brand').value = s.brand;
+  document.getElementById('f-model').value = s.model;
+  document.getElementById('f-date').value = s.date;
+  document.getElementById('f-size').value = s.size;
+  document.getElementById('f-price').value = s.price;
+  document.getElementById('f-orig').value = s.orig_price;
+  document.getElementById('f-mileage').value = s.mileage;
+  document.getElementById('f-expected').value = s.expected_mileage;
+}
 
 function openRetiredEditModal(idx) {
   isRetiredEdit = true;
@@ -1474,14 +1583,7 @@ function openRetiredEditModal(idx) {
   document.getElementById('btn-delete').style.display = 'inline-block';
   document.getElementById('btn-move').style.display = 'inline-block';
   document.getElementById('btn-move').textContent = '移至現役';
-  document.getElementById('f-brand').value = s.brand;
-  document.getElementById('f-model').value = s.model;
-  document.getElementById('f-date').value = s.date;
-  document.getElementById('f-size').value = s.size;
-  document.getElementById('f-price').value = s.price;
-  document.getElementById('f-orig').value = s.orig_price;
-  document.getElementById('f-mileage').value = s.mileage;
-  document.getElementById('f-expected').value = s.expected_mileage;
+  fillShoeForm(s);
   document.getElementById('f-monthly').value = 0;
   document.getElementById('f-monthly').parentElement.style.display = 'none';
   document.getElementById('modal').classList.add('active');
@@ -1512,14 +1614,7 @@ function openEditModal(idx) {
   document.getElementById('btn-delete').style.display = 'inline-block';
   document.getElementById('btn-move').style.display = 'inline-block';
   document.getElementById('btn-move').textContent = '移至退役';
-  document.getElementById('f-brand').value = s.brand;
-  document.getElementById('f-model').value = s.model;
-  document.getElementById('f-date').value = s.date;
-  document.getElementById('f-size').value = s.size;
-  document.getElementById('f-price').value = s.price;
-  document.getElementById('f-orig').value = s.orig_price;
-  document.getElementById('f-mileage').value = s.mileage;
-  document.getElementById('f-expected').value = s.expected_mileage;
+  fillShoeForm(s);
   document.getElementById('f-monthly').value = s.monthly_km;
   document.getElementById('f-monthly').parentElement.style.display = '';
   document.getElementById('modal').classList.add('active');
@@ -1636,9 +1731,247 @@ document.getElementById('monthly-modal').addEventListener('click', e => {
   if (e.target.id === 'monthly-modal') closeMonthlyModal();
 });
 
+// ====== Agent / Chat ======
+let agentHistory = [];
+
+async function loadAgentModels() {
+  try {
+    const providers = await apiGet('/agent/providers');
+    const orProv = providers.find(p => p.id === 'openrouter');
+    if (!orProv) return;
+    const modelSel = document.getElementById('agent-model');
+    modelSel.innerHTML = orProv.models.map(m =>
+      `<option value="${m.id}">${m.display}</option>`
+    ).join('');
+  } catch (e) {
+    console.error('載入模型清單失敗:', e);
+  }
+}
+
+function renderMarkdown(text) {
+  if (typeof marked !== 'undefined' && marked.parse) {
+    const raw = marked.parse(text, { breaks: true, gfm: true });
+    // Sanitize: only allow safe tags
+    const div = document.createElement('div');
+    div.innerHTML = raw;
+    // Remove script/iframe/etc
+    const scripts = div.querySelectorAll('script, iframe, style, img');
+    scripts.forEach(s => s.remove());
+    return div.innerHTML;
+  }
+  // fallback: escape HTML and preserve line breaks
+  const esc = text.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'})[c]);
+  return esc.replace(/\n/g, '<br>');
+}
+
+function addAgentMessage(role, text) {
+  const container = document.getElementById('agent-messages');
+  const div = document.createElement('div');
+  div.className = 'agent-message ' + role;
+  const content = document.createElement('div');
+  content.className = 'agent-msg-content';
+  if (role === 'bot') {
+    content.innerHTML = renderMarkdown(text);
+  } else {
+    content.textContent = text;
+  }
+  div.appendChild(content);
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+  return content;
+}
+
+function addRetryButton() {
+  const container = document.getElementById('agent-messages');
+  const btn = document.createElement('div');
+  btn.className = 'agent-retry-btn';
+  btn.innerHTML = '↻ 重新產生';
+  btn.onclick = () => sendAgentMessage(lastUserText);
+  container.appendChild(btn);
+  container.scrollTop = container.scrollHeight;
+}
+
+function setAgentLoading(loading) {
+  const btn = document.getElementById('agent-send-btn');
+  const input = document.getElementById('agent-input');
+  btn.disabled = loading;
+  input.disabled = loading;
+  if (loading) {
+    btn.textContent = '思考中...';
+  } else {
+    btn.textContent = '送出';
+  }
+}
+
+let lastUserText = '';
+
+async function sendAgentMessage(retryText) {
+  const input = document.getElementById('agent-input');
+  const text = retryText || input.value.trim();
+  if (!text) return;
+  const isRetry = !!retryText;
+
+  // Store for retry
+  lastUserText = text;
+
+  // Clear retry buttons from previous failed attempts
+  document.querySelectorAll('.agent-retry-btn').forEach(el => el.remove());
+
+  if (!isRetry) {
+    // Normal send: add user message, clear input
+    addAgentMessage('user', text);
+    input.value = '';
+  } else {
+    // Retry: remove everything after the last user message
+    const container = document.getElementById('agent-messages');
+    const userMsgs = container.querySelectorAll('.agent-message.user');
+    const lastUser = userMsgs[userMsgs.length - 1];
+    if (lastUser) {
+      while (lastUser.nextElementSibling) {
+        lastUser.nextElementSibling.remove();
+      }
+    }
+    // Pop the last failed assistant response from history
+    if (agentHistory.length >= 2 && agentHistory[agentHistory.length - 1].role === 'assistant') {
+      agentHistory.pop();
+    }
+  }
+
+  const container = document.getElementById('agent-messages');
+
+  // Create tool status container (hidden until first tool event)
+  let toolStatusDiv = null;
+  let thinkingDiv = null;
+
+  // Create bot message placeholder
+  const botDiv = document.createElement('div');
+  botDiv.className = 'agent-message bot agent-typing';
+  const botContent = document.createElement('div');
+  botContent.className = 'agent-msg-content';
+  botContent.innerHTML = '';
+  botDiv.appendChild(botContent);
+  container.appendChild(botDiv);
+
+  setAgentLoading(true);
+
+  const provider = 'openrouter';
+  const model = document.getElementById('agent-model').value;
+
+  try {
+    const res = await fetch(API_BASE + '/agent/chat', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + authToken,
+      },
+      body: JSON.stringify({
+        user_message: text,
+        history: agentHistory,
+        provider: provider,
+        model: model,
+      }),
+    });
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let fullText = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const data = line.slice(6).trim();
+        if (!data) continue;
+
+        try {
+          const event = JSON.parse(data);
+          if (event.type === 'reasoning') {
+            // New reasoning round → reset both containers so new tools go
+            // into a fresh group that sits AFTER this thinking bubble
+            if (!thinkingDiv) {
+              thinkingDiv = document.createElement('div');
+              thinkingDiv.className = 'agent-thinking';
+              thinkingDiv.textContent = '💭 ';
+              container.insertBefore(thinkingDiv, botDiv);
+              toolStatusDiv = null;  // next tool event creates a new group
+            }
+            thinkingDiv.textContent += event.text;
+            container.scrollTop = container.scrollHeight;
+          } else if (event.type === 'tool') {
+            // Finalize current thinking bubble
+            thinkingDiv = null;
+            // Create a new tool group if needed (inserted after the thinking bubble)
+            if (!toolStatusDiv) {
+              toolStatusDiv = document.createElement('div');
+              toolStatusDiv.className = 'agent-tools';
+              container.insertBefore(toolStatusDiv, botDiv);
+            }
+            // Use a sequence counter so each tool item has a unique ID
+            const seq = toolStatusDiv.children.length;
+            const toolItem = document.createElement('div');
+            toolItem.className = 'tool-item';
+            toolItem.dataset.toolSeq = seq;
+            toolItem.innerHTML = '<span class="tool-icon">🔍</span> <span class="tool-name">' + (event.name || '查詢中') + '</span>';
+            toolStatusDiv.appendChild(toolItem);
+            container.scrollTop = container.scrollHeight;
+          } else if (event.type === 'tool_done') {
+            // 個別工具完成 → 打勾該 tool group 中第一個仍 🔍 的工具
+            const group = toolStatusDiv;
+            if (group) {
+              const pending = group.querySelector('.tool-item:not(.done)');
+              if (pending) {
+                pending.classList.add('done');
+                pending.querySelector('.tool-icon').textContent = '✅';
+              }
+            }
+          } else if (event.type === 'token') {
+            // First token — allow next reasoning round
+            thinkingDiv = null;
+            fullText += event.text;
+            // During streaming, use textContent to avoid broken partial markdown rendering
+            botContent.textContent = fullText;
+            container.scrollTop = container.scrollHeight;
+          } else if (event.type === 'error') {
+            fullText += '\n\n⚠️ ' + event.text;
+            botContent.textContent = fullText;
+          }
+        } catch (e) {
+          console.error('解析 SSE 事件失敗:', e);
+        }
+      }
+    }
+
+    botDiv.classList.remove('agent-typing');
+    if (fullText) {
+      botContent.innerHTML = renderMarkdown(fullText);
+      if (!isRetry) agentHistory.push({ role: 'user', content: text });
+      agentHistory.push({ role: 'assistant', content: fullText });
+    } else {
+      botContent.textContent = '（模型沒有回應，請再試一次或更換模型。）';
+      if (!isRetry) agentHistory.push({ role: 'user', content: text });
+    }
+    addRetryButton(); // 不管成功失敗都顯示重試
+  } catch (e) {
+    botContent.textContent = '⚠️ 連線失敗，請確認後端服務已啟動。';
+    botDiv.classList.remove('agent-typing');
+    console.error('Agent 請求失敗:', e);
+    addRetryButton();
+  }
+
+  setAgentLoading(false);
+}
+
 // Check stored token on load
 async function init() {
   populateAddSelects();
+  loadAgentModels();
   if (authToken) {
     try {
       await fetch(API_BASE + '/auth/me', { headers: authHeaders() });
@@ -1655,6 +1988,15 @@ async function init() {
 }
 
 init();
+
+// Resize handler — re-apply agent tab layout on window resize
+window.addEventListener('resize', () => {
+  const activePanel = document.querySelector('.tab-panel.active');
+  if (activePanel && activePanel.dataset.panel === 'agent') {
+    const appView = document.getElementById('app-view');
+    appView.style.height = '100vh';
+  }
+});
 </script>
 </body>
 </html>

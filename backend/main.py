@@ -4,11 +4,12 @@ from pathlib import Path
 
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
 
 from backend.database import engine, Base, SessionLocal, get_db
-from backend import models, schemas
+from backend import models, schemas, llm, agent
 from backend.auth import (
     verify_password, get_password_hash,
     create_access_token, get_current_user,
@@ -392,3 +393,35 @@ def delete_monthly_mileage(
         db.rollback()
         raise
     return {"ok": True}
+
+
+# ── Agent / Chat Routes ────────────────────────────────────────
+@app.get("/api/agent/providers")
+def list_agent_providers():
+    """回傳 provider/model 清單（含 key 是否已設定）。"""
+    return llm.list_providers()
+
+
+@app.post("/api/agent/chat")
+def agent_chat(
+    payload: dict,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """SSE 串流：接收 user_message, history, provider, model，回傳 agent 事件。"""
+    user_message = payload.get("user_message", "")
+    history = payload.get("history", [])
+    provider = payload.get("provider", "openrouter")
+    model = payload.get("model")
+
+    return StreamingResponse(
+        agent.run_agent(
+            user_message=user_message,
+            history=history,
+            provider=provider,
+            model=model,
+            db=db,
+            user_id=current_user.id,
+        ),
+        media_type="text/event-stream",
+    )

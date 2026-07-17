@@ -1,6 +1,6 @@
 # Running Shoes Dashboard
 
-跑鞋追蹤 Dashboard — 記錄每雙跑鞋的里程、成本、生命週期，支援圖表視覺化。支援多使用者帳號，每人資料獨立隔離。
+跑鞋追蹤 Dashboard — 記錄每雙跑鞋的里程、成本、生命週期，支援每月跑量統計與圖表視覺化，並內建 AI 跑鞋推薦助手。支援多使用者帳號，每人資料獨立隔離。
 
 ## 使用方式
 
@@ -41,6 +41,11 @@ running-shoes/
 │   ├── database.py       # SQLite 資料庫連線
 │   ├── models.py         # 資料表定義
 │   ├── schemas.py        # Pydantic schema
+│   ├── agent.py          # AI 助手 agent loop（工具呼叫 + SSE 串流）
+│   ├── llm.py            # LLM 抽象層（OpenRouter）
+│   ├── tools/            # AI 助手工具
+│   │   ├── db_tools.py   # 讀取使用者跑鞋 / 跑量資料
+│   │   └── search_tool.py# 上網搜尋市售鞋款（DuckDuckGo）
 │   └── run.py            # 本機開發啟動入口
 ├── frontend/
 │   ├── index.html        # Dashboard 前端（Chart.js）
@@ -67,6 +72,25 @@ open http://localhost:8000
 
 第一次啟動會自動建立 `shoes.db`（資料表結構）。預設範例資料只在 `SEED_DATA=true` 時才會寫入（Fly.io 部署預設會 seed，本機開發則不會）。
 
+想在本機使用 AI 跑鞋推薦助手，需在專案根目錄的 `.env` 設定 OpenRouter API 金鑰：
+
+```bash
+OPENROUTER_API_KEY=<你的 OpenRouter API Key>   # 取得: https://openrouter.ai/keys
+```
+
+沒設定也不影響 Dashboard 的其他功能，只是 AI 助手無法使用。
+
+## AI 跑鞋推薦助手
+
+內建的 AI 助手會依你的**實際資料**給換鞋與選鞋建議：
+
+- 讀取你的跑鞋清單、剩餘壽命、每月跑量趨勢（只看你自己的資料）
+- 找出接近預期壽命、該準備替換的鞋
+- 上網搜尋市售鞋款、規格、評價、價格，並附上來源連結
+- 以繁體中文對話，過程逐步顯示推理與工具呼叫（SSE 串流）
+
+需要設定 `OPENROUTER_API_KEY`（見上方）。模型使用 OpenRouter 上的免費/低成本模型，可透過 `OR_MODEL` 環境變數指定預設模型。
+
 ## Docker 部署
 
 ```bash
@@ -82,10 +106,15 @@ open http://你的IP:8000
 
 ## Fly.io 部署流程
 
-第一次部署需要設定 MIGRATION_PASSWORD（seed 給 Joy 帳號的初始密碼，沒設會啟動失敗）：
+第一次部署需要設定以下 secrets：
 
 ```bash
+# 必要：管理員帳號的初始密碼（沒設會啟動失敗）
 fly secrets set MIGRATION_PASSWORD=<你想設的密碼>
+
+# 必要：AI 助手功能需要 OpenRouter API 金鑰
+# 取得: https://openrouter.ai/keys
+fly secrets set OPENROUTER_API_KEY=<你的 OpenRouter API Key>
 ```
 
 之後每次部署只要：
