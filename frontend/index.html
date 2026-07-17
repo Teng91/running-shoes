@@ -716,6 +716,7 @@ async function handleLogin() {
     }
     const data = await res.json();
     setAuth(data.access_token, username);
+    resetAgentChat();  // 保險：確保進入時對話是乾淨的，不殘留上一位使用者
     showAppView();
     loadData();
   } catch (e) {
@@ -765,6 +766,7 @@ async function handleRegister() {
 
 function handleLogout() {
   clearAuth();
+  resetAgentChat();
   showLoginView();
 }
 
@@ -1733,6 +1735,20 @@ document.getElementById('monthly-modal').addEventListener('click', e => {
 
 // ====== Agent / Chat ======
 let agentHistory = [];
+
+const AGENT_GREETING = '你好！我是跑鞋助手，可以幫你查詢跑鞋資料、分析跑量、推薦新鞋。有什麼想問的嗎？';
+
+// 清空對話（登出/切換帳號時呼叫）：重設上下文陣列 + 還原畫面為初始問候語，
+// 避免前一個使用者的對話殘留給下一位（隱私）。
+function resetAgentChat() {
+  agentHistory = [];
+  const container = document.getElementById('agent-messages');
+  if (container) {
+    container.innerHTML =
+      '<div class="agent-message bot"><div class="agent-msg-content">' +
+      AGENT_GREETING + '</div></div>';
+  }
+}
 
 async function loadAgentModels() {
   try {
