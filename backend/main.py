@@ -411,31 +411,6 @@ def list_agent_providers():
     return llm.list_providers()
 
 
-@app.post("/api/agent/chat")
-def agent_chat(
-    payload: dict,
-    current_user: models.User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    """SSE 串流：接收 user_message, history, provider, model，回傳 agent 事件。"""
-    user_message = payload.get("user_message", "")
-    history = payload.get("history", [])
-    provider = payload.get("provider", "openrouter")
-    model = payload.get("model")
-
-    return StreamingResponse(
-        agent.run_agent(
-            user_message=user_message,
-            history=history,
-            provider=provider,
-            model=model,
-            db=db,
-            user_id=current_user.id,
-        ),
-        media_type="text/event-stream",
-    )
-
-
 @app.post("/api/agent/chat/stream")
 def agent_chat_stream(
     payload: dict,
