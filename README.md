@@ -41,7 +41,7 @@ running-shoes/
 │   ├── database.py       # SQLite 資料庫連線
 │   ├── models.py         # 資料表定義
 │   ├── schemas.py        # Pydantic schema
-│   ├── agent.py          # AI 助手 agent loop（工具呼叫 + SSE 串流）
+│   ├── agent.py          # AI 助手 agent loop（工具呼叫 + SSE 串流，僅保留 streaming 版）
 │   ├── llm.py            # LLM 抽象層（OpenRouter）
 │   ├── tools/            # AI 助手工具
 │   │   ├── db_tools.py   # 讀取使用者跑鞋 / 跑量資料

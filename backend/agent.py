@@ -9,8 +9,7 @@
       │       user 訊息餵回 → 再呼叫 LLM
       └─ 文字中無標記 → 那就是最終回覆（去掉標記後）
 
-為求在免費模型上穩定，LLM 呼叫採**非串流**；最終文字的「逐字」
-效果由這裡切成小塊模擬。輸出是 SSE 事件 generator：
+為求在免費模型上穩定，LLM 呼叫採**串流**；token 以 SSE 逐字即時送達前端。
 
     {"type": "reasoning", "text": "..."}  # LLM 呼叫工具前的推理過程（逐字串流）
     {"type": "tool", "name": "...", "args": {...}}
@@ -79,125 +78,6 @@ def _execute_tool(name: str, arguments: dict, db: Session, user_id: int) -> str:
     if fn is None:
         return f"（未知工具：{name}）"
     return fn(db, user_id)
-
-
-def run_agent(
-    user_message: str,
-    history: Optional[list[dict]] = None,
-    provider: str = "openrouter",
-    model: Optional[str] = None,
-    db: Optional[Session] = None,
-    user_id: Optional[int] = None,
-) -> Generator[str, None, None]:
-    """產生 SSE 事件串流。
-
-    注意：db session 由呼叫方提供並在請求結束時關閉；這裡在多次
-    tool 呼叫間重複使用同一個 session（FastAPI 單請求內是安全的）。
-    """
-    try:
-        prov = llm.LLMProvider.from_str(provider)
-    except llm.LLMError as exc:
-        yield _sse({"type": "error", "text": str(exc)})
-        yield _sse({"type": "done"})
-        return
-
-    if model is None:
-        models = llm.MODELS.get(prov.value, [])
-        model = models[0]["id"] if models else ""
-
-    messages = _build_messages(history, user_message)
-
-    web_search_fails = 0  # 累計 web_search 沒查到/失敗的次數
-
-    for turn in range(MAX_TURNS):
-        is_last_turn = turn == MAX_TURNS - 1
-        if is_last_turn:
-            # 最後一輪：強制模型停手，直接用已有資料給結論，避免它一直
-            # 重試工具（雲端搜尋/免費模型偶發失敗時特別容易發生），
-            # 讓使用者至少拿到一個真正的答案而不是錯誤訊息。
-            messages.append({
-                "role": "user",
-                "content": (
-                    "[系統提示] 這是最後一輪，請「不要」再呼叫任何工具，"
-                    "直接根據上面已取得的跑鞋、跑量與搜尋資料，給出完整的最終建議。"
-                    "若某些市售鞋款資訊沒查到，就用你現有的資料分析並誠實說明。"
-                ),
-            })
-        try:
-            result = llm.call_llm(prov, model, messages)
-        except llm.LLMError as exc:
-            yield _sse({"type": "error", "text": str(exc)})
-            break
-        except Exception as exc:  # 任何非預期錯誤都優雅降級
-            yield _sse({"type": "error", "text": f"模型呼叫發生錯誤：{exc}"})
-            break
-
-        content = result["content"]
-        tool_calls = db_tools.parse_tool_calls(content)
-
-        # 最後一輪不再執行工具（即使模型還想 call），一律當成最終回覆處理。
-        if tool_calls and not is_last_turn:
-            # 推理文字只取「第一個工具標記之前」的內容。標記之後的文字通常
-            # 是弱模型自導自演、憑空捏造的「工具結果」（工具其實還沒執行），
-            # 顯示出來會誤導使用者，故一律丟棄。
-            reasoning = db_tools.strip_tool_markers(
-                content.split("<tool>", 1)[0]
-            ).strip()
-            if not reasoning:
-                # 如果 LLM 沒給推理文字，根據工具名稱自動產生描述
-                tool_desc = {
-                    "list_my_shoes": "查詢你的跑鞋清單，看看目前的鞋況",
-                    "shoe_summary": "彙整你的跑鞋總覽，分析各鞋剩餘壽命",
-                    "monthly_mileage_stats": "查看你的月跑量趨勢，判斷訓練強度",
-                    "nearing_end_of_life": "檢查哪些跑鞋接近退役，需要準備替換",
-                    "web_search": "上網搜尋市售鞋款的最新資訊與評價",
-                }
-                descs = [tool_desc.get(tc["name"], f"查詢 {tc['name']}") for tc in tool_calls]
-                reasoning = "讓我先" + "，然後".join(descs) + "。"
-            for i in range(0, len(reasoning), 4):
-                yield _sse({"type": "reasoning", "text": reasoning[i : i + 4]})
-
-            # 把這輪回覆留給 LLM 當上下文，但截掉最後一個工具標記之後的內容，
-            # 避免模型自己捏造的假結果污染下一輪的上下文（保留推理 + 工具標記即可）。
-            _last_close = content.rfind("</tool>")
-            clean_content = (
-                content[: _last_close + len("</tool>")] if _last_close != -1 else content
-            )
-            messages.append({"role": "assistant", "content": clean_content})
-            for tc in tool_calls:
-                yield _sse({"type": "tool", "name": tc["name"], "args": tc["arguments"]})
-                tool_output = _execute_tool(tc["name"], tc["arguments"], db, user_id)
-                # 每個工具執行完立刻通知前端打勾
-                yield _sse({"type": "tool_done", "name": tc["name"]})
-                # 追蹤 web_search 是否查無結果／失敗（回傳文字以「（」開頭代表非正常結果）
-                if tc["name"] == "web_search" and tool_output.lstrip().startswith("（"):
-                    web_search_fails += 1
-                messages.append({
-                    "role": "user",
-                    "content": f"[工具 {tc['name']} 的結果]\n{tool_output}",
-                })
-            # web_search 連續失敗過多 → 強制要求模型停止搜尋、改用現有資料收斂
-            if web_search_fails >= WEB_SEARCH_FAIL_LIMIT:
-                messages.append({
-                    "role": "user",
-                    "content": (
-                        "[系統提示] 網路搜尋已多次查不到結果，請**不要**再呼叫 web_search。"
-                        "直接根據前面已讀到的跑鞋清單、剩餘壽命與跑量資料，給出最終建議，"
-                        "並說明網路搜尋暫時無法取得市售鞋款資訊。"
-                    ),
-                })
-            # 回到迴圈頂端，讓 LLM 根據工具結果繼續
-            continue
-
-        # 無標記 → 最終回覆，去掉可能殘留的標記後切成小塊模擬打字機
-        final_text = db_tools.strip_tool_markers(content).strip()
-        if not final_text:
-            final_text = "（模型沒有回應，請再試一次或更換模型。）"
-        for i in range(0, len(final_text), 4):
-            yield _sse({"type": "token", "text": final_text[i : i + 4]})
-        break
-
-    yield _sse({"type": "done"})
 
 
 def run_agent_stream(

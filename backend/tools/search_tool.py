@@ -11,6 +11,13 @@
 MAX_RESULTS = 5
 
 
+def run_web_search(arguments: dict) -> str:
+    query = (arguments or {}).get("query", "")
+    if not query:
+        return "（web_search 需要 query 參數）"
+    return web_search(query)
+
+
 def web_search(query: str, max_results: int = MAX_RESULTS) -> str:
     """搜尋網路，回傳給 LLM 看的文字摘要（含來源連結）。"""
     try:
@@ -34,15 +41,4 @@ def web_search(query: str, max_results: int = MAX_RESULTS) -> str:
         href = (r.get("href") or "").strip()
         lines.append(f"{i}. {title}\n   {body}\n   來源：{href}")
     return "\n".join(lines)
-
-
-def run_web_search(arguments: dict) -> str:
-    query = (arguments or {}).get("query", "")
-    if not query:
-        return "（web_search 需要 query 參數）"
-    return web_search(query)
-
-
-# 工具說明統一由 db_tools.TOOL_SPEC_TEXT 提供（文字標記格式），
-# 這裡不再維護 OpenAI 格式的 schema。
 

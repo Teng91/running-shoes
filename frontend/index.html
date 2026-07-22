@@ -937,12 +937,12 @@ function renderTable() {
       <td><span class="brand-dot" style="background:${bc}"></span><span class="brand">${esc(s.brand)}</span></td>
       <td>${esc(s.model)}</td>
       <td>${esc(s.date.replace(/-/g,'/'))}</td>
-      <td class="editable" ondblclick="inlineEdit(${i},'mileage',this)">${s.mileage}</td>
+      <td class="editable" ondblclick="inlineEditRow(shoes, ${i}, 'mileage', this)">${s.mileage}</td>
       <td>${fmtCostPerKm(c.costPerKm)}</td>
-      <td class="editable" ondblclick="inlineEdit(${i},'expected_mileage',this)">${s.expected_mileage}</td>
+      <td class="editable" ondblclick="inlineEditRow(shoes, ${i}, 'expected_mileage', this)">${s.expected_mileage}</td>
       <td>${fmtCostPerKm(c.expectedCost)}</td>
       <td style="color:${pc}">${fmtPct(c.lifeProgress)}</td>
-      <td class="editable" ondblclick="inlineEdit(${i},'monthly_km',this)">${s.monthly_km}</td>
+      <td class="editable" ondblclick="inlineEditRow(shoes, ${i}, 'monthly_km', this)">${s.monthly_km}</td>
       <td>${fmtDate(c.retireDate)}</td>
       <td>${esc(s.size)}</td>
       <td>${fmtMoney(s.price)}</td>
@@ -968,9 +968,9 @@ function renderRetiredTable() {
       <td><span class="brand-dot" style="background:${bc}"></span><span class="brand">${esc(s.brand)}</span></td>
       <td>${esc(s.model)}</td>
       <td>${esc(s.date.replace(/-/g,'/'))}</td>
-      <td class="editable" ondblclick="inlineEditRetired(${i},'mileage',this)">${s.mileage}</td>
+      <td class="editable" ondblclick="inlineEditRow(retiredShoes, ${i}, 'mileage', this)">${s.mileage}</td>
       <td>${fmtCostPerKm(c.costPerKm)}</td>
-      <td class="editable" ondblclick="inlineEditRetired(${i},'expected_mileage',this)">${s.expected_mileage}</td>
+      <td class="editable" ondblclick="inlineEditRow(retiredShoes, ${i}, 'expected_mileage', this)">${s.expected_mileage}</td>
       <td>${fmtCostPerKm(c.expectedCost)}</td>
       <td style="color:${pc}">${fmtPct(c.lifeProgress)}</td>
       <td>-</td>
@@ -1571,173 +1571,136 @@ async function inlineEditRow(arr, idx, field, el) {
   input.focus();
 }
 
-async function inlineEdit(idx, field, el) { return inlineEditRow(shoes, idx, field, el); }
-async function inlineEditRetired(idx, field, el) { return inlineEditRow(retiredShoes, idx, field, el); }
+// ====== Modal (Shoe) ======
+class ShoeModal {
+  constructor() {
+    this.el = document.getElementById('modal');
+    this.formIds = {
+      brand: 'f-brand', model: 'f-model', date: 'f-date', size: 'f-size',
+      price: 'f-price', orig: 'f-orig', mileage: 'f-mileage',
+      expected: 'f-expected', monthly: 'f-monthly'
+    };
+    this.btnDelete = document.getElementById('btn-delete');
+    this.btnMove = document.getElementById('btn-move');
+    this.titleEl = document.getElementById('modal-title');
+    this.monthlyRow = document.getElementById('f-monthly').parentElement;
 
-// ====== Modal ======
-let editingIdx = -1;
-let editingRetiredIdx = -1;
-let isRetiredEdit = false;
-
-// 把一雙鞋的共同欄位（品牌～預期里程）填進 modal 表單
-function fillShoeForm(s) {
-  document.getElementById('f-brand').value = s.brand;
-  document.getElementById('f-model').value = s.model;
-  document.getElementById('f-date').value = s.date;
-  document.getElementById('f-size').value = s.size;
-  document.getElementById('f-price').value = s.price;
-  document.getElementById('f-orig').value = s.orig_price;
-  document.getElementById('f-mileage').value = s.mileage;
-  document.getElementById('f-expected').value = s.expected_mileage;
-}
-
-function openRetiredEditModal(idx) {
-  isRetiredEdit = true;
-  editingRetiredIdx = idx;
-  const s = retiredShoes[idx];
-  document.getElementById('modal-title').textContent = '編輯退役跑鞋';
-  document.getElementById('btn-delete').style.display = 'inline-block';
-  document.getElementById('btn-move').style.display = 'inline-block';
-  document.getElementById('btn-move').textContent = '移至現役';
-  fillShoeForm(s);
-  document.getElementById('f-monthly').value = 0;
-  document.getElementById('f-monthly').parentElement.style.display = 'none';
-  document.getElementById('modal').classList.add('active');
-}
-
-function openAddModal() {
-  isRetiredEdit = false;
-  editingRetiredIdx = -1;
-  editingIdx = -1;
-  document.getElementById('modal-title').textContent = '新增跑鞋';
-  document.getElementById('btn-delete').style.display = 'none';
-  document.getElementById('btn-move').style.display = 'none';
-  ['f-brand','f-model','f-size'].forEach(id => document.getElementById(id).value = '');
-  document.getElementById('f-date').value = new Date().toISOString().slice(0,10);
-  ['f-price','f-orig','f-mileage','f-expected','f-monthly'].forEach(id => document.getElementById(id).value = '');
-  document.getElementById('f-expected').value = 800;
-  document.getElementById('f-monthly').value = 60;
-  document.getElementById('f-monthly').parentElement.style.display = '';
-  document.getElementById('modal').classList.add('active');
-}
-
-function openEditModal(idx) {
-  isRetiredEdit = false;
-  editingRetiredIdx = -1;
-  editingIdx = idx;
-  const s = shoes[idx];
-  document.getElementById('modal-title').textContent = '編輯跑鞋';
-  document.getElementById('btn-delete').style.display = 'inline-block';
-  document.getElementById('btn-move').style.display = 'inline-block';
-  document.getElementById('btn-move').textContent = '移至退役';
-  fillShoeForm(s);
-  document.getElementById('f-monthly').value = s.monthly_km;
-  document.getElementById('f-monthly').parentElement.style.display = '';
-  document.getElementById('modal').classList.add('active');
-}
-
-function closeModal() {
-  document.getElementById('modal').classList.remove('active');
-}
-
-async function saveShoe() {
-  const brand = document.getElementById('f-brand').value.trim();
-  const model = document.getElementById('f-model').value.trim();
-  const date = document.getElementById('f-date').value;
-  const size = document.getElementById('f-size').value.trim();
-  const price = parseFloat(document.getElementById('f-price').value);
-  const origPrice = parseFloat(document.getElementById('f-orig').value);
-  const rawMileage = parseFloat(document.getElementById('f-mileage').value);
-  const rawExpected = parseFloat(document.getElementById('f-expected').value);
-  const monthlyInput = document.getElementById('f-monthly').parentElement.style.display;
-  const rawMonthly = monthlyInput === 'none' ? 0 : parseFloat(document.getElementById('f-monthly').value);
-  const mileage = Number.isFinite(rawMileage) ? rawMileage : 0;
-  const expectedMileage = Number.isFinite(rawExpected) ? rawExpected : 800;
-  const monthlyKm = Number.isFinite(rawMonthly) ? rawMonthly : 60;
-
-  if (!brand || !model || !date || isNaN(price) || isNaN(origPrice)) {
-    alert('請填寫品牌、鞋款、日期、買價、原價');
-    return;
+    // 綁定一次
+    this.el.querySelector('.btn-primary').onclick = () => this.submit();
+    this.btnDelete.onclick = () => this.delete();
+    this.btnMove.onclick = () => this.move();
+    this.el.onclick = e => { if (e.target === this.el) this.close(); };
   }
 
-  const shoeData = {
-    brand, model, date, size,
-    price, orig_price: origPrice,
-    mileage, expected_mileage: expectedMileage,
-    monthly_km: monthlyKm,
-    is_retired: isRetiredEdit,
-  };
-
-  try {
-    if (isRetiredEdit) {
-      if (editingRetiredIdx >= 0) {
-        const id = retiredShoes[editingRetiredIdx].id;
-        await apiPut('/shoes/' + id, shoeData);
-      }
-    } else {
-      if (editingIdx >= 0) {
-        const id = shoes[editingIdx].id;
-        await apiPut('/shoes/' + id, shoeData);
-      } else {
-        await apiPost('/shoes', shoeData);
-      }
-    }
-  } catch (e) {
-    console.error('儲存失敗:', e);
-    alert('儲存失敗，請確認後端服務有啟動');
-    return;
+  // ── 公開 API ──────────────────────────────────────────────
+  openForCreate() {
+    this.mode = 'create';
+    this.shoe = null;
+    this._resetForm();
+    this._updateUI({ title: '新增跑鞋', showDelete: false, showMove: false, monthly: 60, monthlyVisible: true });
+    this._show();
   }
 
-  closeModal();
-  await loadData();
+  openForEdit(shoe, isRetired) {
+    this.mode = isRetired ? 'editRetired' : 'editActive';
+    this.shoe = shoe;
+    this._fillForm(shoe);
+    this._updateUI({
+      title: isRetired ? '編輯退役跑鞋' : '編輯跑鞋',
+      showDelete: true,
+      showMove: true,
+      moveText: isRetired ? '移至現役' : '移至退役',
+      monthly: isRetired ? 0 : shoe.monthly_km,
+      monthlyVisible: !isRetired
+    });
+    this._show();
+  }
+
+  // ── 內部邏輯 ──────────────────────────────────────────────
+  _resetForm() {
+    Object.values(this.formIds).forEach(id => document.getElementById(id).value = '');
+    document.getElementById('f-date').value = new Date().toISOString().slice(0, 10);
+    document.getElementById('f-expected').value = 800;
+  }
+
+  _fillForm(s) {
+    Object.entries(this.formIds).forEach(([k, id]) => {
+      const field = k === 'orig' ? 'orig_price' : k === 'expected' ? 'expected_mileage' : k;
+      document.getElementById(id).value = s[field] ?? '';
+    });
+  }
+
+  _updateUI({ title, showDelete, showMove, moveText, monthly, monthlyVisible }) {
+    this.titleEl.textContent = title;
+    this.btnDelete.style.display = showDelete ? 'inline-block' : 'none';
+    this.btnMove.style.display = showMove ? 'inline-block' : 'none';
+    this.btnMove.textContent = moveText || '';
+    this.monthlyRow.style.display = monthlyVisible ? '' : 'none';
+    document.getElementById('f-monthly').value = monthly;
+  }
+
+  _show() { this.el.classList.add('active'); }
+  close() { this.el.classList.remove('active'); this.shoe = null; }
+
+  _payload() {
+    const get = id => document.getElementById(id).value;
+    const num = id => parseFloat(get(id)) || 0;
+    return {
+      brand: get('f-brand').trim(),
+      model: get('f-model').trim(),
+      date: get('f-date'),
+      size: get('f-size').trim(),
+      price: num('f-price'),
+      orig_price: num('f-orig'),
+      mileage: num('f-mileage'),
+      expected_mileage: num('f-expected'),
+      monthly_km: num('f-monthly'),
+      is_retired: this.mode === 'editRetired'
+    };
+  }
+
+  async submit() {
+    const data = this._payload();
+    if (!data.brand || !data.model || !data.date) return alert('請填寫品牌、鞋款、日期');
+    try {
+      if (this.mode === 'create') await apiPost('/shoes', data);
+      else await apiPut('/shoes/' + this.shoe.id, data);
+    } catch (e) { return alert('儲存失敗'); }
+    this.close();
+    await loadData();
+  }
+
+  async delete() {
+    if (!confirm(`確定刪除 ${this.shoe.brand} ${this.shoe.model}？此動作無法復原。`)) return;
+    try { await apiDelete('/shoes/' + this.shoe.id); }
+    catch { return alert('刪除失敗'); }
+    this.close();
+    await loadData();
+  }
+
+  async move() {
+    const targetRetired = this.mode === 'editActive';
+    if (!confirm(`確定要移至${targetRetired ? '退役' : '現役'}？`)) return;
+    try {
+      await apiPut('/shoes/' + this.shoe.id, {
+        ...this.shoe,
+        is_retired: targetRetired,
+        monthly_km: targetRetired ? 0 : 60
+      });
+    } catch { return alert('移動失敗'); }
+    this.close();
+    await loadData();
+  }
 }
 
-async function moveShoe() {
-  try {
-    if (isRetiredEdit) {
-      if (editingRetiredIdx < 0) return;
-      const s = retiredShoes[editingRetiredIdx];
-      if (!confirm(`確定要把 ${s.brand} ${s.model} 移回現役？`)) return;
-      await apiPut('/shoes/' + s.id, { ...s, is_retired: false, monthly_km: 60 });
-    } else {
-      if (editingIdx < 0) return;
-      const s = shoes[editingIdx];
-      if (!confirm(`確定要把 ${s.brand} ${s.model} 移至退役？`)) return;
-      await apiPut('/shoes/' + s.id, { ...s, is_retired: true, monthly_km: 0 });
-    }
-  } catch (e) {
-    console.error('移動失敗:', e);
-    alert('移動失敗');
-    return;
-  }
-  closeModal();
-  await loadData();
-}
+// 初始化一次
+const shoeModal = new ShoeModal();
 
-async function deleteFromModal() {
-  try {
-    if (isRetiredEdit) {
-      if (editingRetiredIdx < 0) return;
-      const s = retiredShoes[editingRetiredIdx];
-      if (confirm(`確定要刪除 ${s.brand} ${s.model}？此動作無法復原。`)) {
-        await apiDelete('/shoes/' + s.id);
-        closeModal();
-        await loadData();
-      }
-    } else {
-      if (editingIdx < 0) return;
-      const s = shoes[editingIdx];
-      if (confirm(`確定要刪除 ${s.brand} ${s.model}？此動作無法復原。`)) {
-        await apiDelete('/shoes/' + s.id);
-        closeModal();
-        await loadData();
-      }
-    }
-  } catch (e) {
-    console.error('刪除失敗:', e);
-    alert('刪除失敗');
-  }
-}
+// 給舊呼叫處用的精簡 wrapper
+function openAddModal()      { shoeModal.openForCreate(); }
+function openEditModal(i)    { shoeModal.openForEdit(shoes[i], false); }
+function openRetiredEditModal(i) { shoeModal.openForEdit(retiredShoes[i], true); }
+function closeModal()        { shoeModal.close(); }
 
 // ====== Init ======
 document.getElementById('modal').addEventListener('click', e => {

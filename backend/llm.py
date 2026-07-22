@@ -1,4 +1,4 @@
-"""LLM 抽象層 — 目前僅使用 OpenRouter。
+"""LLM 抽象層 — 目前僅使用 OpenRouter（串流版）。
 
 OpenRouter 提供 OpenAI-compatible 端點，用同一個 `openai` SDK 設定
 `base_url` + api_key 即可。本模組只負責「呼叫模型並回傳標準化結果」，
@@ -57,6 +57,7 @@ if _OR_DEFAULT:
             + [m for m in MODELS["openrouter"] if m["id"] != _OR_DEFAULT]
         )
 
+
 def list_providers() -> list[dict[str, Any]]:
     """回傳前端下拉要用的 provider / model 清單，並標註 key 是否已設定。"""
     out = []
@@ -78,56 +79,6 @@ def _build_client(provider: LLMProvider) -> OpenAI:
     if not api_key:
         raise LLMError(f"未設定 {cfg['key_label']}，無法使用 {provider.value}。")
     return OpenAI(base_url=cfg["base_url"], api_key=api_key)
-
-
-def call_llm(
-    provider: LLMProvider,
-    model: str,
-    messages: list[dict[str, Any]],
-) -> dict[str, Any]:
-    """呼叫模型，回傳標準化結果。
-
-    回傳結構::
-
-        {
-            "content": str,            # 模型文字（可能含 <tool> 標記）
-            "finish_reason": str | None,
-        }
-
-    注意：為求在免費模型上穩定，這裡用**非串流**呼叫，且**不**使用
-    各家原生的 tool-calling API（免費模型多半不支援，送 `tools` 會直接
-    404）。工具改由 agent 用文字標記 `<tool>name {json}</tool>` 解析執行。
-    最終文字的「逐字」串流效果由 agent.py 在輸出階段模擬。
-    """
-    client = _build_client(provider)
-
-    kwargs: dict[str, Any] = {
-        "model": model,
-        "messages": messages,
-        "temperature": 0.3,
-    }
-
-    try:
-        resp = client.chat.completions.create(**kwargs)
-        if not resp.choices:
-            # OpenRouter 或模型可能回傳 choices=null（rate limit、內容過濾等）
-            err_text = "no choices in response"
-            if hasattr(resp, "model_extra") and resp.model_extra:
-                err_text = str(resp.model_extra)
-            raise LLMError(f"LLM 回傳空回應（{provider.value} / {model}）：{err_text}")
-        choice = resp.choices[0]
-        if choice is None or choice.message is None:
-            raise LLMError(f"LLM 回傳無效 choice（{provider.value} / {model}）")
-        message = choice.message
-    except LLMError:
-        raise
-    except Exception as exc:  # 網路錯、401、模型不存在等統一包成 LLMError
-        raise LLMError(f"LLM 呼叫失敗（{provider.value} / {model}）：{exc}") from exc
-
-    return {
-        "content": message.content or "",
-        "finish_reason": choice.finish_reason,
-    }
 
 
 def call_llm_stream(
