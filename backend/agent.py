@@ -198,3 +198,114 @@ def run_agent(
         break
 
     yield _sse({"type": "done"})
+
+
+def run_agent_stream(
+    user_message: str,
+    history: Optional[list[dict]] = None,
+    provider: str = "openrouter",
+    model: Optional[str] = None,
+    db: Optional[Session] = None,
+    user_id: Optional[int] = None,
+) -> Generator[str, None, None]:
+    """串流版 agent loop，逐 token 產出 SSE 事件。
+
+    與 run_agent() 行為完全相同，但 LLM 呼叫使用 streaming，
+    token 會以 `token` SSE 事件即時送達前端。若 LLM 中途呼叫工具，
+    會發出 `reasoning_start` 事件讓前端把已顯示的文字移到思考氣泡中。
+    """
+    try:
+        prov = llm.LLMProvider.from_str(provider)
+    except llm.LLMError as exc:
+        yield _sse({"type": "error", "text": str(exc)})
+        yield _sse({"type": "done"})
+        return
+
+    if model is None:
+        models = llm.MODELS.get(prov.value, [])
+        model = models[0]["id"] if models else ""
+
+    messages = _build_messages(history, user_message)
+    web_search_fails = 0
+
+    for turn in range(MAX_TURNS):
+        is_last_turn = turn == MAX_TURNS - 1
+        if is_last_turn:
+            messages.append({
+                "role": "user",
+                "content": (
+                    "[系統提示] 這是最後一輪，請「不要」再呼叫任何工具，"
+                    "直接根據上面已取得的跑鞋、跑量與搜尋資料，給出完整的最終建議。"
+                    "若某些市售鞋款資訊沒查到，就用你現有的資料分析並誠實說明。"
+                ),
+            })
+
+        # ── Streaming LLM call ──
+        full_content = ""
+        seen_tool = False
+        tool_calls = []
+
+        try:
+            stream_gen = llm.call_llm_stream(prov, model, messages)
+            try:
+                while True:
+                    chunk = next(stream_gen)
+                    if chunk:
+                        full_content += chunk
+
+                        if not seen_tool:
+                            # Check if we now have a complete tool call
+                            parsed = db_tools.parse_tool_calls(full_content)
+                            if parsed and not is_last_turn:
+                                seen_tool = True
+                                tool_calls = parsed
+                                yield _sse({"type": "reasoning_start"})
+                            else:
+                                yield _sse({"type": "token", "text": chunk})
+            except StopIteration as e:
+                # Generator returned via return value
+                _ = e.value
+        except llm.LLMError as exc:
+            yield _sse({"type": "error", "text": str(exc)})
+            break
+        except Exception as exc:
+            yield _sse({"type": "error", "text": f"模型呼叫發生錯誤：{exc}"})
+            break
+
+        # ── Post-stream processing ──
+        if seen_tool:
+            _last_close = full_content.rfind("</tool>")
+            clean_content = (
+                full_content[: _last_close + len("</tool>")] if _last_close != -1 else full_content
+            )
+            messages.append({"role": "assistant", "content": clean_content})
+
+            for tc in tool_calls:
+                yield _sse({"type": "tool", "name": tc["name"], "args": tc["arguments"]})
+                tool_output = _execute_tool(tc["name"], tc["arguments"], db, user_id)
+                yield _sse({"type": "tool_done", "name": tc["name"]})
+                if tc["name"] == "web_search" and tool_output.lstrip().startswith("（"):
+                    web_search_fails += 1
+                messages.append({
+                    "role": "user",
+                    "content": f"[工具 {tc['name']} 的結果]\n{tool_output}",
+                })
+
+            if web_search_fails >= WEB_SEARCH_FAIL_LIMIT:
+                messages.append({
+                    "role": "user",
+                    "content": (
+                        "[系統提示] 網路搜尋已多次查不到結果，請**不要**再呼叫 web_search。"
+                        "直接根據前面已讀到的跑鞋清單、剩餘壽命與跑量資料，給出最終建議，"
+                        "並說明網路搜尋暫時無法取得市售鞋款資訊。"
+                    ),
+                })
+            continue
+
+        # 無工具標記 → 最終回覆；token 已在串流過程中以 token 事件送出，
+        # 這裡僅處理空回覆的 fallback。
+        if not full_content.strip():
+            yield _sse({"type": "token", "text": "（模型沒有回應，請再試一次或更換模型。）"})
+        break
+
+    yield _sse({"type": "done"})

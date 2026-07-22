@@ -434,3 +434,28 @@ def agent_chat(
         ),
         media_type="text/event-stream",
     )
+
+
+@app.post("/api/agent/chat/stream")
+def agent_chat_stream(
+    payload: dict,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """SSE 串流版：與 /api/agent/chat 相同，但 LLM token 會逐字即時送達。"""
+    user_message = payload.get("user_message", "")
+    history = payload.get("history", [])
+    provider = payload.get("provider", "openrouter")
+    model = payload.get("model")
+
+    return StreamingResponse(
+        agent.run_agent_stream(
+            user_message=user_message,
+            history=history,
+            provider=provider,
+            model=model,
+            db=db,
+            user_id=current_user.id,
+        ),
+        media_type="text/event-stream",
+    )
