@@ -7,7 +7,7 @@ OpenRouter 提供 OpenAI-compatible 端點，用同一個 `openai` SDK 設定
 
 import os
 from enum import Enum
-from typing import Any
+from typing import Any, Generator
 
 from openai import OpenAI
 
@@ -128,3 +128,53 @@ def call_llm(
         "content": message.content or "",
         "finish_reason": choice.finish_reason,
     }
+
+
+def call_llm_stream(
+    provider: LLMProvider,
+    model: str,
+    messages: list[dict[str, Any]],
+) -> Generator[str, None, dict[str, Any]]:
+    """串流呼叫模型，逐 token 產出文字片段。
+
+    Yields:
+        每個 token 的文字片段（可能為空字串，由呼叫方自行過濾）。
+
+    Returns:
+        {"content": str, "finish_reason": str | None}
+        在 generator 結束時回傳（透過 StopIteration value）。
+    """
+    client = _build_client(provider)
+
+    kwargs: dict[str, Any] = {
+        "model": model,
+        "messages": messages,
+        "temperature": 0.3,
+        "stream": True,
+        "stream_options": {"include_usage": False},
+    }
+
+    full_content = ""
+    finish_reason = None
+
+    try:
+        stream = client.chat.completions.create(**kwargs)
+        for chunk in stream:
+            if not chunk.choices:
+                continue
+            choice = chunk.choices[0]
+            delta = choice.delta
+            if delta and delta.content:
+                full_content += delta.content
+                yield delta.content
+            if choice.finish_reason:
+                finish_reason = choice.finish_reason
+    except LLMError:
+        raise
+    except Exception as exc:
+        raise LLMError(f"LLM 串流呼叫失敗（{provider.value} / {model}）：{exc}") from exc
+
+    if not full_content and finish_reason is None:
+        raise LLMError(f"LLM 回傳空串流（{provider.value} / {model}）")
+
+    return {"content": full_content, "finish_reason": finish_reason}
