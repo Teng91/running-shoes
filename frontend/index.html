@@ -1888,7 +1888,7 @@ async function sendAgentMessage(retryText) {
   const model = document.getElementById('agent-model').value;
 
   try {
-    const res = await fetch(API_BASE + '/agent/chat', {
+    const res = await fetch(API_BASE + '/agent/chat/stream', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -1961,6 +1961,17 @@ async function sendAgentMessage(retryText) {
                 pending.querySelector('.tool-icon').textContent = '✅';
               }
             }
+          } else if (event.type === 'reasoning_start') {
+            // 串流過程中發現 LLM 要呼叫工具 → 把已顯示的文字移到思考氣泡
+            if (fullText) {
+              thinkingDiv = document.createElement('div');
+              thinkingDiv.className = 'agent-thinking';
+              thinkingDiv.textContent = '💭 ' + fullText;
+              container.insertBefore(thinkingDiv, botDiv);
+              toolStatusDiv = null;
+            }
+            fullText = '';
+            botContent.textContent = '';
           } else if (event.type === 'token') {
             // First token — allow next reasoning round
             thinkingDiv = null;
