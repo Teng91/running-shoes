@@ -1,8 +1,11 @@
 import os
+import csv
+import io
 from contextlib import asynccontextmanager
 from pathlib import Path
+from datetime import datetime
 
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from sqlalchemy import inspect, text
@@ -402,6 +405,132 @@ def delete_monthly_mileage(
         db.rollback()
         raise
     return {"ok": True}
+
+
+# ── Export Routes ─────────────────────────────────────────────────
+def _generate_shoe_rows(shoes: list[models.Shoe], include_retired_status: bool = True):
+    """Generate CSV rows for shoes with all fields."""
+    for s in shoes:
+        status = "已退役" if s.is_retired else "使用中"
+        discount = round(s.price / s.orig_price * 100, 2) if s.orig_price > 0 else 0
+        cost_per_km = round(s.price / s.mileage, 2) if s.mileage > 0 else 0
+        expected_cost = round(s.price / s.expected_mileage, 2) if s.expected_mileage > 0 else 0
+        life_pct = round(s.mileage / s.expected_mileage * 100, 2) if s.expected_mileage > 0 else 0
+
+        row = {
+            "品牌": s.brand,
+            "鞋款": s.model,
+            "購買日期": s.date,
+            "尺寸": s.size,
+            "買價": int(s.price),
+            "原價": int(s.orig_price),
+            "折數(%)": discount,
+            "跑鞋里程(km)": s.mileage,
+            "預期里程(km)": s.expected_mileage,
+            "每km成本": cost_per_km,
+            "預期每km成本": expected_cost,
+            "生命進度(%)": life_pct,
+            "月跑量(km)": s.monthly_km,
+        }
+        if include_retired_status:
+            row["狀態"] = status
+        yield row
+
+
+def _get_export_filename(format: str, mode: str) -> str:
+    """Generate export filename with timestamp."""
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    return f"running_shoes_{mode}_{timestamp}.{format}"
+
+
+@app.get("/api/export")
+def export_shoes(
+    format: str = Query("xlsx", pattern="^(csv|xlsx)$"),
+    mode: str = Query("active", pattern="^(all|active|retired)$"),
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """匯出跑鞋資料為 CSV 或 XLSX。
+
+    - format: csv 或 xlsx (預設 xlsx)
+    - mode: all(全部) | active(現役) | retired(退役) (預設 active)
+    """
+    # 查詢鞋款
+    query = db.query(models.Shoe).filter(models.Shoe.user_id == current_user.id)
+    if mode == "active":
+        query = query.filter(models.Shoe.is_retired == False)  # noqa: E712
+    elif mode == "retired":
+        query = query.filter(models.Shoe.is_retired == True)  # noqa: E712
+    # mode == "all" 不加額外過濾
+    shoes = query.order_by(models.Shoe.is_retired, models.Shoe.date.desc()).all()
+
+    if not shoes:
+        raise HTTPException(status_code=404, detail="沒有可匯出的跑鞋資料")
+
+    include_status = mode != "retired"  # 退役模式不需要狀態欄（全是已退役）
+    rows = list(_generate_shoe_rows(shoes, include_retired_status=include_status))
+
+    if format == "csv":
+        # 生成 CSV
+        output = io.StringIO()
+        if rows:
+            writer = csv.DictWriter(output, fieldnames=rows[0].keys())
+            writer.writeheader()
+            writer.writerows(rows)
+
+        return StreamingResponse(
+            io.BytesIO(output.getvalue().encode("utf-8-sig")),
+            media_type="text/csv; charset=utf-8",
+            headers={
+                "Content-Disposition": f'attachment; filename="{_get_export_filename("csv", mode)}"'
+            },
+        )
+
+    elif format == "xlsx":
+        # 生成 XLSX (需要 openpyxl)
+        try:
+            import openpyxl
+            from openpyxl.styles import Font, PatternFill, Alignment
+        except ImportError:
+            raise HTTPException(status_code=500, detail="伺服器缺少 openpyxl 套件，無法匯出 XLSX")
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "跑鞋資料"
+
+        if rows:
+            headers = list(rows[0].keys())
+            # 寫入標題列
+            header_font = Font(bold=True, color="FFFFFF")
+            header_fill = PatternFill(start_color="3B82F6", end_color="3B82F6", fill_type="solid")
+            header_alignment = Alignment(horizontal="center")
+
+            for col_idx, header in enumerate(headers, 1):
+                cell = ws.cell(row=1, column=col_idx, value=header)
+                cell.font = header_font
+                cell.fill = header_fill
+                cell.alignment = header_alignment
+
+            # 寫入資料列
+            for row_idx, row in enumerate(rows, 2):
+                for col_idx, header in enumerate(headers, 1):
+                    ws.cell(row=row_idx, column=col_idx, value=row[header])
+
+            # 自動調整欄寬
+            for col_idx in range(1, len(headers) + 1):
+                ws.column_dimensions[openpyxl.utils.get_column_letter(col_idx)].width = 18
+
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+
+        return StreamingResponse(
+            output,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={
+                "Content-Disposition": f'attachment; filename="{_get_export_filename("xlsx", mode)}"'
+            },
+        )
 
 
 # ── Agent / Chat Routes ────────────────────────────────────────
