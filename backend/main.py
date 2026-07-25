@@ -1,9 +1,7 @@
 import os
-import csv
-import io
 from contextlib import asynccontextmanager
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
 from fastapi import FastAPI, Depends, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -472,6 +470,8 @@ def export_shoes(
 
     if format == "csv":
         # 生成 CSV
+        import csv
+        import io
         output = io.StringIO()
         if rows:
             writer = csv.DictWriter(output, fieldnames=rows[0].keys())
@@ -488,9 +488,11 @@ def export_shoes(
 
     elif format == "xlsx":
         # 生成 XLSX (需要 openpyxl)
+        import io
         try:
             import openpyxl
             from openpyxl.styles import Font, PatternFill, Alignment
+            from openpyxl.utils import get_column_letter
         except ImportError:
             raise HTTPException(status_code=500, detail="伺服器缺少 openpyxl 套件，無法匯出 XLSX")
 
@@ -518,7 +520,7 @@ def export_shoes(
 
             # 自動調整欄寬
             for col_idx in range(1, len(headers) + 1):
-                ws.column_dimensions[openpyxl.utils.get_column_letter(col_idx)].width = 18
+                ws.column_dimensions[get_column_letter(col_idx)].width = 18
 
         output = io.BytesIO()
         wb.save(output)
