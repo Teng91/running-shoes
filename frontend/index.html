@@ -333,7 +333,7 @@ tr:hover td { background: rgba(99,102,241,0.05); }
         <h2>現役跑鞋</h2>
         <div style="display:flex; gap:8px; align-items:center;">
           <button class="btn btn-primary" onclick="openAddModal()">+ 新增跑鞋</button>
-          <button class="btn btn-sm" style="background:#475569;color:#fff;" onclick="exportShoes('xlsx', false)" title="匯出現役跑鞋 XLSX">匯出</button>
+          <button class="btn btn-sm" style="background:#475569;color:#fff;" onclick="openExportModal()">匯出</button>
         </div>
       </div>
       <div class="table-wrap">
@@ -353,7 +353,6 @@ tr:hover td { background: rgba(99,102,241,0.05); }
     <div class="table-section">
       <div class="table-header">
         <h2>退役跑鞋</h2>
-        <button class="btn btn-sm" style="background:#475569;color:#fff;" onclick="exportShoes('xlsx', 'retired')" title="匯出退役跑鞋 XLSX">匯出</button>
       </div>
       <div class="table-wrap">
         <table>
@@ -501,6 +500,34 @@ tr:hover td { background: rgba(99,102,241,0.05); }
       <span style="flex:1"></span>
       <button class="btn btn-cancel" onclick="closeMonthlyModal()">取消</button>
       <button class="btn btn-primary" onclick="saveMonthlyMileage()">儲存</button>
+    </div>
+  </div>
+</div>
+
+<!-- Export Modal -->
+<div class="modal-overlay" id="export-modal">
+  <div class="modal" style="width: 380px;">
+    <h2 id="export-modal-title">匯出跑鞋資料</h2>
+    <div class="form-group">
+      <label>匯出範圍</label>
+      <select id="export-mode">
+        <option value="active">現役跑鞋</option>
+        <option value="retired">退役跑鞋</option>
+        <option value="all">全部跑鞋</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>檔案格式</label>
+      <select id="export-format">
+        <option value="xlsx">Excel (.xlsx)</option>
+        <option value="csv">CSV (.csv)</option>
+      </select>
+    </div>
+    <div class="auth-error" id="export-error"></div>
+    <div class="modal-actions">
+      <span style="flex:1"></span>
+      <button class="btn btn-cancel" onclick="closeExportModal()">取消</button>
+      <button class="btn btn-primary" onclick="doExport()">匯出</button>
     </div>
   </div>
 </div>
@@ -908,74 +935,6 @@ function render() {
   }
 }
 
-// ====== Export Functions ======
-async function exportShoes(format, mode) {
-  // mode: false/'active' = 現役, 'retired' = 退役, true/'all' = 全部
-  const backendMode = mode === 'retired' ? 'retired' : (mode === true || mode === 'all' ? 'all' : 'active');
-  const displayMode = backendMode === 'retired' ? '退役' : (backendMode === 'all' ? '全部' : '現役');
-
-  try {
-    // Show loading state
-    const modeStr = mode === 'retired' ? "'retired'" : (mode === true || mode === 'all' ? "'all'" : "false");
-    const btns = document.querySelectorAll(`button[onclick*="exportShoes('${format}', ${modeStr})"]`);
-    btns.forEach(btn => {
-      btn.disabled = true;
-      btn.textContent = btn.textContent.replace('匯出', '匯出中');
-    });
-
-    const params = new URLSearchParams({
-      format: format,
-      mode: backendMode
-    });
-
-    const res = await fetch(API_BASE + '/export?' + params.toString(), {
-      headers: authHeaders()
-    });
-
-    if (res.status === 401) {
-      clearAuth();
-      showLoginView();
-      throw new Error('Unauthorized');
-    }
-
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.detail || `匯出失敗: ${res.status}`);
-    }
-
-    // Get filename from Content-Disposition header
-    const disposition = res.headers.get('Content-Disposition');
-    let filename = `running_shoes_${backendMode}_${new Date().toISOString().slice(0,10)}.${format}`;
-    if (disposition) {
-      const match = disposition.match(/filename="([^"]+)"/);
-      if (match) filename = match[1];
-    }
-
-    // Download the file
-    const blob = await res.blob();
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    window.URL.revokeObjectURL(url);
-    document.body.removeChild(a);
-
-  } catch (e) {
-    console.error('匯出失敗:', e);
-    alert('匯出失敗：' + e.message);
-  } finally {
-    // Restore button state
-    const modeStr = mode === 'retired' ? "'retired'" : (mode === true || mode === 'all' ? "'all'" : "false");
-    const btns = document.querySelectorAll(`button[onclick*="exportShoes('${format}', ${modeStr})"]`);
-    btns.forEach(btn => {
-      btn.disabled = false;
-      btn.textContent = btn.textContent.replace('匯出中', '匯出');
-    });
-  }
-}
-
 function renderCards() {
   const allShoes = [...shoes, ...retiredShoes];
   let totalMileage = 0, totalPrice = 0;
@@ -1208,6 +1167,80 @@ function populateMonthlyEditSelects(year, month) {
 function closeMonthlyModal() {
   document.getElementById('monthly-modal').classList.remove('active');
   editingMonthlyIdx = -1;
+}
+
+// ====== Export Modal Functions ======
+function openExportModal() {
+  document.getElementById('export-error').textContent = '';
+  document.getElementById('export-mode').value = 'active';
+  document.getElementById('export-format').value = 'xlsx';
+  document.getElementById('export-modal').classList.add('active');
+}
+
+function closeExportModal() {
+  document.getElementById('export-modal').classList.remove('active');
+}
+
+async function doExport() {
+  const format = document.getElementById('export-format').value;
+  const mode = document.getElementById('export-mode').value;
+  const backendMode = mode === 'retired' ? 'retired' : (mode === 'all' ? 'all' : 'active');
+  const displayMode = backendMode === 'retired' ? '退役' : (backendMode === 'all' ? '全部' : '現役');
+
+  const btn = document.querySelector('#export-modal .btn-primary');
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '匯出中';
+
+  try {
+    const params = new URLSearchParams({
+      format: format,
+      mode: backendMode
+    });
+
+    const res = await fetch(API_BASE + '/export?' + params.toString(), {
+      headers: authHeaders()
+    });
+
+    if (res.status === 401) {
+      clearAuth();
+      showLoginView();
+      throw new Error('Unauthorized');
+    }
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `匯出失敗: ${res.status}`);
+    }
+
+    // Get filename from Content-Disposition header
+    const disposition = res.headers.get('Content-Disposition');
+    let filename = `running_shoes_${backendMode}_${new Date().toISOString().slice(0,10)}.${format}`;
+    if (disposition) {
+      const match = disposition.match(/filename="([^"]+)"/);
+      if (match) filename = match[1];
+    }
+
+    // Download the file
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+
+    closeExportModal();
+
+  } catch (e) {
+    console.error('匯出失敗:', e);
+    document.getElementById('export-error').textContent = '匯出失敗：' + e.message;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalText;
+  }
 }
 
 async function saveMonthlyMileage() {
@@ -1780,6 +1813,9 @@ document.getElementById('modal').addEventListener('click', e => {
 });
 document.getElementById('monthly-modal').addEventListener('click', e => {
   if (e.target.id === 'monthly-modal') closeMonthlyModal();
+});
+document.getElementById('export-modal').addEventListener('click', e => {
+  if (e.target.id === 'export-modal') closeExportModal();
 });
 
 // ====== Agent / Chat ======
