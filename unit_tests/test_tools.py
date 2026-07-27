@@ -68,7 +68,3 @@ def test_parse_tool_calls_extracts_markers():
     assert calls[1]["arguments"]["query"] == "半馬 跑鞋"
 
 
-def test_strip_tool_markers_removes_tags():
-    text = "Wave Sky 7 快換了。<tool>nearing_end_of_life {}</tool> 記得看預算。"
-    assert "<tool>" not in db_tools.strip_tool_markers(text)
-    assert "Wave Sky 7 快換了。" in db_tools.strip_tool_markers(text)

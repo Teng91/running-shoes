@@ -468,8 +468,8 @@ tr:hover td { background: rgba(99,102,241,0.05); }
       <div class="form-group"><label>月跑量 (km)</label><input id="f-monthly" type="number" placeholder="60"></div>
     </div>
     <div class="modal-actions">
-      <button class="btn btn-sm btn-delete" id="btn-delete" style="display:none" onclick="deleteFromModal()">刪除</button>
-      <button class="btn btn-sm btn-edit" id="btn-move" style="display:none" onclick="moveShoe()">移動</button>
+      <button class="btn btn-sm btn-delete" id="btn-delete" style="display:none">刪除</button>
+      <button class="btn btn-sm btn-edit" id="btn-move" style="display:none">移動</button>
       <span style="flex:1"></span>
       <button class="btn btn-cancel" onclick="closeModal()">取消</button>
       <button class="btn btn-primary" onclick="saveShoe()">儲存</button>
@@ -1808,9 +1808,6 @@ function openRetiredEditModal(i) { shoeModal.openForEdit(retiredShoes[i], true);
 function closeModal()        { shoeModal.close(); }
 
 // ====== Init ======
-document.getElementById('modal').addEventListener('click', e => {
-  if (e.target.id === 'modal') closeModal();
-});
 document.getElementById('monthly-modal').addEventListener('click', e => {
   if (e.target.id === 'monthly-modal') closeMonthlyModal();
 });

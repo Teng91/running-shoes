@@ -26,11 +26,6 @@ def db():
 
 
 @pytest.fixture
-def auth_token():
-    return create_access_token(data={"sub": "testuser"})
-
-
-@pytest.fixture
 def user_with_token(db):
     user = User(username="testuser", hashed_password=get_password_hash("pass1234"))
     db.add(user)
