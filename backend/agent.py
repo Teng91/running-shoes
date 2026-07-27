@@ -90,9 +90,9 @@ def run_agent_stream(
 ) -> Generator[str, None, None]:
     """串流版 agent loop，逐 token 產出 SSE 事件。
 
-    與 run_agent() 行為完全相同，但 LLM 呼叫使用 streaming，
-    token 會以 `token` SSE 事件即時送達前端。若 LLM 中途呼叫工具，
-    會發出 `reasoning_start` 事件讓前端把已顯示的文字移到思考氣泡中。
+    LLM 呼叫使用 streaming，token 會以 `token` SSE 事件即時送達前端。
+    若 LLM 中途呼叫工具，會發出 `reasoning_start` 事件讓前端把
+    已顯示的文字移到思考氣泡中。
     """
     try:
         prov = llm.LLMProvider.from_str(provider)
