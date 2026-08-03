@@ -72,13 +72,24 @@ open http://localhost:8000
 
 第一次啟動會自動建立 `shoes.db`（資料表結構）。預設範例資料只在 `SEED_DATA=true` 時才會寫入（Fly.io 部署預設會 seed，本機開發則不會）。
 
-想在本機使用 AI 跑鞋推薦助手，需在專案根目錄的 `.env` 設定 OpenRouter API 金鑰：
+### 本機使用 AI 助手
+
+在專案根目錄建立 `.env` 檔，填入 OpenRouter API Key：
 
 ```bash
 OPENROUTER_API_KEY=<你的 OpenRouter API Key>   # 取得: https://openrouter.ai/keys
 ```
 
-沒設定也不影響 Dashboard 的其他功能，只是 AI 助手無法使用。
+`.env` 會被自動載入，不需要手動 `export`。沒設定也不影響 Dashboard 的其他功能，只是 AI 助手無法使用。
+
+想在本機使用 AI 跑鞋推薦助手，需在專案根目錄的 `.env` 設定 OpenRouter API 金鑰：
+
+```bash
+# 專案根目錄建立 .env 檔
+OPENROUTER_API_KEY=<你的 OpenRouter API Key>   # 取得: https://openrouter.ai/keys
+```
+
+`.env` 會被自動載入，不需要手動 `export`。沒設定也不影響 Dashboard 的其他功能，只是 AI 助手無法使用。
 
 ## 功能特色
 
@@ -87,7 +98,7 @@ OPENROUTER_API_KEY=<你的 OpenRouter API Key>   # 取得: https://openrouter.ai
 - **圖表視覺化**：生命進度條、每 km 成本比較、退役時間軸、月跑量佔比（Chart.js）
 - **每月跑量統計**：獨立管理月跑量資料，支援年度趨勢圖
 - **跑鞋資料匯出**：一鍵匯出 **XLSX / CSV**，支援 **現役 / 退役 / 全部** 三種範圍，欄位完整含品牌、鞋款、日期、尺寸、價格、里程、成本、生命進度、月跑量
-- **AI 跑鞋推薦助手**：依你的實際資料給換鞋與選鞋建議（需設定 OpenRouter API Key）
+- **AI 跑鞋推薦助手**：依你的實際資料給換鞋與選鞋建議（需設定 OpenRouter API Key），模型列表會自動從 OpenRouter 抓取最新免費模型，點擊刷新按鈕可更新
 - **多使用者隔離**：每人資料完全獨立，支援註冊/登入/改密碼
 
 ## AI 跑鞋推薦助手
@@ -99,7 +110,7 @@ OPENROUTER_API_KEY=<你的 OpenRouter API Key>   # 取得: https://openrouter.ai
 - 上網搜尋市售鞋款、規格、評價、價格，並附上來源連結
 - 以繁體中文對話，過程逐步顯示推理與工具呼叫（SSE 串流）
 
-需要設定 `OPENROUTER_API_KEY`（見上方）。模型使用 OpenRouter 上的免費/低成本模型，可透過 `OR_MODEL` 環境變數指定預設模型。
+需要設定 `OPENROUTER_API_KEY`（見上方）。模型使用 OpenRouter 上的免費模型，啟動時會自動抓取最新可用的免費模型列表，前端點擊 🔄 按鈕可手動刷新。可透過 `OR_MODEL` 環境變數指定預設模型。
 
 ## Docker 部署
 

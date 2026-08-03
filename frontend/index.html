@@ -140,6 +140,9 @@ tr:hover td { background: rgba(99,102,241,0.05); }
 .agent-config { display: flex; gap: 8px; margin-bottom: 16px; align-items: center; flex-shrink: 0; }
 .agent-config select { background: var(--bg); border: 1px solid var(--border); color: var(--text); font-size: 13px; padding: 6px 10px; border-radius: 8px; cursor: pointer; }
 .agent-config select:focus { outline: none; border-color: var(--accent); }
+.agent-config button { background: var(--bg); border: 1px solid var(--border); color: var(--text); font-size: 16px; padding: 4px 10px; border-radius: 8px; cursor: pointer; transition: opacity 0.2s; }
+.agent-config button:hover { opacity: 0.7; }
+.agent-config button:disabled { opacity: 0.4; cursor: not-allowed; }
 .agent-messages { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; flex: 1; min-height: 0; overflow-y: auto; margin-bottom: 12px; display: flex; flex-direction: column; gap: 8px; }
 .agent-message { display: flex; flex-shrink: 0; }
 .agent-message.user { justify-content: flex-end; }
@@ -430,6 +433,7 @@ tr:hover td { background: rgba(99,102,241,0.05); }
     <div class="agent-config">
       <label style="font-size:13px;color:var(--text-dim);white-space:nowrap;">Model Provider</label>
       <select id="agent-model"></select>
+      <button id="agent-refresh-btn" onclick="refreshAgentModels()">🔄 刷新模型列表</button>
     </div>
     <div class="agent-messages" id="agent-messages">
       <div class="agent-message bot">
@@ -1843,6 +1847,21 @@ async function loadAgentModels() {
     ).join('');
   } catch (e) {
     console.error('載入模型清單失敗:', e);
+  }
+}
+
+async function refreshAgentModels() {
+  const btn = document.getElementById('agent-refresh-btn');
+  btn.disabled = true;
+  btn.textContent = '⏳';
+  try {
+    await apiPost('/agent/models/refresh', {});
+    await loadAgentModels();
+  } catch (e) {
+    alert('刷新模型列表失敗：' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '🔄 刷新模型列表';
   }
 }
 
