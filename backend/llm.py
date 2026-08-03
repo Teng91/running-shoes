@@ -54,6 +54,8 @@ _MODELS_CACHE: dict[str, list[dict[str, str]]] = {}
 _MODELS_CACHE_META: dict[str, float] = {}  # provider -> cached_at
 _MODELS_CACHE_TTL = 3600  # 1 小時
 
+_DEFAULT_MODEL = "nvidia/nemotron-3-super-120b-a12b:free"
+
 
 def _fetch_free_models() -> list[dict[str, str]]:
     """從 OpenRouter API 抓取目前可用的免費模型。"""
@@ -99,7 +101,9 @@ if _OR_DEFAULT:
 
 
 def _get_models(provider: LLMProvider, force: bool = False) -> list[dict[str, str]]:
-    """取得模型列表，優先使用快取，快取失效時從 OpenRouter API 抓取。"""
+    """取得模型列表，優先使用快取，快取失效時從 OpenRouter API 抓取。
+    預設模型會排到最前面。
+    """
     now = time.time()
     cached = _MODELS_CACHE.get(provider.value)
     cached_at = _MODELS_CACHE_META.get(provider.value, 0)
@@ -108,6 +112,8 @@ def _get_models(provider: LLMProvider, force: bool = False) -> list[dict[str, st
 
     try:
         models = _fetch_free_models()
+        # Put the default model first
+        models = sorted(models, key=lambda m: 0 if m["id"] == _DEFAULT_MODEL else 1)
         _MODELS_CACHE[provider.value] = models
         _MODELS_CACHE_META[provider.value] = now
         return models
