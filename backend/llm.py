@@ -6,10 +6,15 @@ OpenRouter 提供 OpenAI-compatible 端點，用同一個 `openai` SDK 設定
 """
 
 import os
+import time
 from enum import Enum
 from typing import Any, Generator
 
+import httpx
+from dotenv import load_dotenv
 from openai import OpenAI
+
+load_dotenv()
 
 
 class LLMError(Exception):
@@ -44,6 +49,41 @@ MODELS: dict[str, list[dict[str, str]]] = {
     ],
 }
 
+# 動態模型快取
+_MODELS_CACHE: dict[str, list[dict[str, str]]] = {}
+_MODELS_CACHE_META: dict[str, float] = {}  # provider -> cached_at
+_MODELS_CACHE_TTL = 3600  # 1 小時
+
+
+def _fetch_free_models() -> list[dict[str, str]]:
+    """從 OpenRouter API 抓取目前可用的免費模型。"""
+    cfg = _PROVIDER_CONFIG[LLMProvider.openrouter]
+    api_key = os.environ.get(cfg["key_env"])
+    if not api_key:
+        raise LLMError(f"未設定 {cfg['key_label']}，無法抓取模型列表。")
+
+    try:
+        resp = httpx.get(
+            "https://openrouter.ai/api/v1/models",
+            headers={"Authorization": f"Bearer {api_key}"},
+            timeout=15,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+    except httpx.HTTPError as exc:
+        raise LLMError(f"抓取 OpenRouter 模型列表失敗：{exc}") from exc
+
+    models = []
+    for item in data.get("data", []):
+        pricing = item.get("pricing") or {}
+        if pricing.get("prompt") == "0" and pricing.get("completion") == "0":
+            models.append({"id": item["id"], "display": item.get("name", item["id"])})
+
+    if not models:
+        raise LLMError("OpenRouter 沒有回傳任何免費模型")
+
+    return models
+
 # 各 provider 的預設模型可被環境變數覆寫（使用者可在 .env 指定，
 # 例如轉用付費模型時不必改程式碼）。
 _OR_DEFAULT = os.environ.get("OR_MODEL")
@@ -58,17 +98,38 @@ if _OR_DEFAULT:
         )
 
 
-def list_providers() -> list[dict[str, Any]]:
-    """回傳前端下拉要用的 provider / model 清單，並標註 key 是否已設定。"""
+def _get_models(provider: LLMProvider, force: bool = False) -> list[dict[str, str]]:
+    """取得模型列表，優先使用快取，快取失效時從 OpenRouter API 抓取。"""
+    now = time.time()
+    cached = _MODELS_CACHE.get(provider.value)
+    cached_at = _MODELS_CACHE_META.get(provider.value, 0)
+    if not force and cached is not None and (now - cached_at) < _MODELS_CACHE_TTL:
+        return cached
+
+    try:
+        models = _fetch_free_models()
+        _MODELS_CACHE[provider.value] = models
+        _MODELS_CACHE_META[provider.value] = now
+        return models
+    except LLMError:
+        return MODELS.get(provider.value, [])
+
+
+def list_providers(force: bool = False) -> list[dict[str, Any]]:
+    """回傳前端下拉要用的 provider/model 清單，並標註 key 是否已設定。
+
+    force=True 時強制重新抓取 OpenRouter API（忽略快取）。
+    """
     out = []
     for provider, cfg in _PROVIDER_CONFIG.items():
         has_key = bool(os.environ.get(cfg["key_env"]))
+        models = _get_models(provider, force=force) if has_key else MODELS.get(provider.value, [])
         out.append({
             "id": provider.value,
             "label": provider.value,
             "key_env": cfg["key_label"],
             "configured": has_key,
-            "models": MODELS[provider.value],
+            "models": models,
         })
     return out
 

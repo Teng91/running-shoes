@@ -542,6 +542,14 @@ def list_agent_providers():
     return llm.list_providers()
 
 
+@app.post("/api/agent/models/refresh")
+def refresh_agent_models(
+    current_user: models.User = Depends(get_current_user),
+):
+    """強制刷新 OpenRouter 免費模型快取，回傳更新後的 provider/model 清單。"""
+    return llm.list_providers(force=True)
+
+
 @app.post("/api/agent/chat/stream")
 def agent_chat_stream(
     payload: dict,
