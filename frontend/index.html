@@ -143,6 +143,8 @@ tr:hover td { background: rgba(99,102,241,0.05); }
 .agent-config button { background: var(--bg); border: 1px solid var(--border); color: var(--text); font-size: 16px; padding: 4px 10px; border-radius: 8px; cursor: pointer; transition: opacity 0.2s; }
 .agent-config button:hover { opacity: 0.7; }
 .agent-config button:disabled { opacity: 0.4; cursor: not-allowed; }
+.agent-config input[type="text"] { background: var(--bg); border: 1px solid var(--border); color: var(--text); font-size: 13px; padding: 6px 10px; border-radius: 8px; }
+.agent-config input[type="text"]:focus { outline: none; border-color: var(--accent); }
 .agent-messages { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; flex: 1; min-height: 0; overflow-y: auto; margin-bottom: 12px; display: flex; flex-direction: column; gap: 8px; }
 .agent-message { display: flex; flex-shrink: 0; }
 .agent-message.user { justify-content: flex-end; }
@@ -434,6 +436,11 @@ tr:hover td { background: rgba(99,102,241,0.05); }
       <label style="font-size:13px;color:var(--text-dim);white-space:nowrap;">Model Provider</label>
       <select id="agent-model"></select>
       <button id="agent-refresh-btn" onclick="refreshAgentModels()">🔄 刷新模型列表</button>
+    </div>
+    <div class="agent-config">
+      <label style="font-size:13px;color:var(--text-dim);white-space:nowrap;">Custom Model</label>
+      <input id="agent-custom-model" type="text" placeholder="e.g. anthropic/claude-sonnet-4" style="flex:1;background:var(--bg);border:1px solid var(--border);color:var(--text);font-size:13px;padding:6px 10px;border-radius:8px;" />
+      <button id="agent-custom-save" onclick="saveCustomModel()" title="儲存自訂模型">💾</button>
     </div>
     <div class="agent-messages" id="agent-messages">
       <div class="agent-message bot">
@@ -1865,6 +1872,46 @@ async function refreshAgentModels() {
   }
 }
 
+function getCustomModel() {
+  return localStorage.getItem('agent_custom_model') || '';
+}
+
+function saveCustomModel() {
+  const input = document.getElementById('agent-custom-model');
+  const val = input.value.trim();
+  if (val) {
+    localStorage.setItem('agent_custom_model', val);
+    // Prepend to dropdown if not already there
+    const sel = document.getElementById('agent-model');
+    const existing = Array.from(sel.options).some(o => o.value === val);
+    if (!existing) {
+      const opt = document.createElement('option');
+      opt.value = val;
+      opt.textContent = val + ' (custom)';
+      sel.insertBefore(opt, sel.firstChild);
+    }
+    sel.value = val;
+  }
+  input.value = val;
+}
+
+function loadCustomModel() {
+  const custom = getCustomModel();
+  const input = document.getElementById('agent-custom-model');
+  input.value = custom;
+  if (custom) {
+    const sel = document.getElementById('agent-model');
+    const existing = Array.from(sel.options).some(o => o.value === custom);
+    if (!existing) {
+      const opt = document.createElement('option');
+      opt.value = custom;
+      opt.textContent = custom + ' (custom)';
+      sel.insertBefore(opt, sel.firstChild);
+    }
+    sel.value = custom;
+  }
+}
+
 function renderMarkdown(text) {
   if (typeof marked !== 'undefined' && marked.parse) {
     const raw = marked.parse(text, { breaks: true, gfm: true });
@@ -2100,6 +2147,7 @@ async function sendAgentMessage(retryText) {
 async function init() {
   populateAddSelects();
   loadAgentModels();
+  loadCustomModel();
   if (authToken) {
     try {
       await fetch(API_BASE + '/auth/me', { headers: authHeaders() });
