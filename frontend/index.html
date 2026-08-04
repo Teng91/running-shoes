@@ -437,11 +437,6 @@ tr:hover td { background: rgba(99,102,241,0.05); }
       <select id="agent-model"></select>
       <button id="agent-refresh-btn" onclick="refreshAgentModels()">🔄 刷新模型列表</button>
     </div>
-    <div class="agent-config">
-      <label style="font-size:13px;color:var(--text-dim);white-space:nowrap;">Custom Model</label>
-      <input id="agent-custom-model" type="text" placeholder="e.g. anthropic/claude-sonnet-4" style="flex:1;background:var(--bg);border:1px solid var(--border);color:var(--text);font-size:13px;padding:6px 10px;border-radius:8px;" />
-      <button id="agent-custom-save" onclick="saveCustomModel()" title="儲存自訂模型">💾</button>
-    </div>
     <div class="agent-messages" id="agent-messages">
       <div class="agent-message bot">
         <div class="agent-msg-content">你好！我是跑鞋助手，可以幫你查詢跑鞋資料、分析跑量、推薦新鞋。有什麼想問的嗎？</div>
@@ -1872,46 +1867,6 @@ async function refreshAgentModels() {
   }
 }
 
-function getCustomModel() {
-  return localStorage.getItem('agent_custom_model') || '';
-}
-
-function saveCustomModel() {
-  const input = document.getElementById('agent-custom-model');
-  const val = input.value.trim();
-  if (val) {
-    localStorage.setItem('agent_custom_model', val);
-    // Prepend to dropdown if not already there
-    const sel = document.getElementById('agent-model');
-    const existing = Array.from(sel.options).some(o => o.value === val);
-    if (!existing) {
-      const opt = document.createElement('option');
-      opt.value = val;
-      opt.textContent = val + ' (custom)';
-      sel.insertBefore(opt, sel.firstChild);
-    }
-    sel.value = val;
-  }
-  input.value = val;
-}
-
-function loadCustomModel() {
-  const custom = getCustomModel();
-  const input = document.getElementById('agent-custom-model');
-  input.value = custom;
-  if (custom) {
-    const sel = document.getElementById('agent-model');
-    const existing = Array.from(sel.options).some(o => o.value === custom);
-    if (!existing) {
-      const opt = document.createElement('option');
-      opt.value = custom;
-      opt.textContent = custom + ' (custom)';
-      sel.insertBefore(opt, sel.firstChild);
-    }
-    sel.value = custom;
-  }
-}
-
 function renderMarkdown(text) {
   if (typeof marked !== 'undefined' && marked.parse) {
     const raw = marked.parse(text, { breaks: true, gfm: true });
@@ -2147,7 +2102,6 @@ async function sendAgentMessage(retryText) {
 async function init() {
   populateAddSelects();
   loadAgentModels();
-  loadCustomModel();
   if (authToken) {
     try {
       await fetch(API_BASE + '/auth/me', { headers: authHeaders() });
