@@ -1,5 +1,8 @@
-from typing import Optional
+from typing import Literal, Optional
 from pydantic import BaseModel, ConfigDict
+
+
+SHOE_CATEGORIES = Literal["Daily", "Speed", "Tempo", "Race"]
 
 
 # ── Auth Schemas ──────────────────────────────────────────────
@@ -44,6 +47,7 @@ class ShoeBase(BaseModel):
     expected_mileage: float = 800
     monthly_km: float = 60
     is_retired: bool = False
+    category: SHOE_CATEGORIES = "Daily"
 
 
 class ShoeCreate(ShoeBase):
@@ -61,6 +65,7 @@ class ShoeUpdate(BaseModel):
     expected_mileage: Optional[float] = None
     monthly_km: Optional[float] = None
     is_retired: Optional[bool] = None
+    category: Optional[SHOE_CATEGORIES] = None
 
 
 class ShoeOut(ShoeBase):

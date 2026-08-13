@@ -36,6 +36,7 @@ SYSTEM_PROMPT = """你是「跑鞋推薦助手」，服務一位熱愛跑步的�
 
 回答原則：
 - 優先根據使用者的**實際數據**給建議。例如：某雙鞋里程快到預期壽命、近期跑量暴增代表該添購、某鞋 CP 值高。
+- 依照 Daily、Speed、Tempo、Race 類別判斷跑鞋覆蓋；某雙鞋退役後，只有該類別沒有其他現役鞋時才建議補鞋。
 - 再用上網搜尋到的市售鞋款做**具體推薦**，並在推薦處附上來源連結（格式：`鞋款名 - 一句理由（來源：URL）`）。
 - 若資訊不足以給好建議（例如不知道腳型、目標距離、預算、路跑或越野），主動用一兩個問題追問。
 - 語氣親切、條理清楚，用繁體中文。不要編造鞋款或價格；來源不明的話明說。
@@ -77,6 +78,19 @@ def _execute_tool(name: str, arguments: dict, db: Session, user_id: int) -> str:
     fn = db_tools.REGISTRY.get(name)
     if fn is None:
         return f"（未知工具：{name}）"
+    if name == "nearing_end_of_life":
+        try:
+            threshold = float((arguments or {}).get("threshold", 0.8))
+        except (TypeError, ValueError):
+            threshold = 0.8
+        threshold = max(0.0, min(1.0, threshold))
+        return fn(db, user_id, threshold=threshold)
+    if name == "compare_shoes":
+        args = arguments or {}
+        return fn(db, user_id, shoe_a=args.get("shoe_a", ""), shoe_b=args.get("shoe_b", ""))
+    if name == "shoe_category_status":
+        args = arguments or {}
+        return fn(db, user_id, shoe_name=args.get("shoe_name", ""))
     return fn(db, user_id)
 
 

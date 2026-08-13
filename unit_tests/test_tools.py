@@ -1,5 +1,6 @@
 """驗證 DB 工具對 seed 資料的輸出，以及 user 隔離。"""
 
+from backend import agent
 from backend.tools import db_tools
 from backend.models import User, Shoe
 
@@ -25,6 +26,44 @@ def test_nearing_end_of_life_none_below_threshold(seeded_db):
     # 最高才 67.5%，0.9 不該觸發
     out = db_tools.nearing_end_of_life(db, uid, threshold=0.9)
     assert "暫時都不需要急著換" in out
+
+
+def test_agent_passes_nearing_end_of_life_threshold(seeded_db):
+    db, uid = seeded_db
+    out = agent._execute_tool("nearing_end_of_life", {"threshold": 0.5}, db, uid)
+    assert "Mizuno Wave Sky 7" in out
+
+
+def test_compare_shoes_returns_both_shoes(seeded_db):
+    db, uid = seeded_db
+    out = db_tools.compare_shoes(db, uid, "Wave Sky 7", "Wave Rider 29")
+    assert "Wave Sky 7" in out
+    assert "Wave Rider 29" in out
+    assert "每 km 成本" in out
+
+
+def test_compare_shoes_is_user_isolated(seeded_db):
+    db, uid = seeded_db
+    other = User(username="stranger", hashed_password="x")
+    db.add(other)
+    db.commit()
+    out = db_tools.compare_shoes(db, other.id, "Wave Sky 7", "Wave Rider 29")
+    assert "找不到比較對象" in out
+
+
+def test_shoe_category_status_detects_replacement_need(seeded_db):
+    db, uid = seeded_db
+    out = db_tools.shoe_category_status(db, uid)
+    assert "Daily：現役 2 雙" in out
+    assert "Race：現役 0 雙" in out
+    assert "Race：現役 0 雙、退役 0 雙，需要補鞋" in out
+
+
+def test_shoe_category_status_checks_specific_retirement(seeded_db):
+    db, uid = seeded_db
+    out = db_tools.shoe_category_status(db, uid, "Wave Sky 7")
+    assert "還有 1 雙現役鞋" in out
+    assert "不需要補鞋" in out
 
 
 def test_monthly_mileage_stats(seeded_db):
@@ -66,5 +105,3 @@ def test_parse_tool_calls_extracts_markers():
     assert calls[0]["arguments"] == {"threshold": 0.8}
     assert calls[1]["name"] == "web_search"
     assert calls[1]["arguments"]["query"] == "半馬 跑鞋"
-
-
