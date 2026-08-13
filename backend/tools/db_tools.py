@@ -33,10 +33,11 @@ def list_my_shoes(db: Session, user_id: int) -> str:
         if s.expected_mileage:
             pct = min(100, round(s.mileage / s.expected_mileage * 100))
             life = f" 壽命 {pct}%（{s.mileage}/{s.expected_mileage} km）"
-        lines.append(
-            f"- {s.brand} {s.model} [{status}] 購於 {s.date} 尺寸 {s.size} "
+        line = (
+            f"- {s.brand} {s.model} [{s.category}] [{status}] 購於 {s.date} 尺寸 {s.size} "
             f"價格 {int(s.price)} 元(原價 {int(s.orig_price)}) 月跑量 {s.monthly_km}{life}"
         )
+        lines.append(line)
     return "你的跑鞋清單：\n" + "\n".join(lines)
 
 
@@ -130,12 +131,96 @@ def nearing_end_of_life(db: Session, user_id: int, threshold: float = 0.8) -> st
     return "以下跑鞋接近生命週期尾聲，建議準備替換：\n" + "\n".join(lines)
 
 
+def compare_shoes(db: Session, user_id: int, shoe_a: str = "", shoe_b: str = "") -> str:
+    """比較目前使用者的兩雙鞋，名稱可用「品牌 鞋款」或其中一段文字。"""
+    shoes = db.query(models.Shoe).filter(models.Shoe.user_id == user_id).all()
+
+    def find_shoe(query: str):
+        query = (query or "").strip().lower()
+        if not query:
+            return None
+        exact = next(
+            (s for s in shoes if f"{s.brand} {s.model}".lower() == query),
+            None,
+        )
+        if exact:
+            return exact
+        return next(
+            (s for s in shoes if query in f"{s.brand} {s.model}".lower()),
+            None,
+        )
+
+    first = find_shoe(shoe_a)
+    second = find_shoe(shoe_b)
+    if not first or not second:
+        available = ", ".join(f"{s.brand} {s.model}" for s in shoes)
+        missing = []
+        if not first:
+            missing.append(f"shoe_a={shoe_a or '未提供'}")
+        if not second:
+            missing.append(f"shoe_b={shoe_b or '未提供'}")
+        return f"找不到比較對象（{', '.join(missing)}）。目前可用鞋款：{available or '無'}"
+    if first.id == second.id:
+        return "比較需要兩雙不同的跑鞋，請提供不同鞋款。"
+
+    def details(shoe: models.Shoe) -> list[str]:
+        life = shoe.mileage / shoe.expected_mileage if shoe.expected_mileage else 0
+        remain = max(0, shoe.expected_mileage - shoe.mileage) if shoe.expected_mileage else None
+        actual_cost = shoe.price / shoe.mileage if shoe.mileage > 0 else None
+        expected_cost = shoe.price / shoe.expected_mileage if shoe.expected_mileage > 0 else None
+        result = [
+            f"{shoe.brand} {shoe.model}（{'已退役' if shoe.is_retired else '使用中'}）",
+            f"- 類別：{shoe.category}",
+            f"- 里程：{shoe.mileage:.1f}/{shoe.expected_mileage:.1f} km，已用 {life:.1%}，剩餘約 {remain:.1f} km" if remain is not None else f"- 里程：{shoe.mileage:.1f} km，未設定預期壽命",
+            f"- 每 km 成本：{actual_cost:.2f} 元；預期每 km 成本：{expected_cost:.2f} 元" if actual_cost is not None and expected_cost is not None else "- 每 km 成本：目前尚無足夠里程資料",
+            f"- 設定月跑量：{shoe.monthly_km:.1f} km",
+        ]
+        return result
+
+    return "鞋款比較：\n" + "\n".join(details(first) + ["", "VS", ""] + details(second))
+
+
+def shoe_category_status(db: Session, user_id: int, shoe_name: str = "") -> str:
+    """分析四種鞋款用途的現役覆蓋，以及指定鞋款退役後是否要補鞋。"""
+    categories = ("Daily", "Speed", "Tempo", "Race")
+    shoes = db.query(models.Shoe).filter(models.Shoe.user_id == user_id).all()
+    active = [s for s in shoes if not s.is_retired]
+    retired = [s for s in shoes if s.is_retired]
+
+    if shoe_name:
+        query = shoe_name.strip().lower()
+        target = next(
+            (s for s in active if query in f"{s.brand} {s.model}".lower()),
+            None,
+        )
+        if not target:
+            return f"找不到現役鞋款「{shoe_name}」，請使用品牌或鞋款名稱查詢。"
+        remaining = [s for s in active if s.id != target.id and s.category == target.category]
+        action = "不需要補鞋" if remaining else "需要補鞋"
+        return (
+            f"{target.brand} {target.model} 屬於 {target.category} 類別。若它退役後，"
+            f"{target.category} 類別還有 {len(remaining)} 雙現役鞋，因此{action}。"
+        )
+
+    lines = ["跑鞋用途分類狀態（只把現役鞋算作目前可用）："]
+    for category in categories:
+        active_count = sum(s.category == category for s in active)
+        retired_count = sum(s.category == category for s in retired)
+        action = "需要補鞋" if active_count == 0 else "目前不需要補鞋"
+        lines.append(
+            f"- {category}：現役 {active_count} 雙、退役 {retired_count} 雙，{action}"
+        )
+    return "\n".join(lines)
+
+
 # ── 派發表：讓 agent 用 tool name 找到對應函式 ────────────────
 REGISTRY: dict[str, callable] = {
     "list_my_shoes": list_my_shoes,
     "shoe_summary": shoe_summary,
     "monthly_mileage_stats": monthly_mileage_stats,
     "nearing_end_of_life": nearing_end_of_life,
+    "compare_shoes": compare_shoes,
+    "shoe_category_status": shoe_category_status,
 }
 
 
@@ -147,6 +232,8 @@ TOOL_SPEC_TEXT = """當你需要讀取使用者的資料時，請在回覆中插
 - shoe_summary：跑鞋總覽（鞋數/里程/花費/剩餘壽命）。參數：{}
 - monthly_mileage_stats：每月跑量統計與趨勢。參數：{}
 - nearing_end_of_life：找快到壽命的鞋，參數：{"threshold": 0.8}（0~1，可選）
+- compare_shoes：比較兩雙跑鞋，參數：{"shoe_a": "品牌 鞋款", "shoe_b": "品牌 鞋款"}
+- shoe_category_status：分析 Daily/Speed/Tempo/Race 類別覆蓋與補鞋需求，參數：{"shoe_name": "可選，指定鞋款"}
 - web_search：上網搜尋市售鞋款/評價/價格，參數：{"query": "搜尋關鍵字"}
 
 規則：

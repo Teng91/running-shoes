@@ -224,11 +224,35 @@ def test_create_shoe(client, db, user_with_token):
         "brand": "Mizuno", "model": "Wave Sky 7", "date": "2024-01-01",
         "price": 2390, "orig_price": 4780, "mileage": 100,
         "expected_mileage": 800, "monthly_km": 60,
+        "category": "Daily",
     })
     assert res.status_code == 200
     data = res.json()
     assert data["brand"] == "Mizuno"
     assert data["user_id"] == user.id
+    assert data["category"] == "Daily"
+
+
+def test_create_shoe_rejects_invalid_category(client, user_with_token):
+    user, token = user_with_token
+    res = client.post("/api/shoes", headers=_auth_header(token), json={
+        "brand": "Mizuno", "model": "Wave Sky 7", "date": "2024-01-01",
+        "category": "Walking",
+    })
+    assert res.status_code == 422
+
+
+def test_update_shoe_category(client, db, user_with_token):
+    user, token = user_with_token
+    shoe = Shoe(user_id=user.id, brand="Mizuno", model="Wave Sky 7", date="2024-01-01")
+    db.add(shoe)
+    db.commit()
+    db.refresh(shoe)
+    res = client.put(f"/api/shoes/{shoe.id}", headers=_auth_header(token), json={
+        "category": "Tempo",
+    })
+    assert res.status_code == 200
+    assert res.json()["category"] == "Tempo"
 
 
 def test_update_shoe(client, db, user_with_token):
