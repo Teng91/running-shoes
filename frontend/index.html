@@ -252,7 +252,7 @@ tr:hover td { background: rgba(99,102,241,0.05); }
 <div class="container" id="auth-view" style="display:none;">
 
   <!-- Login Form -->
-  <div class="auth-box" id="login-form">
+  <form class="auth-box" id="login-form" onsubmit="handleLogin(); return false;">
     <h1>跑鞋追蹤</h1>
     <div class="form-group">
       <label>帳號</label>
@@ -263,16 +263,16 @@ tr:hover td { background: rgba(99,102,241,0.05); }
       <input id="login-password" type="password" placeholder="Password">
     </div>
     <div class="auth-error" id="auth-error"></div>
-    <button class="btn btn-primary" style="width:100%;margin-top:8px;" onclick="handleLogin()">登入</button>
+    <button type="submit" class="btn btn-primary" style="width:100%;margin-top:8px;">登入</button>
     <div style="text-align:center;margin-top:12px;">
       <a href="#" onclick="showChangeForm();return false;" style="color:var(--text-dim);font-size:13px;">更改密碼</a>
       <span style="color:var(--border);margin:0 8px;">|</span>
       <a href="#" onclick="showRegisterForm();return false;" style="color:var(--accent-light);font-size:13px;">註冊</a>
     </div>
-  </div>
+  </form>
 
   <!-- Register Form -->
-  <div class="auth-box" id="register-form" style="display:none;">
+  <form class="auth-box" id="register-form" style="display:none;" onsubmit="handleRegister(); return false;">
     <h1>註冊帳號</h1>
     <div class="form-group">
       <label>帳號</label>
@@ -287,14 +287,14 @@ tr:hover td { background: rgba(99,102,241,0.05); }
       <input id="reg-password2" type="password" placeholder="Confirm Password">
     </div>
     <div class="auth-error" id="reg-error"></div>
-    <button class="btn btn-primary" style="width:100%;margin-top:8px;" onclick="handleRegister()">註冊</button>
+    <button type="submit" class="btn btn-primary" style="width:100%;margin-top:8px;">註冊</button>
     <div style="text-align:center;margin-top:12px;">
       <a href="#" onclick="showLoginForm();return false;" style="color:var(--accent-light);font-size:13px;">已有帳號？登入</a>
     </div>
-  </div>
+  </form>
 
   <!-- Change Password Form -->
-  <div class="auth-box" id="change-form" style="display:none;">
+  <form class="auth-box" id="change-form" style="display:none;" onsubmit="handleChangePassword(); return false;">
     <h1>更改密碼</h1>
     <div class="form-group">
       <label>帳號</label>
@@ -313,11 +313,11 @@ tr:hover td { background: rgba(99,102,241,0.05); }
       <input id="change-new-password2" type="password" placeholder="Confirm New Password">
     </div>
     <div class="auth-error" id="change-error"></div>
-    <button class="btn btn-primary" style="width:100%;margin-top:8px;" onclick="handleChangePassword()">更改密碼</button>
+    <button type="submit" class="btn btn-primary" style="width:100%;margin-top:8px;">更改密碼</button>
     <div style="text-align:center;margin-top:12px;">
       <a href="#" onclick="showLoginForm();return false;" style="color:var(--accent-light);font-size:13px;">回登入頁</a>
     </div>
-  </div>
+  </form>
 
 </div>
 
@@ -980,7 +980,7 @@ function renderCards() {
   const avgCostPerKm = totalMileage > 0 ? totalPrice / totalMileage : 0;
   const alertCount = shoes.filter(s => {
     const c = calc(s);
-    return c.lifeProgress >= 1 || (c.remainingMonths !== null && c.remainingMonths <= 3);
+    return c.lifeProgress >= 0.8;
   }).length;
 
   const cards = [
@@ -1024,20 +1024,25 @@ function renderCategorySummary() {
 function renderAlerts() {
   const container = document.getElementById('shoe-alerts');
   const alerts = shoes.map(s => ({ shoe: s, calc: calc(s) }))
-    .filter(({ calc: c }) => c.lifeProgress >= 1 || (c.remainingMonths !== null && c.remainingMonths <= 3))
-    .sort((a, b) => a.calc.remainingMonths - b.calc.remainingMonths);
+    .filter(({ calc: c }) => c.lifeProgress >= 0.8)
+    .sort((a, b) => b.calc.lifeProgress - a.calc.lifeProgress);
 
   if (alerts.length === 0) {
     container.innerHTML = '';
     return;
   }
   container.innerHTML = alerts.map(({ shoe: s, calc: c }) => {
-    const urgent = c.lifeProgress >= 1 || c.remainingMonths <= 1;
-    const message = c.lifeProgress >= 1
-      ? `已超過預期壽命 ${Math.round(c.lifeProgress * 100)}%，建議儘快評估替換。`
-      : `依目前每月 ${s.monthly_km} km 的使用量，約 ${Math.max(1, Math.ceil(c.remainingMonths))} 個月內需要準備替換。`;
+    const urgent = c.lifeProgress >= 0.9;
+    const pct = Math.round(c.lifeProgress * 100);
+    const remaining = shoes.filter(other => other.category === s.category && other.id !== s.id).length;
+    const lifecycleMessage = urgent
+      ? `已使用 ${pct}%，可以準備換鞋。`
+      : `已使用 ${pct}%，開始注意這雙鞋的使用狀況。`;
+    const coverageMessage = remaining > 0
+      ? `同類別還有 ${remaining} 雙現役鞋，其實不用急著補；目前單純注意這雙鞋即可。`
+      : '同類別沒有其他現役鞋，建議準備補鞋。';
     return `<div class="shoe-alert${urgent ? ' urgent' : ''}">
-      <strong>${esc(s.brand)} ${esc(s.model)}</strong>：<span>${message}</span>
+      <strong>${esc(s.brand)} ${esc(s.model)}</strong>：<span>${lifecycleMessage} ${coverageMessage}</span>
     </div>`;
   }).join('');
 }

@@ -18,7 +18,21 @@ def test_nearing_end_of_life_flags_worn_shoe(seeded_db):
     # Wave Sky 7: 540/800 = 67.5%；threshold 0.5 應觸發
     out = db_tools.nearing_end_of_life(db, uid, threshold=0.5)
     assert "Mizuno Wave Sky 7" in out
-    assert "建議準備替換" in out
+    assert "先注意這雙鞋的使用狀況" in out
+
+
+def test_nearing_end_of_life_distinguishes_90_percent_and_category_coverage(seeded_db):
+    db, uid = seeded_db
+    shoe = Shoe(
+        user_id=uid, brand="PUMA", model="Deviate Nitro", date="2026-01-01",
+        mileage=460, expected_mileage=500, monthly_km=30, category="Race",
+    )
+    db.add(shoe)
+    db.commit()
+    out = db_tools.nearing_end_of_life(db, uid)
+    assert "Deviate Nitro" in out
+    assert "可以準備換鞋" in out
+    assert "同類別沒有其他現役鞋，建議準備補鞋" in out
 
 
 def test_nearing_end_of_life_none_below_threshold(seeded_db):
