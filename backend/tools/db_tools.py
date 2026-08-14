@@ -124,11 +124,22 @@ def nearing_end_of_life(db: Session, user_id: int, threshold: float = 0.8) -> st
     candidates.sort(reverse=True)
     lines = []
     for pct, s, remain in candidates:
+        other_active_same_category = sum(
+            other.id != s.id and other.category == s.category for other in shoes
+        )
+        lifecycle_message = (
+            "可以準備換鞋" if pct >= 0.9 else "先注意這雙鞋的使用狀況"
+        )
+        coverage_message = (
+            f"同類別還有 {other_active_same_category} 雙現役鞋，暫時不用補鞋；目前單純注意這雙鞋即可"
+            if other_active_same_category
+            else "同類別沒有其他現役鞋，建議準備補鞋"
+        )
         lines.append(
             f"- {s.brand} {s.model}：已用 {round(pct*100)}%（{int(s.mileage)}/{int(s.expected_mileage)} km），"
-            f"剩約 {int(remain)} km，建議準備替換"
+            f"剩約 {int(remain)} km，{lifecycle_message}。{coverage_message}。"
         )
-    return "以下跑鞋接近生命週期尾聲，建議準備替換：\n" + "\n".join(lines)
+    return "以下跑鞋已達預期壽命的提醒門檻：\n" + "\n".join(lines)
 
 
 def compare_shoes(db: Session, user_id: int, shoe_a: str = "", shoe_b: str = "") -> str:
