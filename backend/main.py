@@ -547,6 +547,37 @@ def export_shoes(
         )
 
 
+# ── Spending Routes ────────────────────────────────────────────
+@app.get("/api/spending/monthly")
+def monthly_spending(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """回傳每月鞋款支出統計（依購買日期 grouped）。"""
+    shoes = db.query(models.Shoe).filter(
+        models.Shoe.user_id == current_user.id,
+        models.Shoe.price > 0,
+    ).all()
+
+    buckets: dict[tuple[int, int], dict] = {}
+    for s in shoes:
+        if not s.date:
+            continue
+        try:
+            year = int(s.date[:4])
+            month = int(s.date[5:7])
+        except (ValueError, IndexError):
+            continue
+        key = (year, month)
+        if key not in buckets:
+            buckets[key] = {"year": year, "month": month, "total_paid": 0.0, "total_orig": 0.0}
+        buckets[key]["total_paid"] += s.price
+        buckets[key]["total_orig"] += s.orig_price or 0
+
+    result = sorted(buckets.values(), key=lambda x: (x["year"], x["month"]))
+    return result
+
+
 # ── Agent / Chat Routes ────────────────────────────────────────
 @app.get("/api/agent/providers")
 def list_agent_providers():
