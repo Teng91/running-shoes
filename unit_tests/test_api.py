@@ -255,6 +255,16 @@ def test_update_shoe_category(client, db, user_with_token):
     assert res.json()["category"] == "Tempo"
 
 
+def test_create_shoe_with_trail_category(client, user_with_token):
+    user, token = user_with_token
+    res = client.post("/api/shoes", headers=_auth_header(token), json={
+        "brand": "Salomon", "model": "Sense Ride", "date": "2026-01-01",
+        "category": "Trail",
+    })
+    assert res.status_code == 200
+    assert res.json()["category"] == "Trail"
+
+
 def test_update_shoe(client, db, user_with_token):
     user, token = user_with_token
     shoe = Shoe(user_id=user.id, brand="Mizuno", model="Wave Sky 7", date="2024-01-01",

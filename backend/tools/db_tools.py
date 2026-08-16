@@ -206,6 +206,8 @@ def shoe_category_status(db: Session, user_id: int, shoe_name: str = "") -> str:
         )
         if not target:
             return f"找不到現役鞋款「{shoe_name}」，請使用品牌或鞋款名稱查詢。"
+        if target.category == "Trail":
+            return f"{target.brand} {target.model} 屬於 {target.category} 類別，不納入 Daily/Speed/Tempo/Race 的補鞋分析。"
         remaining = [s for s in active if s.id != target.id and s.category == target.category]
         action = "不需要補鞋" if remaining else "需要補鞋"
         return (
