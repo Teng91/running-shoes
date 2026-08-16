@@ -364,7 +364,7 @@ tr:hover td { background: rgba(99,102,241,0.05); }
             <tr>
               <th>品牌</th><th>鞋款</th><th>購買日期</th>
               <th>跑鞋里程</th><th>每km成本</th><th>預期里程</th><th>預期成本</th><th>生命進度</th>
-              <th>月跑量</th><th>預估退役</th><th>類別</th><th>退役後是否補鞋</th>
+              <th>月跑量</th><th>預估退役</th><th>類別</th>
               <th>尺寸</th><th>買價</th><th>原價</th><th>折數</th><th></th>
             </tr>
           </thead>
@@ -497,6 +497,7 @@ tr:hover td { background: rgba(99,102,241,0.05); }
           <option value="Speed">Speed｜速度訓練</option>
           <option value="Tempo">Tempo｜節奏跑</option>
           <option value="Race">Race｜比賽</option>
+          <option value="Trail">Trail｜越野</option>
         </select>
       </div>
     </div>
@@ -1006,11 +1007,6 @@ function categoryCounts() {
   }));
 }
 
-function categoryReplacementText(category, shoeId) {
-  const remaining = shoes.filter(s => s.category === category && s.id !== shoeId).length;
-  return remaining > 0 ? `不用補（尚有 ${remaining} 雙）` : '需要補鞋';
-}
-
 function renderCategorySummary() {
   const container = document.getElementById('category-summary');
   container.innerHTML = categoryCounts().map(({ category, active, retired }) => {
@@ -1068,7 +1064,6 @@ function renderTable() {
       <td class="editable" ondblclick="inlineEditRow(shoes, ${i}, 'monthly_km', this)">${s.monthly_km}</td>
       <td>${fmtDate(c.retireDate)}</td>
       <td>${esc(s.category)}</td>
-      <td>${categoryReplacementText(s.category, s.id)}</td>
       <td>${esc(s.size)}</td>
       <td>${fmtMoney(s.price)}</td>
       <td>${fmtMoney(s.orig_price)}</td>

@@ -80,6 +80,19 @@ def test_shoe_category_status_checks_specific_retirement(seeded_db):
     assert "不需要補鞋" in out
 
 
+def test_shoe_category_status_excludes_trail_from_replacement_analysis(seeded_db):
+    db, uid = seeded_db
+    shoe = Shoe(
+        user_id=uid, brand="Salomon", model="Sense Ride", date="2026-01-01",
+        mileage=500, expected_mileage=500, category="Trail",
+    )
+    db.add(shoe)
+    db.commit()
+    out = db_tools.shoe_category_status(db, uid, "Sense Ride")
+    assert "Trail" in out
+    assert "不納入" in out
+
+
 def test_monthly_mileage_stats(seeded_db):
     db, uid = seeded_db
     out = db_tools.monthly_mileage_stats(db, uid)

@@ -121,6 +121,9 @@ async def lifespan(app: FastAPI):
     with engine.begin() as conn:
         if "category" not in shoe_columns:
             conn.execute(text("ALTER TABLE shoes ADD COLUMN category TEXT NOT NULL DEFAULT 'Daily'"))
+        # Other was a temporary category; normalize any existing rows before
+        # removing it from the public category choices.
+        conn.execute(text("UPDATE shoes SET category = 'Daily' WHERE category = 'Other'"))
 
     seed_default_data()
     yield

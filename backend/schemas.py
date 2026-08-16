@@ -2,7 +2,7 @@ from typing import Literal, Optional
 from pydantic import BaseModel, ConfigDict
 
 
-SHOE_CATEGORIES = Literal["Daily", "Speed", "Tempo", "Race"]
+SHOE_CATEGORIES = Literal["Daily", "Speed", "Tempo", "Race", "Trail"]
 
 
 # ── Auth Schemas ──────────────────────────────────────────────
