@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import Integer, String, Float, Boolean, ForeignKey, DateTime, UniqueConstraint
+from sqlalchemy import Integer, String, Float, Boolean, ForeignKey, DateTime, UniqueConstraint, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from backend.database import Base
 
@@ -35,7 +35,7 @@ class Shoe(Base):
     expected_mileage: Mapped[float] = mapped_column(Float, default=800)
     monthly_km: Mapped[float] = mapped_column(Float, default=60)
     is_retired: Mapped[bool] = mapped_column(Boolean, default=False)
-    category: Mapped[str] = mapped_column(String, default="Daily", nullable=False)
+    categories: Mapped[list[str]] = mapped_column(JSON, default=lambda: ["Daily"], nullable=False)
 
     owner: Mapped["User"] = relationship(back_populates="shoes")
 
