@@ -25,7 +25,7 @@ def test_nearing_end_of_life_distinguishes_90_percent_and_category_coverage(seed
     db, uid = seeded_db
     shoe = Shoe(
         user_id=uid, brand="PUMA", model="Deviate Nitro", date="2026-01-01",
-        mileage=460, expected_mileage=500, monthly_km=30, category="Race",
+        mileage=460, expected_mileage=500, monthly_km=30, categories=["Race"],
     )
     db.add(shoe)
     db.commit()
@@ -80,17 +80,53 @@ def test_shoe_category_status_checks_specific_retirement(seeded_db):
     assert "不需要補鞋" in out
 
 
-def test_shoe_category_status_excludes_trail_from_replacement_analysis(seeded_db):
+def test_shoe_category_status_includes_trail(seeded_db):
     db, uid = seeded_db
     shoe = Shoe(
         user_id=uid, brand="Salomon", model="Sense Ride", date="2026-01-01",
-        mileage=500, expected_mileage=500, category="Trail",
+        mileage=500, expected_mileage=500, categories=["Trail"],
     )
     db.add(shoe)
     db.commit()
     out = db_tools.shoe_category_status(db, uid, "Sense Ride")
     assert "Trail" in out
-    assert "不納入" in out
+    assert "Sense Ride" in out
+    assert "尚未設定" not in out  # Trail shoe has a category, so not "unset"
+    assert "補鞎" in out  # Either "不需要補鞎" or "準備補鞎" — tells us replacement status
+
+
+def test_shoe_category_status_multi_category_counts_for_all_purposes(seeded_db):
+    """A shoe with multiple categories (e.g. Daily+Tempo) is counted in BOTH
+    the Speed and Tempo category tallies — not just the first one."""
+    db, uid = seeded_db
+    shoe = Shoe(
+        user_id=uid, brand="Hoka", model="Mach 6", date="2026-06-01",
+        categories=["Speed", "Tempo"],
+    )
+    db.add(shoe)
+    db.commit()
+    out = db_tools.shoe_category_status(db, uid)
+    # Mach 6 adds to both Speed and Tempo counts
+    assert "Speed：現役 2 雙" in out       # Rebel v5 + Mach 6
+    assert "Tempo：現役 2 雙" in out       # Boston 12 + Mach 6
+    assert "Trail：現役 0 雙" in out       # No Trail shoes in seeded data
+
+
+def test_nearing_end_of_life_multi_category_find_backup_via_shared_category(seeded_db):
+    """A shoe near end-of-life that has [Daily, Tempo] categories should
+    find backup coverage via any other active shoe sharing at least one category."""
+    db, uid = seeded_db
+    shoe = Shoe(
+        user_id=uid, brand="Saucony", model="Endorphin", date="2026-01-01",
+        mileage=460, expected_mileage=500, monthly_km=30,
+        categories=["Daily", "Tempo"],
+    )
+    db.add(shoe)
+    db.commit()
+    out = db_tools.nearing_end_of_life(db, uid, threshold=0.8)
+    # 460/500 = 92% → flagged; backup exists via shared "Daily" category
+    assert "Saucony Endorphin" in out
+    assert "同類別還有" in out  # Has backup via shared "Daily" category
 
 
 def test_monthly_mileage_stats(seeded_db):

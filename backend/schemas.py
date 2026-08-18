@@ -1,8 +1,9 @@
-from typing import Literal, Optional
-from pydantic import BaseModel, ConfigDict
+from typing import Optional
+from pydantic import BaseModel, ConfigDict, field_validator
 
 
-SHOE_CATEGORIES = Literal["Daily", "Speed", "Tempo", "Race", "Trail"]
+# All valid shoe purpose/function categories.
+SHOE_CATEGORIES = ["Daily", "Speed", "Tempo", "Race", "Trail"]
 
 
 # ── Auth Schemas ──────────────────────────────────────────────
@@ -47,7 +48,17 @@ class ShoeBase(BaseModel):
     expected_mileage: float = 800
     monthly_km: float = 60
     is_retired: bool = False
-    category: SHOE_CATEGORIES = "Daily"
+    categories: list[str] = ["Daily"]
+
+    @field_validator("categories")
+    @classmethod
+    def validate_categories(cls, v):
+        invalid = [c for c in v if c not in SHOE_CATEGORIES]
+        if invalid:
+            raise ValueError(
+                f"Invalid categories: {invalid}. Must be subset of {SHOE_CATEGORIES}"
+            )
+        return v
 
 
 class ShoeCreate(ShoeBase):
@@ -65,7 +76,18 @@ class ShoeUpdate(BaseModel):
     expected_mileage: Optional[float] = None
     monthly_km: Optional[float] = None
     is_retired: Optional[bool] = None
-    category: Optional[SHOE_CATEGORIES] = None
+    categories: Optional[list[str]] = None
+
+    @field_validator("categories")
+    @classmethod
+    def validate_categories(cls, v):
+        if v is not None:
+            invalid = [c for c in v if c not in SHOE_CATEGORIES]
+            if invalid:
+                raise ValueError(
+                    f"Invalid categories: {invalid}. Must be subset of {SHOE_CATEGORIES}"
+                )
+        return v
 
 
 class ShoeOut(ShoeBase):
