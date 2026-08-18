@@ -224,45 +224,69 @@ def test_create_shoe(client, db, user_with_token):
         "brand": "Mizuno", "model": "Wave Sky 7", "date": "2024-01-01",
         "price": 2390, "orig_price": 4780, "mileage": 100,
         "expected_mileage": 800, "monthly_km": 60,
-        "category": "Daily",
+        "categories": ["Daily"],
     })
     assert res.status_code == 200
     data = res.json()
     assert data["brand"] == "Mizuno"
     assert data["user_id"] == user.id
-    assert data["category"] == "Daily"
+    assert data["categories"] == ["Daily"]
 
 
 def test_create_shoe_rejects_invalid_category(client, user_with_token):
     user, token = user_with_token
     res = client.post("/api/shoes", headers=_auth_header(token), json={
         "brand": "Mizuno", "model": "Wave Sky 7", "date": "2024-01-01",
-        "category": "Walking",
+        "categories": ["Walking"],
     })
     assert res.status_code == 422
 
 
-def test_update_shoe_category(client, db, user_with_token):
+def test_update_shoe_categories(client, db, user_with_token):
     user, token = user_with_token
     shoe = Shoe(user_id=user.id, brand="Mizuno", model="Wave Sky 7", date="2024-01-01")
     db.add(shoe)
     db.commit()
     db.refresh(shoe)
     res = client.put(f"/api/shoes/{shoe.id}", headers=_auth_header(token), json={
-        "category": "Tempo",
+        "categories": ["Tempo"],
     })
     assert res.status_code == 200
-    assert res.json()["category"] == "Tempo"
+    assert res.json()["categories"] == ["Tempo"]
 
 
 def test_create_shoe_with_trail_category(client, user_with_token):
     user, token = user_with_token
     res = client.post("/api/shoes", headers=_auth_header(token), json={
         "brand": "Salomon", "model": "Sense Ride", "date": "2026-01-01",
-        "category": "Trail",
+        "categories": ["Trail"],
     })
     assert res.status_code == 200
-    assert res.json()["category"] == "Trail"
+    assert res.json()["categories"] == ["Trail"]
+
+
+def test_create_shoe_with_multiple_categories(client, user_with_token):
+    user, token = user_with_token
+    res = client.post("/api/shoes", headers=_auth_header(token), json={
+        "brand": "Brooks", "model": "Ghost", "date": "2026-01-01",
+        "categories": ["Daily", "Tempo"],
+    })
+    assert res.status_code == 200
+    assert res.json()["categories"] == ["Daily", "Tempo"]
+
+
+def test_update_shoe_adds_categories(client, db, user_with_token):
+    user, token = user_with_token
+    shoe = Shoe(user_id=user.id, brand="Mizuno", model="Wave Sky 7", date="2024-01-01",
+                categories=["Daily"])
+    db.add(shoe)
+    db.commit()
+    db.refresh(shoe)
+    res = client.put(f"/api/shoes/{shoe.id}", headers=_auth_header(token), json={
+        "categories": ["Daily", "Tempo"],
+    })
+    assert res.status_code == 200
+    assert res.json()["categories"] == ["Daily", "Tempo"]
 
 
 def test_update_shoe(client, db, user_with_token):
@@ -657,6 +681,7 @@ def test_lifespan_migrates_old_schema(monkeypatch):
 
             cols = [row[1] for row in conn.execute(text("PRAGMA table_info(shoes)")).fetchall()]
             assert "user_id" in cols, "user_id column should be added to shoes"
+            assert "categories" in cols, "categories column should be added to shoes"
 
             user_id = conn.execute(text("SELECT user_id FROM shoes")).fetchone()[0]
             assert user_id is not None, "existing shoes should get user_id assigned"

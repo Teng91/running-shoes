@@ -53,19 +53,19 @@ def seeded_db(db):
     shoes = [
         Shoe(user_id=user.id, brand="Mizuno", model="Wave Sky 7", date="2024-09-15",
              size="us13/31cm", price=2390, orig_price=4780, mileage=540,
-             expected_mileage=800, monthly_km=60, category="Daily"),
+             expected_mileage=800, monthly_km=60, categories=["Daily"]),
         Shoe(user_id=user.id, brand="Mizuno", model="Wave Rider 29", date="2025-12-12",
              size="us12/30cm", price=2505, orig_price=3980, mileage=293,
-             expected_mileage=800, monthly_km=60, category="Daily"),
+             expected_mileage=800, monthly_km=60, categories=["Daily"]),
         Shoe(user_id=user.id, brand="New Balance", model="Rebel v5", date="2026-02-20",
              size="us11/29cm", price=2300, orig_price=4280, mileage=102,
-             expected_mileage=500, monthly_km=30, category="Speed"),
+             expected_mileage=500, monthly_km=30, categories=["Speed"]),
         Shoe(user_id=user.id, brand="Adidas", model="Boston 12", date="2026-04-21",
              size="us11.5/29.5cm", price=1680, orig_price=4290, mileage=61,
-             expected_mileage=800, monthly_km=30, category="Tempo"),
+             expected_mileage=800, monthly_km=30, categories=["Tempo"]),
         Shoe(user_id=user.id, brand="Asics", model="Gel-Excite 8", date="2024-01-05",
              size="us11/29cm", price=1780, orig_price=2280, mileage=625,
-             expected_mileage=600, monthly_km=0, is_retired=True, category="Daily"),
+             expected_mileage=600, monthly_km=0, is_retired=True, categories=["Daily"]),
     ]
     db.add_all(shoes)
 
