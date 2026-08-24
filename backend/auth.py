@@ -1,4 +1,5 @@
 import os
+import sys
 import warnings
 from datetime import datetime, timedelta, timezone
 
@@ -11,11 +12,18 @@ from sqlalchemy.orm import Session
 from backend.database import get_db
 from backend.models import User
 
-SECRET_KEY = os.environ.get("SECRET_KEY", "dev-only-fallback-change-me")
+SECRET_KEY = os.environ.get("SECRET_KEY")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
 
-if SECRET_KEY == "dev-only-fallback-change-me":
+# Detect production-like environments (not local dev)
+IS_PRODUCTION = os.environ.get("ENVIRONMENT", "development").lower() != "development"
+if not SECRET_KEY:
+    if IS_PRODUCTION:
+        print("ERROR: SECRET_KEY environment variable is required in production", file=sys.stderr)
+        sys.exit(1)
+    # Development fallback — still warn but allow startup
+    SECRET_KEY = "dev-only-fallback-change-me"
     warnings.warn("Using fallback SECRET_KEY — set the SECRET_KEY env var in production!")
 
 security = HTTPBearer()

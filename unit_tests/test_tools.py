@@ -92,7 +92,20 @@ def test_shoe_category_status_includes_trail(seeded_db):
     assert "Trail" in out
     assert "Sense Ride" in out
     assert "尚未設定" not in out  # Trail shoe has a category, so not "unset"
-    assert "補鞎" in out  # Either "不需要補鞎" or "準備補鞎" — tells us replacement status
+    assert "補鞋" in out  # Either "不需要補鞋" or "建議準備補鞋" — tells us replacement status
+
+
+def test_shoe_category_status_counts_walk(seeded_db):
+    """Walk is a valid category in the analysis tuple (frontend allows selecting it)."""
+    db, uid = seeded_db
+    shoe = Shoe(
+        user_id=uid, brand="Nike", model="Free RN", date="2026-01-01",
+        categories=["Walk"],
+    )
+    db.add(shoe)
+    db.commit()
+    out = db_tools.shoe_category_status(db, uid)
+    assert "Walk：現役 1 雙" in out
 
 
 def test_shoe_category_status_multi_category_counts_for_all_purposes(seeded_db):

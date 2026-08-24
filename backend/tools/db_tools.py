@@ -109,11 +109,12 @@ def monthly_mileage_stats(db: Session, user_id: int) -> str:
 def nearing_end_of_life(db: Session, user_id: int, threshold: float = 0.8) -> str:
     shoes = (
         db.query(models.Shoe)
-        .filter(models.Shoe.user_id == user_id, models.Shoe.is_retired == False)  # noqa: E712
+        .filter(models.Shoe.user_id == user_id, models.Shoe.is_retired.is_(False))
         .all()
     )
     candidates = []
     for s in shoes:
+        # Guard against expected_mileage = 0 (user-editable) to avoid division by zero
         if s.expected_mileage and s.expected_mileage > 0:
             pct = s.mileage / s.expected_mileage
             if pct >= threshold:
@@ -201,22 +202,27 @@ def shoe_category_status(db: Session, user_id: int, shoe_name: str = "") -> str:
     一雙鞋可對應多個用途（例如 Daily + Tempo）。退役分析會檢查該鞋
     涵蓋的每個類別是否還有其他現役鞋作為替代。
     """
-    categories = ("Daily", "Speed", "Tempo", "Race", "Trail")
+    categories = ("Daily", "Speed", "Tempo", "Race", "Trail", "Walk")
     shoes = db.query(models.Shoe).filter(models.Shoe.user_id == user_id).all()
     active = [s for s in shoes if not s.is_retired]
     retired = [s for s in shoes if s.is_retired]
 
     if shoe_name:
         query = shoe_name.strip().lower()
+        # Search in ALL shoes (active + retired) so user can query retired shoes too
         target = next(
-            (s for s in active if query in f"{s.brand} {s.model}".lower()),
+            (s for s in shoes if query in f"{s.brand} {s.model}".lower()),
             None,
         )
         if not target:
-            return f"找不到現役鞋款「{shoe_name}」，請使用品牌或鞋款名稱查詢。"
+            return f"找不到鞋款「{shoe_name}」，請使用品牌或鞋款名稱查詢。"
         target_cats = target.categories or []
         if not target_cats:
             return f"{target.brand} {target.model} 尚未設定用途類別。"
+
+        # If the queried shoe is already retired, note that in the response
+        is_retired_note = "（此鞋已退役）" if target.is_retired else ""
+
         cat_str = ", ".join(target_cats)
         # For each category the target serves, check if any other active shoe covers it
         parts = []
@@ -230,9 +236,9 @@ def shoe_category_status(db: Session, user_id: int, shoe_name: str = "") -> str:
             any(s.id != target.id and cat in (s.categories or []) for s in active)
             for cat in target_cats
         )
-        action = "暫時不需要補鞋" if all_covered else "建議準備補鞎"
+        action = "暫時不需要補鞋" if all_covered else "建議準備補鞋"
         return (
-            f"{target.brand} {target.model} 屬於 {cat_str} 類別。"
+            f"{target.brand} {target.model} {is_retired_note}屬於 {cat_str} 類別。"
             f"若它退役後：" + "、".join(parts) + f"，因此{action}。"
         )
 
