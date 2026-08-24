@@ -137,6 +137,7 @@ def run_agent_stream(
 
         # ── Streaming LLM call ──
         full_content = ""
+        pending_tool_text = ""
         seen_tool = False
         tool_calls = []
 
@@ -157,6 +158,21 @@ def run_agent_stream(
                                 yield _sse({"type": "reasoning_start"})
                             else:
                                 yield _sse({"type": "token", "text": chunk})
+                        else:
+                            # Already streaming a tool round — keep buffering the
+                            # raw assistant text instead of emitting leftover
+                            # `<tool>` markers to the user. parse_tool_calls()
+                            # only returns the first marker, so drop any frozen
+                            # tools at freeze time (below) to keep indices
+                            # aligned if the model concatenates multiple.
+                            pending_tool_text += chunk
+
+                    if seen_tool and not is_last_turn and "</tool>" in pending_tool_text:
+                        # Another complete tool marker arrived while we were
+                        # buffering. Its text is still part of the assistant
+                        # turn (so keep it for the LLM context), but we only
+                        # ever execute the first tool.
+                        break
             except StopIteration as e:
                 # Generator returned via return value
                 _ = e.value
@@ -169,6 +185,10 @@ def run_agent_stream(
 
         # ── Post-stream processing ──
         if seen_tool:
+            # full_content already contains every streamed chunk (including any
+            # buffered second <tool> marker). Only the FIRST tool gets executed;
+            # the raw marker text stays in the assistant turn for LLM context.
+            tool_calls = db_tools.parse_tool_calls(full_content)[:1]
             _last_close = full_content.rfind("</tool>")
             clean_content = (
                 full_content[: _last_close + len("</tool>")] if _last_close != -1 else full_content

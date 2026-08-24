@@ -207,10 +207,15 @@ async def http_exception_handler(request, exc):
 def register(payload: schemas.UserCreate, db: Session = Depends(get_db)):
     if len(payload.password) < 4:
         raise HTTPException(status_code=400, detail="Password must be at least 4 characters")
-    if db.query(models.User).filter(models.User.username == payload.username).first():
+    username = payload.username.strip()
+    if not username:
+        raise HTTPException(status_code=400, detail="Username cannot be empty")
+    if len(username) > 50:
+        raise HTTPException(status_code=400, detail="Username must be 50 characters or fewer")
+    if db.query(models.User).filter(models.User.username == username).first():
         raise HTTPException(status_code=400, detail="Username already registered")
     user = models.User(
-        username=payload.username,
+        username=username,
         hashed_password=get_password_hash(payload.password),
     )
     db.add(user)
@@ -398,6 +403,9 @@ def update_monthly_mileage(
     new_year = update_data.get("year", entry.year)
     if new_month < 1 or new_month > 12:
         raise HTTPException(status_code=400, detail="Month must be between 1 and 12")
+    new_km = update_data.get("km", entry.km)
+    if new_km < 0:
+        raise HTTPException(status_code=400, detail="Km must be non-negative")
 
     # Check uniqueness if year/month are changing
     if ("year" in update_data or "month" in update_data) and (
@@ -584,7 +592,6 @@ def monthly_spending(
     """回傳每月鞋款支出統計（依購買日期 grouped）。"""
     shoes = db.query(models.Shoe).filter(
         models.Shoe.user_id == current_user.id,
-        models.Shoe.price > 0,
     ).all()
 
     buckets: dict[tuple[int, int], dict] = {}
