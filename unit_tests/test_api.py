@@ -47,6 +47,25 @@ def test_register_duplicate_username(client, db):
     assert res.status_code == 400
 
 
+def test_register_strips_whitespace(client):
+    res = client.post("/api/auth/register", json={"username": "  alice  ", "password": "pass1234"})
+    assert res.status_code == 200
+    assert res.json()["username"] == "alice"
+    # Logging in with the stripped name works
+    login = client.post("/api/auth/login", json={"username": "alice", "password": "pass1234"})
+    assert login.status_code == 200
+
+
+def test_register_whitespace_only_rejected(client):
+    res = client.post("/api/auth/register", json={"username": "   ", "password": "pass1234"})
+    assert res.status_code == 400
+
+
+def test_register_overlong_username_rejected(client):
+    res = client.post("/api/auth/register", json={"username": "x" * 51, "password": "pass1234"})
+    assert res.status_code == 400
+
+
 def test_login_success(client, db):
     db.add(User(username="alice", hashed_password=get_password_hash("pass1234")))
     db.commit()
