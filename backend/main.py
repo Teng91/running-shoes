@@ -88,30 +88,34 @@ async def lifespan(app: FastAPI):
 
         migration_password = os.environ.get("MIGRATION_PASSWORD")
         if not migration_password:
-            raise RuntimeError(
-                "MIGRATION_PASSWORD must be set to run the schema migration; "
-                "it becomes the password for the legacy 'Joy' account."
+            # Don't crash the app — log warning and skip migration.
+            # Admin can run migration manually later via CLI.
+            import logging
+            logging.warning(
+                "MIGRATION_PASSWORD not set — skipping legacy schema migration. "
+                "Existing shoes will remain unassigned until migration is run manually."
             )
-        db = SessionLocal()
-        try:
-            joy_user = models.User(
-                username="Joy",
-                hashed_password=get_password_hash(migration_password),
-            )
-            db.add(joy_user)
-            db.commit()
-            db.refresh(joy_user)
-
-            # Add user_id column (SQLite allows ALTER TABLE ADD COLUMN without FK)
-            with engine.connect() as conn:
-                conn.execute(text("ALTER TABLE shoes ADD COLUMN user_id INTEGER"))
-                conn.execute(
-                    text("UPDATE shoes SET user_id = :uid"),
-                    {"uid": joy_user.id},
+        else:
+            db = SessionLocal()
+            try:
+                joy_user = models.User(
+                    username="Joy",
+                    hashed_password=get_password_hash(migration_password),
                 )
-                conn.commit()
-        finally:
-            db.close()
+                db.add(joy_user)
+                db.commit()
+                db.refresh(joy_user)
+
+                # Add user_id column (SQLite allows ALTER TABLE ADD COLUMN without FK)
+                with engine.connect() as conn:
+                    conn.execute(text("ALTER TABLE shoes ADD COLUMN user_id INTEGER"))
+                    conn.execute(
+                        text("UPDATE shoes SET user_id = :uid"),
+                        {"uid": joy_user.id},
+                    )
+                    conn.commit()
+            finally:
+                db.close()
 
     Base.metadata.create_all(bind=engine)
 
@@ -129,8 +133,22 @@ async def lifespan(app: FastAPI):
             else:
                 # Table exists but has no category column at all — add the new one
                 conn.execute(text("ALTER TABLE shoes ADD COLUMN categories TEXT NOT NULL DEFAULT '[]'"))
-        # Other was a temporary category; remove it from any JSON arrays
-        conn.execute(text("UPDATE shoes SET categories = json_remove(categories, json_each.key) FROM json_each(categories) WHERE json_each.value = 'Other'"))
+        # Other was a temporary category; remove it from any JSON arrays.
+        # Use a compatible approach: find ids with 'Other' and update individually.
+        # This avoids "UPDATE ... FROM json_each" which requires SQLite 3.38+.
+        # Use `shoes.id` (our primary key) to avoid ambiguous column in join.
+        rows_with_other = conn.execute(text("""
+            SELECT shoes.id FROM shoes,
+            json_each(categories)
+            WHERE json_each.value = 'Other'
+        """)).fetchall()
+        for (sid,) in rows_with_other:
+            conn.execute(text("""
+                UPDATE shoes
+                SET categories = json_remove(categories,
+                    (SELECT key FROM json_each(categories) WHERE value = 'Other' LIMIT 1))
+                WHERE id = :sid
+            """), {"sid": sid})
 
     seed_default_data()
     yield
@@ -155,11 +173,12 @@ frontend_dir.mkdir(exist_ok=True)
 
 
 # index.html 內含 inline JS，必須用 no-cache 讓瀏覽器每次都向伺服器
-# 驗證（有 ETag，未變更會回 304 很省），否則使用者會一直卡在舊版前端。
+# 驗證（FileResponse 內建 ETag/Last-Modified，未變更會回 304 很省），
+# 否則使用者會一直卡在舊版前端。
 def _index_response():
     return FileResponse(
         frontend_dir / "index.html",
-        headers={"Cache-Control": "no-cache"},
+        headers={"Cache-Control": "no-cache, must-revalidate"},
     )
 
 
@@ -231,13 +250,15 @@ def change_password(payload: schemas.UserChangePassword, db: Session = Depends(g
 
 
 # ── Shoe Routes ───────────────────────────────────────────────
+from sqlalchemy import false, true
+
 @app.get("/api/shoes/active", response_model=list[schemas.ShoeOut])
 def list_active(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     return db.query(models.Shoe).filter(
-        models.Shoe.is_retired == False,
+        models.Shoe.is_retired.is_(False),
         models.Shoe.user_id == current_user.id,
     ).all()
 
@@ -248,7 +269,7 @@ def list_retired(
     db: Session = Depends(get_db),
 ):
     return db.query(models.Shoe).filter(
-        models.Shoe.is_retired == True,
+        models.Shoe.is_retired.is_(True),
         models.Shoe.user_id == current_user.id,
     ).all()
 

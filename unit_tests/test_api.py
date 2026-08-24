@@ -265,6 +265,17 @@ def test_create_shoe_with_trail_category(client, user_with_token):
     assert res.json()["categories"] == ["Trail"]
 
 
+def test_create_shoe_with_walk_category(client, user_with_token):
+    """Walk is a valid category selectable in the frontend checklist."""
+    user, token = user_with_token
+    res = client.post("/api/shoes", headers=_auth_header(token), json={
+        "brand": "Nike", "model": "Free RN", "date": "2026-01-01",
+        "categories": ["Walk"],
+    })
+    assert res.status_code == 200
+    assert res.json()["categories"] == ["Walk"]
+
+
 def test_create_shoe_with_multiple_categories(client, user_with_token):
     user, token = user_with_token
     res = client.post("/api/shoes", headers=_auth_header(token), json={

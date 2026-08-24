@@ -10,6 +10,17 @@
 
 MAX_RESULTS = 5
 
+# All failure messages (missing package, network error, no results) start with a
+# fullwidth left paren 「（」. agent.py relies on this prefix to count consecutive
+# web_search failures and force the model to converge. Define it here as the
+# single source of truth so the contract stays explicit.
+FAILURE_PREFIX = "（"
+
+
+def is_failure(result: str) -> bool:
+    """True if a web_search result string is a failure/empty signal."""
+    return result.lstrip().startswith(FAILURE_PREFIX)
+
 
 def run_web_search(arguments: dict) -> str:
     query = (arguments or {}).get("query", "")
