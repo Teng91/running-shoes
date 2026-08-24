@@ -638,10 +638,10 @@ tr:hover td { background: rgba(99,102,241,0.05); }
 // String-based replacement — faster than creating DOM nodes each call
 function esc(str) {
   return String(str)
-    .replace(/&/g, '&')
-    .replace(/</g, '<')
-    .replace(/>/g, '>')
-    .replace(/"/g, '"')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
 }
 
@@ -1457,7 +1457,7 @@ function renderCharts() {
   Object.values(chartInstances).forEach(c => c.destroy());
   chartInstances = {};
 
-  const labels = shoes.map(s => esc(s.brand) + ' ' + esc(s.model));
+  const labels = shoes.map(s => s.brand + ' ' + s.model);
   let brandSeq = {};
   const colors = shoes.map(s => {
     brandSeq[s.brand] = (brandSeq[s.brand] || 0);
@@ -1539,6 +1539,7 @@ function renderCharts() {
   const retireData = calcs.map((c, i) => ({
     x: c.retireDate ? c.retireDate.getTime() : null,
     y: i,
+    shoeIdx: i,
     label: labels[i]
   })).filter(d => d.x !== null);
 
@@ -1547,10 +1548,7 @@ function renderCharts() {
     data: {
       datasets: [{
         data: retireData.map(d => ({ x: d.x, y: d.y })),
-        backgroundColor: retireData.map((d, i) => {
-          const origIdx = shoes.findIndex(s => s.brand + ' ' + s.model === d.label);
-          return colors[origIdx >= 0 ? origIdx : i] || '#6366f1';
-        }),
+        backgroundColor: retireData.map((d) => colors[d.shoeIdx] || '#6366f1'),
         pointRadius: 10,
         pointHoverRadius: 14,
       }]
@@ -2190,11 +2188,20 @@ class ShoeModal {
     const targetRetired = this.mode === 'editActive';
     if (!confirm(`確定要移至${targetRetired ? '退役' : '現役'}？`)) return;
     try {
-      await apiPut('/shoes/' + this.shoe.id, {
-        ...this.shoe,
-        is_retired: targetRetired,
-        monthly_km: targetRetired ? 0 : 60
-      });
+      const payload = { ...this.shoe, is_retired: targetRetired };
+      if (targetRetired) {
+        payload.monthly_km = 0;
+      } else if (!payload.monthly_km) {
+        // 退役時月跑量被歸零，回到現役時用其他現役鞋的平均月跑量當起始參考，
+        // 避免硬編碼 60。
+        const activeKm = shoes
+          .filter(s => s.id !== this.shoe.id && !s.is_retired && s.monthly_km > 0)
+          .map(s => s.monthly_km);
+        payload.monthly_km = activeKm.length
+          ? Math.round(activeKm.reduce((a, b) => a + b, 0) / activeKm.length * 10) / 10
+          : 60;
+      }
+      await apiPut('/shoes/' + this.shoe.id, payload);
     } catch { return alert('移動失敗'); }
     this.close();
     await loadData();
@@ -2277,6 +2284,11 @@ function sanitizeMarkdownHtml(raw) {
   const div = document.createElement('div');
   div.innerHTML = raw;
   const scrub = (el) => {
+    // Strip event-handler attributes (onclick, onerror, …) from every
+    // allowed tag — marked passes raw HTML through unchanged.
+    for (const attr of [...el.attributes]) {
+      if (/^on/i.test(attr.name)) el.removeAttribute(attr.name);
+    }
     if (el.tagName === 'A' && el.href) {
       // Only allow http(s) links; neutralise javascript: etc.
       try {
@@ -2440,19 +2452,7 @@ async function sendAgentMessage(retryText) {
 
         try {
           const event = JSON.parse(data);
-          if (event.type === 'reasoning') {
-            // New reasoning round → reset both containers so new tools go
-            // into a fresh group that sits AFTER this thinking bubble
-            if (!thinkingDiv) {
-              thinkingDiv = document.createElement('div');
-              thinkingDiv.className = 'agent-thinking';
-              thinkingDiv.textContent = '💭 ';
-              container.insertBefore(thinkingDiv, botDiv);
-              toolStatusDiv = null;  // next tool event creates a new group
-            }
-            thinkingDiv.textContent += event.text;
-            container.scrollTop = container.scrollHeight;
-          } else if (event.type === 'tool') {
+          if (event.type === 'tool') {
             // Finalize current thinking bubble
             thinkingDiv = null;
             // Create a new tool group if needed (inserted after the thinking bubble)

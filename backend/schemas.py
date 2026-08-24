@@ -1,5 +1,6 @@
 from typing import Optional
 from pydantic import BaseModel, ConfigDict, field_validator
+import math
 
 
 # All valid shoe purpose/function categories.
@@ -60,6 +61,19 @@ class ShoeBase(BaseModel):
             )
         return v
 
+    @field_validator("price", "orig_price", "mileage", "expected_mileage", "monthly_km")
+    @classmethod
+    def validate_non_negative(cls, v):
+        if v is None:
+            return v
+        # Reject NaN/Inf — SQLite treats them as NULL and the NOT NULL
+        # constraint turns a legit client into a 500.
+        if isinstance(v, float) and not math.isfinite(v):
+            raise ValueError("must be a finite number")
+        if v < 0:
+            raise ValueError("must be non-negative")
+        return v
+
 
 class ShoeCreate(ShoeBase):
     pass  # user_id is set by the backend, never by the client
@@ -87,6 +101,17 @@ class ShoeUpdate(BaseModel):
                 raise ValueError(
                     f"Invalid categories: {invalid}. Must be subset of {SHOE_CATEGORIES}"
                 )
+        return v
+
+    @field_validator("price", "orig_price", "mileage", "expected_mileage", "monthly_km")
+    @classmethod
+    def validate_non_negative(cls, v):
+        if v is None:
+            return v
+        if isinstance(v, float) and not math.isfinite(v):
+            raise ValueError("must be a finite number")
+        if v < 0:
+            raise ValueError("must be non-negative")
         return v
 
 
