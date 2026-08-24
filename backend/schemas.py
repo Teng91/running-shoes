@@ -3,7 +3,7 @@ from pydantic import BaseModel, ConfigDict, field_validator
 
 
 # All valid shoe purpose/function categories.
-SHOE_CATEGORIES = ["Daily", "Speed", "Tempo", "Race", "Trail"]
+SHOE_CATEGORIES = ["Daily", "Speed", "Tempo", "Race", "Trail", "Walk"]
 
 
 # ── Auth Schemas ──────────────────────────────────────────────

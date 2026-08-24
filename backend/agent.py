@@ -26,7 +26,7 @@ from sqlalchemy.orm import Session
 
 from backend import llm
 from backend.tools import db_tools
-from backend.tools.search_tool import run_web_search
+from backend.tools.search_tool import run_web_search, is_failure
 
 SYSTEM_PROMPT = """你是「跑鞋推薦助手」，服務一位熱愛跑步的使用者。
 
@@ -179,7 +179,7 @@ def run_agent_stream(
                 yield _sse({"type": "tool", "name": tc["name"], "args": tc["arguments"]})
                 tool_output = _execute_tool(tc["name"], tc["arguments"], db, user_id)
                 yield _sse({"type": "tool_done", "name": tc["name"]})
-                if tc["name"] == "web_search" and tool_output.lstrip().startswith("（"):
+                if tc["name"] == "web_search" and is_failure(tool_output):
                     web_search_fails += 1
                 messages.append({
                     "role": "user",
