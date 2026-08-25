@@ -1,5 +1,6 @@
 """驗證 web_search 對 ddgs 的封裝與錯誤降級。"""
 
+import builtins
 from unittest.mock import MagicMock, patch
 
 from backend.tools import search_tool
@@ -42,3 +43,23 @@ def test_is_failure_flags_all_failure_modes():
     assert search_tool.is_failure("（web_search 需要 query 參數）")
     assert search_tool.is_failure("（網路搜尋暫時失敗：blocked；請改用你現有的跑鞋資料回答。）")
     assert not search_tool.is_failure("網路搜尋「半馬 跑鞋 推薦」結果：\n1. ...")
+
+
+def test_run_web_search_validates_and_delegates(monkeypatch):
+    assert "需要 query" in search_tool.run_web_search({})
+    web_search = MagicMock(return_value="results")
+    monkeypatch.setattr(search_tool, "web_search", web_search)
+    assert search_tool.run_web_search({"query": "daily trainer"}) == "results"
+    web_search.assert_called_once_with("daily trainer")
+
+
+def test_web_search_handles_missing_ddgs_package(monkeypatch):
+    original_import = builtins.__import__
+
+    def fail_ddgs_import(name, *args, **kwargs):
+        if name == "ddgs":
+            raise ImportError("missing")
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", fail_ddgs_import)
+    assert "搜尋工具未安裝" in search_tool.web_search("跑鞋")
