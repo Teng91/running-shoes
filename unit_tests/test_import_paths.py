@@ -17,9 +17,13 @@ def test_llm_applies_new_and_existing_or_model_env_defaults():
         assert llm.MODELS["openrouter"][0]["id"] == "vendor/custom:free"
         assert llm.MODELS["openrouter"][0]["display"].endswith("(env)")
 
+        os.environ["OR_MODEL"] = "nvidia/nemotron-3-ultra-550b-a55b:free"
+        importlib.reload(llm)
+        assert llm.MODELS["openrouter"][0]["id"] == "nvidia/nemotron-3-ultra-550b-a55b:free"
+
         os.environ["OR_MODEL"] = "openrouter/free"
         importlib.reload(llm)
-        assert llm.MODELS["openrouter"][0]["id"] == "openrouter/free"
+        assert all(model["id"] != "openrouter/free" for model in llm.MODELS["openrouter"])
     finally:
         if original is None:
             os.environ.pop("OR_MODEL", None)
