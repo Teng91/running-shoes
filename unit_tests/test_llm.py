@@ -27,6 +27,21 @@ def _chunk(content=None, finish_reason=None, model="openrouter/free"):
     return SimpleNamespace(choices=[choice], model=model)
 
 
+def _tool_chunk(tool_calls, finish_reason=None, model="routed/model:free"):
+    delta = SimpleNamespace(content=None, tool_calls=tool_calls)
+    choice = SimpleNamespace(delta=delta, finish_reason=finish_reason)
+    return SimpleNamespace(choices=[choice], model=model)
+
+
+def _consume(generator):
+    chunks = []
+    while True:
+        try:
+            chunks.append(next(generator))
+        except StopIteration as stop:
+            return chunks, stop.value
+
+
 def test_openrouter_free_is_static_default():
     assert llm._DEFAULT_MODEL == "openrouter/free"
     assert llm.MODELS["openrouter"][0]["id"] == "openrouter/free"
@@ -45,14 +60,22 @@ def test_fetch_free_models_filters_out_paid_models(monkeypatch):
     response.json.return_value = {
         "data": [
             {
-                "id": "openrouter/free",
-                "name": "Free Models Router",
+                "id": "vendor/free-without-tools",
+                "name": "Free Without Tools",
                 "pricing": {"prompt": "0", "completion": "0"},
+                "supported_parameters": ["temperature"],
+            },
+            {
+                "id": "vendor/free-with-tools",
+                "name": "Free With Tools",
+                "pricing": {"prompt": "0", "completion": "0"},
+                "supported_parameters": ["tools", "temperature"],
             },
             {
                 "id": "vendor/paid",
                 "name": "Paid",
                 "pricing": {"prompt": "0.1", "completion": "0.2"},
+                "supported_parameters": ["tools"],
             },
         ]
     }
@@ -60,10 +83,14 @@ def test_fetch_free_models_filters_out_paid_models(monkeypatch):
     monkeypatch.setattr(llm.httpx, "get", get)
 
     assert llm._fetch_free_models() == [
-        {"id": "openrouter/free", "display": "Free Models Router"}
+        {"id": "openrouter/free", "display": "Free Models Router (auto)"},
+        {"id": "vendor/free-with-tools", "display": "Free With Tools"},
     ]
     response.raise_for_status.assert_called_once_with()
     assert get.call_args.kwargs["headers"] == {"Authorization": "Bearer test-key"}
+    assert get.call_args.args == (
+        "https://openrouter.ai/api/v1/models?supported_parameters=tools",
+    )
 
 
 def test_fetch_free_models_requires_api_key(monkeypatch):
@@ -85,14 +112,15 @@ def test_fetch_free_models_wraps_http_errors(monkeypatch):
         llm._fetch_free_models()
 
 
-def test_fetch_free_models_rejects_empty_free_list(monkeypatch):
+def test_fetch_free_models_keeps_router_when_api_has_no_compatible_models(monkeypatch):
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     response = MagicMock()
     response.json.return_value = {"data": []}
     monkeypatch.setattr(llm.httpx, "get", MagicMock(return_value=response))
 
-    with pytest.raises(llm.LLMError, match="沒有回傳任何免費模型"):
-        llm._fetch_free_models()
+    assert llm._fetch_free_models() == [
+        {"id": "openrouter/free", "display": "Free Models Router (auto)"}
+    ]
 
 
 def test_get_models_places_openrouter_free_first(monkeypatch):
@@ -212,6 +240,89 @@ def test_call_llm_stream_yields_content(monkeypatch):
     assert chunks == ["跑鞋", "建議"]
     assert create.call_args.kwargs["model"] == "openrouter/free"
     assert create.call_args.kwargs["stream"] is True
+
+
+def test_call_llm_stream_reassembles_native_tool_call_fragments(monkeypatch):
+    first_call = SimpleNamespace(
+        index=0,
+        id="call_abc",
+        function=SimpleNamespace(name="nearing_end_", arguments='{"threshold":'),
+    )
+    second_call = SimpleNamespace(
+        index=0,
+        id=None,
+        function=SimpleNamespace(name="of_life", arguments="0.8}"),
+    )
+    create = MagicMock(
+        return_value=[
+            _tool_chunk([first_call]),
+            _tool_chunk([second_call], finish_reason="tool_calls"),
+        ]
+    )
+    client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+    monkeypatch.setattr(llm, "_build_client", MagicMock(return_value=client))
+    tools = [{"type": "function", "function": {"name": "nearing_end_of_life"}}]
+
+    chunks, result = _consume(
+        llm.call_llm_stream(
+            llm.LLMProvider.openrouter,
+            "openrouter/free",
+            [],
+            tools=tools,
+        )
+    )
+
+    assert chunks == []
+    assert result["model"] == "routed/model:free"
+    assert result["finish_reason"] == "tool_calls"
+    assert result["tool_calls"] == [
+        {
+            "id": "call_abc",
+            "name": "nearing_end_of_life",
+            "arguments": {"threshold": 0.8},
+            "arguments_json": '{"threshold":0.8}',
+        }
+    ]
+    assert create.call_args.kwargs["tools"] is tools
+
+
+def test_call_llm_stream_handles_incomplete_and_invalid_tool_arguments(monkeypatch):
+    calls = [
+        SimpleNamespace(index=None, id=None, function=None),
+        SimpleNamespace(
+            index=1,
+            id=None,
+            function=SimpleNamespace(name="shoe_summary", arguments="[]"),
+        ),
+        SimpleNamespace(
+            index=2,
+            id="call_bad_json",
+            function=SimpleNamespace(name="monthly_mileage_stats", arguments="{bad"),
+        ),
+    ]
+    client = SimpleNamespace(
+        chat=SimpleNamespace(
+            completions=SimpleNamespace(
+                create=MagicMock(
+                    return_value=[_tool_chunk(calls, finish_reason="tool_calls")]
+                )
+            )
+        )
+    )
+    monkeypatch.setattr(llm, "_build_client", MagicMock(return_value=client))
+
+    _, result = _consume(
+        llm.call_llm_stream(llm.LLMProvider.openrouter, "openrouter/free", [])
+    )
+
+    assert result["tool_calls"][0] == {
+        "id": "call_1",
+        "name": "shoe_summary",
+        "arguments": {},
+        "arguments_json": "{}",
+    }
+    assert result["tool_calls"][1]["arguments"] == {}
+    assert result["tool_calls"][1]["arguments_json"] == "{}"
 
 
 def test_call_llm_stream_wraps_sdk_errors(monkeypatch):

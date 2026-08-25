@@ -4,9 +4,10 @@
 「免費模型」的理念一致。回傳前 N 筆（預設 5）的標題/連結/摘要，
 讓 LLM 拿來對照推薦並附上來源。
 
-若 `ddgs` 呼叫失敗（被擋/網路錯），回傳一段說明文字而不是噴例外，
-讓 agent 能優雅降級（只靠現有資料回答）。
+結果與錯誤都回傳具名 JSON，讓不同能力的模型不必解析編號文字。
 """
+
+import json
 
 MAX_RESULTS = 5
 
@@ -17,15 +18,33 @@ MAX_RESULTS = 5
 FAILURE_PREFIX = "（"
 
 
+def _result(*, ok: bool, status: str, query: str, results=None, error=None) -> str:
+    payload = {
+        "tool": "web_search",
+        "schema_version": 1,
+        "ok": ok,
+        "status": status,
+        "query": query,
+        "results": results or [],
+    }
+    if error:
+        payload["error"] = error
+    return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+
+
 def is_failure(result: str) -> bool:
-    """True if a web_search result string is a failure/empty signal."""
-    return result.lstrip().startswith(FAILURE_PREFIX)
+    """True for structured failures and legacy text failures."""
+    try:
+        payload = json.loads(result)
+    except (TypeError, json.JSONDecodeError):
+        return result.lstrip().startswith(FAILURE_PREFIX)
+    return payload.get("tool") == "web_search" and payload.get("ok") is False
 
 
 def run_web_search(arguments: dict) -> str:
     query = (arguments or {}).get("query", "")
     if not query:
-        return "（web_search 需要 query 參數）"
+        return _result(ok=False, status="missing_query", query="", error="query is required")
     return web_search(query)
 
 
@@ -34,22 +53,26 @@ def web_search(query: str, max_results: int = MAX_RESULTS) -> str:
     try:
         from ddgs import DDGS
     except ImportError:
-        return "（搜尋工具未安裝：缺少 ddgs 套件）"
+        return _result(
+            ok=False, status="dependency_missing", query=query,
+            error="ddgs package is not installed",
+        )
 
     try:
         with DDGS() as ddgs:
             results = ddgs.text(query, max_results=max_results)
     except Exception as exc:
-        return f"（網路搜尋暫時失敗：{exc}；請改用你現有的跑鞋資料回答。）"
+        return _result(ok=False, status="request_failed", query=query, error=str(exc))
 
     if not results:
-        return f"（沒有找到與「{query}」相關的結果）"
+        return _result(ok=False, status="no_results", query=query)
 
-    lines = [f"網路搜尋「{query}」結果："]
-    for i, r in enumerate(results, 1):
-        title = (r.get("title") or "").strip()
-        body = (r.get("body") or "").strip()
-        href = (r.get("href") or "").strip()
-        lines.append(f"{i}. {title}\n   {body}\n   來源：{href}")
-    return "\n".join(lines)
-
+    normalized = [
+        {
+            "title": (item.get("title") or "").strip(),
+            "snippet": (item.get("body") or "").strip(),
+            "url": (item.get("href") or "").strip(),
+        }
+        for item in results
+    ]
+    return _result(ok=True, status="available", query=query, results=normalized)
