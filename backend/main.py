@@ -146,7 +146,10 @@ async def lifespan(app: FastAPI):
             conn.execute(text("""
                 UPDATE shoes
                 SET categories = json_remove(categories,
-                    (SELECT key FROM json_each(categories) WHERE value = 'Other' LIMIT 1))
+                    (SELECT '$[' || key || ']'
+                     FROM json_each(categories)
+                     WHERE value = 'Other'
+                     LIMIT 1))
                 WHERE id = :sid
             """), {"sid": sid})
 

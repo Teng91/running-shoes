@@ -12,24 +12,8 @@
 
 ### 自己部署
 
-開源專案，歡迎 clone 下來自己跑：
-
-```bash
-# 1. Clone
-git clone https://github.com/你的帳號/running-shoes.git
-cd running-shoes
-
-# 2. 安裝依賴
-pip install -r requirements.txt
-
-# 3. 啟動伺服器
-python -m backend.run
-
-# 4. 開啟瀏覽器
-open http://localhost:8000
-```
-
-也可以部署到自己的 Fly.io 帳號或其他平台，完全獨立運作。
+開源專案，可依照下方「快速開始」在本機執行，也可以部署到自己的
+Fly.io 帳號或其他支援 Docker 的平台。
 
 ## 目錄結構
 
@@ -50,7 +34,7 @@ running-shoes/
 ├── frontend/
 │   ├── index.html        # Dashboard 前端（Chart.js）
 │   └── favicon.svg
-├── unit_tests/           # Pytest 測試
+├── unit_tests/           # Pytest 測試（API、Agent、LLM、migration 與邊界案例）
 ├── requirements.txt      # Python 依賴
 ├── Dockerfile            # Docker 部署用
 ├── fly.toml              # Fly.io 部署設定
@@ -60,13 +44,21 @@ running-shoes/
 ## 快速開始（本機開發）
 
 ```bash
-# 1. 安裝依賴
-pip install -r requirements.txt
+# 1. Clone
+git clone https://github.com/Teng91/running-shoes.git
+cd running-shoes
 
-# 2. 啟動伺服器
+# 2. 建立並啟用虛擬環境
+python3 -m venv venv
+source venv/bin/activate
+
+# 3. 安裝依賴
+python -m pip install -r requirements.txt
+
+# 4. 啟動伺服器
 python -m backend.run
 
-# 3. 開啟瀏覽器
+# 5. 開啟瀏覽器
 open http://localhost:8000
 ```
 
@@ -78,28 +70,21 @@ open http://localhost:8000
 
 ```bash
 OPENROUTER_API_KEY=<你的 OpenRouter API Key>   # 取得: https://openrouter.ai/keys
-```
-
-`.env` 會被自動載入，不需要手動 `export`。沒設定也不影響 Dashboard 的其他功能，只是 AI 助手無法使用。
-
-想在本機使用 AI 跑鞋推薦助手，需在專案根目錄的 `.env` 設定 OpenRouter API 金鑰：
-
-```bash
-# 專案根目錄建立 .env 檔
-OPENROUTER_API_KEY=<你的 OpenRouter API Key>   # 取得: https://openrouter.ai/keys
+# 選填：覆寫預設模型；未設定時使用 openrouter/free
+OR_MODEL=openrouter/free
 ```
 
 `.env` 會被自動載入，不需要手動 `export`。沒設定也不影響 Dashboard 的其他功能，只是 AI 助手無法使用。
 
 ## 功能特色
 
-- **跑鞋全生命週期追蹤**：記錄品牌、鞋款、用途類別 (Daily / Speed / Tempo / Race / Trail，可多選)、購買日期、尺寸、價格、里程、預期壽命、月跑量
+- **跑鞋全生命週期追蹤**：記錄品牌、鞋款、用途類別 (Daily / Speed / Tempo / Race / Trail / Walk，可多選)、購買日期、尺寸、價格、里程、預期壽命、月跑量
 - **鞋櫃類別覆蓋分析**：判斷某雙鞋退役後其所有用途是否仍有其他現役鞋覆蓋，避免不必要地補鞋 (支援多用途鞋款)
 - **智慧試算**：自動計算每 km 成本、折數、生命進度、預估退役日期
 - **圖表視覺化**：生命進度條、每 km 成本比較、退役時間軸、月跑量佔比（Chart.js）
 - **每月跑量統計**：獨立管理月跑量資料，支援年度趨勢圖
 - **跑鞋資料匯出**：一鍵匯出 **XLSX / CSV**，支援 **現役 / 退役 / 全部** 三種範圍，欄位完整含品牌、鞋款、日期、尺寸、價格、里程、成本、生命進度、月跑量
-- **AI 跑鞋推薦助手**：依你的實際資料給換鞋與選鞋建議（需設定 OpenRouter API Key），模型列表會自動從 OpenRouter 抓取最新免費模型，點擊刷新按鈕可更新
+- **AI 跑鞋推薦助手**：依你的實際資料給換鞋與選鞋建議（需設定 OpenRouter API Key），預設使用 `openrouter/free` 自動路由免費模型，也可手動指定其他模型
 - **多使用者隔離**：每人資料完全獨立，支援註冊/登入/改密碼
 
 ## AI 跑鞋推薦助手
@@ -111,7 +96,26 @@ OPENROUTER_API_KEY=<你的 OpenRouter API Key>   # 取得: https://openrouter.ai
 - 上網搜尋市售鞋款、規格、評價、價格，並附上來源連結
 - 以繁體中文對話，過程逐步顯示推理與工具呼叫（SSE 串流）
 
-需要設定 `OPENROUTER_API_KEY`（見上方）。模型使用 OpenRouter 上的免費模型，啟動時會自動抓取最新可用的免費模型列表，前端點擊 🔄 按鈕可手動刷新。可透過 `OR_MODEL` 環境變數指定預設模型。
+需要設定 `OPENROUTER_API_KEY`（見上方）。預設模型為 `openrouter/free`：OpenRouter
+會依請求需求，從當下可用的免費模型中自動選擇。免費模型的速率限制、延遲與可用性
+可能波動，因此較適合個人使用、展示與低流量情境，不保證每次請求都成功。
+
+前端下拉選單仍會顯示 OpenRouter 目前提供的免費模型，點擊 🔄 可強制刷新；若要固定
+其他預設模型，可設定 `OR_MODEL=<model-id>`。
+
+## 測試
+
+請使用專案虛擬環境執行，避免誤用系統 Python 而找不到 `ddgs` 等套件：
+
+```bash
+# 一般測試
+venv/bin/pytest -q
+
+# 同時檢查行覆蓋率與分支覆蓋率
+venv/bin/pytest -q --cov=backend --cov-branch --cov-report=term-missing
+```
+
+目前測試基準為 **139 passed**，`backend` 的行覆蓋率與分支覆蓋率皆為 **100%**。
 
 ## Docker 部署
 
@@ -133,6 +137,9 @@ open http://你的IP:8000
 ```bash
 # 必要：管理員帳號的初始密碼（沒設會啟動失敗）
 fly secrets set MIGRATION_PASSWORD=<你想設的密碼>
+
+# 必要：JWT 簽章密鑰，請使用足夠長度的隨機字串
+fly secrets set SECRET_KEY=<隨機安全字串>
 
 # 必要：AI 助手功能需要 OpenRouter API 金鑰
 # 取得: https://openrouter.ai/keys
