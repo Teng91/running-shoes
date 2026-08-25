@@ -46,8 +46,9 @@ _PROVIDER_CONFIG = {
 # 各家免費/低成本的建議模型清單。display 是給前端顯示的名稱。
 MODELS: dict[str, list[dict[str, str]]] = {
     "openrouter": [
-        {"id": "openrouter/free", "display": "Free Models Router (auto)"},
         {"id": "nvidia/nemotron-3-ultra-550b-a55b:free", "display": "Nemotron 3 Ultra 550B (free)"},
+        {"id": "poolside/laguna-s-2.1:free", "display": "Laguna S 2.1 (free)"},
+        {"id": "nvidia/nemotron-3.5-lightning:free", "display": "Nemotron 3.5 Lightning (free)"},
         {"id": "nvidia/nemotron-3-super-120b-a12b:free", "display": "Nemotron 3 Super 120B (free)"},
     ],
 }
@@ -57,11 +58,41 @@ _MODELS_CACHE: dict[str, list[dict[str, str]]] = {}
 _MODELS_CACHE_META: dict[str, float] = {}  # provider -> cached_at
 _MODELS_CACHE_TTL = 3600  # 1 小時
 
-_DEFAULT_MODEL = "openrouter/free"
+_DEFAULT_MODEL = "nvidia/nemotron-3-ultra-550b-a55b:free"
+_REMOVED_MODELS = {"openrouter/free"}
+_POPULARITY_URL = (
+    "https://openrouter.ai/api/frontend/v1/models/find"
+    "?supported_parameters=tools&max_price=0&max_output_price=0"
+    "&order=top-weekly&active=true"
+)
+
+
+def _fetch_popularity_ranks() -> dict[str, int]:
+    """取得 OpenRouter Models 頁的近 7 天 token 使用量排序。
+
+    這是顯示順序的輔助資料；若端點暫時不可用，模型清單仍應正常回傳。
+    """
+    try:
+        resp = httpx.get(_POPULARITY_URL, timeout=15)
+        resp.raise_for_status()
+        body = resp.json()
+        data = body.get("data") if isinstance(body, dict) else None
+        raw_models = data.get("models") if isinstance(data, dict) else None
+        payload: list[Any] = raw_models if isinstance(raw_models, list) else []
+    except (httpx.HTTPError, TypeError, ValueError):
+        return {}
+
+    ranks: dict[str, int] = {}
+    for rank, item in enumerate(payload):
+        endpoint = item.get("endpoint") or {}
+        model_id = endpoint.get("model_variant_slug") or item.get("slug")
+        if model_id:
+            ranks[model_id] = rank
+    return ranks
 
 
 def _fetch_free_models() -> list[dict[str, str]]:
-    """從 OpenRouter API 抓取目前免費且可供 Agent 使用的模型。"""
+    """抓取免費 Agent 模型，並依近 7 天 token 使用量由高到低排列。"""
     cfg = _PROVIDER_CONFIG[LLMProvider.openrouter]
     api_key = os.environ.get(cfg["key_env"])
     if not api_key:
@@ -78,23 +109,30 @@ def _fetch_free_models() -> list[dict[str, str]]:
     except httpx.HTTPError as exc:
         raise LLMError(f"抓取 OpenRouter 模型列表失敗：{exc}") from exc
 
-    # `openrouter/free` is a virtual router and is not consistently included in
-    # the filtered /models response. Keep it available explicitly; sending the
-    # native `tools` parameter lets OpenRouter route only to compatible models.
-    models = [{"id": _DEFAULT_MODEL, "display": "Free Models Router (auto)"}]
+    popularity_ranks = _fetch_popularity_ranks()
+    models = []
     for item in data.get("data", []):
         pricing = item.get("pricing") or {}
         supported = item.get("supported_parameters") or []
         is_free = pricing.get("prompt") == "0" and pricing.get("completion") == "0"
         supports_tools = "tools" in supported
-        if is_free and supports_tools and item.get("id") != _DEFAULT_MODEL:
+        if is_free and supports_tools and item.get("id") not in _REMOVED_MODELS:
             models.append({"id": item["id"], "display": item.get("name", item["id"])})
+
+    # OpenRouter 的 Models 頁以最近 7 天處理的 token 數排序。新模型若尚未
+    # 出現在排名資料中，放在已排名模型之後，再以名稱確保順序穩定。
+    models.sort(key=lambda model: (
+        popularity_ranks.get(model["id"], len(popularity_ranks)),
+        model["display"].casefold(),
+    ))
 
     return models
 
 # 各 provider 的預設模型可被環境變數覆寫（使用者可在 .env 指定，
 # 例如轉用付費模型時不必改程式碼）。
 _OR_DEFAULT = os.environ.get("OR_MODEL")
+if _OR_DEFAULT in _REMOVED_MODELS:
+    _OR_DEFAULT = None
 if _OR_DEFAULT:
     _existing = [m["id"] for m in MODELS["openrouter"]]
     if _OR_DEFAULT not in _existing:
@@ -118,9 +156,9 @@ def _get_models(provider: LLMProvider, force: bool = False) -> list[dict[str, st
 
     try:
         models = _fetch_free_models()
-        # Put the default model first
-        default_model = _OR_DEFAULT or _DEFAULT_MODEL
-        models = sorted(models, key=lambda m: 0 if m["id"] == default_model else 1)
+        # Without an explicit override, preserve the weekly-usage ordering.
+        if _OR_DEFAULT:
+            models = sorted(models, key=lambda m: 0 if m["id"] == _OR_DEFAULT else 1)
         _MODELS_CACHE[provider.value] = models
         _MODELS_CACHE_META[provider.value] = now
         return models
