@@ -3,8 +3,8 @@
 import json
 
 from backend import agent
+from backend.models import MonthlyMileage, Shoe, User
 from backend.tools import db_tools
-from backend.models import MonthlyMileage, User, Shoe
 
 
 def _result(raw: str) -> dict:
@@ -88,7 +88,7 @@ def test_compare_shoes_returns_both_shoes(seeded_db):
 
 
 def test_compare_shoes_is_user_isolated(seeded_db):
-    db, uid = seeded_db
+    db, _uid = seeded_db
     other = User(username="stranger", hashed_password="x")
     db.add(other)
     db.commit()
@@ -205,7 +205,7 @@ def test_list_my_shoes_includes_all(seeded_db):
 
 
 def test_isolation_other_user_sees_nothing(seeded_db):
-    db, uid = seeded_db
+    db, _uid = seeded_db
     other = User(username="stranger", hashed_password="x")
     db.add(other)
     db.commit()

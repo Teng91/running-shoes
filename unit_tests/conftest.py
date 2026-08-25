@@ -1,12 +1,11 @@
-import os
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from backend.auth import create_access_token, get_password_hash
 from backend.database import Base
-from backend.models import User, Shoe, MonthlyMileage
-from backend.auth import get_password_hash, create_access_token
+from backend.models import MonthlyMileage, Shoe, User
 
 
 @pytest.fixture

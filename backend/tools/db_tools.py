@@ -12,6 +12,7 @@
 """
 
 import json
+from collections.abc import Callable
 
 from sqlalchemy.orm import Session
 
@@ -27,7 +28,7 @@ def _json_result(tool: str, **payload) -> str:
     )
 
 
-def _round(value: float | int | None, digits: int = 2) -> float:
+def _round(value: float | None, digits: int = 2) -> float:
     return round(float(value or 0), digits)
 
 
@@ -187,7 +188,7 @@ def nearing_end_of_life(db: Session, user_id: int, threshold: float = 0.8) -> st
 
     candidates.sort(key=lambda item: item[0], reverse=True)
     results = []
-    for pct, s, _remain in candidates:
+    for _pct, s, _remain in candidates:
         other_active_same_category = sum(
             other.id != s.id and any(
                 cat in (other.categories or []) for cat in (s.categories or [])
@@ -340,7 +341,7 @@ def shoe_category_status(db: Session, user_id: int, shoe_name: str = "") -> str:
 
 
 # ── 派發表：讓 agent 用 tool name 找到對應函式 ────────────────
-REGISTRY: dict[str, callable] = {
+REGISTRY: dict[str, Callable[..., str]] = {
     "list_my_shoes": list_my_shoes,
     "shoe_summary": shoe_summary,
     "monthly_mileage_stats": monthly_mileage_stats,
@@ -470,14 +471,15 @@ def parse_tool_calls(text: str) -> list[dict]:
 
     回傳 [{"name": str, "arguments": dict}, ...]。解析失敗的參數會用 {} 代替。
     """
-    import re, json as _json
+    import json as _json
+    import re
     out = []
     for m in re.finditer(r"<tool>\s*([A-Za-z_]+)\s*(\{.*?\})\s*</tool>", text, re.DOTALL):
         name = m.group(1)
         raw = m.group(2) or "{}"
         try:
             args = _json.loads(raw)
-        except Exception:
+        except (TypeError, _json.JSONDecodeError):
             args = {}
         out.append({"name": name, "arguments": args})
     return out
