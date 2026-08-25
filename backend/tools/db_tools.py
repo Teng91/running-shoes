@@ -4,15 +4,76 @@
 - 每個查詢都帶 `user_id`，永遠只看「目前登入使用者」的資料，與現有
   Dashboard 的 user 隔離一致。工具本身不接收 user_id 參數（由 agent
   在呼叫時自動注入），避免 LLM 去讀別人的資料。
-- 回傳值統一為「人類可讀的文字 + 結構化資料」，方便直接餵回 LLM。
+- 資料庫工具一律回傳具名 JSON。里程、百分比、成本與分類結論都由
+  後端計算，LLM 只負責把結果轉成自然語言，不自行猜測欄位含義。
 - 這裡只定義 tool 的 schema 與執行器；真正的派發在 agent.py。
 
-所有函式都接受 `(db, user_id)`，回傳 `str`（給 LLM 看的摘要）。
+所有函式都接受 `(db, user_id)`，回傳 JSON 字串。
 """
+
+import json
 
 from sqlalchemy.orm import Session
 
 from backend import models
+
+
+def _json_result(tool: str, **payload) -> str:
+    """Serialize a stable, machine-readable tool result for the LLM."""
+    return json.dumps(
+        {"tool": tool, "schema_version": 1, **payload},
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+
+
+def _round(value: float | int | None, digits: int = 2) -> float:
+    return round(float(value or 0), digits)
+
+
+def _lifecycle(shoe: models.Shoe) -> dict:
+    mileage = _round(shoe.mileage)
+    expected = _round(shoe.expected_mileage)
+    if expected <= 0:
+        return {
+            "mileage_km": mileage,
+            "expected_lifespan_km": None,
+            "remaining_mileage_km": None,
+            "usage_percent": None,
+            "lifecycle_status": "lifespan_not_configured",
+        }
+
+    usage_percent = _round(mileage / expected * 100, 1)
+    if usage_percent >= 90:
+        lifecycle_status = "replace_soon"
+    elif usage_percent >= 80:
+        lifecycle_status = "monitor"
+    else:
+        lifecycle_status = "healthy"
+    return {
+        "mileage_km": mileage,
+        "expected_lifespan_km": expected,
+        "remaining_mileage_km": _round(max(0, expected - mileage)),
+        "usage_percent": usage_percent,
+        "lifecycle_status": lifecycle_status,
+    }
+
+
+def _shoe_data(shoe: models.Shoe) -> dict:
+    return {
+        "shoe_id": shoe.id,
+        "brand": shoe.brand,
+        "model": shoe.model,
+        "categories": shoe.categories or [],
+        "status": "retired" if shoe.is_retired else "active",
+        "purchase_date": shoe.date,
+        "size": shoe.size,
+        "purchase_price_twd": _round(shoe.price),
+        "original_price_twd": _round(shoe.orig_price),
+        # This is a user-assigned allocation target, not accumulated mileage.
+        "assigned_monthly_km": _round(shoe.monthly_km),
+        **_lifecycle(shoe),
+    }
 
 
 # ── 工具實作 ────────────────────────────────────────────────────
@@ -23,52 +84,40 @@ def list_my_shoes(db: Session, user_id: int) -> str:
         .order_by(models.Shoe.is_retired, models.Shoe.date.desc())
         .all()
     )
-    if not shoes:
-        return "（你目前沒有任何跑鞋紀錄）"
-
-    lines = []
-    for s in shoes:
-        status = "已退役" if s.is_retired else "使用中"
-        cats = s.categories or []
-        cat_str = ", ".join(cats) if cats else "（無）"
-        life = ""
-        if s.expected_mileage:
-            pct = min(100, round(s.mileage / s.expected_mileage * 100))
-            life = f" 壽命 {pct}%（{s.mileage}/{s.expected_mileage} km）"
-        line = (
-            f"- {s.brand} {s.model} [{cat_str}] [{status}] 購於 {s.date} 尺寸 {s.size} "
-            f"價格 {int(s.price)} 元(原價 {int(s.orig_price)}) 月跑量 {s.monthly_km}{life}"
-        )
-        lines.append(line)
-    return "你的跑鞋清單：\n" + "\n".join(lines)
+    return _json_result(
+        "list_my_shoes",
+        ok=True,
+        shoe_count=len(shoes),
+        field_definitions={
+            "mileage_km": "此鞋目前累積已跑里程，不是剩餘里程",
+            "expected_lifespan_km": "此鞋設定的預期總壽命",
+            "remaining_mileage_km": "後端計算的剩餘里程",
+            "usage_percent": "後端計算的已使用壽命百分比，不是剩餘百分比",
+            "assigned_monthly_km": "使用者分配給此鞋的每月目標里程，不是累積里程",
+        },
+        shoes=[_shoe_data(shoe) for shoe in shoes],
+    )
 
 
 def shoe_summary(db: Session, user_id: int) -> str:
     shoes = db.query(models.Shoe).filter(models.Shoe.user_id == user_id).all()
-    if not shoes:
-        return "（你目前沒有任何跑鞋紀錄）"
-
     active = [s for s in shoes if not s.is_retired]
     retired = [s for s in shoes if s.is_retired]
-    total_mileage = sum(s.mileage or 0 for s in shoes)
-    total_spent = sum(s.price or 0 for s in active)
-    total_orig = sum(s.orig_price or 0 for s in active)
-
-    # 各鞋剩餘壽命
-    life_lines = []
-    for s in sorted(active, key=lambda x: (x.mileage / x.expected_mileage if x.expected_mileage else 0), reverse=True):
-        if s.expected_mileage:
-            remain = max(0, s.expected_mileage - s.mileage)
-            pct = round(s.mileage / s.expected_mileage * 100)
-            life_lines.append(f"  - {s.brand} {s.model}：已用 {pct}%，剩約 {int(remain)} km")
-        else:
-            life_lines.append(f"  - {s.brand} {s.model}：未設定預期壽命")
-
-    return (
-        f"跑鞋總覽：共 {len(shoes)} 雙（使用中 {len(active)} / 已退役 {len(retired)}）\n"
-        f"總累積里程：{int(total_mileage)} km\n"
-        f"使用中鞋款花費：{int(total_spent)} 元（原價 {int(total_orig)} 元）\n"
-        "剩餘壽命：\n" + ("\n".join(life_lines) if life_lines else "  （無）")
+    active_lifecycle = sorted(
+        (_shoe_data(shoe) for shoe in active),
+        key=lambda item: item["usage_percent"] if item["usage_percent"] is not None else -1,
+        reverse=True,
+    )
+    return _json_result(
+        "shoe_summary",
+        ok=True,
+        total_shoe_count=len(shoes),
+        active_shoe_count=len(active),
+        retired_shoe_count=len(retired),
+        all_shoes_accumulated_mileage_km=_round(sum(s.mileage or 0 for s in shoes)),
+        active_shoes_purchase_price_twd=_round(sum(s.price or 0 for s in active)),
+        active_shoes_original_price_twd=_round(sum(s.orig_price or 0 for s in active)),
+        active_shoes_lifecycle=active_lifecycle,
     )
 
 
@@ -79,30 +128,45 @@ def monthly_mileage_stats(db: Session, user_id: int) -> str:
         .order_by(models.MonthlyMileage.year, models.MonthlyMileage.month)
         .all()
     )
-    if not rows:
-        return "（你目前沒有每月跑量紀錄）"
-
+    recorded_rows = rows
     rows = [r for r in rows if r.km > 0]
     if not rows:
-        return "（所有月份的跑量都為 0）"
+        return _json_result(
+            "monthly_mileage_stats",
+            ok=True,
+            status="no_records" if not recorded_rows else "all_months_zero",
+            recorded_month_count=len(recorded_rows),
+            nonzero_month_count=0,
+            total_mileage_km=0.0,
+            recent_nonzero_months=[],
+        )
 
     total = sum(r.km for r in rows)
     avg = total / len(rows)
     recent = rows[-6:]
     recent_total = sum(r.km for r in recent)
     recent_avg = recent_total / len(recent)
-    trend = "上升" if (recent_avg > avg) else ("下降" if recent_avg < avg else "持平")
+    trend = "up" if (recent_avg > avg) else ("down" if recent_avg < avg else "flat")
 
     last = rows[-1]
-    detail = "\n".join(
-        f"  - {r.year}-{r.month:02d}: {r.km:.1f} km" for r in recent
-    )
-    return (
-        f"跑量統計：有紀錄月份 {len(rows)} 個，總跑量 {total:.1f} km，月均 {avg:.1f} km\n"
-        f"近 6 個月有跑量月份月均 {recent_avg:.1f} km（近 6 月合計 {recent_total:.1f} km）\n"
-        f"趨勢：相較整體月均為「{trend}」\n"
-        f"最近一筆：{last.year}-{last.month:02d} {last.km:.1f} km\n"
-        "近 6 個月明細：\n" + detail
+    return _json_result(
+        "monthly_mileage_stats",
+        ok=True,
+        status="available",
+        recorded_month_count=len(recorded_rows),
+        nonzero_month_count=len(rows),
+        total_mileage_km=_round(total),
+        overall_nonzero_month_average_km=_round(avg),
+        recent_period_definition="latest_6_months_with_positive_mileage",
+        recent_period_month_count=len(recent),
+        recent_period_total_km=_round(recent_total),
+        recent_period_average_km=_round(recent_avg),
+        recent_vs_overall_trend=trend,
+        latest_record={"year": last.year, "month": last.month, "mileage_km": _round(last.km)},
+        recent_nonzero_months=[
+            {"year": row.year, "month": row.month, "mileage_km": _round(row.km)}
+            for row in recent
+        ],
     )
 
 
@@ -121,30 +185,32 @@ def nearing_end_of_life(db: Session, user_id: int, threshold: float = 0.8) -> st
                 remain = max(0, s.expected_mileage - s.mileage)
                 candidates.append((pct, s, remain))
 
-    if not candidates:
-        return f"目前沒有鞋的累積里程達到預期壽命的 {int(threshold*100)}%，暫時都不需要急著換。"
-
-    candidates.sort(reverse=True)
-    lines = []
-    for pct, s, remain in candidates:
+    candidates.sort(key=lambda item: item[0], reverse=True)
+    results = []
+    for pct, s, _remain in candidates:
         other_active_same_category = sum(
             other.id != s.id and any(
                 cat in (other.categories or []) for cat in (s.categories or [])
             ) for other in shoes
         )
-        lifecycle_message = (
-            "可以準備換鞋" if pct >= 0.9 else "先注意這雙鞋的使用狀況"
-        )
-        coverage_message = (
-            f"同類別還有 {other_active_same_category} 雙現役鞋，暫時不用補鞋；目前單純注意這雙鞋即可"
-            if other_active_same_category
-            else "同類別沒有其他現役鞋，建議準備補鞋"
-        )
-        lines.append(
-            f"- {s.brand} {s.model}：已用 {round(pct*100)}%（{int(s.mileage)}/{int(s.expected_mileage)} km），"
-            f"剩約 {int(remain)} km，{lifecycle_message}。{coverage_message}。"
-        )
-    return "以下跑鞋已達預期壽命的提醒門檻：\n" + "\n".join(lines)
+        results.append({
+            **_shoe_data(s),
+            "active_replacement_count_sharing_any_category": other_active_same_category,
+            "has_active_category_replacement": other_active_same_category > 0,
+            "replacement_recommendation": (
+                "monitor_only_no_purchase_needed"
+                if other_active_same_category
+                else "prepare_replacement_purchase"
+            ),
+        })
+    return _json_result(
+        "nearing_end_of_life",
+        ok=True,
+        threshold_fraction=_round(threshold, 3),
+        threshold_percent=_round(threshold * 100, 1),
+        matching_shoe_count=len(results),
+        shoes=results,
+    )
 
 
 def compare_shoes(db: Session, user_id: int, shoe_a: str = "", shoe_b: str = "") -> str:
@@ -169,31 +235,36 @@ def compare_shoes(db: Session, user_id: int, shoe_a: str = "", shoe_b: str = "")
     first = find_shoe(shoe_a)
     second = find_shoe(shoe_b)
     if not first or not second:
-        available = ", ".join(f"{s.brand} {s.model}" for s in shoes)
         missing = []
         if not first:
             missing.append(f"shoe_a={shoe_a or '未提供'}")
         if not second:
             missing.append(f"shoe_b={shoe_b or '未提供'}")
-        return f"找不到比較對象（{', '.join(missing)}）。目前可用鞋款：{available or '無'}"
+        return _json_result(
+            "compare_shoes",
+            ok=False,
+            error="shoe_not_found",
+            missing_queries=missing,
+            available_shoes=[f"{s.brand} {s.model}" for s in shoes],
+        )
     if first.id == second.id:
-        return "比較需要兩雙不同的跑鞋，請提供不同鞋款。"
+        return _json_result(
+            "compare_shoes", ok=False, error="same_shoe_selected",
+            matched_shoe=f"{first.brand} {first.model}",
+        )
 
-    def details(shoe: models.Shoe) -> list[str]:
-        life = shoe.mileage / shoe.expected_mileage if shoe.expected_mileage else 0
-        remain = max(0, shoe.expected_mileage - shoe.mileage) if shoe.expected_mileage else None
+    def details(shoe: models.Shoe) -> dict:
         actual_cost = shoe.price / shoe.mileage if shoe.mileage > 0 else None
         expected_cost = shoe.price / shoe.expected_mileage if shoe.expected_mileage > 0 else None
-        result = [
-            f"{shoe.brand} {shoe.model}（{'已退役' if shoe.is_retired else '使用中'}）",
-            f"- 類別：{', '.join(cats) if (cats := shoe.categories or []) else '（無）'}",
-            f"- 里程：{shoe.mileage:.1f}/{shoe.expected_mileage:.1f} km，已用 {life:.1%}，剩餘約 {remain:.1f} km" if remain is not None else f"- 里程：{shoe.mileage:.1f} km，未設定預期壽命",
-            f"- 每 km 成本：{actual_cost:.2f} 元；預期每 km 成本：{expected_cost:.2f} 元" if actual_cost is not None and expected_cost is not None else "- 每 km 成本：目前尚無足夠里程資料",
-            f"- 設定月跑量：{shoe.monthly_km:.1f} km",
-        ]
-        return result
+        return {
+            **_shoe_data(shoe),
+            "actual_cost_per_completed_km_twd": _round(actual_cost) if actual_cost is not None else None,
+            "projected_cost_per_lifespan_km_twd": _round(expected_cost) if expected_cost is not None else None,
+        }
 
-    return "鞋款比較：\n" + "\n".join(details(first) + ["", "VS", ""] + details(second))
+    return _json_result(
+        "compare_shoes", ok=True, shoe_a=details(first), shoe_b=details(second)
+    )
 
 
 def shoe_category_status(db: Session, user_id: int, shoe_name: str = "") -> str:
@@ -215,42 +286,57 @@ def shoe_category_status(db: Session, user_id: int, shoe_name: str = "") -> str:
             None,
         )
         if not target:
-            return f"找不到鞋款「{shoe_name}」，請使用品牌或鞋款名稱查詢。"
+            return _json_result(
+                "shoe_category_status", ok=False, error="shoe_not_found", query=shoe_name
+            )
         target_cats = target.categories or []
         if not target_cats:
-            return f"{target.brand} {target.model} 尚未設定用途類別。"
+            return _json_result(
+                "shoe_category_status", ok=True, mode="specific_shoe",
+                shoe=_shoe_data(target), category_status="categories_not_configured",
+            )
 
-        # If the queried shoe is already retired, note that in the response
-        is_retired_note = "（此鞋已退役）" if target.is_retired else ""
-
-        cat_str = ", ".join(target_cats)
-        # For each category the target serves, check if any other active shoe covers it
-        parts = []
+        coverage = []
         for cat in target_cats:
             backup = [s for s in active if s.id != target.id and cat in (s.categories or [])]
-            if backup:
-                parts.append(f"{cat} 類別還有 {len(backup)} 雙現役鞋")
-            else:
-                parts.append(f"{cat} 類別沒有其他現役鞋")
+            coverage.append({
+                "category": cat,
+                "other_active_shoe_count": len(backup),
+                "covered_after_target_retirement": bool(backup),
+                "other_active_shoes": [f"{s.brand} {s.model}" for s in backup],
+            })
         all_covered = all(
             any(s.id != target.id and cat in (s.categories or []) for s in active)
             for cat in target_cats
         )
-        action = "暫時不需要補鞋" if all_covered else "建議準備補鞋"
-        return (
-            f"{target.brand} {target.model} {is_retired_note}屬於 {cat_str} 類別。"
-            f"若它退役後：" + "、".join(parts) + f"，因此{action}。"
+        return _json_result(
+            "shoe_category_status",
+            ok=True,
+            mode="specific_shoe",
+            shoe=_shoe_data(target),
+            coverage_after_target_retirement=coverage,
+            all_categories_remain_covered=all_covered,
+            purchase_recommendation=(
+                "no_purchase_needed" if all_covered else "prepare_replacement_purchase"
+            ),
         )
 
-    lines = ["跑鞋用途分類狀態（只把現役鞋算作目前可用）："]
+    coverage = []
     for category in categories:
         active_count = sum(category in (s.categories or []) for s in active)
         retired_count = sum(category in (s.categories or []) for s in retired)
-        action = "需要補鞋" if active_count == 0 else "目前不需要補鞋"
-        lines.append(
-            f"- {category}：現役 {active_count} 雙、退役 {retired_count} 雙，{action}"
-        )
-    return "\n".join(lines)
+        coverage.append({
+            "category": category,
+            "active_shoe_count": active_count,
+            "retired_shoe_count": retired_count,
+            "has_active_coverage": active_count > 0,
+            "purchase_recommendation": (
+                "no_purchase_needed" if active_count > 0 else "category_missing_consider_purchase"
+            ),
+        })
+    return _json_result(
+        "shoe_category_status", ok=True, mode="all_categories", categories=coverage
+    )
 
 
 # ── 派發表：讓 agent 用 tool name 找到對應函式 ────────────────
@@ -264,7 +350,101 @@ REGISTRY: dict[str, callable] = {
 }
 
 
-# ── 給 LLM 看的工具說明（文字格式，不用各家原生 tool-calling）──
+# ── OpenRouter / OpenAI 原生 function-calling schema ─────────────
+# 不啟用 provider-specific strict mode，讓更多 OpenRouter 免費模型能使用。
+TOOL_DEFINITIONS: list[dict] = [
+    {
+        "type": "function",
+        "function": {
+            "name": "list_my_shoes",
+            "description": "以 JSON 列出所有跑鞋；後端已分別計算累積里程、剩餘里程、已使用百分比與分配月跑量。",
+            "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "shoe_summary",
+            "description": "以 JSON 取得跑鞋總覽；所有數量、金額、里程與壽命皆由後端計算。",
+            "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "monthly_mileage_stats",
+            "description": "以 JSON 取得後端計算的跑量統計及最近六個有跑量月份；必須逐字採用 mileage_km，不可自行重算或杜撰。",
+            "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "nearing_end_of_life",
+            "description": "以 JSON 找出接近壽命的現役鞋；剩餘里程、使用率與是否需要補鞋均由後端判定。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "threshold": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1,
+                        "description": "提醒門檻，0.8 代表達預期壽命 80%。",
+                    }
+                },
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "compare_shoes",
+            "description": "以 JSON 比較兩雙鞋；壽命、剩餘里程與每公里成本均由後端計算。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "shoe_a": {"type": "string", "description": "第一雙鞋的品牌或鞋款名稱。"},
+                    "shoe_b": {"type": "string", "description": "第二雙鞋的品牌或鞋款名稱。"},
+                },
+                "required": ["shoe_a", "shoe_b"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "shoe_category_status",
+            "description": "以 JSON 分析用途覆蓋與補鞋需求；也可指定鞋款取得退役後的後端判定。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "shoe_name": {"type": "string", "description": "選填，指定品牌或鞋款名稱。"}
+                },
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "web_search",
+            "description": "以 JSON 搜尋市售跑鞋、規格、評價或價格，結果欄位為 title、snippet、url；只在需要外部資訊時使用。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "具體搜尋關鍵字。"}
+                },
+                "required": ["query"],
+                "additionalProperties": False,
+            },
+        },
+    },
+]
+
+
+# ── 舊文字標記相容層（新流程使用上方原生 TOOL_DEFINITIONS）─────
 TOOL_SPEC_TEXT = """當你需要讀取使用者的資料時，請在回覆中插入一個工具標記，
 格式為：<tool>工具名稱 {JSON 參數}</tool>
 可用工具：

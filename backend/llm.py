@@ -5,6 +5,7 @@ OpenRouter 提供 OpenAI-compatible 端點，用同一個 `openai` SDK 設定
 不處理 tool loop（那是 agent.py 的責任）。
 """
 
+import json
 import os
 import time
 from enum import Enum
@@ -59,7 +60,7 @@ _DEFAULT_MODEL = "openrouter/free"
 
 
 def _fetch_free_models() -> list[dict[str, str]]:
-    """從 OpenRouter API 抓取目前可用的免費模型。"""
+    """從 OpenRouter API 抓取目前免費且可供 Agent 使用的模型。"""
     cfg = _PROVIDER_CONFIG[LLMProvider.openrouter]
     api_key = os.environ.get(cfg["key_env"])
     if not api_key:
@@ -67,7 +68,7 @@ def _fetch_free_models() -> list[dict[str, str]]:
 
     try:
         resp = httpx.get(
-            "https://openrouter.ai/api/v1/models",
+            "https://openrouter.ai/api/v1/models?supported_parameters=tools",
             headers={"Authorization": f"Bearer {api_key}"},
             timeout=15,
         )
@@ -76,14 +77,17 @@ def _fetch_free_models() -> list[dict[str, str]]:
     except httpx.HTTPError as exc:
         raise LLMError(f"抓取 OpenRouter 模型列表失敗：{exc}") from exc
 
-    models = []
+    # `openrouter/free` is a virtual router and is not consistently included in
+    # the filtered /models response. Keep it available explicitly; sending the
+    # native `tools` parameter lets OpenRouter route only to compatible models.
+    models = [{"id": _DEFAULT_MODEL, "display": "Free Models Router (auto)"}]
     for item in data.get("data", []):
         pricing = item.get("pricing") or {}
-        if pricing.get("prompt") == "0" and pricing.get("completion") == "0":
+        supported = item.get("supported_parameters") or []
+        is_free = pricing.get("prompt") == "0" and pricing.get("completion") == "0"
+        supports_tools = "tools" in supported
+        if is_free and supports_tools and item.get("id") != _DEFAULT_MODEL:
             models.append({"id": item["id"], "display": item.get("name", item["id"])})
-
-    if not models:
-        raise LLMError("OpenRouter 沒有回傳任何免費模型")
 
     return models
 
@@ -154,14 +158,16 @@ def call_llm_stream(
     provider: LLMProvider,
     model: str,
     messages: list[dict[str, Any]],
+    tools: list[dict[str, Any]] | None = None,
 ) -> Generator[str, None, dict[str, Any]]:
-    """串流呼叫模型，逐 token 產出文字片段。
+    """串流呼叫模型，逐 token 產出文字並收集原生 tool calls。
 
     Yields:
         每個 token 的文字片段（可能為空字串，由呼叫方自行過濾）。
 
     Returns:
-        {"content": str, "finish_reason": str | None}
+        {"content": str, "finish_reason": str | None, "tool_calls": list,
+         "model": str | None}
         在 generator 結束時回傳（透過 StopIteration value）。
     """
     client = _build_client(provider)
@@ -173,13 +179,18 @@ def call_llm_stream(
         "stream": True,
         "stream_options": {"include_usage": False},
     }
+    if tools:
+        kwargs["tools"] = tools
 
     full_content = ""
     finish_reason = None
+    actual_model = None
+    tool_call_parts: dict[int, dict[str, str]] = {}
 
     try:
         stream = client.chat.completions.create(**kwargs)
         for chunk in stream:
+            actual_model = getattr(chunk, "model", None) or actual_model
             if not chunk.choices:
                 continue
             choice = chunk.choices[0]
@@ -187,6 +198,19 @@ def call_llm_stream(
             if delta and delta.content:
                 full_content += delta.content
                 yield delta.content
+            for position, tool_call in enumerate(getattr(delta, "tool_calls", None) or []):
+                index = getattr(tool_call, "index", None)
+                index = position if index is None else index
+                part = tool_call_parts.setdefault(
+                    index,
+                    {"id": "", "name": "", "arguments": ""},
+                )
+                if getattr(tool_call, "id", None):
+                    part["id"] = tool_call.id
+                function = getattr(tool_call, "function", None)
+                if function:
+                    part["name"] += getattr(function, "name", None) or ""
+                    part["arguments"] += getattr(function, "arguments", None) or ""
             if choice.finish_reason:
                 finish_reason = choice.finish_reason
     except LLMError:
@@ -197,4 +221,30 @@ def call_llm_stream(
     if not full_content and finish_reason is None:
         raise LLMError(f"LLM 回傳空串流（{provider.value} / {model}）")
 
-    return {"content": full_content, "finish_reason": finish_reason}
+    tool_calls = []
+    for index, part in sorted(tool_call_parts.items()):
+        if not part["name"]:
+            continue
+        raw_arguments = part["arguments"] or "{}"
+        normalized_arguments = raw_arguments
+        try:
+            arguments = json.loads(raw_arguments)
+            if not isinstance(arguments, dict):
+                arguments = {}
+                normalized_arguments = "{}"
+        except (TypeError, json.JSONDecodeError):
+            arguments = {}
+            normalized_arguments = "{}"
+        tool_calls.append({
+            "id": part["id"] or f"call_{index}",
+            "name": part["name"],
+            "arguments": arguments,
+            "arguments_json": normalized_arguments,
+        })
+
+    return {
+        "content": full_content,
+        "finish_reason": finish_reason,
+        "tool_calls": tool_calls,
+        "model": actual_model,
+    }

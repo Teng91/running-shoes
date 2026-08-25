@@ -2481,10 +2481,11 @@ async function sendAgentMessage(retryText) {
             }
           } else if (event.type === 'reasoning_start') {
             // 串流過程中發現 LLM 要呼叫工具 → 把已顯示的文字移到思考氣泡
-            if (fullText) {
+            const reasoningText = typeof event.text === 'string' ? event.text : fullText;
+            if (reasoningText) {
               thinkingDiv = document.createElement('div');
               thinkingDiv.className = 'agent-thinking';
-              thinkingDiv.textContent = '💭 ' + fullText;
+              thinkingDiv.textContent = '💭 ' + reasoningText;
               container.insertBefore(thinkingDiv, botDiv);
               toolStatusDiv = null;
             }

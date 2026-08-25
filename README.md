@@ -95,13 +95,28 @@ OR_MODEL=openrouter/free
 - 找出接近預期壽命、該準備替換的鞋
 - 上網搜尋市售鞋款、規格、評價、價格，並附上來源連結
 - 以繁體中文對話，過程逐步顯示推理與工具呼叫（SSE 串流）
+- 使用 OpenRouter / OpenAI 原生 function calling；模型清單只顯示免費且宣告支援 `tools` 的模型
+- 資料庫工具回傳具名 JSON；里程、剩餘壽命、百分比、成本與跑量統計由後端計算，LLM 只負責文字分析
+
+目前提供 7 個 Agent 工具：
+
+| Tool | 用途 |
+| --- | --- |
+| `list_my_shoes` | 列出所有跑鞋，明確區分累積里程、預期壽命、剩餘里程、已使用百分比與分配月跑量 |
+| `shoe_summary` | 統計鞋款數量、總里程、現役鞋花費及各鞋生命週期 |
+| `monthly_mileage_stats` | 由後端計算總跑量、月均、近期趨勢及最近六個有跑量月份明細 |
+| `nearing_end_of_life` | 找出達提醒門檻的現役鞋，並判斷同類別是否已有替代鞋 |
+| `compare_shoes` | 比較兩雙鞋的用途、里程、壽命與每公里成本 |
+| `shoe_category_status` | 分析 Daily / Speed / Tempo / Race / Trail / Walk 覆蓋及補鞋需求 |
+| `web_search` | 搜尋市售鞋款、規格、評價與價格來源 |
 
 需要設定 `OPENROUTER_API_KEY`（見上方）。預設模型為 `openrouter/free`：OpenRouter
 會依請求需求，從當下可用的免費模型中自動選擇。免費模型的速率限制、延遲與可用性
 可能波動，因此較適合個人使用、展示與低流量情境，不保證每次請求都成功。
 
-前端下拉選單仍會顯示 OpenRouter 目前提供的免費模型，點擊 🔄 可強制刷新；若要固定
-其他預設模型，可設定 `OR_MODEL=<model-id>`。
+前端下拉選單會顯示 OpenRouter 目前提供且支援工具呼叫的免費模型，點擊 🔄 可強制刷新；若要固定
+其他預設模型，可設定 `OR_MODEL=<model-id>`。由於 Agent 使用原生工具呼叫，固定模型也必須
+支援 OpenRouter 的 `tools` 參數。
 
 ## 測試
 
