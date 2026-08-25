@@ -1,20 +1,27 @@
+import logging
 import os
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
+from typing import cast
 
-from fastapi import FastAPI, Depends, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
-from sqlalchemy import inspect, text
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from sqlalchemy import Table, inspect, text
 from sqlalchemy.orm import Session
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from backend.database import engine, Base, SessionLocal, get_db
-from backend import models, schemas, llm, agent
+from backend import agent, llm, models, schemas
 from backend.auth import (
-    verify_password, get_password_hash,
-    create_access_token, get_current_user,
+    create_access_token,
+    get_current_user,
+    get_password_hash,
+    verify_password,
 )
+from backend.database import Base, SessionLocal, engine, get_db
+
+logger = logging.getLogger(__name__)
 
 
 # ── Seed default data (only when SEED_DATA=true) ──────────────
@@ -84,14 +91,14 @@ async def lifespan(app: FastAPI):
 
     if "shoes" in existing_tables and "users" not in existing_tables:
         # Old schema: create users table, add user_id to shoes, assign to "Joy"
-        Base.metadata.create_all(bind=engine, tables=[models.User.__table__])
+        user_table = cast(Table, models.User.__table__)
+        Base.metadata.create_all(bind=engine, tables=[user_table])
 
         migration_password = os.environ.get("MIGRATION_PASSWORD")
         if not migration_password:
             # Don't crash the app — log warning and skip migration.
             # Admin can run migration manually later via CLI.
-            import logging
-            logging.warning(
+            logger.warning(
                 "MIGRATION_PASSWORD not set — skipping legacy schema migration. "
                 "Existing shoes will remain unassigned until migration is run manually."
             )
@@ -168,9 +175,6 @@ app.add_middleware(
 )
 
 # ── Serve static frontend ─────────────────────────────────────
-from fastapi.responses import FileResponse, JSONResponse
-from starlette.exceptions import HTTPException as StarletteHTTPException
-
 frontend_dir = Path(__file__).resolve().parent.parent / "frontend"
 frontend_dir.mkdir(exist_ok=True)
 
@@ -191,7 +195,7 @@ async def http_exception_handler(request, exc):
     but return proper JSON for API errors (4xx/5xx)."""
     if exc.status_code == 404:
         path = request.url.path
-        if path.startswith("/api/") or path.startswith("/docs") or path.startswith("/openapi.json"):
+        if path.startswith(("/api/", "/docs", "/openapi.json")):
             return JSONResponse({"detail": exc.detail}, status_code=404)
         # Resolve and ensure the file lives inside frontend_dir — otherwise
         # a path like "/../shoes.db" could escape and serve arbitrary files.
@@ -258,7 +262,7 @@ def change_password(payload: schemas.UserChangePassword, db: Session = Depends(g
 
 
 # ── Shoe Routes ───────────────────────────────────────────────
-from sqlalchemy import false, true
+
 
 @app.get("/api/shoes/active", response_model=list[schemas.ShoeOut])
 def list_active(
@@ -488,7 +492,7 @@ def _generate_shoe_rows(shoes: list[models.Shoe], include_retired_status: bool =
 
 def _get_export_filename(format: str, mode: str) -> str:
     """Generate export filename with timestamp."""
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    timestamp = datetime.now().astimezone().strftime("%Y%m%d_%H%M%S")
     return f"running_shoes_{mode}_{timestamp}.{format}"
 
 
@@ -523,14 +527,14 @@ def export_shoes(
         # 生成 CSV
         import csv
         import io
-        output = io.StringIO()
+        csv_output = io.StringIO()
         if rows:
-            writer = csv.DictWriter(output, fieldnames=rows[0].keys())
+            writer = csv.DictWriter(csv_output, fieldnames=rows[0].keys())
             writer.writeheader()
             writer.writerows(rows)
 
         return StreamingResponse(
-            io.BytesIO(output.getvalue().encode("utf-8-sig")),
+            io.BytesIO(csv_output.getvalue().encode("utf-8-sig")),
             media_type="text/csv; charset=utf-8",
             headers={
                 "Content-Disposition": f'attachment; filename="{_get_export_filename("csv", mode)}"'
@@ -542,13 +546,18 @@ def export_shoes(
         import io
         try:
             import openpyxl
-            from openpyxl.styles import Font, PatternFill, Alignment
+            from openpyxl.styles import Alignment, Font, PatternFill
             from openpyxl.utils import get_column_letter
-        except ImportError:
-            raise HTTPException(status_code=500, detail="伺服器缺少 openpyxl 套件，無法匯出 XLSX")
+        except ImportError as exc:
+            raise HTTPException(
+                status_code=500,
+                detail="伺服器缺少 openpyxl 套件，無法匯出 XLSX",
+            ) from exc
 
         wb = openpyxl.Workbook()
         ws = wb.active
+        if ws is None:
+            raise RuntimeError("openpyxl did not create an active worksheet")
         ws.title = "跑鞋資料"
 
         if rows:
@@ -573,12 +582,12 @@ def export_shoes(
             for col_idx in range(1, len(headers) + 1):
                 ws.column_dimensions[get_column_letter(col_idx)].width = 18
 
-        output = io.BytesIO()
-        wb.save(output)
-        output.seek(0)
+        xlsx_output = io.BytesIO()
+        wb.save(xlsx_output)
+        xlsx_output.seek(0)
 
         return StreamingResponse(
-            output,
+            xlsx_output,
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             headers={
                 "Content-Disposition": f'attachment; filename="{_get_export_filename("xlsx", mode)}"'

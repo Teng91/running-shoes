@@ -19,8 +19,7 @@ def _event_types(events):
 
 def _native_response(*, content=(), tool_calls=()):
     def generate():
-        for chunk in content:
-            yield chunk
+        yield from content
         return {
             "content": "".join(content),
             "finish_reason": "tool_calls" if tool_calls else "stop",
@@ -190,7 +189,9 @@ def test_only_first_tool_is_executed_when_model_emits_multiple(monkeypatch):
     monkeypatch.setattr(llm, "call_llm_stream", model_calls)
     monkeypatch.setattr(agent, "_execute_tool", tool)
 
-    events = _events(agent.run_agent_stream("分析", model="openrouter/free"))
+    events = _events(
+        agent.run_agent_stream("分析", model="openrouter/free", db="db", user_id=7)
+    )
 
     assert [event.get("name") for event in events if event["type"] == "tool"] == ["shoe_summary"]
     tool.assert_called_once()
@@ -240,7 +241,9 @@ def test_last_turn_forces_answer_without_another_tool(monkeypatch):
     tool = MagicMock(return_value="鞋況")
     monkeypatch.setattr(agent, "_execute_tool", tool)
 
-    events = _events(agent.run_agent_stream("完整分析", model="openrouter/free"))
+    events = _events(
+        agent.run_agent_stream("完整分析", model="openrouter/free", db="db", user_id=7)
+    )
 
     assert call_count == agent.MAX_TURNS
     assert tool.call_count == agent.MAX_TURNS - 1
@@ -280,7 +283,9 @@ def test_native_tool_calls_use_standard_assistant_and_tool_messages(monkeypatch)
     execute = MagicMock(side_effect=["鞋況結果", "跑量結果"])
     monkeypatch.setattr(agent, "_execute_tool", execute)
 
-    events = _events(agent.run_agent_stream("分析跑鞋", model="openrouter/free"))
+    events = _events(
+        agent.run_agent_stream("分析跑鞋", model="openrouter/free", db="db", user_id=7)
+    )
 
     assert [event["name"] for event in events if event["type"] == "tool"] == [
         "shoe_summary",
@@ -302,3 +307,24 @@ def test_native_tool_calls_use_standard_assistant_and_tool_messages(monkeypatch)
     }
     assert second_round[-1]["tool_call_id"] == "call_mileage"
     assert events[-2] == {"type": "token", "text": "完整分析"}
+
+
+def test_database_tool_without_request_context_reports_stream_error(monkeypatch):
+    calls = [
+        {
+            "id": "call_summary",
+            "name": "shoe_summary",
+            "arguments": {},
+            "arguments_json": "{}",
+        }
+    ]
+    monkeypatch.setattr(
+        llm,
+        "call_llm_stream",
+        MagicMock(return_value=_native_response(tool_calls=calls)),
+    )
+
+    events = _events(agent.run_agent_stream("分析跑鞋", model="openrouter/free"))
+
+    assert _event_types(events) == ["reasoning_start", "tool", "error", "done"]
+    assert "缺少使用者資料庫上下文" in events[-2]["text"]

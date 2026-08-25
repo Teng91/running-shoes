@@ -1,18 +1,18 @@
 import os
 import sys
 import warnings
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import bcrypt
 from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 
 from backend.database import get_db
 from backend.models import User
 
-SECRET_KEY = os.environ.get("SECRET_KEY")
+SECRET_KEY: str = os.environ.get("SECRET_KEY") or ""
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
 
@@ -24,7 +24,10 @@ if not SECRET_KEY:
         sys.exit(1)
     # Development fallback — still warn but allow startup
     SECRET_KEY = "dev-only-fallback-change-me"
-    warnings.warn("Using fallback SECRET_KEY — set the SECRET_KEY env var in production!")
+    warnings.warn(
+        "Using fallback SECRET_KEY — set the SECRET_KEY env var in production!",
+        stacklevel=2,
+    )
 
 security = HTTPBearer()
 
@@ -42,7 +45,7 @@ def get_password_hash(password: str) -> str:
 
 def create_access_token(data: dict) -> str:
     to_encode = data.copy()
-    expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    expire = datetime.now(UTC) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
@@ -56,7 +59,7 @@ def decode_access_token(token: str) -> dict:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate credentials",
             headers={"WWW-Authenticate": "Bearer"},
-        )
+        ) from None
 
 
 def get_current_user(

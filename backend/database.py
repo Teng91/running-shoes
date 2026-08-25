@@ -2,7 +2,7 @@ import os
 from pathlib import Path
 
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, DeclarativeBase
+from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 # 本機開發預設存專案根目錄，Docker 部署透過 DB_DIR=/data 環境變數覆蓋
 _DEFAULT_DB_DIR = str(Path(__file__).resolve().parent.parent)
