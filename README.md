@@ -70,8 +70,8 @@ open http://localhost:8000
 
 ```bash
 OPENROUTER_API_KEY=<你的 OpenRouter API Key>   # 取得: https://openrouter.ai/keys
-# 選填：覆寫預設模型；未設定時使用 openrouter/free
-OR_MODEL=openrouter/free
+# 選填：固定某個免費且支援 tools 的模型
+OR_MODEL=nvidia/nemotron-3-ultra-550b-a55b:free
 ```
 
 `.env` 會被自動載入，不需要手動 `export`。沒設定也不影響 Dashboard 的其他功能，只是 AI 助手無法使用。
@@ -84,7 +84,7 @@ OR_MODEL=openrouter/free
 - **圖表視覺化**：生命進度條、每 km 成本比較、退役時間軸、月跑量佔比（Chart.js）
 - **每月跑量統計**：獨立管理月跑量資料，支援年度趨勢圖
 - **跑鞋資料匯出**：一鍵匯出 **XLSX / CSV**，支援 **現役 / 退役 / 全部** 三種範圍，欄位完整含品牌、鞋款、日期、尺寸、價格、里程、成本、生命進度、月跑量
-- **AI 跑鞋推薦助手**：依你的實際資料給換鞋與選鞋建議（需設定 OpenRouter API Key），預設使用 `openrouter/free` 自動路由免費模型，也可手動指定其他模型
+- **AI 跑鞋推薦助手**：依你的實際資料給換鞋與選鞋建議（需設定 OpenRouter API Key），可從目前免費且支援工具呼叫的模型中選擇
 - **多使用者隔離**：每人資料完全獨立，支援註冊/登入/改密碼
 
 ## AI 跑鞋推薦助手
@@ -110,13 +110,14 @@ OR_MODEL=openrouter/free
 | `shoe_category_status` | 分析 Daily / Speed / Tempo / Race / Trail / Walk 覆蓋及補鞋需求 |
 | `web_search` | 搜尋市售鞋款、規格、評價與價格來源 |
 
-需要設定 `OPENROUTER_API_KEY`（見上方）。預設模型為 `openrouter/free`：OpenRouter
-會依請求需求，從當下可用的免費模型中自動選擇。免費模型的速率限制、延遲與可用性
-可能波動，因此較適合個人使用、展示與低流量情境，不保證每次請求都成功。
+需要設定 `OPENROUTER_API_KEY`（見上方）。前端預設選取 OpenRouter 最近 7 天 token
+使用量最高的免費工具模型。免費模型的速率限制、延遲與可用性可能波動，因此較適合
+個人使用、展示與低流量情境，不保證每次請求都成功。
 
-前端下拉選單會顯示 OpenRouter 目前提供且支援工具呼叫的免費模型，點擊 🔄 可強制刷新；若要固定
-其他預設模型，可設定 `OR_MODEL=<model-id>`。由於 Agent 使用原生工具呼叫，固定模型也必須
-支援 OpenRouter 的 `tools` 參數。
+前端下拉選單會顯示 OpenRouter 目前提供且支援工具呼叫的免費模型，並依最近 7 天 token
+使用量由高到低排列；點擊 🔄 可強制刷新。若要固定其他預設模型，可設定
+`OR_MODEL=<model-id>`。由於 Agent 使用原生工具呼叫，固定模型也必須支援 OpenRouter 的
+`tools` 參數。
 
 ## 測試
 
@@ -130,7 +131,7 @@ venv/bin/pytest -q
 venv/bin/pytest -q --cov=backend --cov-branch --cov-report=term-missing
 ```
 
-目前測試基準為 **139 passed**，`backend` 的行覆蓋率與分支覆蓋率皆為 **100%**。
+目前測試基準為 **147 passed**，`backend` 整體測試覆蓋率為 **99%**。
 
 ## Docker 部署
 

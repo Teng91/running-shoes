@@ -42,9 +42,9 @@ def _consume(generator):
             return chunks, stop.value
 
 
-def test_openrouter_free_is_static_default():
-    assert llm._DEFAULT_MODEL == "openrouter/free"
-    assert llm.MODELS["openrouter"][0]["id"] == "openrouter/free"
+def test_ultra_is_static_fallback_default():
+    assert llm._DEFAULT_MODEL == "nvidia/nemotron-3-ultra-550b-a55b:free"
+    assert llm.MODELS["openrouter"][0]["id"] == llm._DEFAULT_MODEL
 
 
 def test_provider_from_str_accepts_openrouter_and_rejects_unknown():
@@ -79,18 +79,90 @@ def test_fetch_free_models_filters_out_paid_models(monkeypatch):
             },
         ]
     }
-    get = MagicMock(return_value=response)
+    popularity_response = MagicMock()
+    popularity_response.json.return_value = {
+        "data": {
+            "models": [
+                {"endpoint": {"model_variant_slug": "vendor/free-with-tools"}},
+            ]
+        }
+    }
+    get = MagicMock(side_effect=[response, popularity_response])
     monkeypatch.setattr(llm.httpx, "get", get)
 
     assert llm._fetch_free_models() == [
-        {"id": "openrouter/free", "display": "Free Models Router (auto)"},
         {"id": "vendor/free-with-tools", "display": "Free With Tools"},
     ]
     response.raise_for_status.assert_called_once_with()
-    assert get.call_args.kwargs["headers"] == {"Authorization": "Bearer test-key"}
-    assert get.call_args.args == (
+    assert get.call_args_list[0].kwargs["headers"] == {"Authorization": "Bearer test-key"}
+    assert get.call_args_list[0].args == (
         "https://openrouter.ai/api/v1/models?supported_parameters=tools",
     )
+    assert get.call_args_list[1].args == (llm._POPULARITY_URL,)
+
+
+def test_fetch_free_models_sorts_by_weekly_usage(monkeypatch):
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    models_response = MagicMock()
+    models_response.json.return_value = {
+        "data": [
+            {
+                "id": "vendor/less-used:free",
+                "name": "Less Used",
+                "pricing": {"prompt": "0", "completion": "0"},
+                "supported_parameters": ["tools"],
+            },
+            {
+                "id": "vendor/popular:free",
+                "name": "Popular",
+                "pricing": {"prompt": "0", "completion": "0"},
+                "supported_parameters": ["tools"],
+            },
+        ]
+    }
+    popularity_response = MagicMock()
+    popularity_response.json.return_value = {
+        "data": {
+            "models": [
+                {"endpoint": {"model_variant_slug": "vendor/popular:free"}},
+                {"endpoint": {"model_variant_slug": "vendor/less-used:free"}},
+            ]
+        }
+    }
+    monkeypatch.setattr(
+        llm.httpx,
+        "get",
+        MagicMock(side_effect=[models_response, popularity_response]),
+    )
+
+    assert [model["id"] for model in llm._fetch_free_models()] == [
+        "vendor/popular:free",
+        "vendor/less-used:free",
+    ]
+
+
+def test_fetch_free_models_keeps_models_when_popularity_lookup_fails(monkeypatch):
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    models_response = MagicMock()
+    models_response.json.return_value = {
+        "data": [
+            {
+                "id": "vendor/model:free",
+                "name": "Model",
+                "pricing": {"prompt": "0", "completion": "0"},
+                "supported_parameters": ["tools"],
+            }
+        ]
+    }
+    monkeypatch.setattr(
+        llm.httpx,
+        "get",
+        MagicMock(side_effect=[models_response, httpx.ConnectError("offline")]),
+    )
+
+    assert llm._fetch_free_models() == [
+        {"id": "vendor/model:free", "display": "Model"},
+    ]
 
 
 def test_fetch_free_models_requires_api_key(monkeypatch):
@@ -112,18 +184,16 @@ def test_fetch_free_models_wraps_http_errors(monkeypatch):
         llm._fetch_free_models()
 
 
-def test_fetch_free_models_keeps_router_when_api_has_no_compatible_models(monkeypatch):
+def test_fetch_free_models_returns_empty_when_api_has_no_compatible_models(monkeypatch):
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     response = MagicMock()
     response.json.return_value = {"data": []}
     monkeypatch.setattr(llm.httpx, "get", MagicMock(return_value=response))
 
-    assert llm._fetch_free_models() == [
-        {"id": "openrouter/free", "display": "Free Models Router (auto)"}
-    ]
+    assert llm._fetch_free_models() == []
 
 
-def test_get_models_places_openrouter_free_first(monkeypatch):
+def test_get_models_preserves_weekly_usage_order(monkeypatch):
     llm._MODELS_CACHE.clear()
     llm._MODELS_CACHE_META.clear()
     monkeypatch.setattr(llm, "_OR_DEFAULT", None)
@@ -133,14 +203,14 @@ def test_get_models_places_openrouter_free_first(monkeypatch):
         MagicMock(
             return_value=[
                 {"id": "vendor/other:free", "display": "Other"},
-                {"id": "openrouter/free", "display": "Auto"},
+                {"id": llm._DEFAULT_MODEL, "display": "Ultra"},
             ]
         ),
     )
 
     models = llm._get_models(llm.LLMProvider.openrouter, force=True)
 
-    assert models[0]["id"] == "openrouter/free"
+    assert models[0]["id"] == "vendor/other:free"
 
 
 def test_get_models_honors_or_model_override(monkeypatch):
@@ -152,7 +222,7 @@ def test_get_models_honors_or_model_override(monkeypatch):
         "_fetch_free_models",
         MagicMock(
             return_value=[
-                {"id": "openrouter/free", "display": "Auto"},
+                {"id": "vendor/other:free", "display": "Other"},
                 {"id": "vendor/preferred:free", "display": "Preferred"},
             ]
         ),
@@ -186,18 +256,18 @@ def test_get_models_falls_back_to_static_list(monkeypatch):
     models = llm._get_models(llm.LLMProvider.openrouter, force=True)
 
     assert models is llm.MODELS["openrouter"]
-    assert models[0]["id"] == "openrouter/free"
+    assert models[0]["id"] == llm._DEFAULT_MODEL
 
 
 def test_list_providers_reports_configuration(monkeypatch):
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
-    get_models = MagicMock(return_value=[{"id": "openrouter/free", "display": "Auto"}])
+    get_models = MagicMock(return_value=[{"id": llm._DEFAULT_MODEL, "display": "Ultra"}])
     monkeypatch.setattr(llm, "_get_models", get_models)
 
     providers = llm.list_providers(force=True)
 
     assert providers[0]["configured"] is True
-    assert providers[0]["models"][0]["id"] == "openrouter/free"
+    assert providers[0]["models"][0]["id"] == llm._DEFAULT_MODEL
     get_models.assert_called_once_with(llm.LLMProvider.openrouter, force=True)
 
 

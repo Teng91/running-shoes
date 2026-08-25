@@ -103,7 +103,7 @@ def test_plain_response_streams_tokens_and_uses_default_model(monkeypatch):
 
     assert _event_types(events) == ["token", "token", "done"]
     assert "".join(event.get("text", "") for event in events) == "跑鞋建議"
-    assert call.call_args.args[1] == "openrouter/free"
+    assert call.call_args.args[1] == llm._DEFAULT_MODEL
     assert call.call_args.args[2][-1] == {"role": "user", "content": "請推薦"}
 
 
