@@ -8,8 +8,9 @@ OpenRouter 提供 OpenAI-compatible 端點，用同一個 `openai` SDK 設定
 import json
 import os
 import time
-from enum import Enum
-from typing import Any, Generator
+from collections.abc import Generator
+from enum import StrEnum
+from typing import Any
 
 import httpx
 from dotenv import load_dotenv
@@ -22,7 +23,7 @@ class LLMError(Exception):
     """LLM 呼叫失敗（缺 key、網路錯、模型不存在等）。"""
 
 
-class LLMProvider(str, Enum):
+class LLMProvider(StrEnum):
     openrouter = "openrouter"
 
     @classmethod
@@ -30,7 +31,7 @@ class LLMProvider(str, Enum):
         try:
             return cls(value)
         except ValueError:
-            raise LLMError(f"未知的 provider：{value!r}（可用：openrouter）")
+            raise LLMError(f"未知的 provider：{value!r}（可用：openrouter）") from None
 
 
 # 各家 endpoint + 從哪個 env 取 key

@@ -61,7 +61,9 @@ def web_search(query: str, max_results: int = MAX_RESULTS) -> str:
     try:
         with DDGS() as ddgs:
             results = ddgs.text(query, max_results=max_results)
-    except Exception as exc:
+    # Third-party search backends may surface transport and parser failures as
+    # different exception types; every failure must degrade to structured JSON.
+    except Exception as exc:  # noqa: BLE001
         return _result(ok=False, status="request_failed", query=query, error=str(exc))
 
     if not results:

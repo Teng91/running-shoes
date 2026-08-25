@@ -1,4 +1,12 @@
-from backend.auth import verify_password, get_password_hash, create_access_token, decode_access_token
+import pytest
+from fastapi import HTTPException
+
+from backend.auth import (
+    create_access_token,
+    decode_access_token,
+    get_password_hash,
+    verify_password,
+)
 
 
 def test_password_hash_and_verify():
@@ -16,9 +24,7 @@ def test_create_and_decode_token():
 
 
 def test_decode_invalid_token():
-    from fastapi import HTTPException
-    try:
+    with pytest.raises(HTTPException) as exc_info:
         decode_access_token("invalid.token.here")
-        assert False, "Should have raised"
-    except HTTPException as e:
-        assert e.status_code == 401
+
+    assert exc_info.value.status_code == 401

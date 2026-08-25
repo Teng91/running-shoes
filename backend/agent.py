@@ -22,13 +22,14 @@ system prompt；正常情況一律走原生 tool_calls。
 """
 
 import json
-from typing import Generator, Optional
+from collections.abc import Generator
+from typing import Any
 
 from sqlalchemy.orm import Session
 
 from backend import llm
 from backend.tools import db_tools
-from backend.tools.search_tool import run_web_search, is_failure
+from backend.tools.search_tool import is_failure, run_web_search
 
 SYSTEM_PROMPT = """你是「跑鞋推薦助手」，服務一位熱愛跑步的使用者。
 
@@ -71,7 +72,7 @@ def _sse(event: dict) -> str:
     return f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
 
 
-def _build_messages(history: list[dict], user_message: str) -> list[dict]:
+def _build_messages(history: list[dict] | None, user_message: str) -> list[dict]:
     """組裝送給 LLM 的 messages。history 只保留 user/assistant 輪次。"""
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
     for turn in history or []:
@@ -83,12 +84,19 @@ def _build_messages(history: list[dict], user_message: str) -> list[dict]:
     return messages
 
 
-def _execute_tool(name: str, arguments: dict, db: Session, user_id: int) -> str:
+def _execute_tool(
+    name: str,
+    arguments: dict,
+    db: Session | None,
+    user_id: int | None,
+) -> str:
     if name == "web_search":
         return run_web_search(arguments)
     fn = db_tools.REGISTRY.get(name)
     if fn is None:
         return f"（未知工具：{name}）"
+    if db is None or user_id is None:
+        return "（缺少使用者資料庫上下文）"
     if name == "nearing_end_of_life":
         try:
             threshold = float((arguments or {}).get("threshold", 0.8))
@@ -107,11 +115,11 @@ def _execute_tool(name: str, arguments: dict, db: Session, user_id: int) -> str:
 
 def run_agent_stream(
     user_message: str,
-    history: Optional[list[dict]] = None,
+    history: list[dict] | None = None,
     provider: str = "openrouter",
-    model: Optional[str] = None,
-    db: Optional[Session] = None,
-    user_id: Optional[int] = None,
+    model: str | None = None,
+    db: Session | None = None,
+    user_id: int | None = None,
 ) -> Generator[str, None, None]:
     """串流版 agent loop，逐 token 產出 SSE 事件。
 
@@ -151,7 +159,7 @@ def run_agent_stream(
         seen_tool = False
         tool_calls = []
         native_tool_calls = []
-        llm_result = {}
+        llm_result: dict[str, Any] = {}
 
         try:
             stream_gen = llm.call_llm_stream(
@@ -199,7 +207,9 @@ def run_agent_stream(
         except llm.LLMError as exc:
             yield _sse({"type": "error", "text": str(exc)})
             break
-        except Exception as exc:
+        # Preserve the SSE contract if a provider SDK raises outside the
+        # normalized LLMError boundary.
+        except Exception as exc:  # noqa: BLE001
             yield _sse({"type": "error", "text": f"模型呼叫發生錯誤：{exc}"})
             break
 
@@ -242,6 +252,16 @@ def run_agent_stream(
 
             for tc in tool_calls:
                 yield _sse({"type": "tool", "name": tc["name"], "args": tc["arguments"]})
+                if (
+                    tc["name"] in db_tools.REGISTRY
+                    and (db is None or user_id is None)
+                ):
+                    yield _sse({
+                        "type": "error",
+                        "text": "無法執行資料庫工具：缺少使用者資料庫上下文。",
+                    })
+                    yield _sse({"type": "done"})
+                    return
                 tool_output = _execute_tool(tc["name"], tc["arguments"], db, user_id)
                 yield _sse({"type": "tool_done", "name": tc["name"]})
                 if tc["name"] == "web_search" and is_failure(tool_output):

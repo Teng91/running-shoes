@@ -1,7 +1,6 @@
-from typing import Optional
-from pydantic import BaseModel, ConfigDict, field_validator
 import math
 
+from pydantic import BaseModel, ConfigDict, field_validator
 
 # All valid shoe purpose/function categories.
 SHOE_CATEGORIES = ["Daily", "Speed", "Tempo", "Race", "Trail", "Walk"]
@@ -80,17 +79,17 @@ class ShoeCreate(ShoeBase):
 
 
 class ShoeUpdate(BaseModel):
-    brand: Optional[str] = None
-    model: Optional[str] = None
-    date: Optional[str] = None
-    size: Optional[str] = None
-    price: Optional[float] = None
-    orig_price: Optional[float] = None
-    mileage: Optional[float] = None
-    expected_mileage: Optional[float] = None
-    monthly_km: Optional[float] = None
-    is_retired: Optional[bool] = None
-    categories: Optional[list[str]] = None
+    brand: str | None = None
+    model: str | None = None
+    date: str | None = None
+    size: str | None = None
+    price: float | None = None
+    orig_price: float | None = None
+    mileage: float | None = None
+    expected_mileage: float | None = None
+    monthly_km: float | None = None
+    is_retired: bool | None = None
+    categories: list[str] | None = None
 
     @field_validator("categories")
     @classmethod
@@ -134,9 +133,9 @@ class MonthlyMileageCreate(MonthlyMileageBase):
 
 
 class MonthlyMileageUpdate(BaseModel):
-    year: Optional[int] = None
-    month: Optional[int] = None
-    km: Optional[float] = None
+    year: int | None = None
+    month: int | None = None
+    km: float | None = None
 
 
 class MonthlyMileageOut(MonthlyMileageBase):

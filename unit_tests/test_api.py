@@ -7,10 +7,10 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from backend.database import Base, get_db
-from backend.models import User, Shoe, MonthlyMileage
 from backend.auth import get_password_hash, verify_password
+from backend.database import Base, get_db
 from backend.main import app
+from backend.models import MonthlyMileage, Shoe, User
 
 
 @pytest.fixture
@@ -180,7 +180,7 @@ def test_change_password_chained(client, db):
 
 def test_get_me_authenticated(client, user_with_token):
     """GET /api/auth/me returns the current user's info."""
-    user, token = user_with_token
+    _user, token = user_with_token
     res = client.get("/api/auth/me", headers=_auth_header(token))
     assert res.status_code == 200
     assert res.json()["username"] == "testuser"
@@ -231,7 +231,7 @@ def _auth_header(token):
 
 
 def test_list_active_shoes(client, user_with_token):
-    user, token = user_with_token
+    _user, token = user_with_token
     res = client.get("/api/shoes/active", headers=_auth_header(token))
     assert res.status_code == 200
     assert res.json() == []
@@ -253,7 +253,7 @@ def test_create_shoe(client, db, user_with_token):
 
 
 def test_create_shoe_rejects_invalid_category(client, user_with_token):
-    user, token = user_with_token
+    _user, token = user_with_token
     res = client.post("/api/shoes", headers=_auth_header(token), json={
         "brand": "Mizuno", "model": "Wave Sky 7", "date": "2024-01-01",
         "categories": ["Walking"],
@@ -275,7 +275,7 @@ def test_update_shoe_categories(client, db, user_with_token):
 
 
 def test_create_shoe_with_trail_category(client, user_with_token):
-    user, token = user_with_token
+    _user, token = user_with_token
     res = client.post("/api/shoes", headers=_auth_header(token), json={
         "brand": "Salomon", "model": "Sense Ride", "date": "2026-01-01",
         "categories": ["Trail"],
@@ -286,7 +286,7 @@ def test_create_shoe_with_trail_category(client, user_with_token):
 
 def test_create_shoe_with_walk_category(client, user_with_token):
     """Walk is a valid category selectable in the frontend checklist."""
-    user, token = user_with_token
+    _user, token = user_with_token
     res = client.post("/api/shoes", headers=_auth_header(token), json={
         "brand": "Nike", "model": "Free RN", "date": "2026-01-01",
         "categories": ["Walk"],
@@ -296,7 +296,7 @@ def test_create_shoe_with_walk_category(client, user_with_token):
 
 
 def test_create_shoe_with_multiple_categories(client, user_with_token):
-    user, token = user_with_token
+    _user, token = user_with_token
     res = client.post("/api/shoes", headers=_auth_header(token), json={
         "brand": "Brooks", "model": "Ghost", "date": "2026-01-01",
         "categories": ["Daily", "Tempo"],
@@ -394,7 +394,7 @@ def test_unauthenticated_access(client):
 # ── Monthly Mileage CRUD Tests ────────────────────────────────
 
 def test_list_monthly_mileage_empty(client, user_with_token):
-    user, token = user_with_token
+    _user, token = user_with_token
     res = client.get("/api/monthly-mileage", headers=_auth_header(token))
     assert res.status_code == 200
     assert res.json() == []
@@ -430,7 +430,7 @@ def test_create_monthly_mileage(client, db, user_with_token):
 
 
 def test_create_monthly_mileage_invalid_month(client, user_with_token):
-    user, token = user_with_token
+    _user, token = user_with_token
     res = client.post("/api/monthly-mileage", headers=_auth_header(token), json={
         "year": 2026, "month": 13, "km": 10,
     })
@@ -460,7 +460,7 @@ def test_update_monthly_mileage(client, db, user_with_token):
 
 
 def test_update_monthly_mileage_not_found(client, user_with_token):
-    user, token = user_with_token
+    _user, token = user_with_token
     res = client.put("/api/monthly-mileage/99999", headers=_auth_header(token), json={"km": 10})
     assert res.status_code == 404
 
