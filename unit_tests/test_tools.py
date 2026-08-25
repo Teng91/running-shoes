@@ -2,7 +2,7 @@
 
 from backend import agent
 from backend.tools import db_tools
-from backend.models import User, Shoe
+from backend.models import MonthlyMileage, User, Shoe
 
 
 def test_shoe_summary_counts(seeded_db):
@@ -181,3 +181,42 @@ def test_parse_tool_calls_extracts_markers():
     assert calls[0]["arguments"] == {"threshold": 0.8}
     assert calls[1]["name"] == "web_search"
     assert calls[1]["arguments"]["query"] == "半馬 跑鞋"
+
+
+def test_tool_edge_cases_for_missing_lifespan_and_zero_mileage(seeded_db):
+    db, uid = seeded_db
+    zero_life = Shoe(
+        user_id=uid,
+        brand="Zero",
+        model="No Target",
+        date="2026-01-01",
+        expected_mileage=0,
+        categories=[],
+    )
+    db.add(zero_life)
+    for row in db.query(MonthlyMileage).filter(MonthlyMileage.user_id == uid):
+        row.km = 0
+    db.commit()
+
+    assert "No Target" in db_tools.list_my_shoes(db, uid)
+    assert "未設定預期壽命" in db_tools.shoe_summary(db, uid)
+    assert "所有月份的跑量都為 0" in db_tools.monthly_mileage_stats(db, uid)
+    assert "No Target" not in db_tools.nearing_end_of_life(db, uid, threshold=0)
+    assert "尚未設定用途類別" in db_tools.shoe_category_status(db, uid, "No Target")
+
+
+def test_compare_and_category_lookup_edge_cases(seeded_db):
+    db, uid = seeded_db
+    assert "未提供" in db_tools.compare_shoes(db, uid, "", "")
+    assert "shoe_b=不存在" in db_tools.compare_shoes(db, uid, "Wave Sky 7", "不存在")
+    assert "shoe_a=不存在" in db_tools.compare_shoes(db, uid, "不存在", "Wave Sky 7")
+    assert "兩雙不同" in db_tools.compare_shoes(db, uid, "Mizuno Wave Sky 7", "Wave Sky 7")
+    assert "找不到鞋款" in db_tools.shoe_category_status(db, uid, "不存在的鞋")
+
+
+def test_parse_invalid_tool_json_and_strip_markers():
+    calls = db_tools.parse_tool_calls("<tool>web_search {not-json}</tool>")
+    assert calls == [{"name": "web_search", "arguments": {}}]
+    assert db_tools.strip_tool_markers(
+        "前文\n<tool>shoe_summary {}</tool>\n後文"
+    ) == "前文\n\n後文"

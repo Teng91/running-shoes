@@ -44,6 +44,7 @@ _PROVIDER_CONFIG = {
 # 各家免費/低成本的建議模型清單。display 是給前端顯示的名稱。
 MODELS: dict[str, list[dict[str, str]]] = {
     "openrouter": [
+        {"id": "openrouter/free", "display": "Free Models Router (auto)"},
         {"id": "nvidia/nemotron-3-ultra-550b-a55b:free", "display": "Nemotron 3 Ultra 550B (free)"},
         {"id": "nvidia/nemotron-3-super-120b-a12b:free", "display": "Nemotron 3 Super 120B (free)"},
     ],
@@ -54,7 +55,7 @@ _MODELS_CACHE: dict[str, list[dict[str, str]]] = {}
 _MODELS_CACHE_META: dict[str, float] = {}  # provider -> cached_at
 _MODELS_CACHE_TTL = 3600  # 1 小時
 
-_DEFAULT_MODEL = "nvidia/nemotron-3-super-120b-a12b:free"
+_DEFAULT_MODEL = "openrouter/free"
 
 
 def _fetch_free_models() -> list[dict[str, str]]:
@@ -113,7 +114,8 @@ def _get_models(provider: LLMProvider, force: bool = False) -> list[dict[str, st
     try:
         models = _fetch_free_models()
         # Put the default model first
-        models = sorted(models, key=lambda m: 0 if m["id"] == _DEFAULT_MODEL else 1)
+        default_model = _OR_DEFAULT or _DEFAULT_MODEL
+        models = sorted(models, key=lambda m: 0 if m["id"] == default_model else 1)
         _MODELS_CACHE[provider.value] = models
         _MODELS_CACHE_META[provider.value] = now
         return models
