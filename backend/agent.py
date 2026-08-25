@@ -1,13 +1,15 @@
 """Agent loop — 跑鞋推薦助手的核心。
 
-流程（ReAct 風格，但用「文字標記」而非各家原生 tool-calling，
-因為免費模型多半不支援 function calling，送 `tools` 參數會直接 404）：
+流程（ReAct 風格，使用 OpenRouter / OpenAI 原生 tool calling）：
 
     system(含工具說明) → user 訊息 → 呼叫 LLM
-      ├─ LLM 回傳文字中含 <tool>name {json}</tool> 標記
+      ├─ LLM 回傳 tool_calls
       │     → 解析並執行工具（讀 DB / 上網搜尋）→ 把結果作為新一輪
-      │       user 訊息餵回 → 再呼叫 LLM
-      └─ 文字中無標記 → 那就是最終回覆（去掉標記後）
+      │       role=tool 訊息餵回 → 再呼叫 LLM
+      └─ 沒有 tool_calls → 文字內容就是最終回覆
+
+舊的 `<tool>name {json}</tool>` 文字標記仍保留解析相容性，但不再放進
+system prompt；正常情況一律走原生 tool_calls。
 
 為求在免費模型上穩定，LLM 呼叫採**串流**；token 以 SSE 逐字即時送達前端。
 
@@ -42,13 +44,21 @@ SYSTEM_PROMPT = """你是「跑鞋推薦助手」，服務一位熱愛跑步的�
 - 若資訊不足以給好建議（例如不知道腳型、目標距離、預算、路跑或越野），主動用一兩個問題追問。
 - 語氣親切、條理清楚，用繁體中文。不要編造鞋款或價格；來源不明的話明說。
 - 你**只看得到這位使用者自己的資料**，不要假設有其他人的資料。
+- 資料庫工具會回傳 JSON，且數值已由後端計算。工具結果是唯一可信的資料來源：
+  - `mileage_km` 是目前累積已跑里程。
+  - `expected_lifespan_km` 是預期總壽命。
+  - `remaining_mileage_km` 是剩餘里程。
+  - `usage_percent` 是「已使用」百分比，不是剩餘百分比。
+  - `assigned_monthly_km` 是分配給該鞋的每月目標，不是累積里程，也不是使用者整體月跑量。
+- 直接採用工具提供的數值與後端判定，不要自行重算、交換欄位、推估或補造月份明細。若要列數字表格，必須逐欄複製本輪工具結果。
+- 先給文字分析與行動建議；除非使用者要求表格，否則不要重製大篇數字表格。
+- 使用者要求分析資料、追問數字或指出數字有誤時，本輪必須重新呼叫相關資料庫工具；不要把先前 assistant 回覆中的數字當成資料來源。
 - **說明你的推理過程**：在呼叫工具之前，先用一段簡短文字說明你為什麼要查這個、你預期找到什麼。例如：「讓我先查查你的跑鞋清單，看看目前的鞋況。」
 - **多輪分析**：不要只查一輪就給結論。先查鞋況，再查跑量趨勢，再查快退役的鞋，最後上網搜尋具體推薦款。像一個真正的分析師一樣，逐步深入。
 - **當使用者要求看資料時，直接呼叫工具顯示**：不要只說「我來查一下」卻沒有實際 call tool。如果使用者說「查給我看」、「結果呢」、「資料在哪」，你必須呼叫對應的工具並把結果呈現出來。
 - **上網搜尋要節制**：web_search 最多呼叫 2~3 次，且只為了補充具體鞋款推薦。若某次 web_search 回傳「沒有找到結果」或「搜尋失敗」，代表這次查不到，**不要重複狂 call 同一類搜尋**——立刻改用你已經讀到的跑鞋/跑量資料給出建議，並誠實說明「網路搜尋暫時查不到，以下依你的現有資料分析」。
-
-{tools}
-""".format(tools=db_tools.TOOL_SPEC_TEXT)
+- 工具由系統透過原生 function calling 提供。需要資料時直接呼叫工具；不要用文字、XML、Markdown 或程式碼區塊模擬工具呼叫。
+"""
 
 MAX_TURNS = 6  # 防止 tool loop 失控（多留一輪給模型收斂）
 
@@ -140,9 +150,16 @@ def run_agent_stream(
         pending_tool_text = ""
         seen_tool = False
         tool_calls = []
+        native_tool_calls = []
+        llm_result = {}
 
         try:
-            stream_gen = llm.call_llm_stream(prov, model, messages)
+            stream_gen = llm.call_llm_stream(
+                prov,
+                model,
+                messages,
+                tools=db_tools.TOOL_DEFINITIONS,
+            )
             try:
                 while True:
                     chunk = next(stream_gen)
@@ -155,7 +172,10 @@ def run_agent_stream(
                             if parsed and not is_last_turn:
                                 seen_tool = True
                                 tool_calls = parsed
-                                yield _sse({"type": "reasoning_start"})
+                                yield _sse({
+                                    "type": "reasoning_start",
+                                    "text": db_tools.strip_tool_markers(full_content),
+                                })
                             else:
                                 yield _sse({"type": "token", "text": chunk})
                         else:
@@ -175,7 +195,7 @@ def run_agent_stream(
                         break
             except StopIteration as e:
                 # Generator returned via return value
-                _ = e.value
+                llm_result = e.value or {}
         except llm.LLMError as exc:
             yield _sse({"type": "error", "text": str(exc)})
             break
@@ -183,17 +203,42 @@ def run_agent_stream(
             yield _sse({"type": "error", "text": f"模型呼叫發生錯誤：{exc}"})
             break
 
+        native_tool_calls = llm_result.get("tool_calls", [])
+        if native_tool_calls and not is_last_turn:
+            seen_tool = True
+            tool_calls = native_tool_calls
+            yield _sse({"type": "reasoning_start", "text": full_content.strip()})
+
         # ── Post-stream processing ──
         if seen_tool:
-            # full_content already contains every streamed chunk (including any
-            # buffered second <tool> marker). Only the FIRST tool gets executed;
-            # the raw marker text stays in the assistant turn for LLM context.
-            tool_calls = db_tools.parse_tool_calls(full_content)[:1]
-            _last_close = full_content.rfind("</tool>")
-            clean_content = (
-                full_content[: _last_close + len("</tool>")] if _last_close != -1 else full_content
-            )
-            messages.append({"role": "assistant", "content": clean_content})
+            if native_tool_calls:
+                messages.append({
+                    "role": "assistant",
+                    "content": full_content or None,
+                    "tool_calls": [
+                        {
+                            "id": tc["id"],
+                            "type": "function",
+                            "function": {
+                                "name": tc["name"],
+                                "arguments": tc.get("arguments_json")
+                                or json.dumps(tc["arguments"], ensure_ascii=False),
+                            },
+                        }
+                        for tc in tool_calls
+                    ],
+                })
+            else:
+                # Backward-compatible fallback for models that emit the old
+                # textual <tool> marker despite receiving native tools.
+                tool_calls = db_tools.parse_tool_calls(full_content)[:1]
+                _last_close = full_content.rfind("</tool>")
+                clean_content = (
+                    full_content[: _last_close + len("</tool>")]
+                    if _last_close != -1
+                    else full_content
+                )
+                messages.append({"role": "assistant", "content": clean_content})
 
             for tc in tool_calls:
                 yield _sse({"type": "tool", "name": tc["name"], "args": tc["arguments"]})
@@ -201,10 +246,18 @@ def run_agent_stream(
                 yield _sse({"type": "tool_done", "name": tc["name"]})
                 if tc["name"] == "web_search" and is_failure(tool_output):
                     web_search_fails += 1
-                messages.append({
-                    "role": "user",
-                    "content": f"[工具 {tc['name']} 的結果]\n{tool_output}",
-                })
+                if native_tool_calls:
+                    messages.append({
+                        "role": "tool",
+                        "tool_call_id": tc["id"],
+                        "name": tc["name"],
+                        "content": tool_output,
+                    })
+                else:
+                    messages.append({
+                        "role": "user",
+                        "content": f"[工具 {tc['name']} 的結果]\n{tool_output}",
+                    })
 
             if web_search_fails >= WEB_SEARCH_FAIL_LIMIT:
                 messages.append({

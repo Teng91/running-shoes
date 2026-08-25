@@ -17,6 +17,20 @@ def _event_types(events):
     return [event["type"] for event in events]
 
 
+def _native_response(*, content=(), tool_calls=()):
+    def generate():
+        for chunk in content:
+            yield chunk
+        return {
+            "content": "".join(content),
+            "finish_reason": "tool_calls" if tool_calls else "stop",
+            "tool_calls": list(tool_calls),
+            "model": "routed/model:free",
+        }
+
+    return generate()
+
+
 def test_build_messages_keeps_only_nonempty_chat_turns():
     messages = agent._build_messages(
         [
@@ -29,6 +43,9 @@ def test_build_messages_keeps_only_nonempty_chat_turns():
     )
 
     assert messages[0]["role"] == "system"
+    assert "remaining_mileage_km" in messages[0]["content"]
+    assert "不要自行重算" in messages[0]["content"]
+    assert "本輪必須重新呼叫" in messages[0]["content"]
     assert messages[1:] == [
         {"role": "user", "content": "上一題"},
         {"role": "assistant", "content": "上一答"},
@@ -190,7 +207,7 @@ def test_three_failed_web_searches_add_convergence_instruction(monkeypatch):
         ]
     )
 
-    def fake_model(provider, model, messages):
+    def fake_model(provider, model, messages, **kwargs):
         snapshots.append([dict(message) for message in messages])
         return iter(next(responses))
 
@@ -211,7 +228,7 @@ def test_last_turn_forces_answer_without_another_tool(monkeypatch):
     snapshots = []
     call_count = 0
 
-    def fake_model(provider, model, messages):
+    def fake_model(provider, model, messages, **kwargs):
         nonlocal call_count
         call_count += 1
         snapshots.append([dict(message) for message in messages])
@@ -229,3 +246,59 @@ def test_last_turn_forces_answer_without_another_tool(monkeypatch):
     assert tool.call_count == agent.MAX_TURNS - 1
     assert any("這是最後一輪" in message["content"] for message in snapshots[-1])
     assert events[-2] == {"type": "token", "text": "最後結論"}
+
+
+def test_native_tool_calls_use_standard_assistant_and_tool_messages(monkeypatch):
+    calls = [
+        {
+            "id": "call_summary",
+            "name": "shoe_summary",
+            "arguments": {},
+            "arguments_json": "{}",
+        },
+        {
+            "id": "call_mileage",
+            "name": "monthly_mileage_stats",
+            "arguments": {},
+            "arguments_json": "{}",
+        },
+    ]
+    snapshots = []
+    responses = iter(
+        [
+            _native_response(content=("我先讀資料。",), tool_calls=calls),
+            _native_response(content=("完整分析",)),
+        ]
+    )
+
+    def fake_model(provider, model, messages, **kwargs):
+        snapshots.append([dict(message) for message in messages])
+        assert kwargs["tools"] is db_tools.TOOL_DEFINITIONS
+        return next(responses)
+
+    monkeypatch.setattr(llm, "call_llm_stream", fake_model)
+    execute = MagicMock(side_effect=["鞋況結果", "跑量結果"])
+    monkeypatch.setattr(agent, "_execute_tool", execute)
+
+    events = _events(agent.run_agent_stream("分析跑鞋", model="openrouter/free"))
+
+    assert [event["name"] for event in events if event["type"] == "tool"] == [
+        "shoe_summary",
+        "monthly_mileage_stats",
+    ]
+    assert execute.call_count == 2
+    second_round = snapshots[1]
+    assistant_message = second_round[-3]
+    assert assistant_message["role"] == "assistant"
+    assert [call["id"] for call in assistant_message["tool_calls"]] == [
+        "call_summary",
+        "call_mileage",
+    ]
+    assert second_round[-2] == {
+        "role": "tool",
+        "tool_call_id": "call_summary",
+        "name": "shoe_summary",
+        "content": "鞋況結果",
+    }
+    assert second_round[-1]["tool_call_id"] == "call_mileage"
+    assert events[-2] == {"type": "token", "text": "完整分析"}
