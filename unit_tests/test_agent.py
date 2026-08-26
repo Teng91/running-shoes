@@ -9,8 +9,13 @@ from backend import agent, llm
 from backend.tools import db_tools
 
 
-def _events(stream):
+def _all_events(stream):
     return [json.loads(item.removeprefix("data: ").strip()) for item in stream]
+
+
+def _events(stream):
+    """Keep legacy assertions focused on the pre-source-summary SSE contract."""
+    return [event for event in _all_events(stream) if event["type"] != "source_summary"]
 
 
 def _event_types(events):
@@ -87,13 +92,195 @@ def test_time_sensitive_product_question_runs_search_before_model(monkeypatch):
         )
     )
 
-    assert _event_types(events) == ["tool", "tool_done", "token", "done"]
+    assert _event_types(events) == [
+        "tool", "tool_done", "tool", "tool_done", "token", "done",
+    ]
     assert events[0]["name"] == "web_search"
-    assert events[0]["args"]["query"] == "查 SuperComp Elite v6 的市價與最新評價"
+    assert events[0]["args"]["query"] == "SuperComp Elite v6 官方 規格"
+    assert events[2]["args"]["query"] == "SuperComp Elite v6 評價 價格 台灣"
     assert events[1]["ok"] is True
-    search.assert_called_once()
+    assert search.call_count == 2
     sent_messages = model.call_args.args[2]
     assert "系統預先執行 web_search" in sent_messages[-1]["content"]
+
+
+def test_personal_fit_query_plan_prefetches_web_and_personal_data():
+    plan = agent._build_query_plan("EVO SL適合我嗎")
+
+    assert plan.web_queries == (
+        "EVO SL 官方 規格",
+        "EVO SL 評價 價格 台灣",
+    )
+    assert plan.database_tools == ("list_my_shoes", "monthly_mileage_stats")
+
+
+def test_affirmative_follow_up_reuses_previous_suitability_question():
+    plan = agent._build_query_plan(
+        "好",
+        [
+            {"role": "user", "content": "EVO SL適合我嗎"},
+            {"role": "assistant", "content": "要我查你的跑鞋資料嗎？"},
+        ],
+    )
+
+    assert plan.web_queries == ("EVO SL 官方 規格", "EVO SL 評價 價格 台灣")
+    assert plan.database_tools == ("list_my_shoes", "monthly_mileage_stats")
+
+
+def test_personal_fit_stream_executes_complete_plan_before_model(monkeypatch):
+    search = MagicMock(side_effect=[
+        json.dumps({
+            "tool": "web_search", "ok": True, "query": "EVO SL 官方 規格",
+            "cached": False, "results": [],
+        }),
+        json.dumps({
+            "tool": "web_search", "ok": True, "query": "EVO SL 評價 價格 台灣",
+            "cached": False, "results": [],
+        }),
+    ])
+    execute = MagicMock(side_effect=["鞋櫃資料", "跑量資料"])
+    model = MagicMock(return_value=iter(["完整建議"]))
+    monkeypatch.setattr(agent, "run_web_search", search)
+    monkeypatch.setattr(agent, "_execute_tool", execute)
+    monkeypatch.setattr(llm, "call_llm_stream", model)
+
+    events = _all_events(agent.run_agent_stream(
+        "EVO SL適合我嗎", model="openrouter/free", db="db", user_id=7,
+    ))
+
+    assert [event.get("name") for event in events if event["type"] == "tool"] == [
+        "web_search", "web_search", "list_my_shoes", "monthly_mileage_stats",
+    ]
+    assert execute.call_args_list[0].args == ("list_my_shoes", {}, "db", 7)
+    assert execute.call_args_list[1].args == ("monthly_mileage_stats", {}, "db", 7)
+    sent_contents = [message["content"] for message in model.call_args.args[2]]
+    assert any("系統預先執行 web_search" in content for content in sent_contents)
+    assert any("系統預先執行 list_my_shoes" in content for content in sent_contents)
+    assert events[-2]["type"] == "source_summary"
+    assert events[-2]["web"]["status"] == "live"
+    assert events[-1] == {"type": "done"}
+
+
+def test_source_summary_reports_safe_deduplicated_live_sources():
+    events = _all_events([
+        agent._source_summary_event([
+            {
+                "tool": "web_search",
+                "ok": True,
+                "query": "EVO SL 官方 規格",
+                "cached": False,
+                "results": [
+                    {
+                        "id": "S-1234abcd",
+                        "title": "官方資料",
+                        "url": "https://adidas.com.tw/evo-sl",
+                        "domain": "adidas.com.tw",
+                        "source_type": "official",
+                    },
+                ],
+            },
+            {
+                "tool": "web_search",
+                "ok": True,
+                "query": "EVO SL 評價",
+                "cached": True,
+                "results": [
+                    {
+                        "id": "S-1234abcd",
+                        "title": "重複資料",
+                        "url": "https://adidas.com.tw/evo-sl",
+                    },
+                ],
+            },
+        ])
+    ])
+
+    assert events == [{
+        "type": "source_summary",
+        "web": {
+            "status": "live",
+            "queries": ["EVO SL 官方 規格", "EVO SL 評價"],
+            "result_count": 1,
+            "sources": [{
+                "id": "S-1234abcd",
+                "title": "官方資料",
+                "url": "https://adidas.com.tw/evo-sl",
+                "domain": "adidas.com.tw",
+                "source_type": "official",
+            }],
+        },
+    }]
+
+
+@pytest.mark.parametrize(
+    ("payloads", "expected_status"),
+    [
+        ([{"tool": "web_search", "ok": False, "query": "x"}], "failed"),
+        ([{
+            "tool": "web_search", "ok": True, "query": "x",
+            "cached": True, "results": [],
+        }], "cached"),
+    ],
+)
+def test_source_summary_distinguishes_failed_and_cached(payloads, expected_status):
+    event = _all_events([agent._source_summary_event(payloads)])[0]
+    assert event["web"]["status"] == expected_status
+
+
+def test_source_summary_prioritizes_official_taiwan_and_limits_noise(monkeypatch):
+    monkeypatch.setattr(agent, "SOURCE_SUMMARY_LIMIT", 2)
+    payload = {
+        "tool": "web_search",
+        "ok": True,
+        "query": "EVO SL",
+        "cached": False,
+        "results": [
+            {
+                "id": "S-noise", "title": "同名雜訊", "url": "https://example.com/evo",
+                "domain": "example.com", "source_type": "other",
+            },
+            {
+                "id": "S-global", "title": "全球官方", "url": "https://adidas.com/evo",
+                "domain": "adidas.com", "source_type": "official",
+            },
+            {
+                "id": "S-tw", "title": "台灣官方", "url": "https://adidas.com.tw/evo",
+                "domain": "adidas.com.tw", "source_type": "official",
+            },
+        ],
+    }
+
+    event = _all_events([agent._source_summary_event([payload])])[0]
+
+    assert [source["id"] for source in event["web"]["sources"]] == [
+        "S-tw", "S-global",
+    ]
+    assert event["web"]["result_count"] == 2
+
+
+def test_search_payload_rejects_invalid_or_unrelated_output():
+    assert agent._search_payload("not json") is None
+    assert agent._search_payload('{"tool":"other"}') is None
+
+
+def test_personal_fit_plan_reports_missing_database_context(monkeypatch):
+    monkeypatch.setattr(
+        agent,
+        "run_web_search",
+        MagicMock(return_value=json.dumps({
+            "tool": "web_search", "ok": False, "status": "no_results",
+            "query": "EVO SL", "results": [],
+        })),
+    )
+
+    events = _all_events(agent.run_agent_stream(
+        "EVO SL適合我嗎", model="openrouter/free",
+    ))
+
+    assert [event["type"] for event in events[-3:]] == [
+        "error", "source_summary", "done",
+    ]
+    assert events[-2]["web"]["status"] == "failed"
 
 
 @pytest.mark.parametrize("message", ["hi", "你好", "謝謝你", "你是誰？"])
