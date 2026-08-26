@@ -259,6 +259,36 @@ def test_get_models_falls_back_to_static_list(monkeypatch):
     assert models[0]["id"] == llm._DEFAULT_MODEL
 
 
+def test_resolve_allowed_model_accepts_allowlist_and_rejects_client_override(monkeypatch):
+    allowed = [
+        {"id": "vendor/free-tools:free", "display": "Free Tools"},
+        {"id": "vendor/other:free", "display": "Other"},
+    ]
+    monkeypatch.setattr(llm, "_get_models", MagicMock(return_value=allowed))
+
+    assert (
+        llm.resolve_allowed_model(llm.LLMProvider.openrouter, None)
+        == "vendor/free-tools:free"
+    )
+    assert (
+        llm.resolve_allowed_model(
+            llm.LLMProvider.openrouter, "vendor/other:free"
+        )
+        == "vendor/other:free"
+    )
+    with pytest.raises(llm.LLMError, match="不允許使用此模型"):
+        llm.resolve_allowed_model(
+            llm.LLMProvider.openrouter, "openai/expensive-paid-model"
+        )
+
+
+def test_resolve_allowed_model_rejects_empty_allowlist(monkeypatch):
+    monkeypatch.setattr(llm, "_get_models", MagicMock(return_value=[]))
+
+    with pytest.raises(llm.LLMError, match="沒有可用"):
+        llm.resolve_allowed_model(llm.LLMProvider.openrouter, None)
+
+
 def test_list_providers_reports_configuration(monkeypatch):
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     get_models = MagicMock(return_value=[{"id": llm._DEFAULT_MODEL, "display": "Ultra"}])
@@ -310,6 +340,39 @@ def test_call_llm_stream_yields_content(monkeypatch):
     assert chunks == ["跑鞋", "建議"]
     assert create.call_args.kwargs["model"] == "openrouter/free"
     assert create.call_args.kwargs["stream"] is True
+
+
+def test_call_llm_stream_closes_provider_stream_when_consumer_stops_early(monkeypatch):
+    class ClosableStream:
+        def __init__(self):
+            self.closed = False
+
+        def __iter__(self):
+            return iter([_chunk("first"), _chunk("unused")])
+
+        def close(self):
+            self.closed = True
+
+    provider_stream = ClosableStream()
+    client = SimpleNamespace(
+        chat=SimpleNamespace(
+            completions=SimpleNamespace(
+                create=MagicMock(return_value=provider_stream),
+            )
+        )
+    )
+    monkeypatch.setattr(llm, "_build_client", MagicMock(return_value=client))
+
+    stream = llm.call_llm_stream(
+        llm.LLMProvider.openrouter,
+        "openrouter/free",
+        [{"role": "user", "content": "搜尋跑鞋"}],
+    )
+    assert next(stream) == "first"
+
+    stream.close()
+
+    assert provider_stream.closed is True
 
 
 def test_call_llm_stream_reassembles_native_tool_call_fragments(monkeypatch):

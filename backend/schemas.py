@@ -1,9 +1,24 @@
 import math
+from datetime import date as calendar_date
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 # All valid shoe purpose/function categories.
 SHOE_CATEGORIES = ["Daily", "Speed", "Tempo", "Race", "Trail", "Walk"]
+ReasonableYear = Annotated[int, Field(ge=1900, le=2100)]
+CalendarMonth = Annotated[int, Field(ge=1, le=12)]
+NonNegativeFiniteKm = Annotated[float, Field(ge=0, allow_inf_nan=False)]
+
+
+def _validate_iso_date(value: str) -> str:
+    try:
+        parsed = calendar_date.fromisoformat(value)
+    except (TypeError, ValueError):
+        raise ValueError("date must be a valid YYYY-MM-DD calendar date") from None
+    if parsed.isoformat() != value:
+        raise ValueError("date must use YYYY-MM-DD format")
+    return value
 
 
 # ── Auth Schemas ──────────────────────────────────────────────
@@ -27,6 +42,29 @@ class UserOut(BaseModel):
 class Token(BaseModel):
     access_token: str
     token_type: str = "bearer"
+
+
+# ── Agent Schemas ────────────────────────────────────────────
+
+class AgentHistoryTurn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1, max_length=12_000)
+
+
+class AgentChatRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    user_message: str = Field(min_length=1, max_length=12_000)
+    history: list[AgentHistoryTurn] = Field(default_factory=list, max_length=20)
+    provider: Literal["openrouter"] = "openrouter"
+    model: str | None = Field(default=None, min_length=1, max_length=200)
+
+    @field_validator("user_message")
+    @classmethod
+    def reject_blank_message(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("user_message cannot be blank")
+        return value
 
 
 class UserChangePassword(BaseModel):
@@ -75,7 +113,11 @@ class ShoeBase(BaseModel):
 
 
 class ShoeCreate(ShoeBase):
-    pass  # user_id is set by the backend, never by the client
+    # user_id is set by the backend, never by the client.
+    @field_validator("date")
+    @classmethod
+    def validate_date(cls, value: str) -> str:
+        return _validate_iso_date(value)
 
 
 class ShoeUpdate(BaseModel):
@@ -90,6 +132,11 @@ class ShoeUpdate(BaseModel):
     monthly_km: float | None = None
     is_retired: bool | None = None
     categories: list[str] | None = None
+
+    @field_validator("date")
+    @classmethod
+    def validate_date(cls, value: str | None) -> str | None:
+        return _validate_iso_date(value) if value is not None else None
 
     @field_validator("categories")
     @classmethod
@@ -123,9 +170,9 @@ class ShoeOut(ShoeBase):
 # ── Monthly Mileage Schemas ───────────────────────────────────
 
 class MonthlyMileageBase(BaseModel):
-    year: int
-    month: int
-    km: float = 0
+    year: ReasonableYear
+    month: CalendarMonth
+    km: NonNegativeFiniteKm = 0
 
 
 class MonthlyMileageCreate(MonthlyMileageBase):
@@ -133,9 +180,9 @@ class MonthlyMileageCreate(MonthlyMileageBase):
 
 
 class MonthlyMileageUpdate(BaseModel):
-    year: int | None = None
-    month: int | None = None
-    km: float | None = None
+    year: ReasonableYear | None = None
+    month: CalendarMonth | None = None
+    km: NonNegativeFiniteKm | None = None
 
 
 class MonthlyMileageOut(MonthlyMileageBase):

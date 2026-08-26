@@ -281,6 +281,40 @@ def test_parse_invalid_tool_json_and_strip_markers():
     ) == "前文\n\n後文"
 
 
+def test_parse_bare_json_tool_calls_deduplicates_and_ignores_provider_errors():
+    call = (
+        '{"tool":"web_search","arguments":'
+        '{"query":"New Balance Rebel v1"}}'
+    )
+    text = (
+        f"準備搜尋 {call} {call} "
+        '{"tool":"tool_call_error","arguments":{"error":"not found"}} 完成'
+    )
+
+    assert db_tools.parse_tool_calls(text) == [
+        {
+            "name": "web_search",
+            "arguments": {"query": "New Balance Rebel v1"},
+        }
+    ]
+    assert db_tools.strip_tool_markers(text) == (
+        "準備搜尋   "
+        '{"tool":"tool_call_error","arguments":{"error":"not found"}} 完成'
+    )
+
+
+def test_parse_bare_json_rejects_unknown_tools_and_non_object_arguments():
+    text = (
+        '{"tool":"delete_everything","arguments":{}} '
+        '{"tool":"web_search","arguments":[]} '
+        '{"tool":"shoe_summary","arguments":{}}'
+    )
+
+    assert db_tools.parse_tool_calls(text) == [
+        {"name": "shoe_summary", "arguments": {}}
+    ]
+
+
 def test_native_tool_definitions_match_dispatchable_tools():
     names = {
         definition["function"]["name"]

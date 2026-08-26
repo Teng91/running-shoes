@@ -4,4 +4,3 @@ mypy>=2.3
 ruff>=0.16
 types-openpyxl
 types-python-jose
-

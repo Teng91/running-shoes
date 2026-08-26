@@ -434,7 +434,7 @@ def test_create_monthly_mileage_invalid_month(client, user_with_token):
     res = client.post("/api/monthly-mileage", headers=_auth_header(token), json={
         "year": 2026, "month": 13, "km": 10,
     })
-    assert res.status_code == 400
+    assert res.status_code == 422
 
 
 def test_create_monthly_mileage_duplicate(client, db, user_with_token):

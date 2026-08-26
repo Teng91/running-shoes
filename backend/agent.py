@@ -55,9 +55,11 @@ SYSTEM_PROMPT = """你是「跑鞋推薦助手」，服務一位熱愛跑步的�
 - 先給文字分析與行動建議；除非使用者要求表格，否則不要重製大篇數字表格。
 - 使用者要求分析資料、追問數字或指出數字有誤時，本輪必須重新呼叫相關資料庫工具；不要把先前 assistant 回覆中的數字當成資料來源。
 - **說明你的推理過程**：在呼叫工具之前，先用一段簡短文字說明你為什麼要查這個、你預期找到什麼。例如：「讓我先查查你的跑鞋清單，看看目前的鞋況。」
-- **多輪分析**：不要只查一輪就給結論。先查鞋況，再查跑量趨勢，再查快退役的鞋，最後上網搜尋具體推薦款。像一個真正的分析師一樣，逐步深入。
+- **工具使用要符合意圖**：簡單寒暄、致謝、閒聊或詢問助手能力時直接回答，不要呼叫工具。只有使用者要求跑鞋資料、跑量、訓練分析、比較或推薦時才使用相關工具。
+- **完整分析才需要多輪**：只有在使用者要求完整跑鞋／跑量分析或具體購鞋推薦時，才依需求查鞋況、跑量、壽命與類別；只有需要外部鞋款資訊時才搜尋網路。不要為了湊流程呼叫不相關工具。
 - **當使用者要求看資料時，直接呼叫工具顯示**：不要只說「我來查一下」卻沒有實際 call tool。如果使用者說「查給我看」、「結果呢」、「資料在哪」，你必須呼叫對應的工具並把結果呈現出來。
-- **上網搜尋要節制**：web_search 最多呼叫 2~3 次，且只為了補充具體鞋款推薦。若某次 web_search 回傳「沒有找到結果」或「搜尋失敗」，代表這次查不到，**不要重複狂 call 同一類搜尋**——立刻改用你已經讀到的跑鞋/跑量資料給出建議，並誠實說明「網路搜尋暫時查不到，以下依你的現有資料分析」。
+- 若你上一輪先詢問是否要查詢，而使用者回答「對」、「好」或其他肯定語，請依對話內容直接呼叫適合的工具；不要再次只說「我來查詢」。
+- **上網搜尋要節制**：web_search 每次回答最多呼叫 3 次，且同一組參數不可重複呼叫，只為了補充具體鞋款推薦。若搜尋沒有結果或失敗，立刻改用現有資料並誠實說明。
 - 工具由系統透過原生 function calling 提供。需要資料時直接呼叫工具；不要用文字、XML、Markdown 或程式碼區塊模擬工具呼叫。
 """
 
@@ -66,10 +68,87 @@ MAX_TURNS = 6  # 防止 tool loop 失控（多留一輪給模型收斂）
 # web_search 連續失敗達此次數後，強制提醒模型改用現有資料收斂，
 # 避免免費模型一直重 call 搜尋把回合數耗光。
 WEB_SEARCH_FAIL_LIMIT = 3
+WEB_SEARCH_CALL_LIMIT = 3
+
+_TOOL_INTENT_TERMS = (
+    "跑鞋", "鞋", "鞋款", "鞋況", "鞋櫃", "跑量", "里程", "壽命", "退役",
+    "換鞋", "補鞋", "推薦", "比較", "分析", "課表", "訓練", "配速",
+    "馬拉松", "半馬", "全馬", "比賽", "競速", "越野", "daily", "tempo",
+    "speed", "race", "trail", "資料", "數字", "結果", "重新查", "不對", "錯了",
+    "搜尋", "查詢", "幫我查", "上網", "search", "new balance", "nb", "rebel",
+)
+
+_AFFIRMATIVE_REPLIES = (
+    "對", "對的", "好", "好的", "是", "是的", "沒錯", "可以", "查吧", "幫我查",
+    "對，查吧", "對,查吧", "好，查吧", "好,查吧",
+)
+_CONTEXT_TOOL_TERMS = ("搜尋", "查詢", "查", "工具", "資料")
+_NON_TOOL_REPLIES = ("謝謝", "感謝", "不用了", "沒事", "再見")
+
+
+def _should_offer_tools(
+    user_message: str,
+    history: list[dict] | None = None,
+) -> bool:
+    """Expose tools when the current request or recent context may need them.
+
+    This only controls tool availability. The LLM still decides whether to
+    call a tool, ask a clarifying question, or answer without one.
+    """
+    normalized = " ".join(user_message.lower().split())
+    if any(term in normalized for term in _TOOL_INTENT_TERMS):
+        return True
+    if any(term in normalized for term in _NON_TOOL_REPLIES):
+        return False
+
+    recent_assistant = next((
+        str(turn.get("content", "")).lower()
+        for turn in reversed(history or [])
+        if turn.get("role") == "assistant"
+    ), "")
+    if normalized.strip("！!。,.？?") in _AFFIRMATIVE_REPLIES:
+        return any(term in recent_assistant for term in _CONTEXT_TOOL_TERMS)
+
+    recent_user = next((
+        str(turn.get("content", "")).lower()
+        for turn in reversed(history or [])
+        if turn.get("role") == "user"
+    ), "")
+    return any(term in recent_user for term in _TOOL_INTENT_TERMS)
 
 
 def _sse(event: dict) -> str:
     return f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+
+
+def _tool_done_event(name: str, output: str) -> str:
+    """Build a completion event that distinguishes success from failure."""
+    event: dict[str, Any] = {"type": "tool_done", "name": name, "ok": True}
+    if name != "web_search" or not is_failure(output):
+        return _sse(event)
+
+    event["ok"] = False
+    try:
+        payload = json.loads(output)
+    except (TypeError, json.JSONDecodeError):
+        event["status"] = "request_failed"
+        event["message"] = "搜尋服務暫時無法使用"
+        return _sse(event)
+
+    status = str(payload.get("status") or "request_failed")
+    messages = {
+        "dependency_missing": "搜尋套件未安裝",
+        "missing_query": "缺少搜尋關鍵字",
+        "no_results": "找不到相關搜尋結果",
+        "request_failed": "搜尋服務暫時無法連線",
+    }
+    event.update({
+        "status": status,
+        "message": messages.get(status, "搜尋失敗"),
+    })
+    if payload.get("error"):
+        event["error"] = str(payload["error"])
+    return _sse(event)
 
 
 def _build_messages(history: list[dict] | None, user_message: str) -> list[dict]:
@@ -140,6 +219,13 @@ def run_agent_stream(
 
     messages = _build_messages(history, user_message)
     web_search_fails = 0
+    web_search_calls = 0
+    executed_calls: set[tuple[str, str]] = set()
+    available_tools = (
+        db_tools.TOOL_DEFINITIONS
+        if _should_offer_tools(user_message, history)
+        else None
+    )
 
     for turn in range(MAX_TURNS):
         is_last_turn = turn == MAX_TURNS - 1
@@ -155,7 +241,6 @@ def run_agent_stream(
 
         # ── Streaming LLM call ──
         full_content = ""
-        pending_tool_text = ""
         seen_tool = False
         tool_calls = []
         native_tool_calls = []
@@ -166,7 +251,7 @@ def run_agent_stream(
                 prov,
                 model,
                 messages,
-                tools=db_tools.TOOL_DEFINITIONS,
+                tools=None if is_last_turn else available_tools,
             )
             try:
                 while True:
@@ -184,23 +269,15 @@ def run_agent_stream(
                                     "type": "reasoning_start",
                                     "text": db_tools.strip_tool_markers(full_content),
                                 })
+                                # A complete textual fallback call is enough.
+                                # Stop weak models before they repeat the same
+                                # JSON call hundreds of times in one response.
+                                close_stream = getattr(stream_gen, "close", None)
+                                if close_stream is not None:
+                                    close_stream()
+                                break
                             else:
                                 yield _sse({"type": "token", "text": chunk})
-                        else:
-                            # Already streaming a tool round — keep buffering the
-                            # raw assistant text instead of emitting leftover
-                            # `<tool>` markers to the user. parse_tool_calls()
-                            # only returns the first marker, so drop any frozen
-                            # tools at freeze time (below) to keep indices
-                            # aligned if the model concatenates multiple.
-                            pending_tool_text += chunk
-
-                    if seen_tool and not is_last_turn and "</tool>" in pending_tool_text:
-                        # Another complete tool marker arrived while we were
-                        # buffering. Its text is still part of the assistant
-                        # turn (so keep it for the LLM context), but we only
-                        # ever execute the first tool.
-                        break
             except StopIteration as e:
                 # Generator returned via return value
                 llm_result = e.value or {}
@@ -250,6 +327,7 @@ def run_agent_stream(
                 )
                 messages.append({"role": "assistant", "content": clean_content})
 
+            blocked_tool_call = False
             for tc in tool_calls:
                 yield _sse({"type": "tool", "name": tc["name"], "args": tc["arguments"]})
                 if (
@@ -262,8 +340,35 @@ def run_agent_stream(
                     })
                     yield _sse({"type": "done"})
                     return
-                tool_output = _execute_tool(tc["name"], tc["arguments"], db, user_id)
-                yield _sse({"type": "tool_done", "name": tc["name"]})
+                call_key = (
+                    tc["name"],
+                    json.dumps(tc["arguments"], ensure_ascii=False, sort_keys=True),
+                )
+                duplicate_call = call_key in executed_calls
+                search_limit_reached = (
+                    tc["name"] == "web_search"
+                    and web_search_calls >= WEB_SEARCH_CALL_LIMIT
+                )
+                if duplicate_call or search_limit_reached:
+                    blocked_tool_call = True
+                    status = (
+                        "duplicate_call_blocked"
+                        if duplicate_call
+                        else "search_call_limit_reached"
+                    )
+                    tool_output = json.dumps({
+                        "tool": tc["name"],
+                        "schema_version": 1,
+                        "ok": False,
+                        "status": status,
+                        "error": "Do not call this tool again; answer with existing results.",
+                    }, ensure_ascii=False, separators=(",", ":"))
+                else:
+                    executed_calls.add(call_key)
+                    if tc["name"] == "web_search":
+                        web_search_calls += 1
+                    tool_output = _execute_tool(tc["name"], tc["arguments"], db, user_id)
+                yield _tool_done_event(tc["name"], tool_output)
                 if tc["name"] == "web_search" and is_failure(tool_output):
                     web_search_fails += 1
                 if native_tool_calls:
@@ -279,13 +384,15 @@ def run_agent_stream(
                         "content": f"[工具 {tc['name']} 的結果]\n{tool_output}",
                     })
 
-            if web_search_fails >= WEB_SEARCH_FAIL_LIMIT:
+            if (
+                web_search_fails >= WEB_SEARCH_FAIL_LIMIT
+                or blocked_tool_call
+            ):
                 messages.append({
                     "role": "user",
                     "content": (
-                        "[系統提示] 網路搜尋已多次查不到結果，請**不要**再呼叫 web_search。"
-                        "直接根據前面已讀到的跑鞋清單、剩餘壽命與跑量資料，給出最終建議，"
-                        "並說明網路搜尋暫時無法取得市售鞋款資訊。"
+                        "[系統提示] 工具呼叫已失敗、重複或達到上限。請**不要**再呼叫"
+                        "相同工具，直接根據前面取得的資料給出最終回答；缺少資訊時誠實說明。"
                     ),
                 })
             continue

@@ -52,10 +52,53 @@ def test_build_messages_keeps_only_nonempty_chat_turns():
     ]
 
 
+@pytest.mark.parametrize("message", ["hi", "你好", "謝謝你", "你是誰？"])
+def test_simple_conversation_does_not_offer_tools(message):
+    assert agent._should_offer_tools(message) is False
+
+
+@pytest.mark.parametrize("message", ["分析我的跑鞋", "幫我排課表", "比較兩雙鞋"])
+def test_running_intents_offer_tools(message):
+    assert agent._should_offer_tools(message) is True
+
+
+def test_lookup_and_contextual_follow_ups_offer_tools_without_forcing_a_call():
+    assert agent._should_offer_tools("幫我查 NB 的 SC Rebel v1") is True
+    assert agent._should_offer_tools(
+        "對",
+        [{"role": "assistant", "content": "你要我上網查詢這雙鞋嗎？"}],
+    ) is True
+    assert agent._should_offer_tools(
+        "SC Rebel v1 呢",
+        [{"role": "user", "content": "幫我搜尋 NB 最新跑鞋"}],
+    ) is True
+    assert agent._should_offer_tools(
+        "對",
+        [{"role": "assistant", "content": "你喜歡藍色嗎？"}],
+    ) is False
+    assert agent._should_offer_tools(
+        "謝謝你",
+        [{"role": "user", "content": "幫我搜尋 NB 最新跑鞋"}],
+    ) is False
+
+
+def test_greeting_request_calls_model_without_tools(monkeypatch):
+    call = MagicMock(return_value=iter(["你好！"]))
+    monkeypatch.setattr(llm, "call_llm_stream", call)
+
+    events = _events(agent.run_agent_stream("hi", model="vendor/free:free"))
+
+    assert events[-2] == {"type": "token", "text": "你好！"}
+    assert call.call_args.kwargs["tools"] is None
+
+
 def test_execute_tool_dispatches_all_argument_shapes(monkeypatch):
     monkeypatch.setattr(agent, "run_web_search", lambda args: f"search:{args['query']}")
     assert agent._execute_tool("web_search", {"query": "跑鞋"}, None, 7) == "search:跑鞋"
     assert "未知工具" in agent._execute_tool("missing", {}, None, 7)
+    assert "缺少使用者資料庫上下文" in agent._execute_tool(
+        "shoe_summary", {}, None, 7
+    )
 
     nearing = MagicMock(return_value="near")
     compare = MagicMock(return_value="compare")
@@ -80,6 +123,25 @@ def test_execute_tool_dispatches_all_argument_shapes(monkeypatch):
     category.assert_called_once_with("db", 7, shoe_name="A")
     assert agent._execute_tool("generic", {}, "db", 7) == "generic"
     generic.assert_called_once_with("db", 7)
+
+
+def test_tool_done_event_marks_structured_search_failure():
+    event = _events([
+        agent._tool_done_event(
+            "web_search",
+            '{"tool":"web_search","ok":false,"status":"request_failed",'
+            '"error":"blocked"}',
+        )
+    ])[0]
+
+    assert event == {
+        "type": "tool_done",
+        "name": "web_search",
+        "ok": False,
+        "status": "request_failed",
+        "message": "搜尋服務暫時無法連線",
+        "error": "blocked",
+    }
 
 
 def test_invalid_provider_emits_error_then_done():
@@ -197,6 +259,153 @@ def test_only_first_tool_is_executed_when_model_emits_multiple(monkeypatch):
     tool.assert_called_once()
 
 
+def test_bare_json_tool_call_stops_repetitive_model_stream_early(monkeypatch):
+    emitted_calls = 0
+
+    def repetitive_response():
+        nonlocal emitted_calls
+        yield "馬上幫你搜尋。"
+        for _ in range(100):
+            emitted_calls += 1
+            yield (
+                '{"tool":"web_search","arguments":'
+                '{"query":"New Balance Rebel v1"}}'
+            )
+
+    model_calls = MagicMock(
+        side_effect=[repetitive_response(), iter(["搜尋完成。"])]
+    )
+    execute = MagicMock(return_value='{"tool":"web_search","ok":true}')
+    monkeypatch.setattr(llm, "call_llm_stream", model_calls)
+    monkeypatch.setattr(agent, "_execute_tool", execute)
+
+    events = _events(
+        agent.run_agent_stream("推薦 Rebel v1 跑鞋", model="vendor/free:free")
+    )
+
+    assert emitted_calls == 1
+    assert [event["name"] for event in events if event["type"] == "tool"] == [
+        "web_search"
+    ]
+    execute.assert_called_once()
+    assert events[-2] == {"type": "token", "text": "搜尋完成。"}
+
+
+def test_duplicate_native_tool_call_is_returned_but_not_executed_twice(monkeypatch):
+    call = {
+        "id": "call_summary",
+        "name": "shoe_summary",
+        "arguments": {},
+        "arguments_json": "{}",
+    }
+    snapshots = []
+    responses = iter([
+        _native_response(tool_calls=[call]),
+        _native_response(tool_calls=[{**call, "id": "call_summary_again"}]),
+        _native_response(content=("依現有資料回答。",)),
+    ])
+
+    def fake_model(provider, model, messages, **kwargs):
+        snapshots.append([dict(message) for message in messages])
+        return next(responses)
+
+    execute = MagicMock(return_value="鞋況資料")
+    monkeypatch.setattr(llm, "call_llm_stream", fake_model)
+    monkeypatch.setattr(agent, "_execute_tool", execute)
+
+    events = _events(
+        agent.run_agent_stream("分析跑鞋", model="vendor/free:free", db="db", user_id=7)
+    )
+
+    assert sum(event["type"] == "tool" for event in events) == 2
+    execute.assert_called_once()
+    assert "duplicate_call_blocked" in snapshots[-1][-2]["content"]
+    assert "不要**再呼叫" in snapshots[-1][-1]["content"]
+
+
+def test_web_search_total_call_limit_blocks_fourth_distinct_search(monkeypatch):
+    def call(index):
+        return {
+            "id": f"call_{index}",
+            "name": "web_search",
+            "arguments": {"query": f"query {index}"},
+            "arguments_json": json.dumps({"query": f"query {index}"}),
+        }
+
+    responses = iter([
+        _native_response(tool_calls=[call(1)]),
+        _native_response(tool_calls=[call(2)]),
+        _native_response(tool_calls=[call(3)]),
+        _native_response(tool_calls=[call(4)]),
+        _native_response(content=("停止搜尋並回答。",)),
+    ])
+    monkeypatch.setattr(
+        llm, "call_llm_stream", lambda *args, **kwargs: next(responses)
+    )
+    execute = MagicMock(return_value='{"tool":"web_search","ok":true}')
+    monkeypatch.setattr(agent, "_execute_tool", execute)
+
+    events = _events(
+        agent.run_agent_stream("推薦跑鞋", model="vendor/free:free", db="db", user_id=7)
+    )
+
+    assert sum(event["type"] == "tool" for event in events) == 4
+    assert execute.call_count == 3
+    assert events[-2] == {"type": "token", "text": "停止搜尋並回答。"}
+
+
+def test_llm_can_choose_to_confirm_lookup_without_backend_forcing_search(monkeypatch):
+    model = MagicMock(return_value=iter(["你是要我上網查 SC Rebel v1 嗎？"]))
+    execute = MagicMock()
+    monkeypatch.setattr(llm, "call_llm_stream", model)
+    monkeypatch.setattr(agent, "_execute_tool", execute)
+
+    events = _events(
+        agent.run_agent_stream("幫我查 NB 的 SC Rebel v1", model="vendor/free:free")
+    )
+
+    assert events == [
+        {"type": "token", "text": "你是要我上網查 SC Rebel v1 嗎？"},
+        {"type": "done"},
+    ]
+    assert model.call_args.kwargs["tools"] is db_tools.TOOL_DEFINITIONS
+    execute.assert_not_called()
+
+
+def test_llm_receives_tools_after_user_affirms_search_confirmation(monkeypatch):
+    call = {
+        "id": "call_search",
+        "name": "web_search",
+        "arguments": {"query": "New Balance SC Rebel v1"},
+        "arguments_json": '{"query":"New Balance SC Rebel v1"}',
+    }
+    responses = iter([
+        _native_response(tool_calls=[call]),
+        _native_response(content=("這是搜尋結果。",)),
+    ])
+    model = MagicMock(side_effect=lambda *args, **kwargs: next(responses))
+    execute = MagicMock(return_value='{"tool":"web_search","ok":true,"results":[]}')
+    monkeypatch.setattr(llm, "call_llm_stream", model)
+    monkeypatch.setattr(agent, "_execute_tool", execute)
+
+    events = _events(
+        agent.run_agent_stream(
+            "對",
+            history=[
+                {"role": "user", "content": "幫我查 NB 的 SC Rebel v1"},
+                {"role": "assistant", "content": "你是要我上網查這雙鞋嗎？"},
+            ],
+            model="vendor/free:free",
+        )
+    )
+
+    assert _event_types(events) == ["reasoning_start", "tool", "tool_done", "token", "done"]
+    assert model.call_args_list[0].kwargs["tools"] is db_tools.TOOL_DEFINITIONS
+    execute.assert_called_once_with(
+        "web_search", {"query": "New Balance SC Rebel v1"}, None, None
+    )
+
+
 def test_three_failed_web_searches_add_convergence_instruction(monkeypatch):
     snapshots = []
     responses = iter(
@@ -219,7 +428,7 @@ def test_three_failed_web_searches_add_convergence_instruction(monkeypatch):
 
     assert sum(event["type"] == "tool" for event in events) == 3
     assert any(
-        "再呼叫 web_search" in message["content"]
+        "不要**再呼叫" in message["content"]
         for message in snapshots[-1]
     )
     assert events[-2] == {"type": "token", "text": "依現有資料回答。"}
@@ -227,12 +436,14 @@ def test_three_failed_web_searches_add_convergence_instruction(monkeypatch):
 
 def test_last_turn_forces_answer_without_another_tool(monkeypatch):
     snapshots = []
+    tools_by_turn = []
     call_count = 0
 
     def fake_model(provider, model, messages, **kwargs):
         nonlocal call_count
         call_count += 1
         snapshots.append([dict(message) for message in messages])
+        tools_by_turn.append(kwargs["tools"])
         if call_count < agent.MAX_TURNS:
             return iter(['<tool>shoe_summary {}</tool>'])
         return iter(["最後結論"])
@@ -246,8 +457,12 @@ def test_last_turn_forces_answer_without_another_tool(monkeypatch):
     )
 
     assert call_count == agent.MAX_TURNS
-    assert tool.call_count == agent.MAX_TURNS - 1
+    # The first call executes; identical calls in later turns receive a
+    # structured duplicate error instead of hitting the database repeatedly.
+    assert tool.call_count == 1
     assert any("這是最後一輪" in message["content"] for message in snapshots[-1])
+    assert all(tools is db_tools.TOOL_DEFINITIONS for tools in tools_by_turn[:-1])
+    assert tools_by_turn[-1] is None
     assert events[-2] == {"type": "token", "text": "最後結論"}
 
 
