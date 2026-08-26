@@ -131,7 +131,9 @@ def _fetch_free_models() -> list[dict[str, str]]:
 # 各 provider 的預設模型可被環境變數覆寫（使用者可在 .env 指定，
 # 例如轉用付費模型時不必改程式碼）。
 _OR_DEFAULT = os.environ.get("OR_MODEL")
-if _OR_DEFAULT in _REMOVED_MODELS:
+if _OR_DEFAULT in _REMOVED_MODELS or (
+    _OR_DEFAULT is not None and not _OR_DEFAULT.endswith(":free")
+):
     _OR_DEFAULT = None
 if _OR_DEFAULT:
     _existing = [m["id"] for m in MODELS["openrouter"]]
@@ -164,6 +166,24 @@ def _get_models(provider: LLMProvider, force: bool = False) -> list[dict[str, st
         return models
     except LLMError:
         return MODELS.get(provider.value, [])
+
+
+def resolve_allowed_model(provider: LLMProvider, requested_model: str | None) -> str:
+    """Resolve a request to a server-approved free, tool-capable model.
+
+    Client input must never be forwarded directly to OpenRouter because every
+    request uses the server-owned API key. The dynamic list is already filtered
+    to zero-price tool models; the static list is the outage fallback allowlist.
+    """
+    models = _get_models(provider)
+    if not models:
+        raise LLMError("目前沒有可用的免費工具模型，請稍後再試。")
+
+    allowed_ids = {model["id"] for model in models}
+    selected = requested_model or models[0]["id"]
+    if selected not in allowed_ids:
+        raise LLMError("不允許使用此模型；請重新整理並選擇清單中的免費工具模型。")
+    return selected
 
 
 def list_providers(force: bool = False) -> list[dict[str, Any]]:
@@ -226,6 +246,7 @@ def call_llm_stream(
     actual_model = None
     tool_call_parts: dict[int, dict[str, str]] = {}
 
+    stream = None
     try:
         stream = client.chat.completions.create(**kwargs)
         for chunk in stream:
@@ -256,6 +277,10 @@ def call_llm_stream(
         raise
     except Exception as exc:
         raise LLMError(f"LLM 串流呼叫失敗（{provider.value} / {model}）：{exc}") from exc
+    finally:
+        close_stream = getattr(stream, "close", None)
+        if close_stream is not None:
+            close_stream()
 
     if not full_content and finish_reason is None:
         raise LLMError(f"LLM 回傳空串流（{provider.value} / {model}）")

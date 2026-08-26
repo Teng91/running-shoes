@@ -10,13 +10,15 @@ from unittest.mock import MagicMock
 
 import openpyxl
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from backend import schemas
+from backend import llm, schemas
 from backend.auth import create_access_token
 from backend.database import get_db
 from backend.main import (
+    _enforce_agent_rate_limit,
     app,
     create_monthly_mileage,
     create_shoe,
@@ -200,6 +202,8 @@ def test_agent_stream_route_forwards_payload_and_user(client, user_with_token, m
     user, token = user_with_token
     run_agent = MagicMock(return_value=iter(['data: {"type":"done"}\n\n']))
     monkeypatch.setattr("backend.main.agent.run_agent_stream", run_agent)
+    resolve_model = MagicMock(return_value="vendor/allowed:free")
+    monkeypatch.setattr("backend.main.llm.resolve_allowed_model", resolve_model)
 
     response = client.post(
         "/api/agent/chat/stream",
@@ -208,7 +212,7 @@ def test_agent_stream_route_forwards_payload_and_user(client, user_with_token, m
             "user_message": "推薦跑鞋",
             "history": [{"role": "user", "content": "之前"}],
             "provider": "openrouter",
-            "model": "openrouter/free",
+            "model": "vendor/allowed:free",
         },
     )
 
@@ -216,7 +220,63 @@ def test_agent_stream_route_forwards_payload_and_user(client, user_with_token, m
     assert response.headers["content-type"].startswith("text/event-stream")
     assert '"type":"done"' in response.text
     assert run_agent.call_args.kwargs["user_id"] == user.id
-    assert run_agent.call_args.kwargs["model"] == "openrouter/free"
+    assert run_agent.call_args.kwargs["model"] == "vendor/allowed:free"
+    resolve_model.assert_called_once()
+
+
+def test_agent_stream_rejects_unapproved_model_before_llm_call(
+    client, user_with_token, monkeypatch
+):
+    _, token = user_with_token
+    run_agent = MagicMock()
+    monkeypatch.setattr("backend.main.agent.run_agent_stream", run_agent)
+    monkeypatch.setattr(
+        "backend.main.llm.resolve_allowed_model",
+        MagicMock(side_effect=llm.LLMError("不允許使用此模型")),
+    )
+    response = client.post(
+        "/api/agent/chat/stream",
+        headers=_auth(token),
+        json={"user_message": "分析跑鞋", "model": "openai/gpt-paid"},
+    )
+
+    assert response.status_code == 400
+    assert "不允許" in response.json()["detail"]
+    run_agent.assert_not_called()
+
+
+def test_agent_stream_rejects_malformed_or_oversized_payload(client, user_with_token):
+    _, token = user_with_token
+    malformed = client.post(
+        "/api/agent/chat/stream",
+        headers=_auth(token),
+        json={"user_message": "分析跑鞋", "history": {"bad": "shape"}},
+    )
+    oversized = client.post(
+        "/api/agent/chat/stream",
+        headers=_auth(token),
+        json={"user_message": "x" * 12_001},
+    )
+
+    assert malformed.status_code == 422
+    assert oversized.status_code == 422
+
+
+def test_agent_rate_limit_uses_per_user_sliding_window(monkeypatch):
+    from backend import main
+
+    user_id = 987654
+    main._agent_rate_events.pop(user_id, None)
+    monkeypatch.setattr(main, "AGENT_RATE_LIMIT_PER_MINUTE", 2)
+
+    _enforce_agent_rate_limit(user_id, now=100)
+    _enforce_agent_rate_limit(user_id, now=101)
+    with pytest.raises(HTTPException) as exc_info:
+        _enforce_agent_rate_limit(user_id, now=102)
+    assert exc_info.value.status_code == 429
+    assert exc_info.value.headers == {"Retry-After": "58"}
+
+    _enforce_agent_rate_limit(user_id, now=161)
 
 
 def test_update_shoe_not_found(client, user_with_token):
@@ -233,7 +293,7 @@ def test_monthly_mileage_rejects_negative_create_and_invalid_updates(client, db,
         headers=_auth(token),
         json={"year": 2026, "month": 1, "km": -1},
     )
-    assert negative.status_code == 400
+    assert negative.status_code == 422
 
     entry = MonthlyMileage(user_id=user.id, year=2026, month=1, km=10)
     db.add(entry)
@@ -246,8 +306,8 @@ def test_monthly_mileage_rejects_negative_create_and_invalid_updates(client, db,
     bad_km = client.put(
         f"/api/monthly-mileage/{entry.id}", headers=_auth(token), json={"km": -0.1}
     )
-    assert bad_month.status_code == 400
-    assert bad_km.status_code == 400
+    assert bad_month.status_code == 422
+    assert bad_km.status_code == 422
 
     unchanged = client.put(
         f"/api/monthly-mileage/{entry.id}", headers=_auth(token), json={}

@@ -48,18 +48,43 @@ running-shoes/
 git clone https://github.com/Teng91/running-shoes.git
 cd running-shoes
 
-# 2. 建立並啟用虛擬環境
+# 2. 建立虛擬環境
 python3 -m venv venv
-source venv/bin/activate
 
-# 3. 安裝依賴
-python -m pip install -r requirements.txt
+# 3. 使用虛擬環境安裝依賴（不需要 activate）
+venv/bin/python -m pip install -r requirements.txt
 
-# 4. 啟動伺服器
-python -m backend.run
+# 4. 使用虛擬環境啟動伺服器
+venv/bin/python -m backend.run
 
 # 5. 開啟瀏覽器
 open http://localhost:8000
+```
+
+建議直接使用 `venv/bin/python`，因為指令本身就明確指定虛擬環境，不會因為換了
+Terminal、忘記 activate，或 IDE 使用另一個 shell 而誤用系統 Python。
+
+若偏好先啟用虛擬環境，也可以使用以下等效方式：
+
+```bash
+source venv/bin/activate
+python -m pip install -r requirements.txt
+python -m backend.run
+
+# 使用完畢可離開虛擬環境
+deactivate
+```
+
+`source venv/bin/activate` 不會另外「載入」套件；它會修改**目前這個 shell** 的
+`PATH`，讓 `python` 和 `pip` 優先指向 `venv/bin/`。開啟新的 Terminal、從其他
+IDE Task 啟動，或關閉目前 shell 後，都需要重新 activate。可用以下指令確認：
+
+```bash
+# 應顯示專案內的 venv/bin/python
+which python
+
+# 顯示實際執行器、虛擬環境位置，並確認搜尋套件可匯入
+venv/bin/python -c "import sys; from ddgs import DDGS; print(sys.executable); print(sys.prefix); print(DDGS)"
 ```
 
 第一次啟動會自動建立 `shoes.db`（資料表結構）。預設範例資料只在 `SEED_DATA=true` 時才會寫入（Fly.io 部署預設會 seed，本機開發則不會）。
@@ -72,6 +97,8 @@ open http://localhost:8000
 OPENROUTER_API_KEY=<你的 OpenRouter API Key>   # 取得: https://openrouter.ai/keys
 # 選填：固定某個免費且支援 tools 的模型
 OR_MODEL=nvidia/nemotron-3-ultra-550b-a55b:free
+# 選填：每個帳號每分鐘最多 AI 請求數（預設 20）
+AGENT_RATE_LIMIT_PER_MINUTE=20
 ```
 
 `.env` 會被自動載入，不需要手動 `export`。沒設定也不影響 Dashboard 的其他功能，只是 AI 助手無法使用。
@@ -119,11 +146,16 @@ OR_MODEL=nvidia/nemotron-3-ultra-550b-a55b:free
 `OR_MODEL=<model-id>`。由於 Agent 使用原生工具呼叫，固定模型也必須支援 OpenRouter 的
 `tools` 參數。
 
+後端會再次驗證請求模型必須位於目前的免費工具模型清單，前端傳入任意模型 ID
+不會直接使用伺服器的 OpenRouter API Key 呼叫。Agent API 同時限制單則訊息長度、
+history 筆數，並套用每帳號每分鐘請求上限。
+
 ## 測試
 
 請使用專案虛擬環境執行，避免誤用系統 Python 而找不到 `ddgs` 等套件：
 
 ```bash
+# 不依賴 shell 是否已 activate；推薦用法
 # 一般測試
 venv/bin/pytest -q
 
@@ -131,7 +163,7 @@ venv/bin/pytest -q
 venv/bin/pytest -q --cov=backend --cov-branch --cov-report=term-missing
 ```
 
-目前測試基準為 **147 passed**，`backend` 整體測試覆蓋率為 **99%**。
+目前測試基準為 **177 passed**，`backend` 整體測試覆蓋率為 **99%**。
 
 ## Docker 部署
 
@@ -202,7 +234,7 @@ git push (local) ──→ GitHub ──→ fly deploy ──→ Fly.io Builder
 
 ```bash
 # 1. 停掉本地 server（避免 SQLite 檔案被鎖）
-#    Ctrl+C 結束 python -m backend.run
+#    Ctrl+C 結束 venv/bin/python -m backend.run
 
 # 2. 備份本地（建議，覆蓋前留個底）
 cp shoes.db shoes.db.local.bak
@@ -211,7 +243,7 @@ cp shoes.db shoes.db.local.bak
 fly ssh sftp get /data/shoes.db ./shoes.db
 
 # 4. 重新啟動本地 server
-python -m backend.run
+venv/bin/python -m backend.run
 ```
 
 **注意**：

@@ -1,8 +1,10 @@
-import logging
 import os
+import time
+from collections import deque
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
+from threading import Lock
 from typing import cast
 
 from fastapi import Depends, FastAPI, HTTPException, Query
@@ -21,8 +23,29 @@ from backend.auth import (
 )
 from backend.database import Base, SessionLocal, engine, get_db
 
-logger = logging.getLogger(__name__)
+AGENT_RATE_LIMIT_PER_MINUTE = max(
+    1, int(os.environ.get("AGENT_RATE_LIMIT_PER_MINUTE", "20"))
+)
+_agent_rate_events: dict[int, deque[float]] = {}
+_agent_rate_lock = Lock()
 
+
+def _enforce_agent_rate_limit(user_id: int, now: float | None = None) -> None:
+    """Apply a small per-account sliding-window limit to server-key LLM calls."""
+    current = time.monotonic() if now is None else now
+    cutoff = current - 60
+    with _agent_rate_lock:
+        events = _agent_rate_events.setdefault(user_id, deque())
+        while events and events[0] <= cutoff:
+            events.popleft()
+        if len(events) >= AGENT_RATE_LIMIT_PER_MINUTE:
+            retry_after = max(1, int(60 - (current - events[0])))
+            raise HTTPException(
+                status_code=429,
+                detail="AI 請求過於頻繁，請稍後再試。",
+                headers={"Retry-After": str(retry_after)},
+            )
+        events.append(current)
 
 # ── Seed default data (only when SEED_DATA=true) ──────────────
 def seed_default_data():
@@ -88,23 +111,27 @@ async def lifespan(app: FastAPI):
     # One-time migration: if old schema exists (shoes table without user_id), migrate
     inspector = inspect(engine)
     existing_tables = inspector.get_table_names()
+    existing_shoe_columns = (
+        {column["name"] for column in inspector.get_columns("shoes")}
+        if "shoes" in existing_tables
+        else set()
+    )
 
-    if "shoes" in existing_tables and "users" not in existing_tables:
+    if "shoes" in existing_tables and "user_id" not in existing_shoe_columns:
+        migration_password = os.environ.get("MIGRATION_PASSWORD")
+        if not migration_password:
+            raise RuntimeError(
+                "MIGRATION_PASSWORD is required to migrate the legacy shoes database; "
+                "refusing to start with an unusable schema."
+            )
+
         # Old schema: create users table, add user_id to shoes, assign to "Joy"
         user_table = cast(Table, models.User.__table__)
         Base.metadata.create_all(bind=engine, tables=[user_table])
-
-        migration_password = os.environ.get("MIGRATION_PASSWORD")
-        if not migration_password:
-            # Don't crash the app — log warning and skip migration.
-            # Admin can run migration manually later via CLI.
-            logger.warning(
-                "MIGRATION_PASSWORD not set — skipping legacy schema migration. "
-                "Existing shoes will remain unassigned until migration is run manually."
-            )
-        else:
-            db = SessionLocal()
-            try:
+        db = SessionLocal()
+        try:
+            joy_user = db.query(models.User).filter(models.User.username == "Joy").first()
+            if joy_user is None:
                 joy_user = models.User(
                     username="Joy",
                     hashed_password=get_password_hash(migration_password),
@@ -113,16 +140,16 @@ async def lifespan(app: FastAPI):
                 db.commit()
                 db.refresh(joy_user)
 
-                # Add user_id column (SQLite allows ALTER TABLE ADD COLUMN without FK)
-                with engine.connect() as conn:
-                    conn.execute(text("ALTER TABLE shoes ADD COLUMN user_id INTEGER"))
-                    conn.execute(
-                        text("UPDATE shoes SET user_id = :uid"),
-                        {"uid": joy_user.id},
-                    )
-                    conn.commit()
-            finally:
-                db.close()
+            # Add user_id column (SQLite allows ALTER TABLE ADD COLUMN without FK)
+            with engine.connect() as conn:
+                conn.execute(text("ALTER TABLE shoes ADD COLUMN user_id INTEGER"))
+                conn.execute(
+                    text("UPDATE shoes SET user_id = :uid"),
+                    {"uid": joy_user.id},
+                )
+                conn.commit()
+        finally:
+            db.close()
 
     Base.metadata.create_all(bind=engine)
 
@@ -367,11 +394,6 @@ def create_monthly_mileage(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    if payload.month < 1 or payload.month > 12:
-        raise HTTPException(status_code=400, detail="Month must be between 1 and 12")
-    if payload.km < 0:
-        raise HTTPException(status_code=400, detail="Km must be non-negative")
-
     existing = db.query(models.MonthlyMileage).filter(
         models.MonthlyMileage.user_id == current_user.id,
         models.MonthlyMileage.year == payload.year,
@@ -408,11 +430,6 @@ def update_monthly_mileage(
     update_data = payload.model_dump(exclude_unset=True)
     new_month = update_data.get("month", entry.month)
     new_year = update_data.get("year", entry.year)
-    if new_month < 1 or new_month > 12:
-        raise HTTPException(status_code=400, detail="Month must be between 1 and 12")
-    new_km = update_data.get("km", entry.km)
-    if new_km < 0:
-        raise HTTPException(status_code=400, detail="Km must be non-negative")
 
     # Check uniqueness if year/month are changing
     if ("year" in update_data or "month" in update_data) and (
@@ -642,21 +659,23 @@ def refresh_agent_models(
 
 @app.post("/api/agent/chat/stream")
 def agent_chat_stream(
-    payload: dict,
+    payload: schemas.AgentChatRequest,
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """SSE 串流版：與 /api/agent/chat 相同，但 LLM token 會逐字即時送達。"""
-    user_message = payload.get("user_message", "")
-    history = payload.get("history", [])
-    provider = payload.get("provider", "openrouter")
-    model = payload.get("model")
+    _enforce_agent_rate_limit(current_user.id)
+    try:
+        provider = llm.LLMProvider.from_str(payload.provider)
+        model = llm.resolve_allowed_model(provider, payload.model)
+    except llm.LLMError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     return StreamingResponse(
         agent.run_agent_stream(
-            user_message=user_message,
-            history=history,
-            provider=provider,
+            user_message=payload.user_message,
+            history=[turn.model_dump() for turn in payload.history],
+            provider=provider.value,
             model=model,
             db=db,
             user_id=current_user.id,
