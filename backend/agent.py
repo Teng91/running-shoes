@@ -24,6 +24,7 @@ system prompt；正常情況一律走原生 tool_calls。
 import json
 import re
 from collections.abc import Generator
+from dataclasses import dataclass
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -42,7 +43,7 @@ SYSTEM_PROMPT = """你是「跑鞋推薦助手」，服務一位熱愛跑步的�
 - 優先根據使用者的**實際數據**給建議。例如：某雙鞋里程快到預期壽命、近期跑量暴增代表該添購、某鞋 CP 值高。
 - 依照 Daily、Speed、Tempo、Race 類別判斷跑鞋覆蓋；某雙鞋退役後，只有該類別沒有其他現役鞋時才建議補鞋。
 - 壽命提醒分兩級：達到 80% 先注意使用狀況，達到 90% 可以準備換鞋；若同類別仍有其他現役鞋，說明暫時不用補鞋。
-- 再用上網搜尋到的市售鞋款做**具體推薦**，並在推薦處附上來源連結（格式：`鞋款名 - 一句理由（來源：URL）`）。
+- 再用上網搜尋到的市售鞋款做**具體推薦**，並以搜尋結果提供的來源 ID 標註依據。
 - 若資訊不足以給好建議（例如不知道腳型、目標距離、預算、路跑或越野），主動用一兩個問題追問。
 - 語氣親切、條理清楚，用繁體中文。不要編造鞋款或價格；來源不明的話明說。
 - 你**只看得到這位使用者自己的資料**，不要假設有其他人的資料。
@@ -62,6 +63,8 @@ SYSTEM_PROMPT = """你是「跑鞋推薦助手」，服務一位熱愛跑步的�
 - 若你上一輪先詢問是否要查詢，而使用者回答「對」、「好」或其他肯定語，請依對話內容直接呼叫適合的工具；不要再次只說「我來查詢」。
 - **上網搜尋要節制**：web_search 每次回答最多呼叫 3 次，且同一組參數不可重複呼叫，只為了補充具體鞋款推薦。若搜尋沒有結果或失敗，立刻改用現有資料並誠實說明。
 - **外部資訊必須先搜尋**：使用者詢問市價、售價、最新評價、上市資訊、鞋款規格，或詢問一雙未在本輪資料庫結果中的市售鞋是否適合時，必須先成功使用 web_search 才能陳述具體事實。搜尋失敗時不可憑記憶補造價格、重量、科技或評價，必須明說無法取得即時網路資料。
+- web_search 結果中的每個來源都有 `id`（例如 `[S-a1b2c3d4]`）。外部事實只用這種來源 ID 引用，不要自行拼接 Markdown 網址；前端會依後端原始 URL 產生安全的來源卡片。
+- 不要把先前 assistant 回覆中的價格、規格或評價當作已驗證來源。需要再次依賴外部事實時，必須使用本輪 web_search 結果（後端可能安全地回傳近期快取）。
 - 工具由系統透過原生 function calling 提供。需要資料時直接呼叫工具；不要用文字、XML、Markdown 或程式碼區塊模擬工具呼叫。
 """
 
@@ -71,6 +74,7 @@ MAX_TURNS = 6  # 防止 tool loop 失控（多留一輪給模型收斂）
 # 避免免費模型一直重 call 搜尋把回合數耗光。
 WEB_SEARCH_FAIL_LIMIT = 3
 WEB_SEARCH_CALL_LIMIT = 3
+SOURCE_SUMMARY_LIMIT = 8
 
 _TOOL_INTENT_TERMS = (
     "跑鞋", "鞋", "鞋款", "鞋況", "鞋櫃", "跑量", "里程", "壽命", "退役",
@@ -93,6 +97,13 @@ _WEB_RESEARCH_TERMS = (
 _SHOE_RESEARCH_QUESTIONS = (
     "怎樣的鞋", "怎麼樣的鞋", "適合我", "值得買", "值得入手", "好穿嗎",
 )
+_PERSONAL_FIT_TERMS = ("適合我", "適不適合我", "我適合", "適合我的")
+
+
+@dataclass(frozen=True)
+class QueryPlan:
+    web_queries: tuple[str, ...] = ()
+    database_tools: tuple[str, ...] = ()
 
 
 def _should_offer_tools(
@@ -139,6 +150,135 @@ def _requires_web_search(user_message: str) -> bool:
     return has_model_like_token and normalized.rstrip("？?!！。 ").endswith("呢")
 
 
+def _search_subject(user_message: str) -> str:
+    subject = user_message.strip()
+    removable = (
+        "幫我查", "查一下", "查", "適合我嗎", "適不適合我", "適合我",
+        "是一雙怎樣的鞋", "是一雙怎麼樣的鞋", "怎樣的鞋", "怎麼樣的鞋",
+        "值得買嗎", "值得入手嗎", "好穿嗎", "最新評價", "市價",
+    )
+    for phrase in removable:
+        subject = subject.replace(phrase, " ")
+    tokens = subject.strip("？?!！。,.，～~ ").split()
+    subject = " ".join(token for token in tokens if token not in {"的", "與", "和"})
+    return subject or user_message.strip()
+
+
+def _build_query_plan(
+    user_message: str,
+    history: list[dict] | None = None,
+) -> QueryPlan:
+    """Build a deterministic minimum tool plan before asking the model."""
+    effective_message = user_message
+    normalized = " ".join(user_message.casefold().split()).strip("？?!！。,.， ")
+    if normalized in _AFFIRMATIVE_REPLIES:
+        recent_user = next((
+            str(turn.get("content", ""))
+            for turn in reversed(history or [])
+            if turn.get("role") == "user" and turn.get("content")
+        ), "")
+        recent_assistant = next((
+            str(turn.get("content", "")).casefold()
+            for turn in reversed(history or [])
+            if turn.get("role") == "assistant"
+        ), "")
+        if recent_user and any(term in recent_assistant for term in _CONTEXT_TOOL_TERMS):
+            effective_message = recent_user
+
+    lowered = effective_message.casefold()
+    needs_web = _requires_web_search(effective_message)
+    web_queries: tuple[str, ...] = ()
+    if needs_web:
+        subject = _search_subject(effective_message)
+        web_queries = (
+            f"{subject} 官方 規格",
+            f"{subject} 評價 價格 台灣",
+        )
+
+    database_tools: tuple[str, ...] = ()
+    if any(term in lowered for term in _PERSONAL_FIT_TERMS):
+        database_tools = ("list_my_shoes", "monthly_mileage_stats")
+
+    return QueryPlan(web_queries=web_queries, database_tools=database_tools)
+
+
+def _search_payload(output: str) -> dict[str, Any] | None:
+    try:
+        payload = json.loads(output)
+    except (TypeError, json.JSONDecodeError):
+        return None
+    if payload.get("tool") != "web_search":
+        return None
+    return payload
+
+
+def _source_summary_event(search_payloads: list[dict[str, Any]]) -> str:
+    if not search_payloads:
+        return _sse({
+            "type": "source_summary",
+            "web": {"status": "none", "queries": [], "result_count": 0, "sources": []},
+        })
+
+    successful = [payload for payload in search_payloads if payload.get("ok") is True]
+    if not successful:
+        status = "failed"
+    elif all(payload.get("cached") is True for payload in successful):
+        status = "cached"
+    else:
+        status = "live"
+
+    sources: list[dict[str, str]] = []
+    seen_ids = set()
+    for payload in successful:
+        query_tokens = {
+            token
+            for token in re.findall(r"[a-z0-9]+", str(payload.get("query") or "").casefold())
+            if token not in {"official", "price", "review", "taiwan"}
+        }
+        for source in payload.get("results") or []:
+            source_id = str(source.get("id") or "")
+            if not source_id or source_id in seen_ids:
+                continue
+            seen_ids.add(source_id)
+            searchable = " ".join((
+                str(source.get("title") or ""),
+                str(source.get("snippet") or ""),
+                str(source.get("url") or ""),
+            )).casefold()
+            sources.append({
+                "id": source_id,
+                "title": str(source.get("title") or source.get("domain") or source_id),
+                "url": str(source.get("url") or ""),
+                "domain": str(source.get("domain") or ""),
+                "source_type": str(source.get("source_type") or "other"),
+                "_relevance": str(sum(token in searchable for token in query_tokens)),
+            })
+    source_type_rank = {
+        "official": 0,
+        "review": 1,
+        "other": 2,
+        "community_or_marketplace": 3,
+    }
+    sources.sort(key=lambda source: (
+        -int(source["_relevance"]),
+        source_type_rank.get(source["source_type"], 2),
+        0 if source["domain"].endswith(".tw") else 1,
+    ))
+    sources = sources[:SOURCE_SUMMARY_LIMIT]
+    for source in sources:
+        source.pop("_relevance", None)
+
+    return _sse({
+        "type": "source_summary",
+        "web": {
+            "status": status,
+            "queries": [str(payload.get("query") or "") for payload in search_payloads],
+            "result_count": len(sources),
+            "sources": sources,
+        },
+    })
+
+
 def _sse(event: dict) -> str:
     return f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
 
@@ -162,6 +302,7 @@ def _tool_done_event(name: str, output: str) -> str:
         "dependency_missing": "搜尋套件未安裝",
         "missing_query": "缺少搜尋關鍵字",
         "no_results": "找不到相關搜尋結果",
+        "no_valid_results": "搜尋結果沒有可安全使用的網址",
         "request_failed": "搜尋服務暫時無法連線",
     }
     event.update({
@@ -243,35 +384,62 @@ def run_agent_stream(
     web_search_fails = 0
     web_search_calls = 0
     executed_calls: set[tuple[str, str]] = set()
-    requires_web_search = _requires_web_search(user_message)
+    search_payloads: list[dict[str, Any]] = []
+    query_plan = _build_query_plan(user_message, history)
     available_tools = (
         db_tools.TOOL_DEFINITIONS
-        if requires_web_search or _should_offer_tools(user_message, history)
+        if query_plan.web_queries
+        or query_plan.database_tools
+        or _should_offer_tools(user_message, history)
         else None
     )
 
-    # For time-sensitive product facts, enforce one backend-side lookup instead
-    # of relying on small models to obey a tool-use instruction.
-    if requires_web_search:
-        search_args = {"query": user_message}
+    # Execute the minimum deterministic plan before the first model call. This
+    # lets a suitability question use external facts and personal data in one
+    # response instead of asking the user for permission to query accessible data.
+    for query in query_plan.web_queries:
+        search_args = {"query": query}
         yield _sse({"type": "tool", "name": "web_search", "args": search_args})
         search_output = run_web_search(search_args)
         yield _tool_done_event("web_search", search_output)
-        web_search_calls = 1
+        web_search_calls += 1
         executed_calls.add((
             "web_search",
             json.dumps(search_args, ensure_ascii=False, sort_keys=True),
         ))
+        payload = _search_payload(search_output)
+        if payload is not None:
+            search_payloads.append(payload)
         if is_failure(search_output):
-            web_search_fails = 1
+            web_search_fails += 1
         messages.append({
             "role": "user",
             "content": (
                 "[系統預先執行 web_search 的結果]\n"
                 f"{search_output}\n"
                 "只能根據這份搜尋結果陳述即時外部資訊；若搜尋失敗或資料不足，"
-                "請明確說無法驗證，不可憑記憶補造規格、價格或評價。"
+                "請明確說無法驗證，不可憑記憶補造規格、價格或評價。引用時只用"
+                "結果提供的 `[S-...]` ID，不要自行建立 Markdown 網址。"
             ),
+        })
+
+    for tool_name in query_plan.database_tools:
+        tool_args: dict[str, Any] = {}
+        yield _sse({"type": "tool", "name": tool_name, "args": tool_args})
+        if db is None or user_id is None:
+            yield _sse({
+                "type": "error",
+                "text": "無法執行資料庫工具：缺少使用者資料庫上下文。",
+            })
+            yield _source_summary_event(search_payloads)
+            yield _sse({"type": "done"})
+            return
+        tool_output = _execute_tool(tool_name, tool_args, db, user_id)
+        yield _tool_done_event(tool_name, tool_output)
+        executed_calls.add((tool_name, "{}"))
+        messages.append({
+            "role": "user",
+            "content": f"[系統預先執行 {tool_name} 的結果]\n{tool_output}",
         })
 
     for turn in range(MAX_TURNS):
@@ -416,6 +584,10 @@ def run_agent_stream(
                         web_search_calls += 1
                     tool_output = _execute_tool(tc["name"], tc["arguments"], db, user_id)
                 yield _tool_done_event(tc["name"], tool_output)
+                if tc["name"] == "web_search":
+                    payload = _search_payload(tool_output)
+                    if payload is not None:
+                        search_payloads.append(payload)
                 if tc["name"] == "web_search" and is_failure(tool_output):
                     web_search_fails += 1
                 if native_tool_calls:
@@ -450,4 +622,5 @@ def run_agent_stream(
             yield _sse({"type": "token", "text": "（模型沒有回應，請再試一次或更換模型。）"})
         break
 
+    yield _source_summary_event(search_payloads)
     yield _sse({"type": "done"})

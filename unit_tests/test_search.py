@@ -4,7 +4,16 @@ import builtins
 import json
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from backend.tools import search_tool
+
+
+@pytest.fixture(autouse=True)
+def clear_search_cache():
+    search_tool._search_cache.clear()
+    yield
+    search_tool._search_cache.clear()
 
 
 def test_web_search_formats_results():
@@ -19,11 +28,100 @@ def test_web_search_formats_results():
     assert out["status"] == "available"
     assert out["attempts"] == 1
     assert out["results"][0] == {
+        "id": out["results"][0]["id"],
         "title": "Nike Vaporfly 評價",
         "snippet": "很棒的競速鞋",
         "url": "https://example.com/a",
+        "domain": "example.com",
+        "source_type": "other",
     }
+    assert out["results"][0]["id"].startswith("S-")
     assert out["results"][1]["title"] == "適合半馬的跑鞋"
+
+
+def test_web_search_filters_urls_deduplicates_and_ranks_sources():
+    fake_ddgs = MagicMock()
+    fake_ddgs.__enter__.return_value.text.return_value = [
+        {"title": "社群", "body": "post", "href": "https://vk.ru/evo#comments"},
+        {"title": "評測", "body": "review", "href": "https://runrepeat.com/evo"},
+        {"title": "台灣官方", "body": "spec", "href": "https://adidas.com.tw/evo#top"},
+        {"title": "危險", "body": "bad", "href": "javascript:alert(1)"},
+        {"title": "官方重複", "body": "duplicate", "href": "https://adidas.com.tw/evo"},
+    ]
+
+    with patch("ddgs.DDGS", return_value=fake_ddgs):
+        out = json.loads(search_tool.web_search("EVO SL"))
+
+    assert [item["source_type"] for item in out["results"]] == [
+        "official", "review", "community_or_marketplace",
+    ]
+    assert out["results"][0]["domain"] == "adidas.com.tw"
+    assert out["results"][0]["url"] == "https://adidas.com.tw/evo"
+    assert len({item["id"] for item in out["results"]}) == 3
+
+
+def test_web_search_reuses_recent_successful_result():
+    fake_ddgs = MagicMock()
+    fake_ddgs.__enter__.return_value.text.return_value = [
+        {"title": "EVO SL", "body": "spec", "href": "https://adidas.com/evo"},
+    ]
+
+    with patch("ddgs.DDGS", return_value=fake_ddgs):
+        first = json.loads(search_tool.web_search("EVO   SL 官方 規格"))
+        second = json.loads(search_tool.web_search("evo sl 官方 規格"))
+
+    assert first["cached"] is False
+    assert second["cached"] is True
+    assert second["results"] == first["results"]
+    fake_ddgs.__enter__.return_value.text.assert_called_once()
+
+
+def test_web_search_rejects_results_without_safe_urls():
+    fake_ddgs = MagicMock()
+    fake_ddgs.__enter__.return_value.text.return_value = [
+        {"title": "bad", "body": "bad", "href": "data:text/html,bad"},
+    ]
+
+    with patch("ddgs.DDGS", return_value=fake_ddgs):
+        out = json.loads(search_tool.web_search("unsafe result"))
+
+    assert out["ok"] is False
+    assert out["status"] == "no_valid_results"
+    assert out["results"] == []
+
+
+def test_normalization_skips_non_mapping_and_malformed_url():
+    assert search_tool._normalize_results([
+        "not a mapping",
+        {"title": "bad", "href": "http://["},
+    ]) == []
+
+
+def test_price_queries_use_shorter_cache_ttl():
+    assert search_tool._cache_ttl("EVO SL 價格") == search_tool.PRICE_CACHE_TTL_SECONDS
+    assert search_tool._cache_ttl("EVO SL 規格") == search_tool.SEARCH_CACHE_TTL_SECONDS
+
+
+def test_cache_prunes_expired_and_oldest_entries(monkeypatch):
+    fake_ddgs = MagicMock()
+    fake_ddgs.__enter__.return_value.text.return_value = [
+        {"title": "result", "body": "spec", "href": "https://example.com/new"},
+    ]
+    monkeypatch.setattr(search_tool, "MAX_CACHE_ENTRIES", 2)
+    monkeypatch.setattr(search_tool.time, "monotonic", lambda: 10_000.0)
+    search_tool._search_cache.update({
+        ("expired", 5): (0.0, "{}"),
+        ("old", 5): (9_999.0, "{}"),
+        ("newer", 5): (9_999.5, "{}"),
+    })
+
+    with patch("ddgs.DDGS", return_value=fake_ddgs):
+        search_tool.web_search("fresh")
+
+    assert ("expired", 5) not in search_tool._search_cache
+    assert ("old", 5) not in search_tool._search_cache
+    assert ("newer", 5) in search_tool._search_cache
+    assert ("fresh", 5) in search_tool._search_cache
 
 
 def test_web_search_handles_empty():

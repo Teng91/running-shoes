@@ -38,6 +38,10 @@ def test_agent_frontend_always_discloses_web_search_usage():
 
     assert "webSearchAttempted" in source
     assert "webSearchSucceeded" in source
-    assert "本則回答已使用網路搜尋" in source
-    assert "本則回答未使用網路搜尋" in source
+    assert "本輪已即時搜尋" in source
+    assert "本輪使用近期網路搜尋快取" in source
+    assert "本輪不需要網路搜尋" in source
     assert "網路搜尋失敗，本則回答沒有可驗證的即時網路資料" in source
+    assert "event.type === 'source_summary'" in source
+    assert "url.protocol !== 'http:' && url.protocol !== 'https:'" in source
+    assert "link.rel = 'noopener noreferrer'" in source
