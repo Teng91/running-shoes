@@ -263,6 +263,14 @@ tr:hover td { background: rgba(99,102,241,0.05); }
 }
 .agent-source-status.web-used { color: var(--green); }
 .agent-source-status.web-failed { color: var(--red); }
+.agent-source-list { display: grid; gap: 4px; margin-top: 6px; }
+.agent-source-link {
+  color: var(--accent-light);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.agent-source-link:hover { text-decoration: underline; }
+.agent-source-id { color: var(--text-dim); margin-right: 4px; }
 
 /* Retry button — small inline icon like ChatGPT */
 .agent-retry-btn {
@@ -2352,17 +2360,49 @@ function addAgentMessage(role, text) {
   return content;
 }
 
-function appendAgentSourceStatus(content, attempted, succeeded) {
+function appendAgentSourceStatus(content, summary, attempted, succeeded) {
   const status = document.createElement('div');
   status.className = 'agent-source-status';
-  if (succeeded) {
+  const web = summary && summary.web;
+  const state = web && typeof web.status === 'string'
+    ? web.status
+    : (succeeded ? 'live' : (attempted ? 'failed' : 'none'));
+  const resultCount = web && Number.isInteger(web.result_count) ? web.result_count : 0;
+  if (state === 'live') {
     status.classList.add('web-used');
-    status.textContent = '🌐 本則回答已使用網路搜尋';
-  } else if (attempted) {
+    status.textContent = `🌐 本輪已即時搜尋（${resultCount} 個來源）`;
+  } else if (state === 'cached') {
+    status.classList.add('web-used');
+    status.textContent = `🌐 本輪使用近期網路搜尋快取（${resultCount} 個來源）`;
+  } else if (state === 'failed') {
     status.classList.add('web-failed');
     status.textContent = '⚠️ 網路搜尋失敗，本則回答沒有可驗證的即時網路資料';
   } else {
-    status.textContent = '○ 本則回答未使用網路搜尋';
+    status.textContent = '○ 本輪不需要網路搜尋';
+  }
+
+  const sources = web && Array.isArray(web.sources) ? web.sources : [];
+  if (sources.length) {
+    const list = document.createElement('div');
+    list.className = 'agent-source-list';
+    sources.forEach(source => {
+      try {
+        const url = new URL(source.url);
+        if (url.protocol !== 'http:' && url.protocol !== 'https:') return;
+        const link = document.createElement('a');
+        link.className = 'agent-source-link';
+        link.href = url.href;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        const sourceId = document.createElement('span');
+        sourceId.className = 'agent-source-id';
+        sourceId.textContent = `[${source.id || 'source'}]`;
+        link.appendChild(sourceId);
+        link.appendChild(document.createTextNode(source.title || source.domain || url.hostname));
+        list.appendChild(link);
+      } catch {}
+    });
+    status.appendChild(list);
   }
   content.appendChild(status);
 }
@@ -2430,6 +2470,7 @@ async function sendAgentMessage(retryText) {
   let thinkingDiv = null;
   let webSearchAttempted = false;
   let webSearchSucceeded = false;
+  let sourceSummary = null;
 
   // Create bot message placeholder
   const botDiv = document.createElement('div');
@@ -2564,6 +2605,8 @@ async function sendAgentMessage(retryText) {
           } else if (event.type === 'error') {
             fullText += '\n\n⚠️ ' + event.text;
             botContent.textContent = fullText;
+          } else if (event.type === 'source_summary') {
+            sourceSummary = event;
           }
         } catch (e) {
           console.error('解析 SSE 事件失敗:', e);
@@ -2574,11 +2617,22 @@ async function sendAgentMessage(retryText) {
     botDiv.classList.remove('agent-typing');
     if (fullText) {
       botContent.innerHTML = renderMarkdown(fullText);
-      appendAgentSourceStatus(botContent, webSearchAttempted, webSearchSucceeded);
+      appendAgentSourceStatus(
+        botContent,
+        sourceSummary,
+        webSearchAttempted,
+        webSearchSucceeded,
+      );
       if (!isRetry) agentHistory.push({ role: 'user', content: text });
       agentHistory.push({ role: 'assistant', content: fullText });
     } else {
       botContent.textContent = '（模型沒有回應，請再試一次或更換模型。）';
+      appendAgentSourceStatus(
+        botContent,
+        sourceSummary,
+        webSearchAttempted,
+        webSearchSucceeded,
+      );
       if (!isRetry) agentHistory.push({ role: 'user', content: text });
     }
     addRetryButton(); // 不管成功失敗都顯示重試

@@ -8,9 +8,37 @@
 """
 
 import json
+import time
+from datetime import UTC, datetime
+from hashlib import sha256
+from threading import Lock
+from urllib.parse import urlsplit, urlunsplit
 
 MAX_RESULTS = 5
 SEARCH_ATTEMPTS = 2
+SEARCH_CACHE_TTL_SECONDS = 15 * 60
+PRICE_CACHE_TTL_SECONDS = 5 * 60
+MAX_CACHE_ENTRIES = 256
+
+_search_cache: dict[tuple[str, int], tuple[float, str]] = {}
+_search_cache_lock = Lock()
+
+_OFFICIAL_DOMAINS = (
+    "adidas.com", "newbalance.com", "nike.com", "asics.com", "puma.com",
+    "mizuno.com", "hoka.com", "saucony.com", "brooksrunning.com",
+    "adidas.com.tw", "newbalance.com.tw", "nike.com.tw", "asics.com.tw",
+    "puma.com.tw", "mizuno.com.tw", "hoka.com.tw", "saucony.com.tw",
+)
+_REVIEW_DOMAINS = (
+    "runrepeat.com", "roadtrailrun.com", "doctorsofrunning.com",
+    "believeintherun.com", "runnersworld.com", "solereview.com",
+    "runningwarehouse.com",
+)
+_LOW_PRIORITY_DOMAINS = (
+    "vk.ru", "facebook.com", "instagram.com", "tiktok.com", "x.com",
+    "reddit.com", "shopee.", "amazon.", "ebay.",
+)
+_PRICE_TERMS = ("price", "taiwan", "市價", "售價", "價格", "定價", "優惠", "折扣")
 
 # All failure messages (missing package, network error, no results) start with a
 # fullwidth left paren 「（」. agent.py relies on this prefix to count consecutive
@@ -27,6 +55,7 @@ def _result(
     results=None,
     error=None,
     attempts: int = 1,
+    cached: bool = False,
 ) -> str:
     payload = {
         "tool": "web_search",
@@ -35,6 +64,8 @@ def _result(
         "status": status,
         "query": query,
         "attempts": attempts,
+        "cached": cached,
+        "searched_at": datetime.now(UTC).isoformat(),
         "results": results or [],
     }
     if error:
@@ -58,13 +89,99 @@ def run_web_search(arguments: dict) -> str:
     return web_search(query)
 
 
+def _normalize_url(raw_url: str) -> str | None:
+    try:
+        parsed = urlsplit((raw_url or "").strip())
+    except ValueError:
+        return None
+    if parsed.scheme.lower() not in {"http", "https"} or not parsed.netloc:
+        return None
+    return urlunsplit(
+        (parsed.scheme.lower(), parsed.netloc.lower(), parsed.path, parsed.query, "")
+    )
+
+
+def _domain(url: str) -> str:
+    return (urlsplit(url).hostname or "").lower().removeprefix("www.")
+
+
+def _source_type(domain: str) -> str:
+    if any(domain == item or domain.endswith("." + item) for item in _OFFICIAL_DOMAINS):
+        return "official"
+    if any(domain == item or domain.endswith("." + item) for item in _REVIEW_DOMAINS):
+        return "review"
+    if any(item in domain for item in _LOW_PRIORITY_DOMAINS):
+        return "community_or_marketplace"
+    return "other"
+
+
+def _source_rank(domain: str, source_type: str) -> tuple[int, int]:
+    type_rank = {
+        "official": 0,
+        "review": 2,
+        "other": 3,
+        "community_or_marketplace": 5,
+    }[source_type]
+    taiwan_rank = 0 if domain.endswith(".tw") or domain.startswith("tw.") else 1
+    return type_rank, taiwan_rank
+
+
+def _normalize_results(results) -> list[dict[str, str]]:
+    normalized = []
+    seen_urls = set()
+    for position, item in enumerate(results or []):
+        if not isinstance(item, dict):
+            continue
+        url = _normalize_url(str(item.get("href") or ""))
+        if not url or url in seen_urls:
+            continue
+        seen_urls.add(url)
+        domain = _domain(url)
+        source_type = _source_type(domain)
+        normalized.append({
+            "id": "S-" + sha256(url.encode("utf-8")).hexdigest()[:8],
+            "title": str(item.get("title") or domain).strip(),
+            "snippet": str(item.get("body") or "").strip(),
+            "url": url,
+            "domain": domain,
+            "source_type": source_type,
+            "_position": str(position),
+        })
+    normalized.sort(
+        key=lambda item: (
+            *_source_rank(item["domain"], item["source_type"]),
+            int(item["_position"]),
+        )
+    )
+    for item in normalized:
+        item.pop("_position", None)
+    return normalized
+
+
+def _cache_ttl(query: str) -> int:
+    lowered = query.casefold()
+    if any(term in lowered for term in _PRICE_TERMS):
+        return PRICE_CACHE_TTL_SECONDS
+    return SEARCH_CACHE_TTL_SECONDS
+
+
 def web_search(query: str, max_results: int = MAX_RESULTS) -> str:
-    """搜尋網路，回傳給 LLM 看的文字摘要（含來源連結）。"""
+    """搜尋網路，回傳已驗證、排序且帶穩定來源 ID 的 JSON。"""
+    normalized_query = " ".join(query.split())
+    cache_key = (normalized_query.casefold(), max_results)
+    now = time.monotonic()
+    with _search_cache_lock:
+        cached_entry = _search_cache.get(cache_key)
+        if cached_entry and now - cached_entry[0] < _cache_ttl(normalized_query):
+            payload = json.loads(cached_entry[1])
+            payload["cached"] = True
+            return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+
     try:
         from ddgs import DDGS
     except ImportError:
         return _result(
-            ok=False, status="dependency_missing", query=query,
+            ok=False, status="dependency_missing", query=normalized_query,
             error="ddgs package is not installed",
         )
 
@@ -75,7 +192,7 @@ def web_search(query: str, max_results: int = MAX_RESULTS) -> str:
         attempts = attempt
         try:
             with DDGS() as ddgs:
-                results = ddgs.text(query, max_results=max_results)
+                results = ddgs.text(normalized_query, max_results=max_results)
         # Search providers can intermittently reject or time out a request.
         # Retry once inside the tool so weak models do not need to invent a
         # second query merely to recover from a transient provider failure.
@@ -90,29 +207,41 @@ def web_search(query: str, max_results: int = MAX_RESULTS) -> str:
             return _result(
                 ok=False,
                 status="request_failed",
-                query=query,
+                query=normalized_query,
                 error=last_error[:500],
                 attempts=attempts,
             )
         return _result(
             ok=False,
             status="no_results",
-            query=query,
+            query=normalized_query,
             attempts=attempts,
         )
 
-    normalized = [
-        {
-            "title": (item.get("title") or "").strip(),
-            "snippet": (item.get("body") or "").strip(),
-            "url": (item.get("href") or "").strip(),
-        }
-        for item in results
-    ]
-    return _result(
+    normalized = _normalize_results(results)
+    if not normalized:
+        return _result(
+            ok=False,
+            status="no_valid_results",
+            query=normalized_query,
+            attempts=attempts,
+        )
+    output = _result(
         ok=True,
         status="available",
-        query=query,
+        query=normalized_query,
         results=normalized,
         attempts=attempts,
     )
+    with _search_cache_lock:
+        expired = [
+            key for key, (saved_at, _) in _search_cache.items()
+            if now - saved_at >= _cache_ttl(key[0])
+        ]
+        for key in expired:
+            _search_cache.pop(key, None)
+        if len(_search_cache) >= MAX_CACHE_ENTRIES:
+            oldest_key = min(_search_cache, key=lambda key: _search_cache[key][0])
+            _search_cache.pop(oldest_key, None)
+        _search_cache[cache_key] = (now, output)
+    return output
