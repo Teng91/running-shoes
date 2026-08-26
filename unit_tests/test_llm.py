@@ -259,6 +259,14 @@ def test_get_models_falls_back_to_static_list(monkeypatch):
     assert models[0]["id"] == llm._DEFAULT_MODEL
 
 
+def test_get_models_falls_back_when_successful_response_is_empty(monkeypatch):
+    monkeypatch.setattr(llm, "_fetch_free_models", MagicMock(return_value=[]))
+
+    models = llm._get_models(llm.LLMProvider.openrouter, force=True)
+
+    assert models is llm.MODELS["openrouter"]
+
+
 def test_resolve_allowed_model_accepts_allowlist_and_rejects_client_override(monkeypatch):
     allowed = [
         {"id": "vendor/free-tools:free", "display": "Free Tools"},

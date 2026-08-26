@@ -52,6 +52,50 @@ def test_build_messages_keeps_only_nonempty_chat_turns():
     ]
 
 
+@pytest.mark.parametrize(
+    "message",
+    [
+        "查 SuperComp Elite v6 的市價與最新評價",
+        "SC Rebel v1 是一雙怎樣的鞋？適合我嗎？",
+        "SC Elite v6 呢",
+    ],
+)
+def test_external_product_questions_require_web_search(message):
+    assert agent._requires_web_search(message) is True
+
+
+def test_personal_shoe_summary_does_not_force_web_search():
+    assert agent._requires_web_search("幫我分析目前的跑鞋") is False
+
+
+def test_time_sensitive_product_question_runs_search_before_model(monkeypatch):
+    search_result = json.dumps({
+        "tool": "web_search",
+        "ok": True,
+        "status": "available",
+        "results": [{"title": "官方資料", "url": "https://example.com"}],
+    })
+    search = MagicMock(return_value=search_result)
+    model = MagicMock(return_value=iter(["根據搜尋結果回答。"]))
+    monkeypatch.setattr(agent, "run_web_search", search)
+    monkeypatch.setattr(llm, "call_llm_stream", model)
+
+    events = _events(
+        agent.run_agent_stream(
+            "查 SuperComp Elite v6 的市價與最新評價",
+            model="openrouter/free",
+        )
+    )
+
+    assert _event_types(events) == ["tool", "tool_done", "token", "done"]
+    assert events[0]["name"] == "web_search"
+    assert events[0]["args"]["query"] == "查 SuperComp Elite v6 的市價與最新評價"
+    assert events[1]["ok"] is True
+    search.assert_called_once()
+    sent_messages = model.call_args.args[2]
+    assert "系統預先執行 web_search" in sent_messages[-1]["content"]
+
+
 @pytest.mark.parametrize("message", ["hi", "你好", "謝謝你", "你是誰？"])
 def test_simple_conversation_does_not_offer_tools(message):
     assert agent._should_offer_tools(message) is False
