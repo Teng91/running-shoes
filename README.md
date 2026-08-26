@@ -124,6 +124,8 @@ AGENT_RATE_LIMIT_PER_MINUTE=20
 - 以繁體中文對話，過程逐步顯示推理與工具呼叫（SSE 串流）
 - 使用 OpenRouter / OpenAI 原生 function calling；模型清單只顯示免費且宣告支援 `tools` 的模型
 - 資料庫工具回傳具名 JSON；里程、剩餘壽命、百分比、成本與跑量統計由後端計算，LLM 只負責文字分析
+- 詢問市價、最新評價、上市資訊或具體市售鞋款規格時，後端會先強制執行網路搜尋；搜尋失敗時禁止模型憑記憶補造資料
+- 每則回答下方會標示「已使用網路搜尋」、「未使用網路搜尋」或「網路搜尋失敗」，並在工具列顯示實際搜尋關鍵字
 
 目前提供 7 個 Agent 工具：
 
@@ -163,7 +165,7 @@ venv/bin/pytest -q
 venv/bin/pytest -q --cov=backend --cov-branch --cov-report=term-missing
 ```
 
-目前測試基準為 **177 passed**，`backend` 整體測試覆蓋率為 **99%**。
+目前測試基準為 **184 passed**，`backend` 整體測試覆蓋率為 **99%**。
 
 ## Docker 部署
 

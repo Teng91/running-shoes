@@ -158,6 +158,8 @@ def _get_models(provider: LLMProvider, force: bool = False) -> list[dict[str, st
 
     try:
         models = _fetch_free_models()
+        if not models:
+            raise LLMError("OpenRouter 沒有回傳可用的免費工具模型。")
         # Without an explicit override, preserve the weekly-usage ordering.
         if _OR_DEFAULT:
             models = sorted(models, key=lambda m: 0 if m["id"] == _OR_DEFAULT else 1)
