@@ -10,6 +10,7 @@
 import json
 
 MAX_RESULTS = 5
+SEARCH_ATTEMPTS = 2
 
 # All failure messages (missing package, network error, no results) start with a
 # fullwidth left paren 「（」. agent.py relies on this prefix to count consecutive
@@ -18,13 +19,22 @@ MAX_RESULTS = 5
 FAILURE_PREFIX = "（"
 
 
-def _result(*, ok: bool, status: str, query: str, results=None, error=None) -> str:
+def _result(
+    *,
+    ok: bool,
+    status: str,
+    query: str,
+    results=None,
+    error=None,
+    attempts: int = 1,
+) -> str:
     payload = {
         "tool": "web_search",
         "schema_version": 1,
         "ok": ok,
         "status": status,
         "query": query,
+        "attempts": attempts,
         "results": results or [],
     }
     if error:
@@ -58,16 +68,38 @@ def web_search(query: str, max_results: int = MAX_RESULTS) -> str:
             error="ddgs package is not installed",
         )
 
-    try:
-        with DDGS() as ddgs:
-            results = ddgs.text(query, max_results=max_results)
-    # Third-party search backends may surface transport and parser failures as
-    # different exception types; every failure must degrade to structured JSON.
-    except Exception as exc:  # noqa: BLE001
-        return _result(ok=False, status="request_failed", query=query, error=str(exc))
+    results = []
+    last_error = None
+    attempts = 0
+    for attempt in range(1, SEARCH_ATTEMPTS + 1):
+        attempts = attempt
+        try:
+            with DDGS() as ddgs:
+                results = ddgs.text(query, max_results=max_results)
+        # Search providers can intermittently reject or time out a request.
+        # Retry once inside the tool so weak models do not need to invent a
+        # second query merely to recover from a transient provider failure.
+        except Exception as exc:  # noqa: BLE001
+            last_error = str(exc)
+            continue
+        if results:
+            break
 
     if not results:
-        return _result(ok=False, status="no_results", query=query)
+        if last_error is not None:
+            return _result(
+                ok=False,
+                status="request_failed",
+                query=query,
+                error=last_error[:500],
+                attempts=attempts,
+            )
+        return _result(
+            ok=False,
+            status="no_results",
+            query=query,
+            attempts=attempts,
+        )
 
     normalized = [
         {
@@ -77,4 +109,10 @@ def web_search(query: str, max_results: int = MAX_RESULTS) -> str:
         }
         for item in results
     ]
-    return _result(ok=True, status="available", query=query, results=normalized)
+    return _result(
+        ok=True,
+        status="available",
+        query=query,
+        results=normalized,
+        attempts=attempts,
+    )

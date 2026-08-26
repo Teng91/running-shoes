@@ -17,6 +17,7 @@ def test_web_search_formats_results():
         out = json.loads(search_tool.web_search("半馬 跑鞋 推薦"))
     assert out["ok"] is True
     assert out["status"] == "available"
+    assert out["attempts"] == 1
     assert out["results"][0] == {
         "title": "Nike Vaporfly 評價",
         "snippet": "很棒的競速鞋",
@@ -32,6 +33,7 @@ def test_web_search_handles_empty():
         out = json.loads(search_tool.web_search("zzz 不存在的鞋"))
     assert out["ok"] is False
     assert out["status"] == "no_results"
+    assert out["attempts"] == search_tool.SEARCH_ATTEMPTS
     assert out["results"] == []
 
 
@@ -42,6 +44,22 @@ def test_web_search_handles_exception_gracefully():
         out = json.loads(search_tool.web_search("任何查詢"))
     assert out["status"] == "request_failed"
     assert out["error"] == "blocked"
+    assert out["attempts"] == search_tool.SEARCH_ATTEMPTS
+
+
+def test_web_search_retries_transient_failure_then_succeeds():
+    fake_ddgs = MagicMock()
+    fake_ddgs.__enter__.return_value.text.side_effect = [
+        RuntimeError("temporary block"),
+        [{"title": "NB 1080", "body": "latest", "href": "https://example.com/nb"}],
+    ]
+
+    with patch("ddgs.DDGS", return_value=fake_ddgs):
+        out = json.loads(search_tool.web_search("New Balance 最新跑鞋"))
+
+    assert out["ok"] is True
+    assert out["attempts"] == 2
+    assert out["results"][0]["title"] == "NB 1080"
 
 
 def test_is_failure_flags_all_failure_modes():

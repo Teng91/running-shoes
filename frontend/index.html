@@ -252,6 +252,8 @@ tr:hover td { background: rgba(99,102,241,0.05); }
 .agent-tools .tool-item .tool-icon { display: inline-block; width: 14px; text-align: center; }
 .agent-tools .tool-item.done { color: var(--green); }
 .agent-tools .tool-item.done .tool-name { text-decoration: line-through; opacity: 0.7; }
+.agent-tools .tool-item.failed { color: var(--red); }
+.agent-tools .tool-item .tool-detail { opacity: 0.8; }
 
 /* Retry button — small inline icon like ChatGPT */
 .agent-retry-btn {
@@ -2432,6 +2434,28 @@ async function sendAgentMessage(retryText) {
       }),
     });
 
+    if (res.status === 401) {
+      clearAuth();
+      showLoginView();
+      throw new Error('登入已過期，請重新登入。');
+    }
+    if (!res.ok) {
+      let message = `Agent 請求失敗（HTTP ${res.status}）`;
+      try {
+        const errorBody = await res.json();
+        if (typeof errorBody.detail === 'string') {
+          message = errorBody.detail;
+        } else if (Array.isArray(errorBody.detail)) {
+          message = errorBody.detail.map(item => item.msg || String(item)).join('；');
+        }
+      } catch {}
+      throw new Error(message);
+    }
+    const contentType = res.headers.get('content-type') || '';
+    if (!contentType.includes('text/event-stream') || !res.body) {
+      throw new Error('伺服器回傳了非預期格式，請稍後再試。');
+    }
+
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
@@ -2470,13 +2494,21 @@ async function sendAgentMessage(retryText) {
             toolStatusDiv.appendChild(toolItem);
             container.scrollTop = container.scrollHeight;
           } else if (event.type === 'tool_done') {
-            // 個別工具完成 → 打勾該 tool group 中第一個仍 🔍 的工具
+            // 個別工具完成；執行完成不等於成功，搜尋失敗需明確顯示。
             const group = toolStatusDiv;
             if (group) {
-              const pending = group.querySelector('.tool-item:not(.done)');
+              const pending = group.querySelector('.tool-item:not(.done):not(.failed)');
               if (pending) {
-                pending.classList.add('done');
-                pending.querySelector('.tool-icon').textContent = '✅';
+                const failed = event.ok === false;
+                pending.classList.add(failed ? 'failed' : 'done');
+                pending.querySelector('.tool-icon').textContent = failed ? '⚠️' : '✅';
+                if (failed) {
+                  const detail = document.createElement('span');
+                  detail.className = 'tool-detail';
+                  detail.textContent = '（' + (event.message || '執行失敗') + '）';
+                  pending.appendChild(detail);
+                  if (event.error) pending.title = event.error;
+                }
               }
             }
           } else if (event.type === 'reasoning_start') {
@@ -2519,7 +2551,10 @@ async function sendAgentMessage(retryText) {
     }
     addRetryButton(); // 不管成功失敗都顯示重試
   } catch (e) {
-    botContent.textContent = '⚠️ 連線失敗，請確認後端服務已啟動。';
+    const message = e instanceof TypeError
+      ? '連線失敗，請確認後端服務已啟動。'
+      : (e.message || 'Agent 請求失敗，請稍後再試。');
+    botContent.textContent = '⚠️ ' + message;
     botDiv.classList.remove('agent-typing');
     console.error('Agent 請求失敗:', e);
     addRetryButton();

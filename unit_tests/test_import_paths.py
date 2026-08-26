@@ -24,6 +24,10 @@ def test_llm_applies_new_and_existing_or_model_env_defaults():
         os.environ["OR_MODEL"] = "openrouter/free"
         importlib.reload(llm)
         assert all(model["id"] != "openrouter/free" for model in llm.MODELS["openrouter"])
+
+        os.environ["OR_MODEL"] = "openai/paid-model"
+        importlib.reload(llm)
+        assert all(model["id"] != "openai/paid-model" for model in llm.MODELS["openrouter"])
     finally:
         if original is None:
             os.environ.pop("OR_MODEL", None)

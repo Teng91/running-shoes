@@ -6,6 +6,7 @@ primary_region = "sin"
 
 [env]
   DB_DIR = "/data"
+  ENVIRONMENT = "production"
   SEED_DATA = "true"
 
 [mount]
