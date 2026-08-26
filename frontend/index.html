@@ -254,6 +254,15 @@ tr:hover td { background: rgba(99,102,241,0.05); }
 .agent-tools .tool-item.done .tool-name { text-decoration: line-through; opacity: 0.7; }
 .agent-tools .tool-item.failed { color: var(--red); }
 .agent-tools .tool-item .tool-detail { opacity: 0.8; }
+.agent-source-status {
+  margin-top: 10px;
+  padding-top: 7px;
+  border-top: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 11px;
+}
+.agent-source-status.web-used { color: var(--green); }
+.agent-source-status.web-failed { color: var(--red); }
 
 /* Retry button — small inline icon like ChatGPT */
 .agent-retry-btn {
@@ -2343,6 +2352,21 @@ function addAgentMessage(role, text) {
   return content;
 }
 
+function appendAgentSourceStatus(content, attempted, succeeded) {
+  const status = document.createElement('div');
+  status.className = 'agent-source-status';
+  if (succeeded) {
+    status.classList.add('web-used');
+    status.textContent = '🌐 本則回答已使用網路搜尋';
+  } else if (attempted) {
+    status.classList.add('web-failed');
+    status.textContent = '⚠️ 網路搜尋失敗，本則回答沒有可驗證的即時網路資料';
+  } else {
+    status.textContent = '○ 本則回答未使用網路搜尋';
+  }
+  content.appendChild(status);
+}
+
 function addRetryButton() {
   const container = document.getElementById('agent-messages');
   const btn = document.createElement('div');
@@ -2404,6 +2428,8 @@ async function sendAgentMessage(retryText) {
   // Create tool status container (hidden until first tool event)
   let toolStatusDiv = null;
   let thinkingDiv = null;
+  let webSearchAttempted = false;
+  let webSearchSucceeded = false;
 
   // Create bot message placeholder
   const botDiv = document.createElement('div');
@@ -2477,6 +2503,7 @@ async function sendAgentMessage(retryText) {
         try {
           const event = JSON.parse(data);
           if (event.type === 'tool') {
+            if (event.name === 'web_search') webSearchAttempted = true;
             // Finalize current thinking bubble
             thinkingDiv = null;
             // Create a new tool group if needed (inserted after the thinking bubble)
@@ -2490,10 +2517,14 @@ async function sendAgentMessage(retryText) {
             const toolItem = document.createElement('div');
             toolItem.className = 'tool-item';
             toolItem.dataset.toolSeq = seq;
-            toolItem.innerHTML = '<span class="tool-icon">🔍</span> <span class="tool-name">' + esc(event.name || '查詢中') + '</span>';
+            const query = event.name === 'web_search' && event.args && event.args.query
+              ? '：' + event.args.query
+              : '';
+            toolItem.innerHTML = '<span class="tool-icon">🔍</span> <span class="tool-name">' + esc((event.name || '查詢中') + query) + '</span>';
             toolStatusDiv.appendChild(toolItem);
             container.scrollTop = container.scrollHeight;
           } else if (event.type === 'tool_done') {
+            if (event.name === 'web_search' && event.ok !== false) webSearchSucceeded = true;
             // 個別工具完成；執行完成不等於成功，搜尋失敗需明確顯示。
             const group = toolStatusDiv;
             if (group) {
@@ -2543,6 +2574,7 @@ async function sendAgentMessage(retryText) {
     botDiv.classList.remove('agent-typing');
     if (fullText) {
       botContent.innerHTML = renderMarkdown(fullText);
+      appendAgentSourceStatus(botContent, webSearchAttempted, webSearchSucceeded);
       if (!isRetry) agentHistory.push({ role: 'user', content: text });
       agentHistory.push({ role: 'assistant', content: fullText });
     } else {

@@ -22,6 +22,7 @@ system prompt；正常情況一律走原生 tool_calls。
 """
 
 import json
+import re
 from collections.abc import Generator
 from typing import Any
 
@@ -60,6 +61,7 @@ SYSTEM_PROMPT = """你是「跑鞋推薦助手」，服務一位熱愛跑步的�
 - **當使用者要求看資料時，直接呼叫工具顯示**：不要只說「我來查一下」卻沒有實際 call tool。如果使用者說「查給我看」、「結果呢」、「資料在哪」，你必須呼叫對應的工具並把結果呈現出來。
 - 若你上一輪先詢問是否要查詢，而使用者回答「對」、「好」或其他肯定語，請依對話內容直接呼叫適合的工具；不要再次只說「我來查詢」。
 - **上網搜尋要節制**：web_search 每次回答最多呼叫 3 次，且同一組參數不可重複呼叫，只為了補充具體鞋款推薦。若搜尋沒有結果或失敗，立刻改用現有資料並誠實說明。
+- **外部資訊必須先搜尋**：使用者詢問市價、售價、最新評價、上市資訊、鞋款規格，或詢問一雙未在本輪資料庫結果中的市售鞋是否適合時，必須先成功使用 web_search 才能陳述具體事實。搜尋失敗時不可憑記憶補造價格、重量、科技或評價，必須明說無法取得即時網路資料。
 - 工具由系統透過原生 function calling 提供。需要資料時直接呼叫工具；不要用文字、XML、Markdown 或程式碼區塊模擬工具呼叫。
 """
 
@@ -84,6 +86,13 @@ _AFFIRMATIVE_REPLIES = (
 )
 _CONTEXT_TOOL_TERMS = ("搜尋", "查詢", "查", "工具", "資料")
 _NON_TOOL_REPLIES = ("謝謝", "感謝", "不用了", "沒事", "再見")
+_WEB_RESEARCH_TERMS = (
+    "市價", "售價", "價格", "定價", "最新", "評價", "規格", "上市",
+    "哪裡買", "哪裡有", "通路", "折扣", "優惠", "查網路", "上網查",
+)
+_SHOE_RESEARCH_QUESTIONS = (
+    "怎樣的鞋", "怎麼樣的鞋", "適合我", "值得買", "值得入手", "好穿嗎",
+)
 
 
 def _should_offer_tools(
@@ -115,6 +124,19 @@ def _should_offer_tools(
         if turn.get("role") == "user"
     ), "")
     return any(term in recent_user for term in _TOOL_INTENT_TERMS)
+
+
+def _requires_web_search(user_message: str) -> bool:
+    """Detect requests where answering from model memory would be misleading."""
+    normalized = " ".join(user_message.lower().split())
+    if any(term in normalized for term in _WEB_RESEARCH_TERMS):
+        return True
+    if any(term in normalized for term in _SHOE_RESEARCH_QUESTIONS):
+        return True
+    # Short model-name follow-ups such as "SC Elite v6 呢" should also be
+    # researched instead of inviting a weak model to invent specifications.
+    has_model_like_token = bool(re.search(r"[a-z]{2,}[^\n]{0,30}\d", normalized))
+    return has_model_like_token and normalized.rstrip("？?!！。 ").endswith("呢")
 
 
 def _sse(event: dict) -> str:
@@ -221,11 +243,36 @@ def run_agent_stream(
     web_search_fails = 0
     web_search_calls = 0
     executed_calls: set[tuple[str, str]] = set()
+    requires_web_search = _requires_web_search(user_message)
     available_tools = (
         db_tools.TOOL_DEFINITIONS
-        if _should_offer_tools(user_message, history)
+        if requires_web_search or _should_offer_tools(user_message, history)
         else None
     )
+
+    # For time-sensitive product facts, enforce one backend-side lookup instead
+    # of relying on small models to obey a tool-use instruction.
+    if requires_web_search:
+        search_args = {"query": user_message}
+        yield _sse({"type": "tool", "name": "web_search", "args": search_args})
+        search_output = run_web_search(search_args)
+        yield _tool_done_event("web_search", search_output)
+        web_search_calls = 1
+        executed_calls.add((
+            "web_search",
+            json.dumps(search_args, ensure_ascii=False, sort_keys=True),
+        ))
+        if is_failure(search_output):
+            web_search_fails = 1
+        messages.append({
+            "role": "user",
+            "content": (
+                "[系統預先執行 web_search 的結果]\n"
+                f"{search_output}\n"
+                "只能根據這份搜尋結果陳述即時外部資訊；若搜尋失敗或資料不足，"
+                "請明確說無法驗證，不可憑記憶補造規格、價格或評價。"
+            ),
+        })
 
     for turn in range(MAX_TURNS):
         is_last_turn = turn == MAX_TURNS - 1

@@ -31,3 +31,13 @@ def test_agent_frontend_distinguishes_failed_tools_from_completed_tools():
     assert "event.ok === false" in source
     assert "tool-item.failed" in source
     assert "搜尋服務暫時無法" not in source  # message comes from the backend event
+
+
+def test_agent_frontend_always_discloses_web_search_usage():
+    source = (PROJECT_ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
+
+    assert "webSearchAttempted" in source
+    assert "webSearchSucceeded" in source
+    assert "本則回答已使用網路搜尋" in source
+    assert "本則回答未使用網路搜尋" in source
+    assert "網路搜尋失敗，本則回答沒有可驗證的即時網路資料" in source
