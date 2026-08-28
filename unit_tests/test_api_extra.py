@@ -15,6 +15,7 @@ from fastapi.testclient import TestClient
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from backend import llm, schemas
+from backend import main as main_module
 from backend.auth import create_access_token
 from backend.database import get_db
 from backend.main import (
@@ -136,6 +137,31 @@ def test_export_xlsx_active_has_styled_sheet(client, db, user_with_token):
     assert sheet.column_dimensions["A"].width == 18
 
 
+def test_exports_escape_spreadsheet_formulas(client, db, user_with_token):
+    user, token = user_with_token
+    db.add(Shoe(
+        user_id=user.id,
+        brand="=HYPERLINK(\"https://evil.example\")",
+        model="+cmd|' /C calc'!A0",
+        date="2026-01-01",
+        size=" @SUM(1+1)",
+        categories=["Daily"],
+    ))
+    db.commit()
+
+    csv_response = client.get("/api/export?format=csv", headers=_auth(token))
+    csv_row = next(csv.DictReader(io.StringIO(csv_response.content.decode("utf-8-sig"))))
+    assert csv_row["品牌"].startswith("'=")
+    assert csv_row["鞋款"].startswith("'+")
+    assert csv_row["尺寸"].startswith("' @")
+
+    xlsx_response = client.get("/api/export?format=xlsx", headers=_auth(token))
+    sheet = openpyxl.load_workbook(io.BytesIO(xlsx_response.content))["跑鞋資料"]
+    headers = [cell.value for cell in sheet[1]]
+    assert sheet.cell(2, headers.index("品牌") + 1).data_type == "s"
+    assert sheet.cell(2, headers.index("品牌") + 1).value.startswith("'=")
+
+
 @pytest.mark.parametrize(
     "url",
     [
@@ -196,6 +222,88 @@ def test_agent_provider_routes_delegate_to_llm(client, user_with_token, monkeypa
     assert refresh_response.json() == [{"id": "openrouter"}]
     assert list_providers.call_args_list[0].kwargs == {}
     assert list_providers.call_args_list[1].kwargs == {"force": True}
+
+
+def test_model_refresh_has_per_user_cooldown(client, user_with_token, monkeypatch):
+    user, token = user_with_token
+    main_module._model_refresh_times.pop(user.id, None)
+    monkeypatch.setattr("backend.main.llm.list_providers", MagicMock(return_value=[]))
+    first = client.post("/api/agent/models/refresh", headers=_auth(token))
+    second = client.post("/api/agent/models/refresh", headers=_auth(token))
+    assert first.status_code == 200
+    assert second.status_code == 429
+    main_module._model_refresh_times.pop(user.id, None)
+
+
+def test_registration_capacity_is_enforced(client, db, monkeypatch):
+    monkeypatch.setattr(main_module, "MAX_REGISTERED_USERS", 1)
+    db.add(main_module.models.User(
+        username="existing",
+        hashed_password=main_module.get_password_hash("pass1234"),
+    ))
+    db.commit()
+    response = client.post(
+        "/api/auth/register",
+        headers={"Fly-Client-IP": "198.51.100.8"},
+        json={"username": "new-user", "password": "pass1234"},
+    )
+    assert response.status_code == 403
+
+
+def test_auth_endpoint_rate_limit_uses_client_ip(client, monkeypatch):
+    main_module._auth_rate_events.clear()
+    main_module._auth_global_rate_events.clear()
+    monkeypatch.setattr(main_module, "AUTH_RATE_LIMIT_PER_MINUTE", 1)
+    headers = {"Fly-Client-IP": "198.51.100.9"}
+    first = client.post(
+        "/api/auth/login", headers=headers,
+        json={"username": "nobody", "password": "pass1234"},
+    )
+    second = client.post(
+        "/api/auth/login", headers=headers,
+        json={"username": "nobody", "password": "pass1234"},
+    )
+    assert first.status_code == 401
+    assert second.status_code == 429
+    main_module._auth_rate_events.clear()
+    main_module._auth_global_rate_events.clear()
+
+
+def test_shoe_record_quota_is_enforced(client, db, user_with_token, monkeypatch):
+    user, token = user_with_token
+    monkeypatch.setattr(main_module, "MAX_SHOES_PER_USER", 1)
+    db.add(Shoe(user_id=user.id, brand="A", model="One", date="2026-01-01"))
+    db.commit()
+    response = client.post("/api/shoes", headers=_auth(token), json={
+        "brand": "B", "model": "Two", "date": "2026-01-02",
+    })
+    assert response.status_code == 409
+
+
+def test_agent_ip_and_global_limits_run_before_llm(client, user_with_token, monkeypatch):
+    user, token = user_with_token
+    main_module._agent_rate_events.clear()
+    main_module._agent_ip_rate_events.clear()
+    main_module._agent_global_rate_events.clear()
+    monkeypatch.setattr(main_module, "AGENT_IP_RATE_LIMIT_PER_MINUTE", 1)
+    monkeypatch.setattr(main_module, "AGENT_RATE_LIMIT_PER_MINUTE", 10)
+    monkeypatch.setattr(main_module, "AGENT_GLOBAL_RATE_LIMIT_PER_MINUTE", 10)
+    monkeypatch.setattr("backend.main.llm.resolve_allowed_model", MagicMock(return_value="free"))
+    run_agent = MagicMock(return_value=iter(['data: {"type":"done"}\n\n']))
+    monkeypatch.setattr("backend.main.agent.run_agent_stream", run_agent)
+    headers = {**_auth(token), "Fly-Client-IP": "198.51.100.10"}
+    first = client.post(
+        "/api/agent/chat/stream", headers=headers, json={"user_message": "hi"}
+    )
+    second = client.post(
+        "/api/agent/chat/stream", headers=headers, json={"user_message": "hi"}
+    )
+    assert first.status_code == 200
+    assert second.status_code == 429
+    assert run_agent.call_count == 1
+    main_module._agent_rate_events.pop(user.id, None)
+    main_module._agent_ip_rate_events.clear()
+    main_module._agent_global_rate_events.clear()
 
 
 def test_agent_stream_route_forwards_payload_and_user(client, user_with_token, monkeypatch):

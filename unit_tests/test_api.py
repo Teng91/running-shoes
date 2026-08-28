@@ -40,6 +40,22 @@ def test_register_short_password(client):
     assert "4 characters" in res.json()["detail"]
 
 
+@pytest.mark.parametrize("password", ["a" * 73, "密" * 25])
+def test_auth_rejects_passwords_over_bcrypt_byte_limit(client, password):
+    register = client.post(
+        "/api/auth/register", json={"username": "alice", "password": password}
+    )
+    login = client.post(
+        "/api/auth/login", json={"username": "alice", "password": password}
+    )
+    change = client.post("/api/auth/change-password", json={
+        "username": "alice", "old_password": "pass1234", "new_password": password,
+    })
+    assert register.status_code == 422
+    assert login.status_code == 422
+    assert change.status_code == 422
+
+
 def test_register_duplicate_username(client, db):
     db.add(User(username="alice", hashed_password=get_password_hash("pass1234")))
     db.commit()
@@ -63,7 +79,7 @@ def test_register_whitespace_only_rejected(client):
 
 def test_register_overlong_username_rejected(client):
     res = client.post("/api/auth/register", json={"username": "x" * 51, "password": "pass1234"})
-    assert res.status_code == 400
+    assert res.status_code == 422
 
 
 def test_login_success(client, db):
@@ -76,8 +92,8 @@ def test_login_success(client, db):
 
 def test_login_user_not_found(client):
     res = client.post("/api/auth/login", json={"username": "nobody", "password": "pass1234"})
-    assert res.status_code == 404
-    assert res.json()["detail"] == "User not found"
+    assert res.status_code == 401
+    assert res.json()["detail"] == "Incorrect username or password"
 
 
 def test_login_wrong_password(client, db):
@@ -85,7 +101,7 @@ def test_login_wrong_password(client, db):
     db.commit()
     res = client.post("/api/auth/login", json={"username": "alice", "password": "wrong"})
     assert res.status_code == 401
-    assert res.json()["detail"] == "Incorrect password"
+    assert res.json()["detail"] == "Incorrect username or password"
 
 
 def test_change_password(client, db):
@@ -104,7 +120,7 @@ def test_change_password_user_not_found(client):
     res = client.post("/api/auth/change-password", json={
         "username": "nobody", "old_password": "oldpass", "new_password": "newpass1",
     })
-    assert res.status_code == 404
+    assert res.status_code == 401
 
 
 def test_change_password_wrong_old(client, db):
@@ -114,7 +130,7 @@ def test_change_password_wrong_old(client, db):
         "username": "alice", "old_password": "wrong", "new_password": "newpass1",
     })
     assert res.status_code == 401
-    assert res.json()["detail"] == "Incorrect old password"
+    assert res.json()["detail"] == "Incorrect username or old password"
 
 
 def test_change_password_short_new(client, db):
@@ -134,7 +150,7 @@ def test_change_password_empty_old(client, db):
         "username": "alice", "old_password": "", "new_password": "newpass1",
     })
     assert res.status_code == 401
-    assert res.json()["detail"] == "Incorrect old password"
+    assert res.json()["detail"] == "Incorrect username or old password"
 
 
 def test_change_password_empty_new(client, db):
@@ -250,6 +266,23 @@ def test_create_shoe(client, db, user_with_token):
     assert data["brand"] == "Mizuno"
     assert data["user_id"] == user.id
     assert data["categories"] == ["Daily"]
+
+
+def test_create_shoe_rejects_blank_or_oversized_text(client, user_with_token):
+    _, token = user_with_token
+    blank = client.post("/api/shoes", headers=_auth_header(token), json={
+        "brand": "   ", "model": "Model", "date": "2026-01-01",
+    })
+    oversized = client.post("/api/shoes", headers=_auth_header(token), json={
+        "brand": "B", "model": "x" * 101, "date": "2026-01-01",
+    })
+    duplicate_categories = client.post("/api/shoes", headers=_auth_header(token), json={
+        "brand": "B", "model": "M", "date": "2026-01-01",
+        "categories": ["Daily", "Daily"],
+    })
+    assert blank.status_code == 422
+    assert oversized.status_code == 422
+    assert duplicate_categories.status_code == 422
 
 
 def test_create_shoe_rejects_invalid_category(client, user_with_token):

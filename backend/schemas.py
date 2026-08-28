@@ -9,6 +9,22 @@ SHOE_CATEGORIES = ["Daily", "Speed", "Tempo", "Race", "Trail", "Walk"]
 ReasonableYear = Annotated[int, Field(ge=1900, le=2100)]
 CalendarMonth = Annotated[int, Field(ge=1, le=12)]
 NonNegativeFiniteKm = Annotated[float, Field(ge=0, allow_inf_nan=False)]
+MAX_PASSWORD_BYTES = 72
+Username = Annotated[str, Field(min_length=1, max_length=50)]
+ShoeName = Annotated[str, Field(min_length=1, max_length=100)]
+ShoeSize = Annotated[str, Field(max_length=50)]
+
+
+def _validate_password(value: str) -> str:
+    if len(value.encode("utf-8")) > MAX_PASSWORD_BYTES:
+        raise ValueError(f"password must be at most {MAX_PASSWORD_BYTES} UTF-8 bytes")
+    return value
+
+
+def _validate_non_blank(value: str) -> str:
+    if not value.strip():
+        raise ValueError("must not be blank")
+    return value
 
 
 def _validate_iso_date(value: str) -> str:
@@ -24,13 +40,23 @@ def _validate_iso_date(value: str) -> str:
 # ── Auth Schemas ──────────────────────────────────────────────
 
 class UserCreate(BaseModel):
-    username: str
+    username: Username
     password: str
+
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, value: str) -> str:
+        return _validate_password(value)
 
 
 class UserLogin(BaseModel):
-    username: str
+    username: Username
     password: str
+
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, value: str) -> str:
+        return _validate_password(value)
 
 
 class UserOut(BaseModel):
@@ -68,29 +94,41 @@ class AgentChatRequest(BaseModel):
 
 
 class UserChangePassword(BaseModel):
-    username: str
+    username: Username
     old_password: str
     new_password: str
+
+    @field_validator("old_password", "new_password")
+    @classmethod
+    def validate_password(cls, value: str) -> str:
+        return _validate_password(value)
 
 
 # ── Shoe Schemas ──────────────────────────────────────────────
 
 class ShoeBase(BaseModel):
-    brand: str
-    model: str
+    brand: ShoeName
+    model: ShoeName
     date: str
-    size: str = ""
+    size: ShoeSize = ""
     price: float = 0
     orig_price: float = 0
     mileage: float = 0
     expected_mileage: float = 800
     monthly_km: float = 60
     is_retired: bool = False
-    categories: list[str] = ["Daily"]
+    categories: list[str] = Field(default_factory=lambda: ["Daily"], max_length=6)
+
+    @field_validator("brand", "model")
+    @classmethod
+    def validate_names(cls, value: str) -> str:
+        return _validate_non_blank(value)
 
     @field_validator("categories")
     @classmethod
     def validate_categories(cls, v):
+        if len(v) != len(set(v)):
+            raise ValueError("categories must not contain duplicates")
         invalid = [c for c in v if c not in SHOE_CATEGORIES]
         if invalid:
             raise ValueError(
@@ -121,17 +159,22 @@ class ShoeCreate(ShoeBase):
 
 
 class ShoeUpdate(BaseModel):
-    brand: str | None = None
-    model: str | None = None
+    brand: ShoeName | None = None
+    model: ShoeName | None = None
     date: str | None = None
-    size: str | None = None
+    size: ShoeSize | None = None
     price: float | None = None
     orig_price: float | None = None
     mileage: float | None = None
     expected_mileage: float | None = None
     monthly_km: float | None = None
     is_retired: bool | None = None
-    categories: list[str] | None = None
+    categories: Annotated[list[str], Field(max_length=6)] | None = None
+
+    @field_validator("brand", "model")
+    @classmethod
+    def validate_names(cls, value: str | None) -> str | None:
+        return _validate_non_blank(value) if value is not None else None
 
     @field_validator("date")
     @classmethod
@@ -142,6 +185,8 @@ class ShoeUpdate(BaseModel):
     @classmethod
     def validate_categories(cls, v):
         if v is not None:
+            if len(v) != len(set(v)):
+                raise ValueError("categories must not contain duplicates")
             invalid = [c for c in v if c not in SHOE_CATEGORIES]
             if invalid:
                 raise ValueError(

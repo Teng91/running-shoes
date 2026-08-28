@@ -7,7 +7,7 @@ from pathlib import Path
 from threading import Lock
 from typing import cast
 
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from sqlalchemy import Table, inspect, text
@@ -26,8 +26,31 @@ from backend.database import Base, SessionLocal, engine, get_db
 AGENT_RATE_LIMIT_PER_MINUTE = max(
     1, int(os.environ.get("AGENT_RATE_LIMIT_PER_MINUTE", "20"))
 )
+AGENT_IP_RATE_LIMIT_PER_MINUTE = max(
+    1, int(os.environ.get("AGENT_IP_RATE_LIMIT_PER_MINUTE", "30"))
+)
+AGENT_GLOBAL_RATE_LIMIT_PER_MINUTE = max(
+    1, int(os.environ.get("AGENT_GLOBAL_RATE_LIMIT_PER_MINUTE", "120"))
+)
+AUTH_RATE_LIMIT_PER_MINUTE = max(
+    1, int(os.environ.get("AUTH_RATE_LIMIT_PER_MINUTE", "120"))
+)
+AUTH_GLOBAL_RATE_LIMIT_PER_MINUTE = max(
+    1, int(os.environ.get("AUTH_GLOBAL_RATE_LIMIT_PER_MINUTE", "300"))
+)
+MAX_REGISTERED_USERS = max(1, int(os.environ.get("MAX_REGISTERED_USERS", "100")))
+MAX_SHOES_PER_USER = max(1, int(os.environ.get("MAX_SHOES_PER_USER", "500")))
+MODEL_REFRESH_COOLDOWN_SECONDS = max(
+    1, int(os.environ.get("MODEL_REFRESH_COOLDOWN_SECONDS", "60"))
+)
 _agent_rate_events: dict[int, deque[float]] = {}
+_agent_ip_rate_events: dict[str, deque[float]] = {}
+_agent_global_rate_events: dict[str, deque[float]] = {}
+_auth_rate_events: dict[str, deque[float]] = {}
+_auth_global_rate_events: dict[str, deque[float]] = {}
+_model_refresh_times: dict[int, float] = {}
 _agent_rate_lock = Lock()
+_registration_lock = Lock()
 
 
 def _enforce_agent_rate_limit(user_id: int, now: float | None = None) -> None:
@@ -35,9 +58,12 @@ def _enforce_agent_rate_limit(user_id: int, now: float | None = None) -> None:
     current = time.monotonic() if now is None else now
     cutoff = current - 60
     with _agent_rate_lock:
+        for stale_user_id, stale_events in list(_agent_rate_events.items()):
+            while stale_events and stale_events[0] <= cutoff:
+                stale_events.popleft()
+            if not stale_events:
+                _agent_rate_events.pop(stale_user_id, None)
         events = _agent_rate_events.setdefault(user_id, deque())
-        while events and events[0] <= cutoff:
-            events.popleft()
         if len(events) >= AGENT_RATE_LIMIT_PER_MINUTE:
             retry_after = max(1, int(60 - (current - events[0])))
             raise HTTPException(
@@ -46,6 +72,89 @@ def _enforce_agent_rate_limit(user_id: int, now: float | None = None) -> None:
                 headers={"Retry-After": str(retry_after)},
             )
         events.append(current)
+
+
+def _client_key(request: Request) -> str:
+    """Use Fly's authenticated client-IP header, falling back to the peer address."""
+    fly_ip = request.headers.get("fly-client-ip", "").strip()
+    if fly_ip:
+        return fly_ip[:64]
+    return (request.client.host if request.client else "unknown")[:64]
+
+
+def _enforce_window_limit(
+    buckets: dict[str, deque[float]],
+    key: str,
+    limit: int,
+    detail: str,
+    now: float | None = None,
+) -> None:
+    current = time.monotonic() if now is None else now
+    cutoff = current - 60
+    with _agent_rate_lock:
+        # Opportunistic cleanup prevents stale IP/account keys accumulating forever.
+        for stale_key, stale_events in list(buckets.items()):
+            while stale_events and stale_events[0] <= cutoff:
+                stale_events.popleft()
+            if not stale_events:
+                buckets.pop(stale_key, None)
+        events = buckets.setdefault(key, deque())
+        if len(events) >= limit:
+            retry_after = max(1, int(60 - (current - events[0])))
+            raise HTTPException(
+                status_code=429,
+                detail=detail,
+                headers={"Retry-After": str(retry_after)},
+            )
+        events.append(current)
+
+
+def _enforce_auth_rate_limit(request: Request) -> None:
+    _enforce_window_limit(
+        _auth_rate_events,
+        _client_key(request),
+        AUTH_RATE_LIMIT_PER_MINUTE,
+        "驗證請求過於頻繁，請稍後再試。",
+    )
+    _enforce_window_limit(
+        _auth_global_rate_events,
+        "global",
+        AUTH_GLOBAL_RATE_LIMIT_PER_MINUTE,
+        "驗證服務目前忙碌，請稍後再試。",
+    )
+
+
+def _enforce_agent_request_limits(request: Request, user_id: int) -> None:
+    _enforce_agent_rate_limit(user_id)
+    _enforce_window_limit(
+        _agent_ip_rate_events,
+        _client_key(request),
+        AGENT_IP_RATE_LIMIT_PER_MINUTE,
+        "此網路的 AI 請求過於頻繁，請稍後再試。",
+    )
+    _enforce_window_limit(
+        _agent_global_rate_events,
+        "global",
+        AGENT_GLOBAL_RATE_LIMIT_PER_MINUTE,
+        "AI 服務目前忙碌，請稍後再試。",
+    )
+
+
+def _enforce_model_refresh_cooldown(user_id: int, now: float | None = None) -> None:
+    current = time.monotonic() if now is None else now
+    with _agent_rate_lock:
+        for stale_user_id, refreshed_at in list(_model_refresh_times.items()):
+            if current - refreshed_at >= MODEL_REFRESH_COOLDOWN_SECONDS:
+                _model_refresh_times.pop(stale_user_id, None)
+        last_refresh = _model_refresh_times.get(user_id)
+        if last_refresh is not None and current - last_refresh < MODEL_REFRESH_COOLDOWN_SECONDS:
+            retry_after = max(1, int(MODEL_REFRESH_COOLDOWN_SECONDS - (current - last_refresh)))
+            raise HTTPException(
+                status_code=429,
+                detail="模型列表剛更新過，請稍後再試。",
+                headers={"Retry-After": str(retry_after)},
+            )
+        _model_refresh_times[user_id] = current
 
 # ── Seed default data (only when SEED_DATA=true) ──────────────
 def seed_default_data():
@@ -238,7 +347,8 @@ async def http_exception_handler(request, exc):
 
 # ── Auth Routes ───────────────────────────────────────────────
 @app.post("/api/auth/register", response_model=schemas.UserOut)
-def register(payload: schemas.UserCreate, db: Session = Depends(get_db)):
+def register(request: Request, payload: schemas.UserCreate, db: Session = Depends(get_db)):
+    _enforce_auth_rate_limit(request)
     if len(payload.password) < 4:
         raise HTTPException(status_code=400, detail="Password must be at least 4 characters")
     username = payload.username.strip()
@@ -246,25 +356,31 @@ def register(payload: schemas.UserCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Username cannot be empty")
     if len(username) > 50:
         raise HTTPException(status_code=400, detail="Username must be 50 characters or fewer")
-    if db.query(models.User).filter(models.User.username == username).first():
-        raise HTTPException(status_code=400, detail="Username already registered")
-    user = models.User(
-        username=username,
-        hashed_password=get_password_hash(payload.password),
-    )
-    db.add(user)
-    db.commit()
-    db.refresh(user)
+    with _registration_lock:
+        if db.query(models.User).filter(models.User.username == username).first():
+            raise HTTPException(status_code=400, detail="Username already registered")
+        if db.query(models.User).count() >= MAX_REGISTERED_USERS:
+            raise HTTPException(status_code=403, detail="Registration capacity has been reached")
+        user = models.User(
+            username=username,
+            hashed_password=get_password_hash(payload.password),
+        )
+        db.add(user)
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+        db.refresh(user)
     return user
 
 
 @app.post("/api/auth/login", response_model=schemas.Token)
-def login(payload: schemas.UserLogin, db: Session = Depends(get_db)):
+def login(request: Request, payload: schemas.UserLogin, db: Session = Depends(get_db)):
+    _enforce_auth_rate_limit(request)
     user = db.query(models.User).filter(models.User.username == payload.username).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    if not verify_password(payload.password, user.hashed_password):
-        raise HTTPException(status_code=401, detail="Incorrect password")
+    if not user or not verify_password(payload.password, user.hashed_password):
+        raise HTTPException(status_code=401, detail="Incorrect username or password")
     token = create_access_token(data={"sub": user.username})
     return {"access_token": token, "token_type": "bearer"}
 
@@ -275,14 +391,19 @@ def read_current_user(current_user: models.User = Depends(get_current_user)):
 
 
 @app.post("/api/auth/change-password")
-def change_password(payload: schemas.UserChangePassword, db: Session = Depends(get_db)):
+def change_password(
+    request: Request,
+    payload: schemas.UserChangePassword,
+    db: Session = Depends(get_db),
+):
+    _enforce_auth_rate_limit(request)
     if len(payload.new_password) < 4:
         raise HTTPException(status_code=400, detail="Password must be at least 4 characters")
     user = db.query(models.User).filter(models.User.username == payload.username).first()
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=401, detail="Incorrect username or old password")
     if not verify_password(payload.old_password, user.hashed_password):
-        raise HTTPException(status_code=401, detail="Incorrect old password")
+        raise HTTPException(status_code=401, detail="Incorrect username or old password")
     user.hashed_password = get_password_hash(payload.new_password)
     db.commit()
     return {"ok": True}
@@ -319,6 +440,9 @@ def create_shoe(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    shoe_count = db.query(models.Shoe).filter(models.Shoe.user_id == current_user.id).count()
+    if isinstance(shoe_count, int) and shoe_count >= MAX_SHOES_PER_USER:
+        raise HTTPException(status_code=409, detail="跑鞋資料已達上限")
     shoe = models.Shoe(**payload.model_dump(), user_id=current_user.id)
     db.add(shoe)
     try:
@@ -477,6 +601,13 @@ def delete_monthly_mileage(
 
 
 # ── Export Routes ─────────────────────────────────────────────────
+def _spreadsheet_safe(value):
+    """Prevent user-controlled text becoming a CSV/XLSX formula."""
+    if isinstance(value, str) and value.lstrip().startswith(("=", "+", "-", "@")):
+        return "'" + value
+    return value
+
+
 def _generate_shoe_rows(shoes: list[models.Shoe], include_retired_status: bool = True):
     """Generate CSV rows for shoes with all fields."""
     for s in shoes:
@@ -487,10 +618,10 @@ def _generate_shoe_rows(shoes: list[models.Shoe], include_retired_status: bool =
         life_pct = round(s.mileage / s.expected_mileage * 100, 2) if s.expected_mileage > 0 else 0
 
         row = {
-            "品牌": s.brand,
-            "鞋款": s.model,
-            "購買日期": s.date,
-            "尺寸": s.size,
+            "品牌": _spreadsheet_safe(s.brand),
+            "鞋款": _spreadsheet_safe(s.model),
+            "購買日期": _spreadsheet_safe(s.date),
+            "尺寸": _spreadsheet_safe(s.size),
             "買價": int(s.price),
             "原價": int(s.orig_price),
             "折數(%)": discount,
@@ -500,7 +631,7 @@ def _generate_shoe_rows(shoes: list[models.Shoe], include_retired_status: bool =
             "預期每km成本": expected_cost,
             "生命進度(%)": life_pct,
             "月跑量(km)": s.monthly_km,
-            "類別": ", ".join(s.categories) if s.categories else "",
+            "類別": _spreadsheet_safe(", ".join(s.categories) if s.categories else ""),
         }
         if include_retired_status:
             row["狀態"] = status
@@ -654,17 +785,19 @@ def refresh_agent_models(
     current_user: models.User = Depends(get_current_user),
 ):
     """強制刷新 OpenRouter 免費模型快取，回傳更新後的 provider/model 清單。"""
+    _enforce_model_refresh_cooldown(current_user.id)
     return llm.list_providers(force=True)
 
 
 @app.post("/api/agent/chat/stream")
 def agent_chat_stream(
+    request: Request,
     payload: schemas.AgentChatRequest,
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """SSE 串流版：與 /api/agent/chat 相同，但 LLM token 會逐字即時送達。"""
-    _enforce_agent_rate_limit(current_user.id)
+    _enforce_agent_request_limits(request, current_user.id)
     try:
         provider = llm.LLMProvider.from_str(payload.provider)
         model = llm.resolve_allowed_model(provider, payload.model)
