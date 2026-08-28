@@ -111,33 +111,33 @@ def _enforce_window_limit(
 
 def _enforce_auth_rate_limit(request: Request) -> None:
     _enforce_window_limit(
-        _auth_rate_events,
-        _client_key(request),
-        AUTH_RATE_LIMIT_PER_MINUTE,
-        "驗證請求過於頻繁，請稍後再試。",
-    )
-    _enforce_window_limit(
         _auth_global_rate_events,
         "global",
         AUTH_GLOBAL_RATE_LIMIT_PER_MINUTE,
         "驗證服務目前忙碌，請稍後再試。",
     )
+    _enforce_window_limit(
+        _auth_rate_events,
+        _client_key(request),
+        AUTH_RATE_LIMIT_PER_MINUTE,
+        "驗證請求過於頻繁，請稍後再試。",
+    )
 
 
 def _enforce_agent_request_limits(request: Request, user_id: int) -> None:
-    _enforce_agent_rate_limit(user_id)
-    _enforce_window_limit(
-        _agent_ip_rate_events,
-        _client_key(request),
-        AGENT_IP_RATE_LIMIT_PER_MINUTE,
-        "此網路的 AI 請求過於頻繁，請稍後再試。",
-    )
     _enforce_window_limit(
         _agent_global_rate_events,
         "global",
         AGENT_GLOBAL_RATE_LIMIT_PER_MINUTE,
         "AI 服務目前忙碌，請稍後再試。",
     )
+    _enforce_window_limit(
+        _agent_ip_rate_events,
+        _client_key(request),
+        AGENT_IP_RATE_LIMIT_PER_MINUTE,
+        "此網路的 AI 請求過於頻繁，請稍後再試。",
+    )
+    _enforce_agent_rate_limit(user_id)
 
 
 def _enforce_model_refresh_cooldown(user_id: int, now: float | None = None) -> None:
