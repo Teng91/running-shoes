@@ -51,8 +51,8 @@ cd running-shoes
 # 2. 建立虛擬環境
 python3 -m venv venv
 
-# 3. 使用虛擬環境安裝依賴（不需要 activate）
-venv/bin/python -m pip install -r requirements.txt
+# 3. 使用虛擬環境安裝開發依賴（包含正式執行、測試與程式碼檢查套件）
+venv/bin/python -m pip install -r requirements-dev.txt
 
 # 4. 使用虛擬環境啟動伺服器
 venv/bin/python -m backend.run
@@ -64,11 +64,19 @@ open http://localhost:8000
 建議直接使用 `venv/bin/python`，因為指令本身就明確指定虛擬環境，不會因為換了
 Terminal、忘記 activate，或 IDE 使用另一個 shell 而誤用系統 Python。
 
+專案保留兩份依賴清單是刻意的：
+
+- `requirements.txt`：正式執行需要的套件，Docker／Fly.io 部署使用這份。
+- `requirements-dev.txt`：先引用 `requirements.txt`，再加入 pytest、coverage、Ruff、mypy 與型別 stub，供本機開發及 CI 使用。
+
+如果只想執行服務、不需要跑測試或程式碼檢查，也可以只安裝
+`requirements.txt`。
+
 若偏好先啟用虛擬環境，也可以使用以下等效方式：
 
 ```bash
 source venv/bin/activate
-python -m pip install -r requirements.txt
+python -m pip install -r requirements-dev.txt
 python -m backend.run
 
 # 使用完畢可離開虛擬環境
@@ -180,7 +188,7 @@ venv/bin/pytest -q
 venv/bin/pytest -q --cov=backend --cov-branch --cov-report=term-missing
 ```
 
-目前測試基準為 **216 passed**，`backend` 整體測試覆蓋率為 **99%**。
+目前測試基準為 **218 passed**；`backend` 行覆蓋率為 **99%**，含分支的整體覆蓋率為 **98%**。
 
 ## Docker 部署
 
@@ -200,15 +208,19 @@ open http://你的IP:8000
 第一次部署需要設定以下 secrets：
 
 ```bash
-# 必要：管理員帳號的初始密碼（沒設會啟動失敗）
-fly secrets set MIGRATION_PASSWORD=<你想設的密碼>
+# 必要：管理員帳號的初始密碼（輸入時不會顯示；沒設會啟動失敗）
+read -rsp 'MIGRATION_PASSWORD: ' MIGRATION_PASSWORD_VALUE && echo
+fly secrets set MIGRATION_PASSWORD="$MIGRATION_PASSWORD_VALUE"
+unset MIGRATION_PASSWORD_VALUE
 
-# 必要：JWT 簽章密鑰，請使用足夠長度的隨機字串
-fly secrets set SECRET_KEY=<隨機安全字串>
+# 必要：自動產生 256-bit JWT 簽章密鑰
+fly secrets set SECRET_KEY="$(openssl rand -hex 32)"
 
 # 必要：AI 助手功能需要 OpenRouter API 金鑰
 # 取得: https://openrouter.ai/keys
-fly secrets set OPENROUTER_API_KEY=<你的 OpenRouter API Key>
+read -rsp 'OPENROUTER_API_KEY: ' OPENROUTER_KEY_VALUE && echo
+fly secrets set OPENROUTER_API_KEY="$OPENROUTER_KEY_VALUE"
+unset OPENROUTER_KEY_VALUE
 ```
 
 之後每次部署只要：
@@ -263,12 +275,20 @@ fly status -a running-shoes
 FLY_MACHINE_ID=d8917edb352038
 fly machine start "$FLY_MACHINE_ID" -a running-shoes
 
-# 5. 從 Fly.io 抓最新的 shoes.db
-fly ssh sftp get /data/shoes.db ./shoes.db \
+# 5. 使用 SQLite backup API 在雲端建立交易一致的暫存快照
+fly ssh console --machine "$FLY_MACHINE_ID" -a running-shoes -C \
+  "python -c \"import sqlite3; src=sqlite3.connect('/data/shoes.db'); dst=sqlite3.connect('/data/shoes.snapshot.db'); src.backup(dst); dst.close(); src.close()\""
+
+# 6. 下載快照並覆蓋本機 shoes.db
+fly ssh sftp get /data/shoes.snapshot.db ./shoes.db \
   --machine "$FLY_MACHINE_ID" \
   -a running-shoes
 
-# 6. 重新啟動本地 server
+# 7. 刪除雲端暫存快照（不會刪到正式的 /data/shoes.db）
+fly ssh console --machine "$FLY_MACHINE_ID" -a running-shoes -C \
+  "rm -f /data/shoes.snapshot.db"
+
+# 8. 重新啟動本地 server
 venv/bin/python -m backend.run
 ```
 
@@ -278,6 +298,7 @@ venv/bin/python -m backend.run
 - `FLY_MACHINE_ID` 要換成當次 `fly status` 顯示的 ID；重新部署後 Machine ID 可能改變
 - 專案設定了 `auto_stop_machines = "stop"`，閒置後自動停止是正常行為；若 SFTP 顯示 `no started VMs`，重新執行步驟 3～5 即可
 - 新版 Fly CLI 的啟動指令是 `fly machine start`，不是 `fly start` 或 `flyctl start`
+- 不要在服務運行時直接複製 `/data/shoes.db`；先用 SQLite backup API 建立快照，才能避免下載途中遇到寫入交易而取得不一致的檔案
 
 反向同步（local → 雲端）目前沒有自動化流程，直接對雲端 UI 操作即可。
 

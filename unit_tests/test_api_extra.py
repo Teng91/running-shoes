@@ -269,6 +269,34 @@ def test_auth_endpoint_rate_limit_uses_client_ip(client, monkeypatch):
     main_module._auth_global_rate_events.clear()
 
 
+def test_auth_global_limit_rejects_before_creating_new_ip_bucket(
+    client, monkeypatch
+):
+    main_module._auth_rate_events.clear()
+    main_module._auth_global_rate_events.clear()
+    monkeypatch.setattr(main_module, "AUTH_RATE_LIMIT_PER_MINUTE", 100)
+    monkeypatch.setattr(main_module, "AUTH_GLOBAL_RATE_LIMIT_PER_MINUTE", 1)
+
+    payload = {"username": "nobody", "password": "pass1234"}
+    first = client.post(
+        "/api/auth/login",
+        headers={"Fly-Client-IP": "198.51.100.21"},
+        json=payload,
+    )
+    second = client.post(
+        "/api/auth/login",
+        headers={"Fly-Client-IP": "198.51.100.22"},
+        json=payload,
+    )
+
+    assert first.status_code == 401
+    assert second.status_code == 429
+    assert "198.51.100.21" in main_module._auth_rate_events
+    assert "198.51.100.22" not in main_module._auth_rate_events
+    main_module._auth_rate_events.clear()
+    main_module._auth_global_rate_events.clear()
+
+
 def test_shoe_record_quota_is_enforced(client, db, user_with_token, monkeypatch):
     user, token = user_with_token
     monkeypatch.setattr(main_module, "MAX_SHOES_PER_USER", 1)
@@ -302,6 +330,43 @@ def test_agent_ip_and_global_limits_run_before_llm(client, user_with_token, monk
     assert second.status_code == 429
     assert run_agent.call_count == 1
     main_module._agent_rate_events.pop(user.id, None)
+    main_module._agent_ip_rate_events.clear()
+    main_module._agent_global_rate_events.clear()
+
+
+def test_agent_global_limit_rejects_before_creating_ip_or_account_buckets(
+    client, user_with_token, monkeypatch
+):
+    user, token = user_with_token
+    main_module._agent_rate_events.clear()
+    main_module._agent_ip_rate_events.clear()
+    main_module._agent_global_rate_events.clear()
+    monkeypatch.setattr(main_module, "AGENT_GLOBAL_RATE_LIMIT_PER_MINUTE", 1)
+    monkeypatch.setattr(main_module, "AGENT_IP_RATE_LIMIT_PER_MINUTE", 100)
+    monkeypatch.setattr(main_module, "AGENT_RATE_LIMIT_PER_MINUTE", 100)
+    monkeypatch.setattr("backend.main.llm.resolve_allowed_model", MagicMock(return_value="free"))
+    monkeypatch.setattr(
+        "backend.main.agent.run_agent_stream",
+        MagicMock(return_value=iter(['data: {"type":"done"}\n\n'])),
+    )
+
+    first = client.post(
+        "/api/agent/chat/stream",
+        headers={**_auth(token), "Fly-Client-IP": "198.51.100.31"},
+        json={"user_message": "hi"},
+    )
+    second = client.post(
+        "/api/agent/chat/stream",
+        headers={**_auth(token), "Fly-Client-IP": "198.51.100.32"},
+        json={"user_message": "hi"},
+    )
+
+    assert first.status_code == 200
+    assert second.status_code == 429
+    assert "198.51.100.31" in main_module._agent_ip_rate_events
+    assert "198.51.100.32" not in main_module._agent_ip_rate_events
+    assert len(main_module._agent_rate_events[user.id]) == 1
+    main_module._agent_rate_events.clear()
     main_module._agent_ip_rate_events.clear()
     main_module._agent_global_rate_events.clear()
 

@@ -460,27 +460,7 @@ TOOL_DEFINITIONS: list[dict] = [
 ]
 
 
-# ── 舊文字標記相容層（新流程使用上方原生 TOOL_DEFINITIONS）─────
-TOOL_SPEC_TEXT = """當你需要讀取使用者的資料時，請在回覆中插入一個工具標記，
-格式為：<tool>工具名稱 {JSON 參數}</tool>
-可用工具：
-- list_my_shoes：列出使用者所有跑鞋。參數：{}
-- shoe_summary：跑鞋總覽（鞋數/里程/花費/剩餘壽命）。參數：{}
-- monthly_mileage_stats：每月跑量統計與趨勢。參數：{}
-- nearing_end_of_life：找快到壽命的鞋，參數：{"threshold": 0.8}（0~1，可選）
-- compare_shoes：比較兩雙跑鞋，參數：{"shoe_a": "品牌 鞋款", "shoe_b": "品牌 鞋款"}
-- shoe_category_status：分析 Daily/Speed/Tempo/Race/Trail 類別覆蓋與補鞋需求，參數：{"shoe_name": "可選，指定鞋款"}
-- web_search：上網搜尋市售鞋款/評價/價格，參數：{"query": "搜尋關鍵字"}
-
-規則：
-1. 先根據問題決定要呼叫哪些工具，插入對應標記（可多個）。
-2. 工具標記**單獨成行**，放在你需要的分析位置，但最終給使用者的建議文字裡不要包含標記本身。
-3. **在呼叫工具之前，先用一段文字說明你的推理**：你為什麼要查這個、你預期找到什麼。這段文字會顯示給使用者看，讓他們知道你的思考過程。
-4. 拿到工具結果後，若還需要更多資訊可再呼叫；資訊足夠時，給一段不含標記的最終建議。
-5. 不要呼叫不存在的工具。
-6. **重點：當使用者說「查給我看」、「顯示資料」、「結果呢」時，你必須實際呼叫對應的 `<tool>`，而不是只說「我來查一下」然後沒有給出任何數據。如果不呼叫工具，你無法看到資料庫中的實際內容。**"""
-
-
+# ── 舊文字工具呼叫相容層（原生 tool calling 失敗時使用）──────
 def parse_tool_calls(text: str) -> list[dict]:
     """Parse legacy XML markers and bare JSON tool-call fallbacks.
 
