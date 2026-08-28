@@ -254,19 +254,30 @@ git push (local) ──→ GitHub ──→ fly deploy ──→ Fly.io Builder
 #    Ctrl+C 結束 venv/bin/python -m backend.run
 
 # 2. 備份本地（建議，覆蓋前留個底）
-cp shoes.db shoes.db.local.bak
+cp shoes.db "shoes.db.local-$(date +%Y%m%d-%H%M%S).bak"
 
-# 3. 從 Fly.io 抓最新的 shoes.db
-fly ssh sftp get /data/shoes.db ./shoes.db
+# 3. 查看 Fly Machine ID 與狀態
+fly status -a running-shoes
 
-# 4. 重新啟動本地 server
+# 4. 把下方 ID 換成上一步顯示的 Machine ID；若 STATE 是 stopped，再啟動它
+FLY_MACHINE_ID=d8917edb352038
+fly machine start "$FLY_MACHINE_ID" -a running-shoes
+
+# 5. 從 Fly.io 抓最新的 shoes.db
+fly ssh sftp get /data/shoes.db ./shoes.db \
+  --machine "$FLY_MACHINE_ID" \
+  -a running-shoes
+
+# 6. 重新啟動本地 server
 venv/bin/python -m backend.run
 ```
 
 **注意**：
 - 本地 server 必須先停，否則 SQLite 鎖住會抓不下來
 - 雲端是 source of truth — 本地被覆蓋後，本地的未同步更動會被洗掉
-- 免費方案機器會自動休眠，若 `fly ssh sftp get` 報「no started VMs」先跑 `fly machine start <id>` 叫醒（ID 從 `fly status` 查到）
+- `FLY_MACHINE_ID` 要換成當次 `fly status` 顯示的 ID；重新部署後 Machine ID 可能改變
+- 專案設定了 `auto_stop_machines = "stop"`，閒置後自動停止是正常行為；若 SFTP 顯示 `no started VMs`，重新執行步驟 3～5 即可
+- 新版 Fly CLI 的啟動指令是 `fly machine start`，不是 `fly start` 或 `flyctl start`
 
 反向同步（local → 雲端）目前沒有自動化流程，直接對雲端 UI 操作即可。
 
