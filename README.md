@@ -99,6 +99,16 @@ OPENROUTER_API_KEY=<你的 OpenRouter API Key>   # 取得: https://openrouter.ai
 OR_MODEL=nvidia/nemotron-3-ultra-550b-a55b:free
 # 選填：每個帳號每分鐘最多 AI 請求數（預設 20）
 AGENT_RATE_LIMIT_PER_MINUTE=20
+# 選填：同一 IP／全站每分鐘 AI 請求上限（預設 30／120）
+AGENT_IP_RATE_LIMIT_PER_MINUTE=30
+AGENT_GLOBAL_RATE_LIMIT_PER_MINUTE=120
+# 選填：同一 IP／全站每分鐘登入、註冊、改密碼請求上限（預設 120／300）
+AUTH_RATE_LIMIT_PER_MINUTE=120
+AUTH_GLOBAL_RATE_LIMIT_PER_MINUTE=300
+# 選填：帳號總數、每人跑鞋筆數及模型列表刷新冷卻秒數
+MAX_REGISTERED_USERS=100
+MAX_SHOES_PER_USER=500
+MODEL_REFRESH_COOLDOWN_SECONDS=60
 ```
 
 `.env` 會被自動載入，不需要手動 `export`。沒設定也不影響 Dashboard 的其他功能，只是 AI 助手無法使用。
@@ -127,6 +137,8 @@ AGENT_RATE_LIMIT_PER_MINUTE=20
 - 詢問市價、最新評價、上市資訊或具體市售鞋款規格時，後端會先用「官方規格」與「台灣價格／評價」查詢；搜尋失敗時禁止模型憑記憶補造資料
 - 詢問「某雙鞋適合我嗎」時，後端會在同一輪先取得外部資料、鞋櫃與跑量，再交給模型綜合判斷，不必先問一次再等使用者確認
 - 搜尋結果會過濾不安全網址、去除重複項目，並優先排列官方與可信評測來源；成功結果快取 15 分鐘，價格類查詢快取 5 分鐘
+- 搜尋標題與摘要會限制長度，並以不可信的原生 tool 結果傳給模型，避免網頁文字偽裝成使用者或系統指令
+- 「我最新的月跑量／跑鞋里程」等私人資料問題會優先查後端資料庫；「最新市售跑鞋」才會查網路
 - 每則回答下方會由後端標示「即時搜尋」、「近期搜尋快取」、「不需要搜尋」或「搜尋失敗」，並列出可點擊的來源卡片與實際搜尋關鍵字
 
 目前提供 7 個 Agent 工具：
@@ -152,7 +164,8 @@ AGENT_RATE_LIMIT_PER_MINUTE=20
 
 後端會再次驗證請求模型必須位於目前的免費工具模型清單，前端傳入任意模型 ID
 不會直接使用伺服器的 OpenRouter API Key 呼叫。Agent API 同時限制單則訊息長度、
-history 筆數，並套用每帳號每分鐘請求上限。
+history 筆數，並套用每帳號、每 IP 與全站請求上限。公開驗證端點、註冊帳號總數、
+每人跑鞋筆數及模型列表刷新頻率也都有可透過環境變數調整的防濫用限制。
 
 ## 測試
 
@@ -167,7 +180,7 @@ venv/bin/pytest -q
 venv/bin/pytest -q --cov=backend --cov-branch --cov-report=term-missing
 ```
 
-目前測試基準為 **199 passed**，`backend` 整體測試覆蓋率為 **99%**。
+目前測試基準為 **216 passed**，`backend` 整體測試覆蓋率為 **99%**。
 
 ## Docker 部署
 

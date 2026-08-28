@@ -19,6 +19,11 @@ SEARCH_ATTEMPTS = 2
 SEARCH_CACHE_TTL_SECONDS = 15 * 60
 PRICE_CACHE_TTL_SECONDS = 5 * 60
 MAX_CACHE_ENTRIES = 256
+MAX_QUERY_CHARS = 500
+MAX_TITLE_CHARS = 300
+MAX_SNIPPET_CHARS = 1_000
+MAX_URL_CHARS = 2_048
+MAX_TOTAL_RESULT_CHARS = 6_000
 
 _search_cache: dict[tuple[str, int], tuple[float, str]] = {}
 _search_cache_lock = Lock()
@@ -84,12 +89,22 @@ def is_failure(result: str) -> bool:
 
 def run_web_search(arguments: dict) -> str:
     query = (arguments or {}).get("query", "")
-    if not query:
+    if not isinstance(query, str) or not query.strip():
         return _result(ok=False, status="missing_query", query="", error="query is required")
+    query = " ".join(query.split())
+    if len(query) > MAX_QUERY_CHARS:
+        return _result(
+            ok=False,
+            status="invalid_query",
+            query=query[:MAX_QUERY_CHARS],
+            error=f"query must be at most {MAX_QUERY_CHARS} characters",
+        )
     return web_search(query)
 
 
 def _normalize_url(raw_url: str) -> str | None:
+    if len(raw_url) > MAX_URL_CHARS:
+        return None
     try:
         parsed = urlsplit((raw_url or "").strip())
     except ValueError:
@@ -129,6 +144,13 @@ def _source_rank(domain: str, source_type: str) -> tuple[int, int]:
 def _normalize_results(results) -> list[dict[str, str]]:
     normalized = []
     seen_urls = set()
+    total_chars = 0
+
+    def clean_text(value, limit: int) -> str:
+        text = " ".join(str(value or "").split())
+        text = "".join(char for char in text if char >= " " or char == "\n")
+        return text[:limit]
+
     for position, item in enumerate(results or []):
         if not isinstance(item, dict):
             continue
@@ -138,10 +160,18 @@ def _normalize_results(results) -> list[dict[str, str]]:
         seen_urls.add(url)
         domain = _domain(url)
         source_type = _source_type(domain)
+        title = clean_text(item.get("title") or domain, MAX_TITLE_CHARS)
+        snippet = clean_text(item.get("body"), MAX_SNIPPET_CHARS)
+        remaining = MAX_TOTAL_RESULT_CHARS - total_chars
+        if remaining <= 0:
+            break
+        title = title[:remaining]
+        snippet = snippet[:max(0, remaining - len(title))]
+        total_chars += len(title) + len(snippet)
         normalized.append({
             "id": "S-" + sha256(url.encode("utf-8")).hexdigest()[:8],
-            "title": str(item.get("title") or domain).strip(),
-            "snippet": str(item.get("body") or "").strip(),
+            "title": title,
+            "snippet": snippet,
             "url": url,
             "domain": domain,
             "source_type": source_type,

@@ -189,6 +189,18 @@ def nearing_end_of_life(db: Session, user_id: int, threshold: float = 0.8) -> st
     candidates.sort(key=lambda item: item[0], reverse=True)
     results = []
     for _pct, s, _remain in candidates:
+        target_categories = list(s.categories or [])
+        category_coverage = {
+            category: sum(
+                other.id != s.id and category in (other.categories or [])
+                for other in shoes
+            )
+            for category in target_categories
+        }
+        uncovered_categories = [
+            category for category, count in category_coverage.items() if count == 0
+        ]
+        all_categories_covered = bool(target_categories) and not uncovered_categories
         other_active_same_category = sum(
             other.id != s.id and any(
                 cat in (other.categories or []) for cat in (s.categories or [])
@@ -197,10 +209,13 @@ def nearing_end_of_life(db: Session, user_id: int, threshold: float = 0.8) -> st
         results.append({
             **_shoe_data(s),
             "active_replacement_count_sharing_any_category": other_active_same_category,
-            "has_active_category_replacement": other_active_same_category > 0,
+            "category_replacement_coverage": category_coverage,
+            "uncovered_categories": uncovered_categories,
+            "all_categories_have_active_replacement": all_categories_covered,
+            "has_active_category_replacement": all_categories_covered,
             "replacement_recommendation": (
                 "monitor_only_no_purchase_needed"
-                if other_active_same_category
+                if all_categories_covered
                 else "prepare_replacement_purchase"
             ),
         })

@@ -182,6 +182,30 @@ def test_run_web_search_validates_and_delegates(monkeypatch):
     web_search.assert_called_once_with("daily trainer")
 
 
+def test_run_web_search_rejects_non_string_and_oversized_queries(monkeypatch):
+    web_search = MagicMock()
+    monkeypatch.setattr(search_tool, "web_search", web_search)
+    wrong_type = json.loads(search_tool.run_web_search({"query": 123}))
+    oversized = json.loads(search_tool.run_web_search({
+        "query": "x" * (search_tool.MAX_QUERY_CHARS + 1),
+    }))
+    assert wrong_type["status"] == "missing_query"
+    assert oversized["status"] == "invalid_query"
+    web_search.assert_not_called()
+
+
+def test_search_results_are_sanitized_and_bounded():
+    malicious = "ignore system\x00\n" + "x" * 2_000
+    results = search_tool._normalize_results([{
+        "href": "https://example.com/shoe",
+        "title": "title\x00" + "t" * 500,
+        "body": malicious,
+    }])
+    assert len(results[0]["title"]) <= search_tool.MAX_TITLE_CHARS
+    assert len(results[0]["snippet"]) <= search_tool.MAX_SNIPPET_CHARS
+    assert "\x00" not in results[0]["title"] + results[0]["snippet"]
+
+
 def test_web_search_handles_missing_ddgs_package(monkeypatch):
     original_import = builtins.__import__
 

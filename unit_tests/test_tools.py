@@ -163,22 +163,25 @@ def test_shoe_category_status_multi_category_counts_for_all_purposes(seeded_db):
     assert categories["Trail"]["active_shoe_count"] == 0
 
 
-def test_nearing_end_of_life_multi_category_find_backup_via_shared_category(seeded_db):
-    """A shoe near end-of-life that has [Daily, Tempo] categories should
-    find backup coverage via any other active shoe sharing at least one category."""
+def test_nearing_end_of_life_requires_backup_for_every_category(seeded_db):
+    """One shared category must not hide an uncovered second category."""
     db, uid = seeded_db
     shoe = Shoe(
         user_id=uid, brand="Saucony", model="Endorphin", date="2026-01-01",
         mileage=460, expected_mileage=500, monthly_km=30,
-        categories=["Daily", "Tempo"],
+        categories=["Daily", "Trail"],
     )
     db.add(shoe)
     db.commit()
     out = _result(db_tools.nearing_end_of_life(db, uid, threshold=0.8))
     result = next(shoe for shoe in out["shoes"] if shoe["model"] == "Endorphin")
     assert result["usage_percent"] == 92
-    assert result["has_active_category_replacement"] is True
-    assert result["active_replacement_count_sharing_any_category"] == 3
+    assert result["has_active_category_replacement"] is False
+    assert result["all_categories_have_active_replacement"] is False
+    assert result["uncovered_categories"] == ["Trail"]
+    assert result["category_replacement_coverage"] == {"Daily": 2, "Trail": 0}
+    assert result["replacement_recommendation"] == "prepare_replacement_purchase"
+    assert result["active_replacement_count_sharing_any_category"] == 2
 
 
 def test_monthly_mileage_stats(seeded_db):
