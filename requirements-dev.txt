@@ -1,5 +1,10 @@
 -r requirements.txt
 
+# testing / coverage
+pytest>=8.0
+pytest-cov>=7.0
+
+# lint / type checking
 mypy>=2.3
 ruff>=0.16
 types-openpyxl
