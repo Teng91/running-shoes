@@ -447,6 +447,9 @@ def test_run_log_crud(client, db, user_with_token):
     updated = client.put(f"/api/runs/{run_id}", headers=headers, json={"km": 10.5})
     assert updated.status_code == 200
     assert updated.json()["km"] == 10.5
+    omitted = client.put(f"/api/runs/{run_id}", headers=headers, json={})
+    assert omitted.status_code == 200
+    assert omitted.json()["km"] == 10.5
 
     deleted = client.delete(f"/api/runs/{run_id}", headers=headers)
     assert deleted.status_code == 200
@@ -518,6 +521,30 @@ def test_run_log_limit(client, db, user_with_token, monkeypatch):
 def test_run_log_rejects_invalid_payload(client, user_with_token, payload):
     _, token = user_with_token
     assert client.post("/api/runs", headers=_auth_header(token), json=payload).status_code == 422
+
+
+@pytest.mark.parametrize("payload", [
+    {"date": None},
+    {"km": None},
+    {"shoe_id": None},
+])
+def test_run_log_update_rejects_explicit_nulls(client, db, user_with_token, payload):
+    user, token = user_with_token
+    shoe = Shoe(user_id=user.id, brand="Mizuno", model="Rider", date="2026-01-01")
+    db.add(shoe)
+    db.commit()
+    headers = _auth_header(token)
+    created = client.post("/api/runs", headers=headers, json={
+        "date": "2026-08-12", "km": 5, "shoe_id": shoe.id,
+    })
+    run_id = created.json()["id"]
+
+    rejected = client.put(f"/api/runs/{run_id}", headers=headers, json=payload)
+    assert rejected.status_code == 422
+    unchanged = client.get("/api/runs", headers=headers).json()[0]
+    assert unchanged["date"] == "2026-08-12"
+    assert unchanged["km"] == 5
+    assert unchanged["shoe_id"] == shoe.id
 
 
 def test_run_log_rejects_another_users_shoe_and_record(client, db):
