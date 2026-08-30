@@ -22,11 +22,14 @@ from backend.main import (
     _enforce_agent_rate_limit,
     app,
     create_monthly_mileage,
+    create_run,
     create_shoe,
     delete_monthly_mileage,
+    delete_run,
     delete_shoe,
     export_shoes,
     update_monthly_mileage,
+    update_run,
     update_shoe,
 )
 from backend.models import MonthlyMileage, Shoe
@@ -521,6 +524,16 @@ def test_create_routes_roll_back_failed_commits():
         )
     mileage_db.rollback.assert_called_once_with()
 
+    run_db = _failing_db(existing=SimpleNamespace(id=3))
+    run_db.query.return_value.filter.return_value.count.return_value = 0
+    with pytest.raises(RuntimeError, match="commit failed"):
+        create_run(
+            schemas.RunCreate(date="2026-08-01", km=5, shoe_id=3),
+            current_user=user,
+            db=run_db,
+        )
+    run_db.rollback.assert_called_once_with()
+
 
 def test_update_routes_roll_back_failed_commits():
     user = SimpleNamespace(id=7)
@@ -546,10 +559,25 @@ def test_update_routes_roll_back_failed_commits():
         )
     mileage_db.rollback.assert_called_once_with()
 
+    run = SimpleNamespace(id=1, date="2026-08-01", km=1, shoe_id=3)
+    run_db = _failing_db(existing=run)
+    with pytest.raises(RuntimeError, match="commit failed"):
+        update_run(
+            1,
+            schemas.RunUpdate(km=2),
+            current_user=user,
+            db=run_db,
+        )
+    run_db.rollback.assert_called_once_with()
+
 
 def test_delete_routes_roll_back_failed_commits():
     user = SimpleNamespace(id=7)
     shoe_db = _failing_db(existing=SimpleNamespace(id=1))
+    shoe_db.query.return_value.filter.return_value.first.side_effect = [
+        SimpleNamespace(id=1),
+        None,
+    ]
     with pytest.raises(RuntimeError, match="commit failed"):
         delete_shoe(1, current_user=user, db=shoe_db)
     shoe_db.rollback.assert_called_once_with()
@@ -558,6 +586,11 @@ def test_delete_routes_roll_back_failed_commits():
     with pytest.raises(RuntimeError, match="commit failed"):
         delete_monthly_mileage(1, current_user=user, db=mileage_db)
     mileage_db.rollback.assert_called_once_with()
+
+    run_db = _failing_db(existing=SimpleNamespace(id=1))
+    with pytest.raises(RuntimeError, match="commit failed"):
+        delete_run(1, current_user=user, db=run_db)
+    run_db.rollback.assert_called_once_with()
 
 
 def test_signed_tokens_without_valid_user_are_rejected(client):
