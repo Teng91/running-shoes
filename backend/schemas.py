@@ -9,6 +9,7 @@ SHOE_CATEGORIES = ["Daily", "Speed", "Tempo", "Race", "Trail", "Walk"]
 ReasonableYear = Annotated[int, Field(ge=1900, le=2100)]
 CalendarMonth = Annotated[int, Field(ge=1, le=12)]
 NonNegativeFiniteKm = Annotated[float, Field(ge=0, allow_inf_nan=False)]
+PositiveFiniteKm = Annotated[float, Field(gt=0, le=1000, allow_inf_nan=False)]
 MAX_PASSWORD_BYTES = 72
 Username = Annotated[str, Field(min_length=1, max_length=50)]
 ShoeName = Annotated[str, Field(min_length=1, max_length=100)]
@@ -231,6 +232,40 @@ class MonthlyMileageUpdate(BaseModel):
 
 
 class MonthlyMileageOut(MonthlyMileageBase):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    user_id: int
+
+
+# ── Run Log Schemas ────────────────────────────────────
+
+class RunBase(BaseModel):
+    date: str
+    km: PositiveFiniteKm
+    shoe_id: int = Field(gt=0)
+
+    @field_validator("date")
+    @classmethod
+    def validate_date(cls, value: str) -> str:
+        return _validate_iso_date(value)
+
+
+class RunCreate(RunBase):
+    pass
+
+
+class RunUpdate(BaseModel):
+    date: str | None = None
+    km: PositiveFiniteKm | None = None
+    shoe_id: int | None = Field(default=None, gt=0)
+
+    @field_validator("date")
+    @classmethod
+    def validate_date(cls, value: str | None) -> str | None:
+        return _validate_iso_date(value) if value is not None else None
+
+
+class RunOut(RunBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
     user_id: int

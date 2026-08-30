@@ -3,6 +3,10 @@
 import tomllib
 from pathlib import Path
 
+from sqlalchemy import text
+
+from backend.database import engine
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -10,6 +14,11 @@ def test_fly_deployment_enables_production_secret_checks():
     config = tomllib.loads((PROJECT_ROOT / "fly.toml").read_text(encoding="utf-8"))
 
     assert config["env"]["ENVIRONMENT"] == "production"
+
+
+def test_sqlite_foreign_keys_are_enabled():
+    with engine.connect() as connection:
+        assert connection.execute(text("PRAGMA foreign_keys")).scalar_one() == 1
 
 
 def test_agent_frontend_handles_http_auth_and_non_sse_errors_before_streaming():
@@ -45,3 +54,13 @@ def test_agent_frontend_always_discloses_web_search_usage():
     assert "event.type === 'source_summary'" in source
     assert "url.protocol !== 'http:' && url.protocol !== 'https:'" in source
     assert "link.rel = 'noopener noreferrer'" in source
+
+
+def test_run_log_frontend_keeps_daily_ticks_and_select_state_safe():
+    source = (PROJECT_ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
+
+    assert "autoSkip: false" in source
+    assert "id === 'edit-run-shoe' && selectedId !== null" in source
+    assert "原鞋款已刪除，請重新選擇" in source
+    assert "document.getElementById('run-date').value = localDateISO()" in source
+    assert "document.getElementById('run-month').value = localDateISO().slice(0, 7)" in source

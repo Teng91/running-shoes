@@ -75,6 +75,31 @@ h1 { font-size: 28px; font-weight: 700; margin-bottom: 4px; }
 .inline-add select:focus, .inline-add input:focus { outline: none; border-color: var(--accent); }
 .inline-error { color: var(--red); font-size: 12px; width: 100%; }
 
+/* Run log */
+.run-hero { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(340px, .75fr); gap: 16px; margin-bottom: 16px; }
+.run-intro { padding: 24px; border-radius: 16px; border: 1px solid rgba(99,102,241,.35); background: linear-gradient(135deg, rgba(99,102,241,.18), rgba(34,197,94,.06)); }
+.run-intro h2 { font-size: 22px; margin-bottom: 8px; }
+.run-intro p { color: var(--text-dim); line-height: 1.7; text-wrap: pretty; }
+.run-intro-tail { white-space: nowrap; }
+.run-filter { display: flex; align-items: center; gap: 10px; margin-top: 18px; }
+.run-filter label { font-size: 12px; color: var(--text-dim); }
+.run-entry { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 20px; }
+.run-entry h3 { font-size: 15px; margin-bottom: 14px; }
+.run-entry-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.run-entry-grid .form-group { margin-bottom: 0; }
+.run-entry-grid .shoe-field { grid-column: 1 / -1; }
+.run-entry .btn { width: 100%; margin-top: 14px; }
+.run-stats { grid-template-columns: repeat(3, 1fr); }
+.run-stats .card-value { font-size: 25px; }
+.run-shoe-label { display: inline-flex; align-items: center; gap: 7px; }
+.empty-state { color: var(--text-dim); text-align: center; padding: 28px 12px; }
+@media (max-width: 760px) {
+  .tabs { overflow-x: auto; padding-bottom: 4px; }
+  .tab { flex: 0 0 auto; }
+  .run-hero { grid-template-columns: 1fr; }
+  .run-stats { grid-template-columns: 1fr; }
+}
+
 /* Table */
 .table-section { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 28px; }
 .table-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
@@ -379,6 +404,7 @@ tr:hover td { background: rgba(99,102,241,0.05); }
 
   <div class="tabs">
     <button class="tab active" data-tab="shoes" onclick="switchTab('shoes')">跑鞋</button>
+    <button class="tab" data-tab="runs" onclick="switchTab('runs')">跑步日誌</button>
     <button class="tab" data-tab="monthly" onclick="switchTab('monthly')">月跑量</button>
     <button class="tab" data-tab="spending" onclick="switchTab('spending')">支出</button>
     <button class="tab" data-tab="agent" onclick="switchTab('agent')">AI 助手</button>
@@ -438,6 +464,44 @@ tr:hover td { background: rgba(99,102,241,0.05); }
     </div>
 
   </div><!-- /tab-panel shoes -->
+
+  <div class="tab-panel" data-panel="runs">
+    <div class="run-hero">
+      <div class="run-intro">
+        <h2>這個月，你是怎麼跑的？</h2>
+        <p>把每次跑步和鞋款記下來，就能看見訓練節奏，也更清楚每雙鞋子真正承擔了<span class="run-intro-tail">多少里程。</span></p>
+        <div class="run-filter">
+          <label for="run-month">查看月份</label>
+          <input id="run-month" class="year-select" type="month" onchange="renderRunLog()">
+        </div>
+      </div>
+      <form class="run-entry" onsubmit="addRun(); return false;">
+        <h3>記下一次跑步</h3>
+        <div class="run-entry-grid">
+          <div class="form-group"><label for="run-date">日期</label><input id="run-date" type="date" required></div>
+          <div class="form-group"><label for="run-km">距離 (km)</label><input id="run-km" type="number" min="0.01" max="1000" step="0.01" placeholder="5.00" required></div>
+          <div class="form-group shoe-field"><label for="run-shoe">穿哪雙鞋</label><select id="run-shoe" required></select></div>
+        </div>
+        <div class="inline-error" id="run-error"></div>
+        <button class="btn btn-primary" type="submit">+ 新增跑步紀錄</button>
+      </form>
+    </div>
+
+    <div class="cards run-stats" id="run-stats"></div>
+    <div class="charts">
+      <div class="chart-box"><h3>每日里程</h3><canvas id="chart-run-daily"></canvas></div>
+      <div class="chart-box"><h3>鞋款里程分布</h3><canvas id="chart-run-shoes"></canvas></div>
+    </div>
+    <div class="table-section">
+      <div class="table-header"><h2 id="run-table-title">跑步紀錄</h2></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>日期</th><th>距離</th><th>鞋款</th><th></th></tr></thead>
+          <tbody id="run-table"></tbody>
+        </table>
+      </div>
+    </div>
+  </div><!-- /tab-panel runs -->
 
   <div class="tab-panel" data-panel="monthly">
 
@@ -595,6 +659,25 @@ tr:hover td { background: rgba(99,102,241,0.05); }
       <button class="btn btn-primary" onclick="saveShoe()">儲存</button>
     </div>
   </div>
+</div>
+
+<!-- Run Edit Modal -->
+<div class="modal-overlay" id="run-modal">
+  <form class="modal" style="width: 400px;" onsubmit="saveRun(); return false;">
+    <h2>編輯跑步紀錄</h2>
+    <div class="form-row">
+      <div class="form-group"><label for="edit-run-date">日期</label><input id="edit-run-date" type="date" required></div>
+      <div class="form-group"><label for="edit-run-km">距離 (km)</label><input id="edit-run-km" type="number" min="0.01" max="1000" step="0.01" required></div>
+    </div>
+    <div class="form-group"><label for="edit-run-shoe">穿哪雙鞋</label><select id="edit-run-shoe" required></select></div>
+    <div class="auth-error" id="edit-run-error"></div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-sm btn-delete" onclick="deleteEditingRun()">刪除</button>
+      <span style="flex:1"></span>
+      <button type="button" class="btn btn-cancel" onclick="closeRunModal()">取消</button>
+      <button type="submit" class="btn btn-primary">儲存</button>
+    </div>
+  </form>
 </div>
 
 <!-- Monthly Mileage Modal -->
@@ -772,7 +855,10 @@ async function apiPut(url, body) {
 async function apiDelete(url) {
   const res = await fetch(API_BASE + url, { method: 'DELETE', headers: authHeaders() });
   if (res.status === 401) { clearAuth(); showLoginView(); throw new Error('Unauthorized'); }
-  if (!res.ok) throw new Error('DELETE ' + url + ' failed: ' + res.status);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || ('DELETE ' + url + ' failed: ' + res.status));
+  }
   return res.json();
 }
 
@@ -840,6 +926,9 @@ function switchTab(name) {
   }
   if (name === 'spending') {
     requestAnimationFrame(() => renderSpendingCharts());
+  }
+  if (name === 'runs') {
+    requestAnimationFrame(() => renderRunLog());
   }
   // Agent tab: fill viewport height; other tabs: natural scroll
   const appView = document.getElementById('app-view');
@@ -976,27 +1065,31 @@ let shoes = [];
 let retiredShoes = [];
 let monthlyMileages = [];
 let monthlySpending = [];
+let runs = [];
 let selectedYear = null;
 let selectedSpendingYear = null;
 
 async function loadData() {
   try {
-    const [active, retired, monthly, spending] = await Promise.all([
+    const [active, retired, monthly, spending, runData] = await Promise.all([
       apiGet('/shoes/active'),
       apiGet('/shoes/retired'),
       apiGet('/monthly-mileage'),
       apiGet('/spending/monthly'),
+      apiGet('/runs'),
     ]);
     shoes = active;
     retiredShoes = retired;
     monthlyMileages = monthly;
     monthlySpending = spending;
+    runs = runData;
   } catch (e) {
     console.error('載入資料失敗:', e);
     shoes = [];
     retiredShoes = [];
     monthlyMileages = [];
     monthlySpending = [];
+    runs = [];
   }
   // Default selected year to the most recent year present
   if (monthlyMileages.length > 0) {
@@ -1063,6 +1156,8 @@ function render() {
   renderTable();
   renderRetiredTable();
   renderMonthlyTable();
+  populateRunShoeSelects();
+  renderRunLog();
   if (typeof Chart !== 'undefined') {
     renderCharts();
     renderMonthlyCharts();
@@ -1472,9 +1567,182 @@ async function saveMonthlyMileage() {
 // ====== Charts ======
 let chartInstances = {};
 
+// ====== Run Log ======
+let editingRunId = null;
+
+function localDateISO(date = new Date()) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function allRunShoes() { return [...shoes, ...retiredShoes]; }
+function runShoe(shoeId) { return allRunShoes().find(s => s.id === shoeId); }
+
+function populateRunShoeSelects(selectedId = null) {
+  const shoeList = allRunShoes();
+  const options = shoeList.map(s =>
+    `<option value="${s.id}">${esc(s.brand)} ${esc(s.model)}${s.is_retired ? ' · 已退役' : ''}</option>`
+  ).join('');
+  ['run-shoe', 'edit-run-shoe'].forEach(id => {
+    const select = document.getElementById(id);
+    if (!select) return;
+    const previous = id === 'edit-run-shoe' && selectedId !== null
+      ? selectedId
+      : parseInt(select.value, 10);
+    select.innerHTML = options || '<option value="">請先新增跑鞋</option>';
+    if (previous && shoeList.some(s => s.id === previous)) {
+      select.value = String(previous);
+    } else if (id === 'edit-run-shoe' && selectedId !== null) {
+      select.insertAdjacentHTML(
+        'afterbegin',
+        '<option value="" selected disabled>原鞋款已刪除，請重新選擇</option>',
+      );
+    }
+  });
+}
+
+function selectedRunMonth() {
+  const value = document.getElementById('run-month').value;
+  return /^\d{4}-\d{2}$/.test(value) ? value : localDateISO().slice(0, 7);
+}
+
+function monthRuns() {
+  const month = selectedRunMonth();
+  return runs.filter(run => run.date.slice(0, 7) === month);
+}
+
+async function addRun() {
+  const error = document.getElementById('run-error');
+  error.textContent = '';
+  const date = document.getElementById('run-date').value;
+  const km = parseFloat(document.getElementById('run-km').value);
+  const shoeId = parseInt(document.getElementById('run-shoe').value, 10);
+  if (!date || !Number.isFinite(km) || km <= 0 || !shoeId) {
+    error.textContent = '請填寫日期、正確里程與鞋款。';
+    return;
+  }
+  try {
+    await apiPost('/runs', { date, km, shoe_id: shoeId });
+    document.getElementById('run-km').value = '';
+    document.getElementById('run-month').value = date.slice(0, 7);
+    await loadData();
+  } catch (e) {
+    error.textContent = e.message || '新增失敗，請稍後再試。';
+  }
+}
+
+function openRunModal(runId) {
+  const run = runs.find(item => item.id === runId);
+  if (!run) return;
+  editingRunId = runId;
+  document.getElementById('edit-run-date').value = run.date;
+  document.getElementById('edit-run-km').value = run.km;
+  populateRunShoeSelects(run.shoe_id);
+  document.getElementById('edit-run-error').style.display = 'none';
+  document.getElementById('run-modal').classList.add('active');
+}
+
+function closeRunModal() {
+  editingRunId = null;
+  document.getElementById('run-modal').classList.remove('active');
+}
+
+async function saveRun() {
+  if (!editingRunId) return;
+  const error = document.getElementById('edit-run-error');
+  const payload = {
+    date: document.getElementById('edit-run-date').value,
+    km: parseFloat(document.getElementById('edit-run-km').value),
+    shoe_id: parseInt(document.getElementById('edit-run-shoe').value, 10),
+  };
+  if (!payload.date || !Number.isFinite(payload.km) || payload.km <= 0 || !payload.shoe_id) {
+    error.textContent = '請完整填寫紀錄。';
+    error.style.display = 'block';
+    return;
+  }
+  try {
+    await apiPut('/runs/' + editingRunId, payload);
+    closeRunModal();
+    document.getElementById('run-month').value = payload.date.slice(0, 7);
+    await loadData();
+  } catch (e) {
+    error.textContent = e.message || '儲存失敗。';
+    error.style.display = 'block';
+  }
+}
+
+async function deleteEditingRun() {
+  const run = runs.find(item => item.id === editingRunId);
+  if (!run || !confirm(`確定刪除 ${run.date.replace(/-/g, '/')} 的 ${run.km} km 紀錄？`)) return;
+  try {
+    await apiDelete('/runs/' + editingRunId);
+    closeRunModal();
+    await loadData();
+  } catch { alert('刪除失敗'); }
+}
+
+function renderRunLog() {
+  const month = selectedRunMonth();
+  const filtered = monthRuns();
+  const total = filtered.reduce((sum, run) => sum + run.km, 0);
+  const days = new Set(filtered.map(run => run.date)).size;
+  const shoeTotals = new Map();
+  filtered.forEach(run => shoeTotals.set(run.shoe_id, (shoeTotals.get(run.shoe_id) || 0) + run.km));
+  const favoriteEntry = [...shoeTotals.entries()].sort((a, b) => b[1] - a[1])[0];
+  const favorite = favoriteEntry ? runShoe(favoriteEntry[0]) : null;
+  const monthLabel = `${parseInt(month.slice(5), 10)} 月`;
+  document.getElementById('run-stats').innerHTML = [
+    { label: '本月總里程', value: `${total.toFixed(2)} km`, sub: `${filtered.length} 次跑步` },
+    { label: '跑步天數', value: `${days} 天`, sub: days ? `平均每天 ${(total / days).toFixed(2)} km` : '還沒有紀錄' },
+    { label: '本月主力鞋', value: favorite ? esc(favorite.model) : '—', sub: favoriteEntry ? `${favoriteEntry[1].toFixed(2)} km` : '還沒有紀錄' },
+  ].map(card => `<div class="card"><div class="card-label">${card.label}</div><div class="card-value">${card.value}</div><div class="card-sub">${card.sub}</div></div>`).join('');
+
+  document.getElementById('run-table-title').textContent = `${monthLabel}跑步紀錄`;
+  document.getElementById('run-table').innerHTML = filtered.length ? filtered.map(run => {
+    const shoe = runShoe(run.shoe_id);
+    const color = shoe ? brandColor(shoe.brand, 0) : '#64748b';
+    const shoeName = shoe ? `${esc(shoe.brand)} ${esc(shoe.model)}` : '鞋款已刪除';
+    return `<tr><td>${esc(run.date.replace(/-/g, '/'))}</td><td><strong>${run.km.toFixed(2)} km</strong></td><td><span class="run-shoe-label"><span class="brand-dot" style="background:${color}"></span>${shoeName}</span></td><td><button class="btn btn-sm btn-edit" onclick="openRunModal(${run.id})">編輯</button></td></tr>`;
+  }).join('') : '<tr><td colspan="4" class="empty-state">這個月還沒有跑步紀錄。從右上角記下第一跑吧！</td></tr>';
+
+  if (typeof Chart === 'undefined') return;
+  renderRunDailyChart(filtered, month);
+  renderRunShoeChart(shoeTotals);
+}
+
+function renderRunDailyChart(filtered, month) {
+  if (chartInstances.runDaily) chartInstances.runDaily.destroy();
+  const [year, monthNumber] = month.split('-').map(Number);
+  const daysInMonth = new Date(year, monthNumber, 0).getDate();
+  const daily = Array(daysInMonth).fill(0);
+  filtered.forEach(run => { daily[parseInt(run.date.slice(8), 10) - 1] += run.km; });
+  chartInstances.runDaily = new Chart(document.getElementById('chart-run-daily'), {
+    type: 'bar',
+    data: { labels: Array.from({ length: daysInMonth }, (_, i) => i + 1), datasets: [{ data: daily, backgroundColor: '#6366f1', borderRadius: 4, maxBarThickness: 16 }] },
+    options: { plugins: { legend: { display: false }, tooltip: { callbacks: { title: items => `${monthNumber}/${items[0].label}`, label: ctx => `${ctx.raw.toFixed(2)} km` } } }, scales: { x: { grid: { display: false }, ticks: { color: '#8b8d9a', autoSkip: false, maxRotation: 0, minRotation: 0, font: { size: 9 } } }, y: { beginAtZero: true, grid: { color: '#2a2d3e' }, ticks: { color: '#8b8d9a', callback: value => value + ' km' } } } }
+  });
+}
+
+function renderRunShoeChart(shoeTotals) {
+  if (chartInstances.runShoes) chartInstances.runShoes.destroy();
+  const entries = [...shoeTotals.entries()].sort((a, b) => b[1] - a[1]);
+  const shoeList = entries.map(([id]) => runShoe(id));
+  chartInstances.runShoes = new Chart(document.getElementById('chart-run-shoes'), {
+    type: 'doughnut',
+    data: {
+      labels: shoeList.map(shoe => shoe ? `${shoe.brand} ${shoe.model}` : '鞋款已刪除'),
+      datasets: [{ data: entries.map(([, km]) => km), backgroundColor: shoeList.map((shoe, i) => shoe ? brandColor(shoe.brand, i) : '#64748b'), borderColor: '#1a1d2e', borderWidth: 3 }],
+    },
+    options: { cutout: '62%', plugins: { legend: { position: 'bottom', labels: { color: '#e4e4e7', usePointStyle: true, padding: 14 } }, tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${ctx.raw.toFixed(2)} km` } } } }
+  });
+}
+
 function renderCharts() {
-  Object.values(chartInstances).forEach(c => c.destroy());
-  chartInstances = {};
+  ['progress', 'cost', 'retire', 'value'].forEach(key => {
+    if (chartInstances[key]) {
+      chartInstances[key].destroy();
+      delete chartInstances[key];
+    }
+  });
 
   const labels = shoes.map(s => s.brand + ' ' + s.model);
   let brandSeq = {};
@@ -2198,7 +2466,7 @@ class ShoeModal {
   async delete() {
     if (!confirm(`確定刪除 ${this.shoe.brand} ${this.shoe.model}？此動作無法復原。`)) return;
     try { await apiDelete('/shoes/' + this.shoe.id); }
-    catch { return alert('刪除失敗'); }
+    catch (e) { return alert(e.message || '刪除失敗'); }
     this.close();
     await loadData();
   }
@@ -2242,6 +2510,9 @@ document.getElementById('monthly-modal').addEventListener('click', e => {
 });
 document.getElementById('export-modal').addEventListener('click', e => {
   if (e.target.id === 'export-modal') closeExportModal();
+});
+document.getElementById('run-modal').addEventListener('click', e => {
+  if (e.target.id === 'run-modal') closeRunModal();
 });
 
 // ====== Agent / Chat ======
@@ -2652,6 +2923,8 @@ async function sendAgentMessage(retryText) {
 // Check stored token on load
 async function init() {
   populateAddSelects();
+  document.getElementById('run-date').value = localDateISO();
+  document.getElementById('run-month').value = localDateISO().slice(0, 7);
   loadAgentModels();
   if (authToken) {
     try {
