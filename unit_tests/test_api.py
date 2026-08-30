@@ -424,6 +424,161 @@ def test_unauthenticated_access(client):
     assert res.status_code == 401  # No credentials provided
 
 
+# ── Run Log CRUD Tests ─────────────────────────────────
+
+def test_run_log_crud(client, db, user_with_token):
+    user, token = user_with_token
+    shoe = Shoe(user_id=user.id, brand="Mizuno", model="Wave Rider", date="2026-01-01")
+    db.add(shoe)
+    db.commit()
+    db.refresh(shoe)
+    headers = _auth_header(token)
+
+    created = client.post("/api/runs", headers=headers, json={
+        "date": "2026-08-12", "km": 8.25, "shoe_id": shoe.id,
+    })
+    assert created.status_code == 200
+    run_id = created.json()["id"]
+
+    listed = client.get("/api/runs", headers=headers)
+    assert listed.status_code == 200
+    assert listed.json()[0]["km"] == 8.25
+
+    updated = client.put(f"/api/runs/{run_id}", headers=headers, json={"km": 10.5})
+    assert updated.status_code == 200
+    assert updated.json()["km"] == 10.5
+    omitted = client.put(f"/api/runs/{run_id}", headers=headers, json={})
+    assert omitted.status_code == 200
+    assert omitted.json()["km"] == 10.5
+
+    deleted = client.delete(f"/api/runs/{run_id}", headers=headers)
+    assert deleted.status_code == 200
+    assert client.get("/api/runs", headers=headers).json() == []
+
+
+def test_cannot_delete_shoe_used_by_run_log(client, db, user_with_token):
+    user, token = user_with_token
+    shoe = Shoe(user_id=user.id, brand="Mizuno", model="Wave Rider", date="2026-01-01")
+    db.add(shoe)
+    db.commit()
+    db.refresh(shoe)
+    headers = _auth_header(token)
+    created = client.post("/api/runs", headers=headers, json={
+        "date": "2026-08-12", "km": 8.25, "shoe_id": shoe.id,
+    })
+    assert created.status_code == 200
+
+    deleted = client.delete(f"/api/shoes/{shoe.id}", headers=headers)
+    assert deleted.status_code == 409
+    assert deleted.json()["detail"] == "這雙跑鞋已有跑步紀錄，請保留或移至退役"
+    assert client.get("/api/runs", headers=headers).json()[0]["shoe_id"] == shoe.id
+
+
+def test_run_log_orders_newest_first_and_can_change_owned_shoe(client, db, user_with_token):
+    user, token = user_with_token
+    first_shoe = Shoe(user_id=user.id, brand="Mizuno", model="Rider", date="2026-01-01")
+    second_shoe = Shoe(user_id=user.id, brand="Asics", model="Novablast", date="2026-02-01")
+    db.add_all([first_shoe, second_shoe])
+    db.commit()
+    headers = _auth_header(token)
+    older = client.post("/api/runs", headers=headers, json={
+        "date": "2026-08-01", "km": 5, "shoe_id": first_shoe.id,
+    }).json()
+    newer = client.post("/api/runs", headers=headers, json={
+        "date": "2026-08-15", "km": 8, "shoe_id": first_shoe.id,
+    }).json()
+
+    listed = client.get("/api/runs", headers=headers).json()
+    assert [run["id"] for run in listed] == [newer["id"], older["id"]]
+    changed = client.put(f"/api/runs/{older['id']}", headers=headers, json={
+        "shoe_id": second_shoe.id,
+    })
+    assert changed.status_code == 200
+    assert changed.json()["shoe_id"] == second_shoe.id
+
+
+def test_run_log_limit(client, db, user_with_token, monkeypatch):
+    from backend import main as main_module
+
+    monkeypatch.setattr(main_module, "MAX_RUNS_PER_USER", 1)
+    user, token = user_with_token
+    shoe = Shoe(user_id=user.id, brand="Mizuno", model="Rider", date="2026-01-01")
+    db.add(shoe)
+    db.commit()
+    headers = _auth_header(token)
+    payload = {"date": "2026-08-01", "km": 5, "shoe_id": shoe.id}
+    assert client.post("/api/runs", headers=headers, json=payload).status_code == 200
+    limited = client.post("/api/runs", headers=headers, json=payload)
+    assert limited.status_code == 409
+    assert limited.json()["detail"] == "跑步紀錄已達上限"
+
+
+@pytest.mark.parametrize("payload", [
+    {"date": "2026-02-30", "km": 5, "shoe_id": 1},
+    {"date": "2026-08-12", "km": 0, "shoe_id": 1},
+    {"date": "2026-08-12", "km": 1001, "shoe_id": 1},
+])
+def test_run_log_rejects_invalid_payload(client, user_with_token, payload):
+    _, token = user_with_token
+    assert client.post("/api/runs", headers=_auth_header(token), json=payload).status_code == 422
+
+
+@pytest.mark.parametrize("payload", [
+    {"date": None},
+    {"km": None},
+    {"shoe_id": None},
+])
+def test_run_log_update_rejects_explicit_nulls(client, db, user_with_token, payload):
+    user, token = user_with_token
+    shoe = Shoe(user_id=user.id, brand="Mizuno", model="Rider", date="2026-01-01")
+    db.add(shoe)
+    db.commit()
+    headers = _auth_header(token)
+    created = client.post("/api/runs", headers=headers, json={
+        "date": "2026-08-12", "km": 5, "shoe_id": shoe.id,
+    })
+    run_id = created.json()["id"]
+
+    rejected = client.put(f"/api/runs/{run_id}", headers=headers, json=payload)
+    assert rejected.status_code == 422
+    unchanged = client.get("/api/runs", headers=headers).json()[0]
+    assert unchanged["date"] == "2026-08-12"
+    assert unchanged["km"] == 5
+    assert unchanged["shoe_id"] == shoe.id
+
+
+def test_run_log_rejects_another_users_shoe_and_record(client, db):
+    from backend.auth import create_access_token
+
+    alice = User(username="run-alice", hashed_password=get_password_hash("pass1234"))
+    bob = User(username="run-bob", hashed_password=get_password_hash("pass1234"))
+    db.add_all([alice, bob])
+    db.commit()
+    shoe = Shoe(user_id=alice.id, brand="Asics", model="Novablast", date="2026-01-01")
+    bob_shoe = Shoe(user_id=bob.id, brand="Nike", model="Pegasus", date="2026-01-02")
+    db.add_all([shoe, bob_shoe])
+    db.commit()
+    alice_headers = _auth_header(create_access_token(data={"sub": alice.username}))
+    bob_headers = _auth_header(create_access_token(data={"sub": bob.username}))
+
+    forbidden_create = client.post("/api/runs", headers=bob_headers, json={
+        "date": "2026-08-12", "km": 5, "shoe_id": shoe.id,
+    })
+    assert forbidden_create.status_code == 404
+
+    created = client.post("/api/runs", headers=alice_headers, json={
+        "date": "2026-08-12", "km": 5, "shoe_id": shoe.id,
+    })
+    run_id = created.json()["id"]
+    forbidden_reassign = client.put(f"/api/runs/{run_id}", headers=alice_headers, json={
+        "shoe_id": bob_shoe.id,
+    })
+    assert forbidden_reassign.status_code == 404
+    assert client.get("/api/runs", headers=bob_headers).json() == []
+    assert client.put(f"/api/runs/{run_id}", headers=bob_headers, json={"km": 7}).status_code == 404
+    assert client.delete(f"/api/runs/{run_id}", headers=bob_headers).status_code == 404
+
+
 # ── Monthly Mileage CRUD Tests ────────────────────────────────
 
 def test_list_monthly_mileage_empty(client, user_with_token):
@@ -782,6 +937,11 @@ def test_lifespan_skips_migration_when_new_schema(monkeypatch):
             assert "users" in tables
             assert "shoes" in tables
             assert "monthly_mileages" in tables
+            assert "runs" in tables
+            run_indexes = [row[1] for row in conn.execute(
+                text("PRAGMA index_list('runs')")
+            ).fetchall()]
+            assert "idx_runs_user_date" in run_indexes
 
             # Migration didn't run, so no Joy user should exist
             count = conn.execute(text("SELECT COUNT(*) FROM users")).fetchone()[0]
