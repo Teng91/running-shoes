@@ -261,8 +261,24 @@ class RunUpdate(BaseModel):
 
     @field_validator("date")
     @classmethod
-    def validate_date(cls, value: str | None) -> str | None:
-        return _validate_iso_date(value) if value is not None else None
+    def validate_date(cls, value: str | None) -> str:
+        if value is None:
+            raise ValueError("date must not be null")
+        return _validate_iso_date(value)
+
+    @field_validator("km")
+    @classmethod
+    def validate_km(cls, value: float | None) -> float:
+        if value is None:
+            raise ValueError("km must not be null")
+        return value
+
+    @field_validator("shoe_id")
+    @classmethod
+    def validate_shoe_id(cls, value: int | None) -> int:
+        if value is None:
+            raise ValueError("shoe_id must not be null")
+        return value
 
 
 class RunOut(RunBase):
