@@ -1,6 +1,16 @@
 from datetime import UTC, datetime
 
-from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    DateTime,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.database import Base
@@ -18,6 +28,7 @@ class User(Base):
 
     shoes: Mapped[list["Shoe"]] = relationship(back_populates="owner")
     monthly_mileages: Mapped[list["MonthlyMileage"]] = relationship(back_populates="owner")
+    runs: Mapped[list["Run"]] = relationship(back_populates="owner")
 
 
 class Shoe(Base):
@@ -52,3 +63,21 @@ class MonthlyMileage(Base):
     km: Mapped[float] = mapped_column(Float, default=0)
 
     owner: Mapped["User"] = relationship(back_populates="monthly_mileages")
+
+
+class Run(Base):
+    __tablename__ = "runs"
+    __table_args__ = (Index("idx_runs_user_date", "user_id", "date"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
+    shoe_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("shoes.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    date: Mapped[str] = mapped_column(String, nullable=False)  # YYYY-MM-DD
+    km: Mapped[float] = mapped_column(Float, nullable=False)
+
+    owner: Mapped["User"] = relationship(back_populates="runs")
+    shoe: Mapped["Shoe"] = relationship()

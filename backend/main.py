@@ -40,6 +40,7 @@ AUTH_GLOBAL_RATE_LIMIT_PER_MINUTE = max(
 )
 MAX_REGISTERED_USERS = max(1, int(os.environ.get("MAX_REGISTERED_USERS", "100")))
 MAX_SHOES_PER_USER = max(1, int(os.environ.get("MAX_SHOES_PER_USER", "500")))
+MAX_RUNS_PER_USER = max(1, int(os.environ.get("MAX_RUNS_PER_USER", "5000")))
 MODEL_REFRESH_COOLDOWN_SECONDS = max(
     1, int(os.environ.get("MODEL_REFRESH_COOLDOWN_SECONDS", "60"))
 )
@@ -261,6 +262,15 @@ async def lifespan(app: FastAPI):
             db.close()
 
     Base.metadata.create_all(bind=engine)
+
+    # create_all() does not add indexes to tables that already exist.
+    # Keep the run-log query path fast for upgraded databases as history grows.
+    with engine.begin() as conn:
+        conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS idx_runs_user_date "
+            "ON runs (user_id, date)"
+        ))
+        conn.execute(text("PRAGMA optimize"))
 
     # Incremental migration for SQLite databases created before shoe categories
     # were changed from a single string to a JSON array of multiple purposes.
@@ -491,6 +501,14 @@ def delete_shoe(
     ).first()
     if not shoe:
         raise HTTPException(status_code=404, detail="Shoe not found")
+    if db.query(models.Run).filter(
+        models.Run.user_id == current_user.id,
+        models.Run.shoe_id == shoe_id,
+    ).first():
+        raise HTTPException(
+            status_code=409,
+            detail="這雙跑鞋已有跑步紀錄，請保留或移至退役",
+        )
     db.delete(shoe)
     try:
         db.commit()
@@ -500,7 +518,97 @@ def delete_shoe(
     return {"ok": True}
 
 
-# ── Monthly Mileage Routes ────────────────────────────────────
+# ── Run Log Routes ──
+def _user_shoe_or_404(db: Session, user_id: int, shoe_id: int) -> models.Shoe:
+    shoe = db.query(models.Shoe).filter(
+        models.Shoe.id == shoe_id,
+        models.Shoe.user_id == user_id,
+    ).first()
+    if not shoe:
+        raise HTTPException(status_code=404, detail="Shoe not found")
+    return shoe
+
+
+@app.get("/api/runs", response_model=list[schemas.RunOut])
+def list_runs(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return db.query(models.Run).filter(
+        models.Run.user_id == current_user.id,
+    ).order_by(models.Run.date.desc(), models.Run.id.desc()).all()
+
+
+@app.post("/api/runs", response_model=schemas.RunOut)
+def create_run(
+    payload: schemas.RunCreate,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _user_shoe_or_404(db, current_user.id, payload.shoe_id)
+    run_count = db.query(models.Run).filter(models.Run.user_id == current_user.id).count()
+    if isinstance(run_count, int) and run_count >= MAX_RUNS_PER_USER:
+        raise HTTPException(status_code=409, detail="跑步紀錄已達上限")
+    run = models.Run(**payload.model_dump(), user_id=current_user.id)
+    db.add(run)
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    db.refresh(run)
+    return run
+
+
+@app.put("/api/runs/{run_id}", response_model=schemas.RunOut)
+def update_run(
+    run_id: int,
+    payload: schemas.RunUpdate,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    run = db.query(models.Run).filter(
+        models.Run.id == run_id,
+        models.Run.user_id == current_user.id,
+    ).first()
+    if not run:
+        raise HTTPException(status_code=404, detail="Run not found")
+    update_data = payload.model_dump(exclude_unset=True)
+    if "shoe_id" in update_data:
+        _user_shoe_or_404(db, current_user.id, update_data["shoe_id"])
+    for key, value in update_data.items():
+        setattr(run, key, value)
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    db.refresh(run)
+    return run
+
+
+@app.delete("/api/runs/{run_id}")
+def delete_run(
+    run_id: int,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    run = db.query(models.Run).filter(
+        models.Run.id == run_id,
+        models.Run.user_id == current_user.id,
+    ).first()
+    if not run:
+        raise HTTPException(status_code=404, detail="Run not found")
+    db.delete(run)
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return {"ok": True}
+
+
+# ── Monthly Mileage Routes ──
 @app.get("/api/monthly-mileage", response_model=list[schemas.MonthlyMileageOut])
 def list_monthly_mileage(
     current_user: models.User = Depends(get_current_user),
