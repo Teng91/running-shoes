@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 # 本機開發預設存專案根目錄，Docker 部署透過 DB_DIR=/data 環境變數覆蓋
@@ -13,6 +13,19 @@ DATABASE_URL = os.environ.get("DATABASE_URL", f"sqlite:///{DATABASE_DIR}/shoes.d
 engine = create_engine(
     DATABASE_URL, connect_args={"check_same_thread": False}
 )
+
+
+@event.listens_for(engine, "connect")
+def _enable_sqlite_foreign_keys(dbapi_connection, _connection_record):
+    """Enforce declared relationships instead of relying only on API checks."""
+    if DATABASE_URL.startswith("sqlite"):
+        cursor = dbapi_connection.cursor()
+        try:
+            cursor.execute("PRAGMA foreign_keys=ON")
+        finally:
+            cursor.close()
+
+
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
