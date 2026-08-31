@@ -601,8 +601,8 @@ def _parse_strava_csv(raw: bytes) -> tuple[list[dict[str, object]], int, list[st
         try:
             activity_id = (row.get(fields["id"] or "") or "").strip()
             date_value = _parse_strava_date(row.get(fields["date"] or "") or "")
-            km = float((row.get(fields["distance"] or "") or "").replace(",", "").strip())
-            if not activity_id or km <= 0 or km > 1000:
+            distance_m = float((row.get(fields["distance"] or "") or "").replace(",", "").strip())
+            if not activity_id or distance_m <= 0 or distance_m > 1_000_000:
                 raise ValueError("invalid activity")
         except (TypeError, ValueError):
             invalid += 1
@@ -610,12 +610,27 @@ def _parse_strava_csv(raw: bytes) -> tuple[list[dict[str, object]], int, list[st
         rows.append({
             "strava_id": activity_id[:100],
             "date": date_value,
-            "km": round(km, 2),
+            "km": round(distance_m / 1000, 2),
             "gear": (row.get(fields["gear"] or "") or "").strip(),
         })
     if invalid:
         warnings.append(f"已略過 {invalid} 筆格式不完整的跑步活動")
     return rows, invalid, warnings
+
+
+def _filter_strava_rows(
+    rows: list[dict[str, object]], start_date: str
+) -> tuple[list[dict[str, object]], int]:
+    if not start_date:
+        return rows, 0
+    try:
+        normalized_date = datetime.strptime(start_date, "%Y-%m-%d").replace(
+            tzinfo=UTC
+        ).date().isoformat()
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="起始日期格式錯誤") from exc
+    filtered = [row for row in rows if str(row["date"]) >= normalized_date]
+    return filtered, len(rows) - len(filtered)
 
 
 def _strava_preview(db: Session, user_id: int, rows: list[dict[str, object]], invalid: int, warnings: list[str]) -> dict[str, object]:
@@ -655,6 +670,7 @@ def _strava_preview(db: Session, user_id: int, rows: list[dict[str, object]], in
 @app.post("/api/runs/import/strava/preview")
 async def preview_strava_import(
     file: UploadFile = File(...),
+    start_date: str = Form(""),
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -662,13 +678,17 @@ async def preview_strava_import(
     if len(raw) > 10 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="CSV 檔案不可超過 10 MB")
     rows, invalid, warnings = _parse_strava_csv(raw)
-    return _strava_preview(db, current_user.id, rows, invalid, warnings)
+    rows, filtered_out = _filter_strava_rows(rows, start_date)
+    preview = _strava_preview(db, current_user.id, rows, invalid, warnings)
+    preview["filtered_out"] = filtered_out
+    return preview
 
 
 @app.post("/api/runs/import/strava")
 async def import_strava_runs(
     file: UploadFile = File(...),
     mapping: str = Form("{}"),
+    start_date: str = Form(""),
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -682,6 +702,7 @@ async def import_strava_runs(
     if len(raw) > 10 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="CSV 檔案不可超過 10 MB")
     rows, invalid, _ = _parse_strava_csv(raw)
+    rows, filtered_out = _filter_strava_rows(rows, start_date)
     shoes = {shoe.id: shoe for shoe in db.query(models.Shoe).filter(models.Shoe.user_id == current_user.id).all()}
     normalized_mapping: dict[str, int | None] = {}
     for gear, shoe_id in parsed_mapping.items():
@@ -735,6 +756,7 @@ async def import_strava_runs(
         "skipped_duplicate": skipped_duplicate,
         "skipped_unmapped": skipped_unmapped,
         "skipped_invalid": invalid,
+        "filtered_out": filtered_out,
         "total_run_rows": len(rows),
     }
 
