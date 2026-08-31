@@ -2,6 +2,7 @@ import asyncio
 import io
 
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from backend.database import get_db
@@ -248,6 +249,22 @@ def test_strava_upload_size_limit_is_bounded_before_full_read(
     monkeypatch.setattr(main_module, "MAX_STRAVA_CSV_BYTES", 10)
     response = upload(client, "/api/runs/import/strava/preview", token)
     assert response.status_code == 413
+
+
+def test_strava_parser_rejects_excess_rows_without_materializing_all(monkeypatch):
+    from backend import main as main_module
+
+    monkeypatch.setattr(main_module, "MAX_STRAVA_CSV_ROWS", 2)
+    csv_content = (
+        "活動 ID,活動日期,活動類型,活動裝備,距離\n"
+        "1,2026年1月1日,步行,Shoe,1000\n"
+        "2,2026年1月2日,步行,Shoe,1000\n"
+        "3,2026年1月3日,步行,Shoe,1000\n"
+    )
+    with pytest.raises(HTTPException) as error:
+        _parse_strava_csv(csv_content.encode("utf-8"))
+    assert error.value.status_code == 413
+    assert "2" in str(error.value.detail)
 
 
 def test_strava_request_limit_rejects_before_endpoint_parsing(
