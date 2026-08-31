@@ -24,10 +24,12 @@ def client(db):
     app.dependency_overrides.clear()
 
 
-def upload(client, path, token, mapping=None, start_date="", csv_content=CSV):
+def upload(client, path, token, mapping=None, start_date="", csv_content=CSV, end_date=""):
     data = {"mapping": mapping} if mapping is not None else {}
     if start_date:
         data["start_date"] = start_date
+    if end_date:
+        data["end_date"] = end_date
     return client.post(path, headers=_auth_header(token), files={
         "file": ("activities.csv", io.BytesIO(csv_content.encode("utf-8-sig")), "text/csv")
     }, data=data)
@@ -99,3 +101,26 @@ def test_strava_start_date_filters_older_runs_and_allows_shared_mapping(client, 
     assert response.json()["filtered_out"] == 1
     assert response.json()["imported"] == 2
     assert db.query(Run).filter(Run.shoe_id == shoe.id).count() == 2
+
+
+def test_strava_end_date_excludes_manual_log_period(client, user_with_token):
+    _user, token = user_with_token
+    response = upload(
+        client,
+        "/api/runs/import/strava/preview",
+        token,
+        start_date="2025-07-01",
+        end_date="2026-07-31",
+    )
+    assert response.status_code == 200
+    assert response.json()["run_count"] == 0
+    assert response.json()["filtered_out"] == 2
+    invalid_range = upload(
+        client,
+        "/api/runs/import/strava/preview",
+        token,
+        start_date="2026-08-01",
+        end_date="2026-07-31",
+    )
+    assert invalid_range.status_code == 400
+    assert invalid_range.json()["detail"] == "起始日期不可晚於結束日期"
