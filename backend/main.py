@@ -1,6 +1,7 @@
 import csv
 import io
 import json
+import math
 import os
 import re
 import time
@@ -15,7 +16,7 @@ from typing import cast
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
-from sqlalchemy import Table, inspect, text
+from sqlalchemy import Table, func, inspect, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -47,6 +48,7 @@ AUTH_GLOBAL_RATE_LIMIT_PER_MINUTE = max(
 MAX_REGISTERED_USERS = max(1, int(os.environ.get("MAX_REGISTERED_USERS", "100")))
 MAX_SHOES_PER_USER = max(1, int(os.environ.get("MAX_SHOES_PER_USER", "500")))
 MAX_RUNS_PER_USER = max(1, int(os.environ.get("MAX_RUNS_PER_USER", "5000")))
+MAX_STRAVA_CSV_BYTES = 10 * 1024 * 1024
 MODEL_REFRESH_COOLDOWN_SECONDS = max(
     1, int(os.environ.get("MODEL_REFRESH_COOLDOWN_SECONDS", "60"))
 )
@@ -578,7 +580,7 @@ def _parse_strava_date(value: str) -> str:
 
 
 def _normalize_gear(value: str) -> str:
-    return re.sub(r"[^a-z0-9]+", "", value.casefold())
+    return "".join(character for character in value.casefold() if character.isalnum())
 
 
 def _parse_strava_csv(raw: bytes) -> tuple[list[dict[str, object]], int, list[str]]:
@@ -595,14 +597,25 @@ def _parse_strava_csv(raw: bytes) -> tuple[list[dict[str, object]], int, list[st
     rows: list[dict[str, object]] = []
     invalid = 0
     warnings: list[str] = []
-    for row in reader:
+    try:
+        csv_rows = list(reader)
+    except csv.Error as exc:
+        raise HTTPException(status_code=400, detail="CSV 格式錯誤") from exc
+    for row in csv_rows:
         if (row.get(fields["type"] or "") or "").strip() not in _STRAVA_RUN_TYPES:
             continue
         try:
             activity_id = (row.get(fields["id"] or "") or "").strip()
             date_value = _parse_strava_date(row.get(fields["date"] or "") or "")
             distance_m = float((row.get(fields["distance"] or "") or "").replace(",", "").strip())
-            if not activity_id or distance_m <= 0 or distance_m > 1_000_000:
+            km = round(distance_m / 1000, 2)
+            if (
+                not activity_id
+                or not math.isfinite(distance_m)
+                or distance_m <= 0
+                or distance_m > 1_000_000
+                or km <= 0
+            ):
                 raise ValueError("invalid activity")
         except (TypeError, ValueError):
             invalid += 1
@@ -610,7 +623,7 @@ def _parse_strava_csv(raw: bytes) -> tuple[list[dict[str, object]], int, list[st
         rows.append({
             "strava_id": activity_id[:100],
             "date": date_value,
-            "km": round(distance_m / 1000, 2),
+            "km": km,
             "gear": (row.get(fields["gear"] or "") or "").strip(),
         })
     if invalid:
@@ -643,6 +656,13 @@ def _filter_strava_rows(
     return filtered, len(rows) - len(filtered)
 
 
+async def _read_strava_upload(file: UploadFile) -> bytes:
+    raw = await file.read(MAX_STRAVA_CSV_BYTES + 1)
+    if len(raw) > MAX_STRAVA_CSV_BYTES:
+        raise HTTPException(status_code=413, detail="CSV 檔案不可超過 10 MB")
+    return raw
+
+
 def _strava_preview(db: Session, user_id: int, rows: list[dict[str, object]], invalid: int, warnings: list[str]) -> dict[str, object]:
     existing_ids = {
         value[0] for value in db.query(models.Run.strava_id).filter(
@@ -650,7 +670,11 @@ def _strava_preview(db: Session, user_id: int, rows: list[dict[str, object]], in
         ).all()
     }
     shoes = db.query(models.Shoe).filter(models.Shoe.user_id == user_id).all()
-    shoe_by_key = {_normalize_gear(f"{shoe.brand} {shoe.model}"): shoe for shoe in shoes}
+    shoes_by_key: dict[str, list[models.Shoe]] = {}
+    for shoe in shoes:
+        key = _normalize_gear(f"{shoe.brand} {shoe.model}")
+        if key:
+            shoes_by_key.setdefault(key, []).append(shoe)
     groups: dict[str, dict[str, object]] = {}
     seen: set[str] = set()
     duplicate_count = 0
@@ -664,9 +688,13 @@ def _strava_preview(db: Session, user_id: int, rows: list[dict[str, object]], in
         group["count"] = int(cast(int, group["count"])) + 1
         group["km"] = round(float(cast(float, group["km"])) + float(cast(float, row["km"])), 2)
     for group in groups.values():
-        shoe = shoe_by_key.get(_normalize_gear(str(group["gear"])))
-        group["suggested_shoe_id"] = shoe.id if shoe else None
-        group["shoe_name"] = f"{shoe.brand} {shoe.model}" if shoe else None
+        candidates = shoes_by_key.get(_normalize_gear(str(group["gear"])), [])
+        suggested_shoe = candidates[0] if len(candidates) == 1 else None
+        group["suggested_shoe_id"] = suggested_shoe.id if suggested_shoe else None
+        group["shoe_name"] = (
+            f"{suggested_shoe.brand} {suggested_shoe.model}" if suggested_shoe else None
+        )
+        group["ambiguous_match"] = len(candidates) > 1
     return {
         "total_rows": len(rows) + invalid,
         "run_count": len(rows),
@@ -685,9 +713,7 @@ async def preview_strava_import(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    raw = await file.read()
-    if len(raw) > 10 * 1024 * 1024:
-        raise HTTPException(status_code=413, detail="CSV 檔案不可超過 10 MB")
+    raw = await _read_strava_upload(file)
     rows, invalid, warnings = _parse_strava_csv(raw)
     rows, filtered_out = _filter_strava_rows(rows, start_date, end_date)
     preview = _strava_preview(db, current_user.id, rows, invalid, warnings)
@@ -701,6 +727,7 @@ async def import_strava_runs(
     mapping: str = Form("{}"),
     start_date: str = Form(""),
     end_date: str = Form(""),
+    sync_shoe_mileage: bool = Form(False),
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -710,9 +737,7 @@ async def import_strava_runs(
             raise ValueError
     except (TypeError, ValueError, json.JSONDecodeError) as exc:
         raise HTTPException(status_code=400, detail="鞋款配對格式錯誤") from exc
-    raw = await file.read()
-    if len(raw) > 10 * 1024 * 1024:
-        raise HTTPException(status_code=413, detail="CSV 檔案不可超過 10 MB")
+    raw = await _read_strava_upload(file)
     rows, invalid, _ = _parse_strava_csv(raw)
     rows, filtered_out = _filter_strava_rows(rows, start_date, end_date)
     shoes = {shoe.id: shoe for shoe in db.query(models.Shoe).filter(models.Shoe.user_id == current_user.id).all()}
@@ -757,6 +782,23 @@ async def import_strava_runs(
     current_count = db.query(models.Run).filter(models.Run.user_id == current_user.id).count()
     if current_count + len(runs_to_add) > MAX_RUNS_PER_USER:
         raise HTTPException(status_code=409, detail="匯入後跑步紀錄將超過上限")
+    synced_mileage = 0.0
+    if sync_shoe_mileage:
+        mileage_by_shoe: dict[int, float] = {}
+        for run in runs_to_add:
+            mileage_by_shoe[run.shoe_id] = mileage_by_shoe.get(run.shoe_id, 0.0) + run.km
+        for shoe_id, imported_km in mileage_by_shoe.items():
+            db.query(models.Shoe).filter(
+                models.Shoe.id == shoe_id,
+                models.Shoe.user_id == current_user.id,
+            ).update(
+                {
+                    models.Shoe.mileage: func.coalesce(models.Shoe.mileage, 0)
+                    + round(imported_km, 2)
+                },
+                synchronize_session=False,
+            )
+            synced_mileage += imported_km
     db.add_all(runs_to_add)
     try:
         db.commit()
@@ -769,6 +811,7 @@ async def import_strava_runs(
         "skipped_unmapped": skipped_unmapped,
         "skipped_invalid": invalid,
         "filtered_out": filtered_out,
+        "synced_mileage": round(synced_mileage, 2),
         "total_run_rows": len(rows),
     }
 

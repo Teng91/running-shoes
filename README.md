@@ -160,9 +160,11 @@ MODEL_REFRESH_COOLDOWN_SECONDS=60
 
 ### Strava 歷史資料匯入
 
-在「跑步日誌」右上角按「匯入 Strava」，選擇 Strava 匯出資料夾中的 `activities.csv`（Strava 官方匯出方式請參考[說明](https://support.strava.com/hc/en-us/articles/216918437-Exporting-your-Data-and-Bulk-Export)）。系統會只保留活動類型為跑步且落在所選起訖日期內的資料（包含開始與結束當天），將 Strava 的公尺距離轉換為公里，並先顯示各鞋款的筆數和里程。
+在「跑步日誌」右上角按「匯入 Strava」，選擇 Strava 匯出資料夾中的 `activities.csv`（Strava 官方匯出方式請參考[說明](https://support.strava.com/hc/en-us/articles/216918437-Exporting-your-Data-and-Bulk-Export)）。系統會只保留活動類型為跑步且落在所選起訖日期內的資料（包含開始與結束當天），將 Strava 的公尺距離轉換為公里，並先顯示各鞋款的筆數和里程。日期預設為前 13 個完整月份、不包含本月，調整後會依登入帳號保存在目前瀏覽器。
 
-匯入前可逐組選擇現有鞋款；名稱相符的鞋款會自動配對，也可以把多個 Strava 裝備配到同一雙 Dashboard 跑鞋。沒有鞋款或無法辨識的裝備可以選擇略過。每筆匯入資料會保留 Strava 活動 ID，因此重複選擇同一份 CSV 不會重複建立紀錄。匯入仍受 `MAX_RUNS_PER_USER` 上限限制。
+匯入前可逐組選擇現有鞋款；名稱只有一個相符候選時會自動配對，也可以把多個 Strava 裝備配到同一雙 Dashboard 跑鞋。如果同品牌型號有多雙，系統不會猜測，請依購買日期手動選擇。沒有鞋款或無法辨識的裝備可以選擇略過。
+
+「同步累加跑鞋總里程」預設關閉。勾選後，只有本次真正新增的 Strava 活動會累加到 Dashboard 跑鞋里程；重複匯入不會再次累加。如果 Dashboard 目前的里程已包含這段歷史，請維持關閉。每筆匯入資料會保留 Strava 活動 ID，因此重複選擇同一份 CSV 不會重複建立紀錄。匯入仍受 `MAX_RUNS_PER_USER` 上限限制，CSV 最大為 10 MB。
 
 ## AI 跑鞋推薦助手
 
@@ -220,7 +222,7 @@ venv/bin/pytest -q
 venv/bin/pytest -q --cov=backend --cov-branch --cov-report=term-missing
 ```
 
-目前測試基準為 **238 passed**；`backend` 敘述覆蓋率為 **97.25%**（四捨五入為 97%）、分支覆蓋率為 **94.64%**，含分支的整體覆蓋率為 **96.66%**（四捨五入為 97%）。
+目前測試基準為 **246 passed**；`backend` 敘述覆蓋率為 **97.56%**（四捨五入為 98%）、分支覆蓋率為 **95.09%**，含分支的整體覆蓋率為 **97.00%**。
 
 ## Docker 部署
 
