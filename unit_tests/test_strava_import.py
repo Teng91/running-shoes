@@ -24,12 +24,23 @@ def client(db):
     app.dependency_overrides.clear()
 
 
-def upload(client, path, token, mapping=None, start_date="", csv_content=CSV, end_date=""):
+def upload(
+    client,
+    path,
+    token,
+    mapping=None,
+    start_date="",
+    csv_content=CSV,
+    end_date="",
+    sync_mileage=False,
+):
     data = {"mapping": mapping} if mapping is not None else {}
     if start_date:
         data["start_date"] = start_date
     if end_date:
         data["end_date"] = end_date
+    if sync_mileage:
+        data["sync_shoe_mileage"] = "true"
     return client.post(path, headers=_auth_header(token), files={
         "file": ("activities.csv", io.BytesIO(csv_content.encode("utf-8-sig")), "text/csv")
     }, data=data)
@@ -53,18 +64,30 @@ def test_strava_preview_filters_runs_and_suggests_shoe(client, db, user_with_tok
 
 def test_strava_import_is_idempotent_and_skips_unmapped(client, db, user_with_token):
     user, token = user_with_token
-    shoe = Shoe(user_id=user.id, brand="Mizuno", model="Wave Sky 7", date="2026-01-01")
+    shoe = Shoe(
+        user_id=user.id,
+        brand="Mizuno",
+        model="Wave Sky 7",
+        date="2026-01-01",
+        mileage=10,
+    )
     db.add(shoe)
     db.commit()
     mapping = f'{{"Mizuno Wave Sky 7": {shoe.id}, "": null}}'
-    first = upload(client, "/api/runs/import/strava", token, mapping)
+    first = upload(client, "/api/runs/import/strava", token, mapping, sync_mileage=True)
     assert first.status_code == 200
     assert first.json()["imported"] == 1
     assert first.json()["skipped_unmapped"] == 1
-    second = upload(client, "/api/runs/import/strava", token, mapping)
+    assert first.json()["synced_mileage"] == 5.25
+    db.refresh(shoe)
+    assert shoe.mileage == 15.25
+    second = upload(client, "/api/runs/import/strava", token, mapping, sync_mileage=True)
     assert second.status_code == 200
     assert second.json()["imported"] == 0
     assert second.json()["skipped_duplicate"] == 1
+    assert second.json()["synced_mileage"] == 0
+    db.refresh(shoe)
+    assert shoe.mileage == 15.25
     assert db.query(Run).filter(Run.user_id == user.id).count() == 1
 
 
@@ -95,11 +118,20 @@ def test_strava_start_date_filters_older_runs_and_allows_shared_mapping(client, 
         "1000,2025年7月1日,跑步,Fila Bon Voyage,5000\n"
     mapping = f'{{"Mizuno Wave Sky 7": {shoe.id}, "Fila Bon Voyage": {shoe.id}, "": null}}'
     response = upload(
-        client, "/api/runs/import/strava", token, mapping, "2025-07-01", csv_content
+        client,
+        "/api/runs/import/strava",
+        token,
+        mapping,
+        "2025-07-01",
+        csv_content,
+        sync_mileage=True,
     )
     assert response.status_code == 200
     assert response.json()["filtered_out"] == 1
     assert response.json()["imported"] == 2
+    assert response.json()["synced_mileage"] == 10.25
+    db.refresh(shoe)
+    assert shoe.mileage == 10.25
     assert db.query(Run).filter(Run.shoe_id == shoe.id).count() == 2
 
 
@@ -124,3 +156,75 @@ def test_strava_end_date_excludes_manual_log_period(client, user_with_token):
     )
     assert invalid_range.status_code == 400
     assert invalid_range.json()["detail"] == "起始日期不可晚於結束日期"
+
+
+@pytest.mark.parametrize("distance", ["nan", "0.1", "4.9"])
+def test_strava_preview_rejects_non_finite_or_zero_rounded_distance(
+    client, user_with_token, distance
+):
+    _user, token = user_with_token
+    csv_content = (
+        "活動 ID,活動日期,活動類型,活動裝備,距離\n"
+        f"1,2026年1月1日,跑步,Shoe,{distance}\n"
+    )
+    response = upload(
+        client, "/api/runs/import/strava/preview", token, csv_content=csv_content
+    )
+    assert response.status_code == 200
+    assert response.json()["run_count"] == 0
+    assert response.json()["invalid_count"] == 1
+
+
+def test_strava_preview_does_not_guess_between_duplicate_shoe_names(
+    client, db, user_with_token
+):
+    user, token = user_with_token
+    db.add_all([
+        Shoe(user_id=user.id, brand="Mizuno", model="Wave Sky 7", date="2024-01-01"),
+        Shoe(user_id=user.id, brand="Mizuno", model="Wave Sky 7", date="2025-01-01"),
+    ])
+    db.commit()
+    response = upload(client, "/api/runs/import/strava/preview", token)
+    group = next(
+        item for item in response.json()["gear_groups"]
+        if item["gear"] == "Mizuno Wave Sky 7"
+    )
+    assert group["suggested_shoe_id"] is None
+    assert group["ambiguous_match"] is True
+
+
+def test_strava_preview_preserves_unicode_when_matching_gear(
+    client, db, user_with_token
+):
+    user, token = user_with_token
+    shoe = Shoe(user_id=user.id, brand="跑鞋", model="天空七號", date="2025-01-01")
+    db.add(shoe)
+    db.commit()
+    csv_content = (
+        "活動 ID,活動日期,活動類型,活動裝備,距離\n"
+        "1,2026年1月1日,跑步,跑鞋 天空七號,5000\n"
+    )
+    response = upload(
+        client, "/api/runs/import/strava/preview", token, csv_content=csv_content
+    )
+    assert response.status_code == 200
+    assert response.json()["gear_groups"][0]["suggested_shoe_id"] == shoe.id
+
+
+def test_strava_upload_size_limit_is_bounded_before_full_read(
+    client, user_with_token, monkeypatch
+):
+    from backend import main as main_module
+
+    _user, token = user_with_token
+    monkeypatch.setattr(main_module, "MAX_STRAVA_CSV_BYTES", 10)
+    response = upload(client, "/api/runs/import/strava/preview", token)
+    assert response.status_code == 413
+
+
+def test_run_model_declares_unique_strava_activity_index():
+    index = next(
+        item for item in Run.__table__.indexes
+        if item.name == "idx_runs_user_strava_id"
+    )
+    assert index.unique is True
