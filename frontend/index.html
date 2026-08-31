@@ -692,9 +692,10 @@ tr:hover td { background: rgba(99,102,241,0.05); }
   <div class="modal strava-modal">
     <h2>匯入 Strava 跑步紀錄</h2>
     <p style="color:var(--text-dim);font-size:13px;line-height:1.6">請選擇 Strava 匯出資料夾中的 <code>activities.csv</code>。系統只會匯入跑步活動，並以活動 ID 避免重複。</p>
+    <div class="form-group"><label for="strava-file">activities.csv</label><input id="strava-file" type="file" accept=".csv,text/csv" onchange="previewStravaFile()"></div>
     <div class="form-row">
-      <div class="form-group"><label for="strava-file">activities.csv</label><input id="strava-file" type="file" accept=".csv,text/csv" onchange="previewStravaFile()"></div>
       <div class="form-group"><label for="strava-start-date">從這一天開始</label><input id="strava-start-date" type="date" value="2025-07-01" onchange="previewStravaFile()"></div>
+      <div class="form-group"><label for="strava-end-date">到這一天結束</label><input id="strava-end-date" type="date" value="2026-07-31" onchange="previewStravaFile()"></div>
     </div>
     <div id="strava-summary"></div>
     <div id="strava-mapping" class="strava-groups"></div>
@@ -1739,6 +1740,7 @@ function closeStravaModal() {
 async function previewStravaFile() {
   const file = document.getElementById('strava-file').files[0];
   const startDate = document.getElementById('strava-start-date').value;
+  const endDate = document.getElementById('strava-end-date').value;
   const summary = document.getElementById('strava-summary');
   const error = document.getElementById('strava-error');
   const mapping = document.getElementById('strava-mapping');
@@ -1748,7 +1750,7 @@ async function previewStravaFile() {
   mapping.innerHTML = '';
   document.getElementById('strava-import-btn').disabled = true;
   try {
-    stravaPreview = await apiUpload('/runs/import/strava/preview', file, { start_date: startDate });
+    stravaPreview = await apiUpload('/runs/import/strava/preview', file, { start_date: startDate, end_date: endDate });
     const unknown = stravaPreview.gear_groups.filter(group => !group.suggested_shoe_id).length;
     summary.innerHTML = `找到 <strong>${stravaPreview.run_count}</strong> 筆跑步活動；已有 ${stravaPreview.duplicate_count} 筆重複。${unknown ? `有 ${unknown} 個鞋款需要手動配對或略過。` : '鞋款已全部自動配對。'}`;
     const shoeOptions = allRunShoes().map(shoe => `<option value="${shoe.id}">${esc(shoe.brand)} ${esc(shoe.model)}${shoe.is_retired ? ' · 已退役' : ''}</option>`).join('');
@@ -1772,6 +1774,7 @@ async function importStrava() {
   const file = document.getElementById('strava-file').files[0];
   const mapping = {};
   const startDate = document.getElementById('strava-start-date').value;
+  const endDate = document.getElementById('strava-end-date').value;
   stravaPreview.gear_groups.forEach((group, index) => {
     const value = document.getElementById(`strava-map-${index}`).value;
     mapping[group.gear] = value ? Number(value) : null;
@@ -1780,7 +1783,7 @@ async function importStrava() {
   const error = document.getElementById('strava-error');
   button.disabled = true;
   try {
-    const result = await apiUpload('/runs/import/strava', file, { mapping: JSON.stringify(mapping), start_date: startDate });
+    const result = await apiUpload('/runs/import/strava', file, { mapping: JSON.stringify(mapping), start_date: startDate, end_date: endDate });
     closeStravaModal();
     alert(`已匯入 ${result.imported} 筆跑步紀錄${result.skipped_unmapped ? `，略過 ${result.skipped_unmapped} 筆未配對鞋款` : ''}。`);
     await loadData();
