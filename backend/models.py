@@ -10,6 +10,7 @@ from sqlalchemy import (
     Integer,
     String,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -67,7 +68,16 @@ class MonthlyMileage(Base):
 
 class Run(Base):
     __tablename__ = "runs"
-    __table_args__ = (Index("idx_runs_user_date", "user_id", "date"),)
+    __table_args__ = (
+        Index("idx_runs_user_date", "user_id", "date"),
+        Index(
+            "idx_runs_user_strava_id",
+            "user_id",
+            "strava_id",
+            unique=True,
+            sqlite_where=text("strava_id IS NOT NULL"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)

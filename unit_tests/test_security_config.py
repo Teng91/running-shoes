@@ -75,3 +75,13 @@ def test_strava_upload_lets_browser_set_multipart_content_type():
     assert "new FormData()" in upload_source
     assert "headers: authHeaders()" not in upload_source
     assert "headers['Authorization']" in upload_source
+
+
+def test_strava_frontend_uses_account_range_and_opt_in_mileage_sync():
+    source = (PROJECT_ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
+
+    assert "strava-import-range:${currentUser" in source
+    assert 'id="strava-start-date" type="date" value=' not in source
+    assert 'id="strava-end-date" type="date" value=' not in source
+    assert 'id="strava-sync-mileage" type="checkbox"' in source
+    assert "sync_shoe_mileage: String(syncShoeMileage)" in source

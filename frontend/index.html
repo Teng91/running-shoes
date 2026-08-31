@@ -99,6 +99,9 @@ h1 { font-size: 28px; font-weight: 700; margin-bottom: 4px; }
 .strava-group small { color: var(--text-dim); display: block; }
 .strava-group select { min-width: 220px; }
 .strava-groups { max-height: 300px; overflow-y: auto; margin-top: 12px; }
+.strava-sync { display: flex; align-items: flex-start; gap: 9px; margin-top: 12px; color: var(--text); font-size: 13px; line-height: 1.5; cursor: pointer; }
+.strava-sync input { width: 15px; height: 15px; margin-top: 2px; accent-color: var(--accent); flex: 0 0 auto; }
+.strava-sync small { display: block; color: var(--text-dim); }
 .empty-state { color: var(--text-dim); text-align: center; padding: 28px 12px; }
 @media (max-width: 760px) {
   .tabs { overflow-x: auto; padding-bottom: 4px; }
@@ -694,9 +697,10 @@ tr:hover td { background: rgba(99,102,241,0.05); }
     <p style="color:var(--text-dim);font-size:13px;line-height:1.6">請選擇 Strava 匯出資料夾中的 <code>activities.csv</code>。系統只會匯入跑步活動，並以活動 ID 避免重複。</p>
     <div class="form-group"><label for="strava-file">activities.csv</label><input id="strava-file" type="file" accept=".csv,text/csv" onchange="previewStravaFile()"></div>
     <div class="form-row">
-      <div class="form-group"><label for="strava-start-date">從這一天開始</label><input id="strava-start-date" type="date" value="2025-07-01" onchange="previewStravaFile()"></div>
-      <div class="form-group"><label for="strava-end-date">到這一天結束</label><input id="strava-end-date" type="date" value="2026-07-31" onchange="previewStravaFile()"></div>
+      <div class="form-group"><label for="strava-start-date">從這一天開始</label><input id="strava-start-date" type="date" onchange="previewStravaFile()"></div>
+      <div class="form-group"><label for="strava-end-date">到這一天結束</label><input id="strava-end-date" type="date" onchange="previewStravaFile()"></div>
     </div>
+    <label class="strava-sync"><input id="strava-sync-mileage" type="checkbox"><span>同步累加跑鞋總里程<small>只累加這次新匯入的活動；若 Dashboard 里程已包含這段歷史，請不要勾選。</small></span></label>
     <div id="strava-summary"></div>
     <div id="strava-mapping" class="strava-groups"></div>
     <div class="auth-error" id="strava-error"></div>
@@ -1730,6 +1734,16 @@ function openStravaModal() {
   document.getElementById('strava-mapping').innerHTML = '';
   document.getElementById('strava-error').style.display = 'none';
   document.getElementById('strava-import-btn').disabled = true;
+  const rangeKey = `strava-import-range:${currentUser || 'anonymous'}`;
+  let savedRange = null;
+  try { savedRange = JSON.parse(localStorage.getItem(rangeKey)); } catch {}
+  const now = new Date();
+  const defaultStart = new Date(now.getFullYear(), now.getMonth() - 13, 1);
+  const defaultEnd = new Date(now.getFullYear(), now.getMonth(), 0);
+  const formatDate = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+  document.getElementById('strava-start-date').value = savedRange?.start || formatDate(defaultStart);
+  document.getElementById('strava-end-date').value = savedRange?.end || formatDate(defaultEnd);
+  document.getElementById('strava-sync-mileage').checked = false;
   document.getElementById('strava-modal').classList.add('active');
 }
 
@@ -1744,6 +1758,10 @@ async function previewStravaFile() {
   const summary = document.getElementById('strava-summary');
   const error = document.getElementById('strava-error');
   const mapping = document.getElementById('strava-mapping');
+  localStorage.setItem(
+    `strava-import-range:${currentUser || 'anonymous'}`,
+    JSON.stringify({ start: startDate, end: endDate }),
+  );
   if (!file) return;
   error.style.display = 'none';
   summary.textContent = '正在分析 CSV…';
@@ -1753,7 +1771,7 @@ async function previewStravaFile() {
     stravaPreview = await apiUpload('/runs/import/strava/preview', file, { start_date: startDate, end_date: endDate });
     const unknown = stravaPreview.gear_groups.filter(group => !group.suggested_shoe_id).length;
     summary.innerHTML = `找到 <strong>${stravaPreview.run_count}</strong> 筆跑步活動；已有 ${stravaPreview.duplicate_count} 筆重複。${unknown ? `有 ${unknown} 個鞋款需要手動配對或略過。` : '鞋款已全部自動配對。'}`;
-    const shoeOptions = allRunShoes().map(shoe => `<option value="${shoe.id}">${esc(shoe.brand)} ${esc(shoe.model)}${shoe.is_retired ? ' · 已退役' : ''}</option>`).join('');
+    const shoeOptions = allRunShoes().map(shoe => `<option value="${shoe.id}">${esc(shoe.brand)} ${esc(shoe.model)} · ${esc(shoe.date)}${shoe.is_retired ? ' · 已退役' : ''}</option>`).join('');
     mapping.innerHTML = stravaPreview.gear_groups.map((group, index) => `
       <div class="strava-group"><div><strong>${esc(group.gear || '未指定鞋款')}</strong><small>${group.count} 次 · ${Number(group.km).toFixed(2)} km</small></div>
         <select id="strava-map-${index}"><option value="">不匯入此鞋款</option>${shoeOptions}</select></div>`).join('');
@@ -1775,6 +1793,7 @@ async function importStrava() {
   const mapping = {};
   const startDate = document.getElementById('strava-start-date').value;
   const endDate = document.getElementById('strava-end-date').value;
+  const syncShoeMileage = document.getElementById('strava-sync-mileage').checked;
   stravaPreview.gear_groups.forEach((group, index) => {
     const value = document.getElementById(`strava-map-${index}`).value;
     mapping[group.gear] = value ? Number(value) : null;
@@ -1783,9 +1802,9 @@ async function importStrava() {
   const error = document.getElementById('strava-error');
   button.disabled = true;
   try {
-    const result = await apiUpload('/runs/import/strava', file, { mapping: JSON.stringify(mapping), start_date: startDate, end_date: endDate });
+    const result = await apiUpload('/runs/import/strava', file, { mapping: JSON.stringify(mapping), start_date: startDate, end_date: endDate, sync_shoe_mileage: String(syncShoeMileage) });
     closeStravaModal();
-    alert(`已匯入 ${result.imported} 筆跑步紀錄${result.skipped_unmapped ? `，略過 ${result.skipped_unmapped} 筆未配對鞋款` : ''}。`);
+    alert(`已匯入 ${result.imported} 筆跑步紀錄${result.skipped_unmapped ? `，略過 ${result.skipped_unmapped} 筆未配對鞋款` : ''}${result.synced_mileage ? `，並累加 ${result.synced_mileage.toFixed(2)} km 至跑鞋總里程` : ''}。`);
     await loadData();
   } catch (e) {
     error.textContent = e.message || '匯入失敗';
