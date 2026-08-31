@@ -11,7 +11,7 @@ from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from threading import Lock
-from typing import cast
+from typing import ClassVar, cast
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -20,6 +20,7 @@ from sqlalchemy import Table, func, inspect, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from backend import agent, llm, models, schemas
 from backend.auth import (
@@ -49,6 +50,7 @@ MAX_REGISTERED_USERS = max(1, int(os.environ.get("MAX_REGISTERED_USERS", "100"))
 MAX_SHOES_PER_USER = max(1, int(os.environ.get("MAX_SHOES_PER_USER", "500")))
 MAX_RUNS_PER_USER = max(1, int(os.environ.get("MAX_RUNS_PER_USER", "5000")))
 MAX_STRAVA_CSV_BYTES = 10 * 1024 * 1024
+MAX_STRAVA_REQUEST_BYTES = MAX_STRAVA_CSV_BYTES + 1024 * 1024
 MODEL_REFRESH_COOLDOWN_SECONDS = max(
     1, int(os.environ.get("MODEL_REFRESH_COOLDOWN_SECONDS", "60"))
 )
@@ -60,6 +62,73 @@ _auth_global_rate_events: dict[str, deque[float]] = {}
 _model_refresh_times: dict[int, float] = {}
 _agent_rate_lock = Lock()
 _registration_lock = Lock()
+
+
+class StravaUploadLimitMiddleware:
+    """Reject oversized Strava multipart bodies before form parsing/spooling."""
+
+    _paths: ClassVar[frozenset[str]] = frozenset({
+        "/api/runs/import/strava",
+        "/api/runs/import/strava/preview",
+    })
+
+    def __init__(self, app: ASGIApp):
+        self.app = app
+
+    async def __call__(
+        self, scope: Scope, receive: Receive, send: Send
+    ) -> None:
+        if (
+            scope["type"] != "http"
+            or scope.get("method") != "POST"
+            or scope.get("path") not in self._paths
+        ):
+            await self.app(scope, receive, send)
+            return
+
+        headers = dict(scope.get("headers", []))
+        content_length = headers.get(b"content-length", b"")
+        try:
+            declared_size = int(content_length) if content_length else None
+        except ValueError:
+            declared_size = None
+        if declared_size is not None and declared_size > MAX_STRAVA_REQUEST_BYTES:
+            await JSONResponse(
+                {"detail": "Strava 上傳請求不可超過 11 MB"}, status_code=413
+            )(scope, receive, send)
+            return
+
+        body = bytearray()
+        while True:
+            message = await receive()
+            if message["type"] == "http.disconnect":
+                return
+            if message["type"] != "http.request":
+                continue
+            body.extend(message.get("body", b""))
+            if len(body) > MAX_STRAVA_REQUEST_BYTES:
+                await JSONResponse(
+                    {"detail": "Strava 上傳請求不可超過 11 MB"},
+                    status_code=413,
+                )(scope, receive, send)
+                return
+            if not message.get("more_body", False):
+                break
+
+        replayed = False
+
+        async def replay_receive() -> Message:
+            nonlocal replayed
+            if not replayed:
+                replayed = True
+                return {
+                    "type": "http.request",
+                    "body": bytes(body),
+                    "more_body": False,
+                }
+            return {"type": "http.disconnect"}
+
+        await self.app(scope, replay_receive, send)
 
 
 def _enforce_agent_rate_limit(user_id: int, now: float | None = None) -> None:
@@ -330,6 +399,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Running Shoes API", lifespan=lifespan)
 
+app.add_middleware(StravaUploadLimitMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],

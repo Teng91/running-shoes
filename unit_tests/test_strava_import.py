@@ -1,10 +1,11 @@
+import asyncio
 import io
 
 import pytest
 from fastapi.testclient import TestClient
 
 from backend.database import get_db
-from backend.main import _parse_strava_csv, app
+from backend.main import StravaUploadLimitMiddleware, _parse_strava_csv, app
 from backend.models import Run, Shoe
 from unit_tests.test_api import _auth_header
 
@@ -247,6 +248,60 @@ def test_strava_upload_size_limit_is_bounded_before_full_read(
     monkeypatch.setattr(main_module, "MAX_STRAVA_CSV_BYTES", 10)
     response = upload(client, "/api/runs/import/strava/preview", token)
     assert response.status_code == 413
+
+
+def test_strava_request_limit_rejects_before_endpoint_parsing(
+    client, user_with_token, monkeypatch
+):
+    from backend import main as main_module
+
+    _user, token = user_with_token
+    endpoint_called = False
+
+    async def fail_if_endpoint_reads(_file):
+        nonlocal endpoint_called
+        endpoint_called = True
+        raise AssertionError("endpoint should not parse an oversized multipart body")
+
+    monkeypatch.setattr(main_module, "MAX_STRAVA_REQUEST_BYTES", 10)
+    monkeypatch.setattr(main_module, "_read_strava_upload", fail_if_endpoint_reads)
+    response = upload(client, "/api/runs/import/strava/preview", token)
+    assert response.status_code == 413
+    assert endpoint_called is False
+
+
+def test_strava_request_limit_counts_chunked_body_without_content_length(monkeypatch):
+    from backend import main as main_module
+
+    monkeypatch.setattr(main_module, "MAX_STRAVA_REQUEST_BYTES", 10)
+    messages = iter([
+        {"type": "http.request", "body": b"123456", "more_body": True},
+        {"type": "http.request", "body": b"789012", "more_body": False},
+    ])
+    sent = []
+
+    async def receive():
+        return next(messages)
+
+    async def send(message):
+        sent.append(message)
+
+    async def downstream(_scope, limited_receive, _send):
+        while True:
+            message = await limited_receive()
+            if not message.get("more_body"):
+                return
+
+    scope = {
+        "type": "http",
+        "method": "POST",
+        "path": "/api/runs/import/strava/preview",
+        "headers": [],
+    }
+    middleware = StravaUploadLimitMiddleware(downstream)
+    asyncio.run(middleware(scope, receive, send))
+    assert sent[0]["type"] == "http.response.start"
+    assert sent[0]["status"] == 413
 
 
 def test_run_model_declares_unique_strava_activity_index():
