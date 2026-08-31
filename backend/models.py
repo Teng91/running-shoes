@@ -78,6 +78,7 @@ class Run(Base):
     )
     date: Mapped[str] = mapped_column(String, nullable=False)  # YYYY-MM-DD
     km: Mapped[float] = mapped_column(Float, nullable=False)
+    strava_id: Mapped[str | None] = mapped_column(String, nullable=True)
 
     owner: Mapped["User"] = relationship(back_populates="runs")
     shoe: Mapped["Shoe"] = relationship()

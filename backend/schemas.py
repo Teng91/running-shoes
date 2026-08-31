@@ -285,3 +285,4 @@ class RunOut(RunBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
     user_id: int
+    strava_id: str | None = None
