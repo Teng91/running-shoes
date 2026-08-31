@@ -160,9 +160,9 @@ MODEL_REFRESH_COOLDOWN_SECONDS=60
 
 ### Strava 歷史資料匯入
 
-在「跑步日誌」右上角按「匯入 Strava」，選擇 Strava 匯出資料夾中的 `activities.csv`（Strava 官方匯出方式請參考[說明](https://support.strava.com/hc/en-us/articles/216918437-Exporting-your-Data-and-Bulk-Export)）。系統會只保留活動類型為跑步的資料，解析日期與公里數，並先顯示各鞋款的筆數和里程。
+在「跑步日誌」右上角按「匯入 Strava」，選擇 Strava 匯出資料夾中的 `activities.csv`（Strava 官方匯出方式請參考[說明](https://support.strava.com/hc/en-us/articles/216918437-Exporting-your-Data-and-Bulk-Export)）。系統會只保留活動類型為跑步且不早於所選起始日期的資料，將 Strava 的公尺距離轉換為公里，並先顯示各鞋款的筆數和里程。
 
-匯入前可逐組選擇現有鞋款；名稱相符的鞋款會自動配對，沒有鞋款或無法辨識的裝備可以選擇略過。每筆匯入資料會保留 Strava 活動 ID，因此重複選擇同一份 CSV 不會重複建立紀錄。匯入仍受 `MAX_RUNS_PER_USER` 上限限制。
+匯入前可逐組選擇現有鞋款；名稱相符的鞋款會自動配對，也可以把多個 Strava 裝備配到同一雙 Dashboard 跑鞋。沒有鞋款或無法辨識的裝備可以選擇略過。每筆匯入資料會保留 Strava 活動 ID，因此重複選擇同一份 CSV 不會重複建立紀錄。匯入仍受 `MAX_RUNS_PER_USER` 上限限制。
 
 ## AI 跑鞋推薦助手
 
@@ -220,7 +220,7 @@ venv/bin/pytest -q
 venv/bin/pytest -q --cov=backend --cov-branch --cov-report=term-missing
 ```
 
-目前測試基準為 **235 passed**；`backend` 敘述覆蓋率為 **97.33%**（四捨五入為 97%）、分支覆蓋率為 **94.57%**，含分支的整體覆蓋率為 **96.79%**（四捨五入為 97%）。
+目前測試基準為 **236 passed**；`backend` 敘述覆蓋率為 **97.24%**（四捨五入為 97%）、分支覆蓋率為 **94.59%**，含分支的整體覆蓋率為 **96.64%**（四捨五入為 97%）。
 
 ## Docker 部署
 

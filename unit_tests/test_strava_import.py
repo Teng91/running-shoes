@@ -9,9 +9,9 @@ from backend.models import Run, Shoe
 from unit_tests.test_api import _auth_header
 
 CSV = "活動 ID,活動日期,活動類型,活動裝備,距離\n" \
-    "1001,2026年8月30日 上午11:40:36,跑步,Mizuno Wave Sky 7,5.25\n" \
-    "1002,2026年8月29日,步行,Mizuno Wave Sky 7,3\n" \
-    "1003,2026年8月28日,跑步,,6.10\n"
+    "1001,2026年8月30日 上午11:40:36,跑步,Mizuno Wave Sky 7,5250\n" \
+    "1002,2026年8月29日,步行,Mizuno Wave Sky 7,3000\n" \
+    "1003,2026年8月28日,跑步,,6100\n"
 
 
 @pytest.fixture
@@ -24,10 +24,12 @@ def client(db):
     app.dependency_overrides.clear()
 
 
-def upload(client, path, token, mapping=None):
+def upload(client, path, token, mapping=None, start_date="", csv_content=CSV):
     data = {"mapping": mapping} if mapping is not None else {}
+    if start_date:
+        data["start_date"] = start_date
     return client.post(path, headers=_auth_header(token), files={
-        "file": ("activities.csv", io.BytesIO(CSV.encode("utf-8-sig")), "text/csv")
+        "file": ("activities.csv", io.BytesIO(csv_content.encode("utf-8-sig")), "text/csv")
     }, data=data)
 
 
@@ -43,6 +45,7 @@ def test_strava_preview_filters_runs_and_suggests_shoe(client, db, user_with_tok
     assert result["duplicate_count"] == 0
     groups = {group["gear"]: group for group in result["gear_groups"]}
     assert groups["Mizuno Wave Sky 7"]["suggested_shoe_id"] == shoe.id
+    assert groups["Mizuno Wave Sky 7"]["km"] == 5.25
     assert groups[""]["suggested_shoe_id"] is None
 
 
@@ -79,3 +82,20 @@ def test_strava_preview_rejects_missing_columns(client, user_with_token):
     })
     assert response.status_code == 400
     assert "必要欄位" in response.json()["detail"]
+
+
+def test_strava_start_date_filters_older_runs_and_allows_shared_mapping(client, db, user_with_token):
+    user, token = user_with_token
+    shoe = Shoe(user_id=user.id, brand="Mizuno", model="Wave Sky 7", date="2024-01-01")
+    db.add(shoe)
+    db.commit()
+    csv_content = CSV + "999,2025年6月30日,跑步,Fila Bon Voyage,4000\n" \
+        "1000,2025年7月1日,跑步,Fila Bon Voyage,5000\n"
+    mapping = f'{{"Mizuno Wave Sky 7": {shoe.id}, "Fila Bon Voyage": {shoe.id}, "": null}}'
+    response = upload(
+        client, "/api/runs/import/strava", token, mapping, "2025-07-01", csv_content
+    )
+    assert response.status_code == 200
+    assert response.json()["filtered_out"] == 1
+    assert response.json()["imported"] == 2
+    assert db.query(Run).filter(Run.shoe_id == shoe.id).count() == 2
