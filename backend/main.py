@@ -51,6 +51,7 @@ MAX_SHOES_PER_USER = max(1, int(os.environ.get("MAX_SHOES_PER_USER", "500")))
 MAX_RUNS_PER_USER = max(1, int(os.environ.get("MAX_RUNS_PER_USER", "5000")))
 MAX_STRAVA_CSV_BYTES = 10 * 1024 * 1024
 MAX_STRAVA_REQUEST_BYTES = MAX_STRAVA_CSV_BYTES + 1024 * 1024
+MAX_STRAVA_CSV_ROWS = 50_000
 MODEL_REFRESH_COOLDOWN_SECONDS = max(
     1, int(os.environ.get("MODEL_REFRESH_COOLDOWN_SECONDS", "60"))
 )
@@ -678,34 +679,38 @@ def _parse_strava_csv(raw: bytes) -> tuple[list[dict[str, object]], int, list[st
     invalid = 0
     warnings: list[str] = []
     try:
-        csv_rows = list(reader)
+        for row_number, row in enumerate(reader, start=1):
+            if row_number > MAX_STRAVA_CSV_ROWS:
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"CSV 資料列不可超過 {MAX_STRAVA_CSV_ROWS:,} 筆",
+                )
+            if (row.get(fields["type"] or "") or "").strip() not in _STRAVA_RUN_TYPES:
+                continue
+            try:
+                activity_id = (row.get(fields["id"] or "") or "").strip()
+                date_value = _parse_strava_date(row.get(fields["date"] or "") or "")
+                distance_m = float((row.get(fields["distance"] or "") or "").replace(",", "").strip())
+                km = round(distance_m / 1000, 2)
+                if (
+                    not activity_id
+                    or not math.isfinite(distance_m)
+                    or distance_m <= 0
+                    or distance_m > 1_000_000
+                    or km <= 0
+                ):
+                    raise ValueError("invalid activity")
+            except (TypeError, ValueError):
+                invalid += 1
+                continue
+            rows.append({
+                "strava_id": activity_id[:100],
+                "date": date_value,
+                "km": km,
+                "gear": (row.get(fields["gear"] or "") or "").strip(),
+            })
     except csv.Error as exc:
         raise HTTPException(status_code=400, detail="CSV 格式錯誤") from exc
-    for row in csv_rows:
-        if (row.get(fields["type"] or "") or "").strip() not in _STRAVA_RUN_TYPES:
-            continue
-        try:
-            activity_id = (row.get(fields["id"] or "") or "").strip()
-            date_value = _parse_strava_date(row.get(fields["date"] or "") or "")
-            distance_m = float((row.get(fields["distance"] or "") or "").replace(",", "").strip())
-            km = round(distance_m / 1000, 2)
-            if (
-                not activity_id
-                or not math.isfinite(distance_m)
-                or distance_m <= 0
-                or distance_m > 1_000_000
-                or km <= 0
-            ):
-                raise ValueError("invalid activity")
-        except (TypeError, ValueError):
-            invalid += 1
-            continue
-        rows.append({
-            "strava_id": activity_id[:100],
-            "date": date_value,
-            "km": km,
-            "gear": (row.get(fields["gear"] or "") or "").strip(),
-        })
     if invalid:
         warnings.append(f"已略過 {invalid} 筆格式不完整的跑步活動")
     return rows, invalid, warnings
