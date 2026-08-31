@@ -64,3 +64,14 @@ def test_run_log_frontend_keeps_daily_ticks_and_select_state_safe():
     assert "原鞋款已刪除，請重新選擇" in source
     assert "document.getElementById('run-date').value = localDateISO()" in source
     assert "document.getElementById('run-month').value = localDateISO().slice(0, 7)" in source
+
+
+def test_strava_upload_lets_browser_set_multipart_content_type():
+    source = (PROJECT_ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
+    upload_source = source.split("async function apiUpload", 1)[1].split(
+        "// ====== Auth Handlers ======", 1
+    )[0]
+
+    assert "new FormData()" in upload_source
+    assert "headers: authHeaders()" not in upload_source
+    assert "headers['Authorization']" in upload_source
