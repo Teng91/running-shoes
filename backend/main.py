@@ -551,7 +551,7 @@ _STRAVA_HEADERS = {
     "id": ("活動 ID", "Activity ID"),
     "date": ("活動日期", "Activity Date"),
     "type": ("活動類型", "Activity Type"),
-    "gear": ("活動裝備", "Gear"),
+    "gear": ("活動裝備", "Activity Gear", "Gear"),
     "distance": ("距離", "Distance"),
 }
 _STRAVA_RUN_TYPES = {"跑步", "Run", "TrailRun", "Trail Run", "VirtualRun", "Virtual Run"}
@@ -571,6 +571,16 @@ def _parse_strava_date(value: str) -> str:
         return datetime.strptime(
             f"{match.group(1)}-{match.group(2)}-{match.group(3)}", "%Y-%m-%d"
         ).replace(tzinfo=UTC).date().isoformat()
+    for fmt in (
+        "%b %d, %Y, %I:%M:%S %p",
+        "%B %d, %Y, %I:%M:%S %p",
+        "%b %d, %Y",
+        "%B %d, %Y",
+    ):
+        try:
+            return datetime.strptime(text_value, fmt).replace(tzinfo=UTC).date().isoformat()
+        except ValueError:
+            continue
     for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%m/%d/%Y"):
         try:
             return datetime.strptime(text_value[:10], fmt).replace(tzinfo=UTC).date().isoformat()

@@ -4,7 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend.database import get_db
-from backend.main import app
+from backend.main import _parse_strava_csv, app
 from backend.models import Run, Shoe
 from unit_tests.test_api import _auth_header
 
@@ -209,6 +209,33 @@ def test_strava_preview_preserves_unicode_when_matching_gear(
     )
     assert response.status_code == 200
     assert response.json()["gear_groups"][0]["suggested_shoe_id"] == shoe.id
+
+
+def test_strava_preview_accepts_official_english_headers_and_dates(
+    client, db, user_with_token
+):
+    user, token = user_with_token
+    shoe = Shoe(user_id=user.id, brand="Mizuno", model="Wave Sky 7", date="2025-01-01")
+    db.add(shoe)
+    db.commit()
+    csv_content = (
+        "Activity ID,Activity Date,Activity Type,Activity Gear,Distance\n"
+        '1,"Aug 30, 2026, 11:40:36 AM",Run,Mizuno Wave Sky 7,5250\n'
+        '2,"August 31, 2026, 1:05:02 PM",Run,Mizuno Wave Sky 7,6100\n'
+    )
+    response = upload(
+        client, "/api/runs/import/strava/preview", token, csv_content=csv_content
+    )
+    assert response.status_code == 200
+    result = response.json()
+    assert result["run_count"] == 2
+    assert result["invalid_count"] == 0
+    assert result["gear_groups"][0]["gear"] == "Mizuno Wave Sky 7"
+    assert result["gear_groups"][0]["suggested_shoe_id"] == shoe.id
+    assert result["gear_groups"][0]["km"] == 11.35
+    parsed, invalid, _warnings = _parse_strava_csv(csv_content.encode("utf-8"))
+    assert invalid == 0
+    assert [row["date"] for row in parsed] == ["2026-08-30", "2026-08-31"]
 
 
 def test_strava_upload_size_limit_is_bounded_before_full_read(
