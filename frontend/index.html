@@ -890,13 +890,13 @@ async function apiDelete(url) {
   return res.json();
 }
 
-async function apiUpload(url, file, fields = {}) {
+async function apiUpload(url, file, fields = {}, signal = undefined) {
   const form = new FormData();
   form.append('file', file);
   Object.entries(fields).forEach(([key, value]) => form.append(key, value));
   const headers = {};
   if (authToken) headers['Authorization'] = 'Bearer ' + authToken;
-  const res = await fetch(API_BASE + url, { method: 'POST', headers, body: form });
+  const res = await fetch(API_BASE + url, { method: 'POST', headers, body: form, signal });
   if (res.status === 401) { clearAuth(); showLoginView(); throw new Error('Unauthorized'); }
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
@@ -1113,6 +1113,9 @@ let monthlyMileages = [];
 let monthlySpending = [];
 let runs = [];
 let stravaPreview = null;
+let stravaPreviewKey = '';
+let stravaPreviewRequestId = 0;
+let stravaPreviewController = null;
 let selectedYear = null;
 let selectedSpendingYear = null;
 
@@ -1728,7 +1731,10 @@ async function deleteEditingRun() {
 }
 
 function openStravaModal() {
+  if (stravaPreviewController) stravaPreviewController.abort();
+  stravaPreviewRequestId += 1;
   stravaPreview = null;
+  stravaPreviewKey = '';
   document.getElementById('strava-file').value = '';
   document.getElementById('strava-summary').innerHTML = '';
   document.getElementById('strava-mapping').innerHTML = '';
@@ -1748,7 +1754,17 @@ function openStravaModal() {
 }
 
 function closeStravaModal() {
+  if (stravaPreviewController) stravaPreviewController.abort();
+  stravaPreviewController = null;
+  stravaPreviewRequestId += 1;
+  stravaPreview = null;
+  stravaPreviewKey = '';
   document.getElementById('strava-modal').classList.remove('active');
+}
+
+function stravaInputKey(file, startDate, endDate) {
+  if (!file) return '';
+  return [file.name, file.size, file.lastModified, startDate, endDate].join('|');
 }
 
 async function previewStravaFile() {
@@ -1762,13 +1778,35 @@ async function previewStravaFile() {
     `strava-import-range:${currentUser || 'anonymous'}`,
     JSON.stringify({ start: startDate, end: endDate }),
   );
-  if (!file) return;
-  error.style.display = 'none';
-  summary.textContent = '正在分析 CSV…';
+  if (stravaPreviewController) stravaPreviewController.abort();
+  stravaPreviewController = null;
+  const requestId = ++stravaPreviewRequestId;
+  stravaPreview = null;
+  stravaPreviewKey = '';
+  summary.innerHTML = '';
   mapping.innerHTML = '';
+  error.style.display = 'none';
   document.getElementById('strava-import-btn').disabled = true;
+  if (!file) return;
+  if (file.size > 10 * 1024 * 1024) {
+    error.textContent = 'CSV 檔案不可超過 10 MB';
+    error.style.display = 'block';
+    return;
+  }
+  summary.textContent = '正在分析 CSV…';
+  const inputKey = stravaInputKey(file, startDate, endDate);
+  const controller = new AbortController();
+  stravaPreviewController = controller;
   try {
-    stravaPreview = await apiUpload('/runs/import/strava/preview', file, { start_date: startDate, end_date: endDate });
+    const preview = await apiUpload(
+      '/runs/import/strava/preview',
+      file,
+      { start_date: startDate, end_date: endDate },
+      controller.signal,
+    );
+    if (requestId !== stravaPreviewRequestId) return;
+    stravaPreview = preview;
+    stravaPreviewKey = inputKey;
     const unknown = stravaPreview.gear_groups.filter(group => !group.suggested_shoe_id).length;
     summary.innerHTML = `找到 <strong>${stravaPreview.run_count}</strong> 筆跑步活動；已有 ${stravaPreview.duplicate_count} 筆重複。${unknown ? `有 ${unknown} 個鞋款需要手動配對或略過。` : '鞋款已全部自動配對。'}`;
     const shoeOptions = allRunShoes().map(shoe => `<option value="${shoe.id}">${esc(shoe.brand)} ${esc(shoe.model)} · ${esc(shoe.date)}${shoe.is_retired ? ' · 已退役' : ''}</option>`).join('');
@@ -1780,10 +1818,14 @@ async function previewStravaFile() {
     });
     document.getElementById('strava-import-btn').disabled = stravaPreview.run_count === 0;
   } catch (e) {
+    if (e.name === 'AbortError' || requestId !== stravaPreviewRequestId) return;
     stravaPreview = null;
+    stravaPreviewKey = '';
     summary.innerHTML = '';
     error.textContent = e.message || 'CSV 分析失敗';
     error.style.display = 'block';
+  } finally {
+    if (requestId === stravaPreviewRequestId) stravaPreviewController = null;
   }
 }
 
@@ -1794,12 +1836,18 @@ async function importStrava() {
   const startDate = document.getElementById('strava-start-date').value;
   const endDate = document.getElementById('strava-end-date').value;
   const syncShoeMileage = document.getElementById('strava-sync-mileage').checked;
+  const error = document.getElementById('strava-error');
+  if (stravaPreviewKey !== stravaInputKey(file, startDate, endDate)) {
+    error.textContent = '檔案或日期範圍已變更，請等待最新預覽完成。';
+    error.style.display = 'block';
+    await previewStravaFile();
+    return;
+  }
   stravaPreview.gear_groups.forEach((group, index) => {
     const value = document.getElementById(`strava-map-${index}`).value;
     mapping[group.gear] = value ? Number(value) : null;
   });
   const button = document.getElementById('strava-import-btn');
-  const error = document.getElementById('strava-error');
   button.disabled = true;
   try {
     const result = await apiUpload('/runs/import/strava', file, { mapping: JSON.stringify(mapping), start_date: startDate, end_date: endDate, sync_shoe_mileage: String(syncShoeMileage) });
