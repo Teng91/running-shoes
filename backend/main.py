@@ -619,17 +619,27 @@ def _parse_strava_csv(raw: bytes) -> tuple[list[dict[str, object]], int, list[st
 
 
 def _filter_strava_rows(
-    rows: list[dict[str, object]], start_date: str
+    rows: list[dict[str, object]], start_date: str, end_date: str
 ) -> tuple[list[dict[str, object]], int]:
-    if not start_date:
-        return rows, 0
-    try:
-        normalized_date = datetime.strptime(start_date, "%Y-%m-%d").replace(
-            tzinfo=UTC
-        ).date().isoformat()
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail="起始日期格式錯誤") from exc
-    filtered = [row for row in rows if str(row["date"]) >= normalized_date]
+    normalized_dates: list[str] = []
+    for value, label in ((start_date, "起始"), (end_date, "結束")):
+        if not value:
+            normalized_dates.append("")
+            continue
+        try:
+            normalized_dates.append(
+                datetime.strptime(value, "%Y-%m-%d").replace(tzinfo=UTC).date().isoformat()
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=f"{label}日期格式錯誤") from exc
+    normalized_start, normalized_end = normalized_dates
+    if normalized_start and normalized_end and normalized_start > normalized_end:
+        raise HTTPException(status_code=400, detail="起始日期不可晚於結束日期")
+    filtered = [
+        row for row in rows
+        if (not normalized_start or str(row["date"]) >= normalized_start)
+        and (not normalized_end or str(row["date"]) <= normalized_end)
+    ]
     return filtered, len(rows) - len(filtered)
 
 
@@ -671,6 +681,7 @@ def _strava_preview(db: Session, user_id: int, rows: list[dict[str, object]], in
 async def preview_strava_import(
     file: UploadFile = File(...),
     start_date: str = Form(""),
+    end_date: str = Form(""),
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -678,7 +689,7 @@ async def preview_strava_import(
     if len(raw) > 10 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="CSV 檔案不可超過 10 MB")
     rows, invalid, warnings = _parse_strava_csv(raw)
-    rows, filtered_out = _filter_strava_rows(rows, start_date)
+    rows, filtered_out = _filter_strava_rows(rows, start_date, end_date)
     preview = _strava_preview(db, current_user.id, rows, invalid, warnings)
     preview["filtered_out"] = filtered_out
     return preview
@@ -689,6 +700,7 @@ async def import_strava_runs(
     file: UploadFile = File(...),
     mapping: str = Form("{}"),
     start_date: str = Form(""),
+    end_date: str = Form(""),
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -702,7 +714,7 @@ async def import_strava_runs(
     if len(raw) > 10 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="CSV 檔案不可超過 10 MB")
     rows, invalid, _ = _parse_strava_csv(raw)
-    rows, filtered_out = _filter_strava_rows(rows, start_date)
+    rows, filtered_out = _filter_strava_rows(rows, start_date, end_date)
     shoes = {shoe.id: shoe for shoe in db.query(models.Shoe).filter(models.Shoe.user_id == current_user.id).all()}
     normalized_mapping: dict[str, int | None] = {}
     for gear, shoe_id in parsed_mapping.items():
