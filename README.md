@@ -220,7 +220,7 @@ venv/bin/pytest -q
 venv/bin/pytest -q --cov=backend --cov-branch --cov-report=term-missing
 ```
 
-目前測試基準為 **236 passed**；`backend` 敘述覆蓋率為 **97.24%**（四捨五入為 97%）、分支覆蓋率為 **94.59%**，含分支的整體覆蓋率為 **96.64%**（四捨五入為 97%）。
+目前測試基準為 **237 passed**；`backend` 敘述覆蓋率為 **97.24%**（四捨五入為 97%）、分支覆蓋率為 **94.59%**，含分支的整體覆蓋率為 **96.64%**（四捨五入為 97%）。
 
 ## Docker 部署
 
