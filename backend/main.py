@@ -1,18 +1,26 @@
+import csv
+import io
+import json
+import math
 import os
+import re
 import time
 from collections import deque
+from collections.abc import Sequence
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from threading import Lock
-from typing import cast
+from typing import ClassVar, cast
 
-from fastapi import Depends, FastAPI, HTTPException, Query, Request
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
-from sqlalchemy import Table, inspect, text
+from sqlalchemy import Table, func, inspect, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from backend import agent, llm, models, schemas
 from backend.auth import (
@@ -41,6 +49,9 @@ AUTH_GLOBAL_RATE_LIMIT_PER_MINUTE = max(
 MAX_REGISTERED_USERS = max(1, int(os.environ.get("MAX_REGISTERED_USERS", "100")))
 MAX_SHOES_PER_USER = max(1, int(os.environ.get("MAX_SHOES_PER_USER", "500")))
 MAX_RUNS_PER_USER = max(1, int(os.environ.get("MAX_RUNS_PER_USER", "5000")))
+MAX_STRAVA_CSV_BYTES = 10 * 1024 * 1024
+MAX_STRAVA_REQUEST_BYTES = MAX_STRAVA_CSV_BYTES + 1024 * 1024
+MAX_STRAVA_CSV_ROWS = 50_000
 MODEL_REFRESH_COOLDOWN_SECONDS = max(
     1, int(os.environ.get("MODEL_REFRESH_COOLDOWN_SECONDS", "60"))
 )
@@ -52,6 +63,73 @@ _auth_global_rate_events: dict[str, deque[float]] = {}
 _model_refresh_times: dict[int, float] = {}
 _agent_rate_lock = Lock()
 _registration_lock = Lock()
+
+
+class StravaUploadLimitMiddleware:
+    """Reject oversized Strava multipart bodies before form parsing/spooling."""
+
+    _paths: ClassVar[frozenset[str]] = frozenset({
+        "/api/runs/import/strava",
+        "/api/runs/import/strava/preview",
+    })
+
+    def __init__(self, app: ASGIApp):
+        self.app = app
+
+    async def __call__(
+        self, scope: Scope, receive: Receive, send: Send
+    ) -> None:
+        if (
+            scope["type"] != "http"
+            or scope.get("method") != "POST"
+            or scope.get("path") not in self._paths
+        ):
+            await self.app(scope, receive, send)
+            return
+
+        headers = dict(scope.get("headers", []))
+        content_length = headers.get(b"content-length", b"")
+        try:
+            declared_size = int(content_length) if content_length else None
+        except ValueError:
+            declared_size = None
+        if declared_size is not None and declared_size > MAX_STRAVA_REQUEST_BYTES:
+            await JSONResponse(
+                {"detail": "Strava 上傳請求不可超過 11 MB"}, status_code=413
+            )(scope, receive, send)
+            return
+
+        body = bytearray()
+        while True:
+            message = await receive()
+            if message["type"] == "http.disconnect":
+                return
+            if message["type"] != "http.request":
+                continue
+            body.extend(message.get("body", b""))
+            if len(body) > MAX_STRAVA_REQUEST_BYTES:
+                await JSONResponse(
+                    {"detail": "Strava 上傳請求不可超過 11 MB"},
+                    status_code=413,
+                )(scope, receive, send)
+                return
+            if not message.get("more_body", False):
+                break
+
+        replayed = False
+
+        async def replay_receive() -> Message:
+            nonlocal replayed
+            if not replayed:
+                replayed = True
+                return {
+                    "type": "http.request",
+                    "body": bytes(body),
+                    "more_body": False,
+                }
+            return {"type": "http.disconnect"}
+
+        await self.app(scope, replay_receive, send)
 
 
 def _enforce_agent_rate_limit(user_id: int, now: float | None = None) -> None:
@@ -263,6 +341,16 @@ async def lifespan(app: FastAPI):
 
     Base.metadata.create_all(bind=engine)
 
+    # Incremental migration for Strava provenance on run records.
+    run_columns = {column["name"] for column in inspect(engine).get_columns("runs")}
+    with engine.begin() as conn:
+        if "strava_id" not in run_columns:
+            conn.execute(text("ALTER TABLE runs ADD COLUMN strava_id VARCHAR"))
+        conn.execute(text(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_runs_user_strava_id "
+            "ON runs (user_id, strava_id) WHERE strava_id IS NOT NULL"
+        ))
+
     # create_all() does not add indexes to tables that already exist.
     # Keep the run-log query path fast for upgraded databases as history grows.
     with engine.begin() as conn:
@@ -312,6 +400,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Running Shoes API", lifespan=lifespan)
 
+app.add_middleware(StravaUploadLimitMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -527,6 +616,289 @@ def _user_shoe_or_404(db: Session, user_id: int, shoe_id: int) -> models.Shoe:
     if not shoe:
         raise HTTPException(status_code=404, detail="Shoe not found")
     return shoe
+
+
+_STRAVA_HEADERS = {
+    "id": ("活動 ID", "Activity ID"),
+    "date": ("活動日期", "Activity Date"),
+    "type": ("活動類型", "Activity Type"),
+    "gear": ("活動裝備", "Activity Gear", "Gear"),
+    "distance": ("距離", "Distance"),
+}
+_STRAVA_RUN_TYPES = {"跑步", "Run", "TrailRun", "Trail Run", "VirtualRun", "Virtual Run"}
+
+
+def _strava_field(headers: Sequence[str], key: str) -> str | None:
+    for candidate in _STRAVA_HEADERS[key]:
+        if candidate in headers:
+            return candidate
+    return None
+
+
+def _parse_strava_date(value: str) -> str:
+    text_value = value.strip()
+    match = re.search(r"(\d{4})年\s*(\d{1,2})月\s*(\d{1,2})日", text_value)
+    if match:
+        return datetime.strptime(
+            f"{match.group(1)}-{match.group(2)}-{match.group(3)}", "%Y-%m-%d"
+        ).replace(tzinfo=UTC).date().isoformat()
+    for fmt in (
+        "%b %d, %Y, %I:%M:%S %p",
+        "%B %d, %Y, %I:%M:%S %p",
+        "%b %d, %Y",
+        "%B %d, %Y",
+    ):
+        try:
+            return datetime.strptime(text_value, fmt).replace(tzinfo=UTC).date().isoformat()
+        except ValueError:
+            continue
+    for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%m/%d/%Y"):
+        try:
+            return datetime.strptime(text_value[:10], fmt).replace(tzinfo=UTC).date().isoformat()
+        except ValueError:
+            continue
+    raise ValueError("invalid date")
+
+
+def _normalize_gear(value: str) -> str:
+    return "".join(character for character in value.casefold() if character.isalnum())
+
+
+def _parse_strava_csv(raw: bytes) -> tuple[list[dict[str, object]], int, list[str]]:
+    try:
+        csv_text = raw.decode("utf-8-sig")
+    except UnicodeDecodeError as exc:
+        raise HTTPException(status_code=400, detail="無法讀取 CSV，請使用 UTF-8 編碼") from exc
+    reader = csv.DictReader(io.StringIO(csv_text))
+    headers = reader.fieldnames or []
+    fields = {key: _strava_field(headers, key) for key in _STRAVA_HEADERS}
+    missing = [key for key, field in fields.items() if field is None]
+    if missing:
+        raise HTTPException(status_code=400, detail="CSV 缺少必要欄位：" + ", ".join(missing))
+    rows: list[dict[str, object]] = []
+    invalid = 0
+    warnings: list[str] = []
+    try:
+        for row_number, row in enumerate(reader, start=1):
+            if row_number > MAX_STRAVA_CSV_ROWS:
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"CSV 資料列不可超過 {MAX_STRAVA_CSV_ROWS:,} 筆",
+                )
+            if (row.get(fields["type"] or "") or "").strip() not in _STRAVA_RUN_TYPES:
+                continue
+            try:
+                activity_id = (row.get(fields["id"] or "") or "").strip()
+                date_value = _parse_strava_date(row.get(fields["date"] or "") or "")
+                distance_m = float((row.get(fields["distance"] or "") or "").replace(",", "").strip())
+                km = round(distance_m / 1000, 2)
+                if (
+                    not activity_id
+                    or not math.isfinite(distance_m)
+                    or distance_m <= 0
+                    or distance_m > 1_000_000
+                    or km <= 0
+                ):
+                    raise ValueError("invalid activity")
+            except (TypeError, ValueError):
+                invalid += 1
+                continue
+            rows.append({
+                "strava_id": activity_id[:100],
+                "date": date_value,
+                "km": km,
+                "gear": (row.get(fields["gear"] or "") or "").strip(),
+            })
+    except csv.Error as exc:
+        raise HTTPException(status_code=400, detail="CSV 格式錯誤") from exc
+    if invalid:
+        warnings.append(f"已略過 {invalid} 筆格式不完整的跑步活動")
+    return rows, invalid, warnings
+
+
+def _filter_strava_rows(
+    rows: list[dict[str, object]], start_date: str, end_date: str
+) -> tuple[list[dict[str, object]], int]:
+    normalized_dates: list[str] = []
+    for value, label in ((start_date, "起始"), (end_date, "結束")):
+        if not value:
+            normalized_dates.append("")
+            continue
+        try:
+            normalized_dates.append(
+                datetime.strptime(value, "%Y-%m-%d").replace(tzinfo=UTC).date().isoformat()
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=f"{label}日期格式錯誤") from exc
+    normalized_start, normalized_end = normalized_dates
+    if normalized_start and normalized_end and normalized_start > normalized_end:
+        raise HTTPException(status_code=400, detail="起始日期不可晚於結束日期")
+    filtered = [
+        row for row in rows
+        if (not normalized_start or str(row["date"]) >= normalized_start)
+        and (not normalized_end or str(row["date"]) <= normalized_end)
+    ]
+    return filtered, len(rows) - len(filtered)
+
+
+async def _read_strava_upload(file: UploadFile) -> bytes:
+    raw = await file.read(MAX_STRAVA_CSV_BYTES + 1)
+    if len(raw) > MAX_STRAVA_CSV_BYTES:
+        raise HTTPException(status_code=413, detail="CSV 檔案不可超過 10 MB")
+    return raw
+
+
+def _strava_preview(db: Session, user_id: int, rows: list[dict[str, object]], invalid: int, warnings: list[str]) -> dict[str, object]:
+    existing_ids = {
+        value[0] for value in db.query(models.Run.strava_id).filter(
+            models.Run.user_id == user_id, models.Run.strava_id.isnot(None)
+        ).all()
+    }
+    shoes = db.query(models.Shoe).filter(models.Shoe.user_id == user_id).all()
+    shoes_by_key: dict[str, list[models.Shoe]] = {}
+    for shoe in shoes:
+        key = _normalize_gear(f"{shoe.brand} {shoe.model}")
+        if key:
+            shoes_by_key.setdefault(key, []).append(shoe)
+    groups: dict[str, dict[str, object]] = {}
+    seen: set[str] = set()
+    duplicate_count = 0
+    for row in rows:
+        strava_id = str(row["strava_id"])
+        if strava_id in existing_ids or strava_id in seen:
+            duplicate_count += 1
+        seen.add(strava_id)
+        gear = str(row["gear"])
+        group = groups.setdefault(gear, {"gear": gear, "count": 0, "km": 0.0})
+        group["count"] = int(cast(int, group["count"])) + 1
+        group["km"] = round(float(cast(float, group["km"])) + float(cast(float, row["km"])), 2)
+    for group in groups.values():
+        candidates = shoes_by_key.get(_normalize_gear(str(group["gear"])), [])
+        suggested_shoe = candidates[0] if len(candidates) == 1 else None
+        group["suggested_shoe_id"] = suggested_shoe.id if suggested_shoe else None
+        group["shoe_name"] = (
+            f"{suggested_shoe.brand} {suggested_shoe.model}" if suggested_shoe else None
+        )
+        group["ambiguous_match"] = len(candidates) > 1
+    return {
+        "total_rows": len(rows) + invalid,
+        "run_count": len(rows),
+        "duplicate_count": duplicate_count,
+        "invalid_count": invalid,
+        "gear_groups": sorted(groups.values(), key=lambda group: str(group["gear"])),
+        "warnings": warnings,
+    }
+
+
+@app.post("/api/runs/import/strava/preview")
+async def preview_strava_import(
+    file: UploadFile = File(...),
+    start_date: str = Form(""),
+    end_date: str = Form(""),
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    raw = await _read_strava_upload(file)
+    rows, invalid, warnings = _parse_strava_csv(raw)
+    rows, filtered_out = _filter_strava_rows(rows, start_date, end_date)
+    preview = _strava_preview(db, current_user.id, rows, invalid, warnings)
+    preview["filtered_out"] = filtered_out
+    return preview
+
+
+@app.post("/api/runs/import/strava")
+async def import_strava_runs(
+    file: UploadFile = File(...),
+    mapping: str = Form("{}"),
+    start_date: str = Form(""),
+    end_date: str = Form(""),
+    sync_shoe_mileage: bool = Form(False),
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        parsed_mapping = json.loads(mapping)
+        if not isinstance(parsed_mapping, dict):
+            raise ValueError
+    except (TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=400, detail="鞋款配對格式錯誤") from exc
+    raw = await _read_strava_upload(file)
+    rows, invalid, _ = _parse_strava_csv(raw)
+    rows, filtered_out = _filter_strava_rows(rows, start_date, end_date)
+    shoes = {shoe.id: shoe for shoe in db.query(models.Shoe).filter(models.Shoe.user_id == current_user.id).all()}
+    normalized_mapping: dict[str, int | None] = {}
+    for gear, shoe_id in parsed_mapping.items():
+        if shoe_id in (None, "", 0, "0"):
+            normalized_mapping[str(gear)] = None
+            continue
+        try:
+            shoe_id_int = int(cast(str | int, shoe_id))
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail="鞋款配對格式錯誤") from exc
+        if shoe_id_int not in shoes:
+            raise HTTPException(status_code=404, detail="鞋款不存在或不屬於目前帳號")
+        normalized_mapping[str(gear)] = shoe_id_int
+    existing_ids = {
+        value[0] for value in db.query(models.Run.strava_id).filter(
+            models.Run.user_id == current_user.id, models.Run.strava_id.isnot(None)
+        ).all()
+    }
+    seen: set[str] = set()
+    runs_to_add: list[models.Run] = []
+    skipped_duplicate = 0
+    skipped_unmapped = 0
+    for row in rows:
+        strava_id = str(row["strava_id"])
+        if strava_id in existing_ids or strava_id in seen:
+            skipped_duplicate += 1
+            continue
+        seen.add(strava_id)
+        shoe_id = normalized_mapping.get(str(row["gear"]))
+        if shoe_id is None:
+            skipped_unmapped += 1
+            continue
+        runs_to_add.append(models.Run(
+            user_id=current_user.id,
+            shoe_id=shoe_id,
+            date=str(row["date"]),
+            km=float(cast(float, row["km"])),
+            strava_id=strava_id,
+        ))
+    current_count = db.query(models.Run).filter(models.Run.user_id == current_user.id).count()
+    if current_count + len(runs_to_add) > MAX_RUNS_PER_USER:
+        raise HTTPException(status_code=409, detail="匯入後跑步紀錄將超過上限")
+    synced_mileage = 0.0
+    if sync_shoe_mileage:
+        mileage_by_shoe: dict[int, float] = {}
+        for run in runs_to_add:
+            mileage_by_shoe[run.shoe_id] = mileage_by_shoe.get(run.shoe_id, 0.0) + run.km
+        for shoe_id, imported_km in mileage_by_shoe.items():
+            db.query(models.Shoe).filter(
+                models.Shoe.id == shoe_id,
+                models.Shoe.user_id == current_user.id,
+            ).update(
+                {
+                    models.Shoe.mileage: func.coalesce(models.Shoe.mileage, 0)
+                    + round(imported_km, 2)
+                },
+                synchronize_session=False,
+            )
+            synced_mileage += imported_km
+    db.add_all(runs_to_add)
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="部分 Strava 活動已存在，請重新預覽") from exc
+    return {
+        "imported": len(runs_to_add),
+        "skipped_duplicate": skipped_duplicate,
+        "skipped_unmapped": skipped_unmapped,
+        "skipped_invalid": invalid,
+        "filtered_out": filtered_out,
+        "synced_mileage": round(synced_mileage, 2),
+        "total_run_rows": len(rows),
+    }
 
 
 @app.get("/api/runs", response_model=list[schemas.RunOut])
