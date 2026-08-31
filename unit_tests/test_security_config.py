@@ -85,3 +85,12 @@ def test_strava_frontend_uses_account_range_and_opt_in_mileage_sync():
     assert 'id="strava-end-date" type="date" value=' not in source
     assert 'id="strava-sync-mileage" type="checkbox"' in source
     assert "sync_shoe_mileage: String(syncShoeMileage)" in source
+
+
+def test_strava_frontend_discards_stale_preview_responses():
+    source = (PROJECT_ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
+
+    assert "new AbortController()" in source
+    assert "requestId !== stravaPreviewRequestId" in source
+    assert "stravaPreviewKey !== stravaInputKey" in source
+    assert "file.size > 10 * 1024 * 1024" in source
