@@ -130,6 +130,7 @@ MODEL_REFRESH_COOLDOWN_SECONDS=60
 - **圖表視覺化**：生命進度條、每 km 成本比較、退役時間軸、月跑量佔比（Chart.js）
 - **每月跑量統計**：獨立管理月跑量資料，支援年度趨勢圖
 - **跑步日誌**：記錄每次跑步的日期、公里數與鞋款，並以每日里程及鞋款佔比圖表統計當月跑量
+- **Strava 歷史匯入**：從 Strava 匯出的 `activities.csv` 預覽並批次匯入跑步活動，依活動 ID 去重，支援匯入前逐鞋款配對
 - **跑鞋資料匯出**：一鍵匯出 **XLSX / CSV**，支援 **現役 / 退役 / 全部** 三種範圍，欄位完整含品牌、鞋款、日期、尺寸、價格、里程、成本、生命進度、月跑量
 - **AI 跑鞋推薦助手**：依你的實際資料給換鞋與選鞋建議（需設定 OpenRouter API Key），可從目前免費且支援工具呼叫的模型中選擇
 - **多使用者隔離**：每人資料完全獨立，支援註冊/登入/改密碼
@@ -154,6 +155,14 @@ MODEL_REFRESH_COOLDOWN_SECONDS=60
 | `POST /api/runs` | 新增日期、公里數與鞋款 |
 | `PUT /api/runs/{run_id}` | 編輯指定跑步紀錄 |
 | `DELETE /api/runs/{run_id}` | 刪除指定跑步紀錄 |
+| `POST /api/runs/import/strava/preview` | 預覽 Strava CSV 中的跑步活動與鞋款配對 |
+| `POST /api/runs/import/strava` | 依鞋款配對批次匯入 Strava 跑步活動 |
+
+### Strava 歷史資料匯入
+
+在「跑步日誌」右上角按「匯入 Strava」，選擇 Strava 匯出資料夾中的 `activities.csv`（Strava 官方匯出方式請參考[說明](https://support.strava.com/hc/en-us/articles/216918437-Exporting-your-Data-and-Bulk-Export)）。系統會只保留活動類型為跑步的資料，解析日期與公里數，並先顯示各鞋款的筆數和里程。
+
+匯入前可逐組選擇現有鞋款；名稱相符的鞋款會自動配對，沒有鞋款或無法辨識的裝備可以選擇略過。每筆匯入資料會保留 Strava 活動 ID，因此重複選擇同一份 CSV 不會重複建立紀錄。匯入仍受 `MAX_RUNS_PER_USER` 上限限制。
 
 ## AI 跑鞋推薦助手
 
@@ -211,7 +220,7 @@ venv/bin/pytest -q
 venv/bin/pytest -q --cov=backend --cov-branch --cov-report=term-missing
 ```
 
-目前測試基準為 **231 passed**；`backend` 敘述覆蓋率為 **98.70%**（四捨五入為 99%）、分支覆蓋率為 **95.96%**，含分支的整體覆蓋率為 **98.09%**（四捨五入為 98%）。
+目前測試基準為 **235 passed**；`backend` 敘述覆蓋率為 **97.33%**（四捨五入為 97%）、分支覆蓋率為 **94.57%**，含分支的整體覆蓋率為 **96.79%**（四捨五入為 97%）。
 
 ## Docker 部署
 

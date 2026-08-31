@@ -92,6 +92,13 @@ h1 { font-size: 28px; font-weight: 700; margin-bottom: 4px; }
 .run-stats { grid-template-columns: repeat(3, 1fr); }
 .run-stats .card-value { font-size: 25px; }
 .run-shoe-label { display: inline-flex; align-items: center; gap: 7px; }
+.strava-modal { width: min(680px, calc(100vw - 32px)); }
+.strava-summary, .strava-group { background: rgba(15,23,42,.55); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-top: 10px; }
+.strava-summary { color: var(--text-dim); line-height: 1.6; }
+.strava-group { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; }
+.strava-group small { color: var(--text-dim); display: block; }
+.strava-group select { min-width: 220px; }
+.strava-groups { max-height: 300px; overflow-y: auto; margin-top: 12px; }
 .empty-state { color: var(--text-dim); text-align: center; padding: 28px 12px; }
 @media (max-width: 760px) {
   .tabs { overflow-x: auto; padding-bottom: 4px; }
@@ -493,7 +500,7 @@ tr:hover td { background: rgba(99,102,241,0.05); }
       <div class="chart-box"><h3>鞋款里程分布</h3><canvas id="chart-run-shoes"></canvas></div>
     </div>
     <div class="table-section">
-      <div class="table-header"><h2 id="run-table-title">跑步紀錄</h2></div>
+      <div class="table-header"><h2 id="run-table-title">跑步紀錄</h2><button class="btn btn-sm btn-edit" onclick="openStravaModal()">↗ 匯入 Strava</button></div>
       <div class="table-wrap">
         <table>
           <thead><tr><th>日期</th><th>距離</th><th>鞋款</th><th></th></tr></thead>
@@ -680,6 +687,19 @@ tr:hover td { background: rgba(99,102,241,0.05); }
   </form>
 </div>
 
+<!-- Strava Import Modal -->
+<div class="modal-overlay" id="strava-modal">
+  <div class="modal strava-modal">
+    <h2>匯入 Strava 跑步紀錄</h2>
+    <p style="color:var(--text-dim);font-size:13px;line-height:1.6">請選擇 Strava 匯出資料夾中的 <code>activities.csv</code>。系統只會匯入跑步活動，並以活動 ID 避免重複。</p>
+    <div class="form-group"><label for="strava-file">activities.csv</label><input id="strava-file" type="file" accept=".csv,text/csv" onchange="previewStravaFile()"></div>
+    <div id="strava-summary"></div>
+    <div id="strava-mapping" class="strava-groups"></div>
+    <div class="auth-error" id="strava-error"></div>
+    <div class="modal-actions"><span style="flex:1"></span><button class="btn btn-cancel" onclick="closeStravaModal()">取消</button><button class="btn btn-primary" id="strava-import-btn" onclick="importStrava()" disabled>匯入</button></div>
+  </div>
+</div>
+
 <!-- Monthly Mileage Modal -->
 <div class="modal-overlay" id="monthly-modal">
   <div class="modal" style="width: 360px;">
@@ -858,6 +878,19 @@ async function apiDelete(url) {
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.detail || ('DELETE ' + url + ' failed: ' + res.status));
+  }
+  return res.json();
+}
+
+async function apiUpload(url, file, fields = {}) {
+  const form = new FormData();
+  form.append('file', file);
+  Object.entries(fields).forEach(([key, value]) => form.append(key, value));
+  const res = await fetch(API_BASE + url, { method: 'POST', headers: authHeaders(), body: form });
+  if (res.status === 401) { clearAuth(); showLoginView(); throw new Error('Unauthorized'); }
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || ('POST ' + url + ' failed: ' + res.status));
   }
   return res.json();
 }
@@ -1066,6 +1099,7 @@ let retiredShoes = [];
 let monthlyMileages = [];
 let monthlySpending = [];
 let runs = [];
+let stravaPreview = null;
 let selectedYear = null;
 let selectedSpendingYear = null;
 
@@ -1678,6 +1712,73 @@ async function deleteEditingRun() {
     closeRunModal();
     await loadData();
   } catch { alert('刪除失敗'); }
+}
+
+function openStravaModal() {
+  stravaPreview = null;
+  document.getElementById('strava-file').value = '';
+  document.getElementById('strava-summary').innerHTML = '';
+  document.getElementById('strava-mapping').innerHTML = '';
+  document.getElementById('strava-error').style.display = 'none';
+  document.getElementById('strava-import-btn').disabled = true;
+  document.getElementById('strava-modal').classList.add('active');
+}
+
+function closeStravaModal() {
+  document.getElementById('strava-modal').classList.remove('active');
+}
+
+async function previewStravaFile() {
+  const file = document.getElementById('strava-file').files[0];
+  const summary = document.getElementById('strava-summary');
+  const error = document.getElementById('strava-error');
+  const mapping = document.getElementById('strava-mapping');
+  if (!file) return;
+  error.style.display = 'none';
+  summary.textContent = '正在分析 CSV…';
+  mapping.innerHTML = '';
+  document.getElementById('strava-import-btn').disabled = true;
+  try {
+    stravaPreview = await apiUpload('/runs/import/strava/preview', file);
+    const unknown = stravaPreview.gear_groups.filter(group => !group.suggested_shoe_id).length;
+    summary.innerHTML = `找到 <strong>${stravaPreview.run_count}</strong> 筆跑步活動；已有 ${stravaPreview.duplicate_count} 筆重複。${unknown ? `有 ${unknown} 個鞋款需要手動配對或略過。` : '鞋款已全部自動配對。'}`;
+    const shoeOptions = allRunShoes().map(shoe => `<option value="${shoe.id}">${esc(shoe.brand)} ${esc(shoe.model)}${shoe.is_retired ? ' · 已退役' : ''}</option>`).join('');
+    mapping.innerHTML = stravaPreview.gear_groups.map((group, index) => `
+      <div class="strava-group"><div><strong>${esc(group.gear || '未指定鞋款')}</strong><small>${group.count} 次 · ${Number(group.km).toFixed(2)} km</small></div>
+        <select id="strava-map-${index}"><option value="">不匯入此鞋款</option>${shoeOptions}</select></div>`).join('');
+    stravaPreview.gear_groups.forEach((group, index) => {
+      if (group.suggested_shoe_id) document.getElementById(`strava-map-${index}`).value = String(group.suggested_shoe_id);
+    });
+    document.getElementById('strava-import-btn').disabled = stravaPreview.run_count === 0;
+  } catch (e) {
+    stravaPreview = null;
+    summary.innerHTML = '';
+    error.textContent = e.message || 'CSV 分析失敗';
+    error.style.display = 'block';
+  }
+}
+
+async function importStrava() {
+  if (!stravaPreview) return;
+  const file = document.getElementById('strava-file').files[0];
+  const mapping = {};
+  stravaPreview.gear_groups.forEach((group, index) => {
+    const value = document.getElementById(`strava-map-${index}`).value;
+    mapping[group.gear] = value ? Number(value) : null;
+  });
+  const button = document.getElementById('strava-import-btn');
+  const error = document.getElementById('strava-error');
+  button.disabled = true;
+  try {
+    const result = await apiUpload('/runs/import/strava', file, { mapping: JSON.stringify(mapping) });
+    closeStravaModal();
+    alert(`已匯入 ${result.imported} 筆跑步紀錄${result.skipped_unmapped ? `，略過 ${result.skipped_unmapped} 筆未配對鞋款` : ''}。`);
+    await loadData();
+  } catch (e) {
+    error.textContent = e.message || '匯入失敗';
+    error.style.display = 'block';
+    button.disabled = false;
+  }
 }
 
 function renderRunLog() {
