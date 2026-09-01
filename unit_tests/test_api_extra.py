@@ -525,6 +525,10 @@ def test_create_routes_roll_back_failed_commits():
     mileage_db.rollback.assert_called_once_with()
 
     run_db = _failing_db(existing=SimpleNamespace(id=3))
+    run_db.query.return_value.filter.return_value.first.side_effect = [
+        SimpleNamespace(id=3),
+        None,
+    ]
     run_db.query.return_value.filter.return_value.count.return_value = 0
     with pytest.raises(RuntimeError, match="commit failed"):
         create_run(
@@ -561,6 +565,11 @@ def test_update_routes_roll_back_failed_commits():
 
     run = SimpleNamespace(id=1, date="2026-08-01", km=1, shoe_id=3)
     run_db = _failing_db(existing=run)
+    run_db.query.return_value.filter.return_value.first.side_effect = [
+        run,
+        SimpleNamespace(id=4, km=10),
+        SimpleNamespace(id=4, km=9),
+    ]
     with pytest.raises(RuntimeError, match="commit failed"):
         update_run(
             1,
@@ -588,6 +597,10 @@ def test_delete_routes_roll_back_failed_commits():
     mileage_db.rollback.assert_called_once_with()
 
     run_db = _failing_db(existing=SimpleNamespace(id=1))
+    run_db.query.return_value.filter.return_value.first.side_effect = [
+        SimpleNamespace(id=1, shoe_id=3, date="2026-08-01", km=5),
+        SimpleNamespace(id=4, km=5),
+    ]
     with pytest.raises(RuntimeError, match="commit failed"):
         delete_run(1, current_user=user, db=run_db)
     run_db.rollback.assert_called_once_with()

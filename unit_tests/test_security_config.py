@@ -77,14 +77,24 @@ def test_strava_upload_lets_browser_set_multipart_content_type():
     assert "headers['Authorization']" in upload_source
 
 
-def test_strava_frontend_uses_account_range_and_opt_in_mileage_sync():
+def test_strava_frontend_uses_account_range_and_automatic_mileage_sync():
     source = (PROJECT_ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
 
     assert "strava-import-range:${currentUser" in source
     assert 'id="strava-start-date" type="date" value=' not in source
     assert 'id="strava-end-date" type="date" value=' not in source
-    assert 'id="strava-sync-mileage" type="checkbox"' in source
-    assert "sync_shoe_mileage: String(syncShoeMileage)" in source
+    assert 'id="strava-sync-mileage"' not in source
+    assert "sync_shoe_mileage" not in source
+    assert "只有新活動會加入跑鞋里程與對應月份的月跑量" in source
+
+
+def test_run_log_is_the_first_and_default_tab():
+    source = (PROJECT_ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
+    tabs = source.split('<div class="tabs">', 1)[1].split("</div>", 1)[0]
+
+    assert tabs.index('data-tab="runs"') < tabs.index('data-tab="shoes"')
+    assert 'class="tab active" data-tab="runs"' in tabs
+    assert "t.dataset.tab === 'runs'" in source
 
 
 def test_strava_frontend_discards_stale_preview_responses():
