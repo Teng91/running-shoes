@@ -618,6 +618,67 @@ def _user_shoe_or_404(db: Session, user_id: int, shoe_id: int) -> models.Shoe:
     return shoe
 
 
+def _apply_run_mileage_deltas(
+    db: Session,
+    user_id: int,
+    run_values: Sequence[tuple[int, str, float]],
+    multiplier: int,
+) -> float:
+    """Apply run deltas to shoe totals and monthly mileage in one transaction."""
+    shoe_deltas: dict[int, float] = {}
+    month_deltas: dict[tuple[int, int], float] = {}
+    total_delta = 0.0
+    for shoe_id, run_date, km in run_values:
+        delta = round(km * multiplier, 2)
+        shoe_deltas[shoe_id] = shoe_deltas.get(shoe_id, 0.0) + delta
+        year, month = int(run_date[:4]), int(run_date[5:7])
+        month_deltas[(year, month)] = month_deltas.get((year, month), 0.0) + delta
+        total_delta += delta
+
+    for shoe_id, delta in shoe_deltas.items():
+        db.query(models.Shoe).filter(
+            models.Shoe.id == shoe_id,
+            models.Shoe.user_id == user_id,
+        ).update(
+            {
+                models.Shoe.mileage: func.max(
+                    0,
+                    func.coalesce(models.Shoe.mileage, 0) + round(delta, 2),
+                )
+            },
+            synchronize_session=False,
+        )
+
+    for (year, month), delta in month_deltas.items():
+        entry = db.query(models.MonthlyMileage).filter(
+            models.MonthlyMileage.user_id == user_id,
+            models.MonthlyMileage.year == year,
+            models.MonthlyMileage.month == month,
+        ).first()
+        if entry:
+            db.query(models.MonthlyMileage).filter(
+                models.MonthlyMileage.id == entry.id,
+                models.MonthlyMileage.user_id == user_id,
+            ).update(
+                {
+                    models.MonthlyMileage.km: func.max(
+                        0,
+                        func.coalesce(models.MonthlyMileage.km, 0)
+                        + round(delta, 2),
+                    )
+                },
+                synchronize_session=False,
+            )
+        elif delta > 0:
+            db.add(models.MonthlyMileage(
+                user_id=user_id,
+                year=year,
+                month=month,
+                km=round(delta, 2),
+            ))
+    return round(total_delta, 2)
+
+
 _STRAVA_HEADERS = {
     "id": ("活動 ID", "Activity ID"),
     "date": ("活動日期", "Activity Date"),
@@ -812,7 +873,6 @@ async def import_strava_runs(
     mapping: str = Form("{}"),
     start_date: str = Form(""),
     end_date: str = Form(""),
-    sync_shoe_mileage: bool = Form(False),
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -867,23 +927,12 @@ async def import_strava_runs(
     current_count = db.query(models.Run).filter(models.Run.user_id == current_user.id).count()
     if current_count + len(runs_to_add) > MAX_RUNS_PER_USER:
         raise HTTPException(status_code=409, detail="匯入後跑步紀錄將超過上限")
-    synced_mileage = 0.0
-    if sync_shoe_mileage:
-        mileage_by_shoe: dict[int, float] = {}
-        for run in runs_to_add:
-            mileage_by_shoe[run.shoe_id] = mileage_by_shoe.get(run.shoe_id, 0.0) + run.km
-        for shoe_id, imported_km in mileage_by_shoe.items():
-            db.query(models.Shoe).filter(
-                models.Shoe.id == shoe_id,
-                models.Shoe.user_id == current_user.id,
-            ).update(
-                {
-                    models.Shoe.mileage: func.coalesce(models.Shoe.mileage, 0)
-                    + round(imported_km, 2)
-                },
-                synchronize_session=False,
-            )
-            synced_mileage += imported_km
+    synced_mileage = _apply_run_mileage_deltas(
+        db,
+        current_user.id,
+        [(run.shoe_id, run.date, run.km) for run in runs_to_add],
+        1,
+    )
     db.add_all(runs_to_add)
     try:
         db.commit()
@@ -924,6 +973,12 @@ def create_run(
     run = models.Run(**payload.model_dump(), user_id=current_user.id)
     db.add(run)
     try:
+        _apply_run_mileage_deltas(
+            db,
+            current_user.id,
+            [(payload.shoe_id, payload.date, payload.km)],
+            1,
+        )
         db.commit()
     except Exception:
         db.rollback()
@@ -948,9 +1003,17 @@ def update_run(
     update_data = payload.model_dump(exclude_unset=True)
     if "shoe_id" in update_data:
         _user_shoe_or_404(db, current_user.id, update_data["shoe_id"])
+    old_values = (run.shoe_id, run.date, run.km)
     for key, value in update_data.items():
         setattr(run, key, value)
     try:
+        _apply_run_mileage_deltas(db, current_user.id, [old_values], -1)
+        _apply_run_mileage_deltas(
+            db,
+            current_user.id,
+            [(run.shoe_id, run.date, run.km)],
+            1,
+        )
         db.commit()
     except Exception:
         db.rollback()
@@ -971,8 +1034,10 @@ def delete_run(
     ).first()
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
+    run_values = (run.shoe_id, run.date, run.km)
     db.delete(run)
     try:
+        _apply_run_mileage_deltas(db, current_user.id, [run_values], -1)
         db.commit()
     except Exception:
         db.rollback()

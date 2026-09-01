@@ -413,14 +413,14 @@ tr:hover td { background: rgba(99,102,241,0.05); }
   <p class="subtitle" id="today-label"></p>
 
   <div class="tabs">
-    <button class="tab active" data-tab="shoes" onclick="switchTab('shoes')">跑鞋</button>
-    <button class="tab" data-tab="runs" onclick="switchTab('runs')">跑步日誌</button>
+    <button class="tab active" data-tab="runs" onclick="switchTab('runs')">跑步日誌</button>
+    <button class="tab" data-tab="shoes" onclick="switchTab('shoes')">跑鞋</button>
     <button class="tab" data-tab="monthly" onclick="switchTab('monthly')">月跑量</button>
     <button class="tab" data-tab="spending" onclick="switchTab('spending')">支出</button>
     <button class="tab" data-tab="agent" onclick="switchTab('agent')">AI 助手</button>
   </div>
 
-  <div class="tab-panel active" data-panel="shoes">
+  <div class="tab-panel" data-panel="shoes">
 
     <div class="cards" id="summary-cards"></div>
     <div class="shoe-alerts" id="shoe-alerts"></div>
@@ -475,7 +475,7 @@ tr:hover td { background: rgba(99,102,241,0.05); }
 
   </div><!-- /tab-panel shoes -->
 
-  <div class="tab-panel" data-panel="runs">
+  <div class="tab-panel active" data-panel="runs">
     <div class="run-hero">
       <div class="run-intro">
         <h2>這個月，你是怎麼跑的？</h2>
@@ -700,7 +700,7 @@ tr:hover td { background: rgba(99,102,241,0.05); }
       <div class="form-group"><label for="strava-start-date">從這一天開始</label><input id="strava-start-date" type="date" onchange="previewStravaFile()"></div>
       <div class="form-group"><label for="strava-end-date">到這一天結束</label><input id="strava-end-date" type="date" onchange="previewStravaFile()"></div>
     </div>
-    <label class="strava-sync"><input id="strava-sync-mileage" type="checkbox"><span>同步累加跑鞋總里程<small>只累加這次新匯入的活動；若 Dashboard 里程已包含這段歷史，請不要勾選。</small></span></label>
+    <p class="strava-sync"><span>匯入後會自動同步<small>只有新活動會加入跑鞋里程與對應月份的月跑量；重複活動不會再次計算。</small></span></p>
     <div id="strava-summary"></div>
     <div id="strava-mapping" class="strava-groups"></div>
     <div class="auth-error" id="strava-error"></div>
@@ -817,14 +817,14 @@ function showAppView() {
 }
 
 // 只在「從登入頁進入」時呼叫：清掉上一位使用者切到 AI 助手時留下的 inline 樣式，
-// 並把分頁拉回跑鞋。F5 (init 用 stored token) 不會走這條路，所以不會被強制跳頁。
+// 並把分頁拉回跑步日誌。F5 (init 用 stored token) 不會走這條路，所以不會被強制跳頁。
 function resetAppLayout() {
   const appView = document.getElementById('app-view');
   appView.style.height = '';
   appView.style.overflow = '';
   appView.style.flexDirection = '';
-  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === 'shoes'));
-  document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.dataset.panel === 'shoes'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === 'runs'));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.dataset.panel === 'runs'));
 }
 
 // ====== Brand Colors ======
@@ -1022,7 +1022,7 @@ async function handleLogin() {
     const data = await res.json();
     setAuth(data.access_token, username);
     resetAgentChat();  // 保險：確保進入時對話是乾淨的，不殘留上一位使用者
-    resetAppLayout();  // 清掉上一位使用者切到 AI 助手留下的 inline 樣式，並回到跑鞋頁
+    resetAppLayout();  // 清掉上一位使用者切到 AI 助手留下的 inline 樣式，並回到跑步日誌
     showAppView();
     loadData();
   } catch (e) {
@@ -1063,7 +1063,7 @@ async function handleRegister() {
     }
     const data = await loginRes.json();
     setAuth(data.access_token, username);
-    resetAppLayout();  // 清掉殘留 inline 樣式並回到跑鞋頁
+    resetAppLayout();  // 清掉殘留 inline 樣式並回到跑步日誌
     showAppView();
     loadData();
   } catch (e) {
@@ -1749,7 +1749,6 @@ function openStravaModal() {
   const formatDate = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
   document.getElementById('strava-start-date').value = savedRange?.start || formatDate(defaultStart);
   document.getElementById('strava-end-date').value = savedRange?.end || formatDate(defaultEnd);
-  document.getElementById('strava-sync-mileage').checked = false;
   document.getElementById('strava-modal').classList.add('active');
 }
 
@@ -1835,7 +1834,6 @@ async function importStrava() {
   const mapping = {};
   const startDate = document.getElementById('strava-start-date').value;
   const endDate = document.getElementById('strava-end-date').value;
-  const syncShoeMileage = document.getElementById('strava-sync-mileage').checked;
   const error = document.getElementById('strava-error');
   if (stravaPreviewKey !== stravaInputKey(file, startDate, endDate)) {
     error.textContent = '檔案或日期範圍已變更，請等待最新預覽完成。';
@@ -1850,9 +1848,9 @@ async function importStrava() {
   const button = document.getElementById('strava-import-btn');
   button.disabled = true;
   try {
-    const result = await apiUpload('/runs/import/strava', file, { mapping: JSON.stringify(mapping), start_date: startDate, end_date: endDate, sync_shoe_mileage: String(syncShoeMileage) });
+    const result = await apiUpload('/runs/import/strava', file, { mapping: JSON.stringify(mapping), start_date: startDate, end_date: endDate });
     closeStravaModal();
-    alert(`已匯入 ${result.imported} 筆跑步紀錄${result.skipped_unmapped ? `，略過 ${result.skipped_unmapped} 筆未配對鞋款` : ''}${result.synced_mileage ? `，並累加 ${result.synced_mileage.toFixed(2)} km 至跑鞋總里程` : ''}。`);
+    alert(`已匯入 ${result.imported} 筆跑步紀錄${result.skipped_unmapped ? `，略過 ${result.skipped_unmapped} 筆未配對鞋款` : ''}${result.synced_mileage ? `，並同步 ${result.synced_mileage.toFixed(2)} km 至跑鞋與月跑量` : ''}。`);
     await loadData();
   } catch (e) {
     error.textContent = e.message || '匯入失敗';
@@ -3111,10 +3109,9 @@ async function init() {
     try {
       await fetch(API_BASE + '/auth/me', { headers: authHeaders() });
       showAppView();
-      // 還原 F5 之前的 tab（init 走 stored token，沒經過 resetAppLayout，
-      // 所以 HTML 預設的「跑鞋」class 仍會保留，必須用 switchTab 強制切回去）
+      // 還原 F5 之前的 tab（init 走 stored token，沒經過 resetAppLayout）。
       const savedTab = localStorage.getItem('activeTab');
-      if (savedTab && savedTab !== 'shoes') switchTab(savedTab);
+      if (savedTab && savedTab !== 'runs') switchTab(savedTab);
       loadData();
     } catch {
       clearAuth();

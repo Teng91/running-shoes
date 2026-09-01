@@ -439,14 +439,30 @@ def test_run_log_crud(client, db, user_with_token):
     })
     assert created.status_code == 200
     run_id = created.json()["id"]
+    db.refresh(shoe)
+    assert shoe.mileage == 8.25
+    august = db.query(MonthlyMileage).filter_by(
+        user_id=user.id, year=2026, month=8
+    ).one()
+    assert august.km == 8.25
 
     listed = client.get("/api/runs", headers=headers)
     assert listed.status_code == 200
     assert listed.json()[0]["km"] == 8.25
 
-    updated = client.put(f"/api/runs/{run_id}", headers=headers, json={"km": 10.5})
+    updated = client.put(f"/api/runs/{run_id}", headers=headers, json={
+        "date": "2026-09-01", "km": 10.5,
+    })
     assert updated.status_code == 200
     assert updated.json()["km"] == 10.5
+    db.refresh(shoe)
+    db.refresh(august)
+    september = db.query(MonthlyMileage).filter_by(
+        user_id=user.id, year=2026, month=9
+    ).one()
+    assert shoe.mileage == 10.5
+    assert august.km == 0
+    assert september.km == 10.5
     omitted = client.put(f"/api/runs/{run_id}", headers=headers, json={})
     assert omitted.status_code == 200
     assert omitted.json()["km"] == 10.5
@@ -454,6 +470,10 @@ def test_run_log_crud(client, db, user_with_token):
     deleted = client.delete(f"/api/runs/{run_id}", headers=headers)
     assert deleted.status_code == 200
     assert client.get("/api/runs", headers=headers).json() == []
+    db.refresh(shoe)
+    db.refresh(september)
+    assert shoe.mileage == 0
+    assert september.km == 0
 
 
 def test_cannot_delete_shoe_used_by_run_log(client, db, user_with_token):
@@ -495,6 +515,14 @@ def test_run_log_orders_newest_first_and_can_change_owned_shoe(client, db, user_
     })
     assert changed.status_code == 200
     assert changed.json()["shoe_id"] == second_shoe.id
+    db.refresh(first_shoe)
+    db.refresh(second_shoe)
+    monthly = db.query(MonthlyMileage).filter_by(
+        user_id=user.id, year=2026, month=8
+    ).one()
+    assert first_shoe.mileage == 8
+    assert second_shoe.mileage == 5
+    assert monthly.km == 13
 
 
 def test_run_log_limit(client, db, user_with_token, monkeypatch):
