@@ -2,7 +2,7 @@ import math
 from datetime import date as calendar_date
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 # All valid shoe purpose/function categories.
 SHOE_CATEGORIES = ["Daily", "Speed", "Tempo", "Race", "Trail", "Walk"]
@@ -172,6 +172,13 @@ class ShoeUpdate(BaseModel):
     is_retired: bool | None = None
     categories: Annotated[list[str], Field(max_length=6)] | None = None
 
+    @model_validator(mode="before")
+    @classmethod
+    def reject_explicit_nulls(cls, value):
+        if isinstance(value, dict) and any(item is None for item in value.values()):
+            raise ValueError("shoe fields may be omitted but must not be null")
+        return value
+
     @field_validator("brand", "model")
     @classmethod
     def validate_names(cls, value: str | None) -> str | None:
@@ -229,6 +236,13 @@ class MonthlyMileageUpdate(BaseModel):
     year: ReasonableYear | None = None
     month: CalendarMonth | None = None
     km: NonNegativeFiniteKm | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def reject_explicit_nulls(cls, value):
+        if isinstance(value, dict) and any(item is None for item in value.values()):
+            raise ValueError("monthly mileage fields may be omitted but must not be null")
+        return value
 
 
 class MonthlyMileageOut(MonthlyMileageBase):
