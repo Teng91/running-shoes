@@ -1007,11 +1007,13 @@ def update_run(
     for key, value in update_data.items():
         setattr(run, key, value)
     try:
-        _apply_run_mileage_deltas(db, current_user.id, [old_values], -1)
         _apply_run_mileage_deltas(
             db,
             current_user.id,
-            [(run.shoe_id, run.date, run.km)],
+            [
+                (old_values[0], old_values[1], -old_values[2]),
+                (run.shoe_id, run.date, run.km),
+            ],
             1,
         )
         db.commit()

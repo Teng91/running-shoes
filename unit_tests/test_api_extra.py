@@ -482,8 +482,12 @@ def test_monthly_mileage_rejects_negative_create_and_invalid_updates(client, db,
     bad_km = client.put(
         f"/api/monthly-mileage/{entry.id}", headers=_auth(token), json={"km": -0.1}
     )
+    null_km = client.put(
+        f"/api/monthly-mileage/{entry.id}", headers=_auth(token), json={"km": None}
+    )
     assert bad_month.status_code == 422
     assert bad_km.status_code == 422
+    assert null_km.status_code == 422
 
     unchanged = client.put(
         f"/api/monthly-mileage/{entry.id}", headers=_auth(token), json={}
