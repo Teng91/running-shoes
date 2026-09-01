@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 
 from backend.database import get_db
 from backend.main import StravaUploadLimitMiddleware, _parse_strava_csv, app
-from backend.models import Run, Shoe
+from backend.models import MonthlyMileage, Run, Shoe
 from unit_tests.test_api import _auth_header
 
 CSV = "活動 ID,活動日期,活動類型,活動裝備,距離\n" \
@@ -64,7 +64,7 @@ def test_strava_preview_filters_runs_and_suggests_shoe(client, db, user_with_tok
     assert groups[""]["suggested_shoe_id"] is None
 
 
-def test_strava_import_is_idempotent_and_skips_unmapped(client, db, user_with_token):
+def test_strava_import_is_idempotent_and_syncs_totals(client, db, user_with_token):
     user, token = user_with_token
     shoe = Shoe(
         user_id=user.id,
@@ -76,20 +76,26 @@ def test_strava_import_is_idempotent_and_skips_unmapped(client, db, user_with_to
     db.add(shoe)
     db.commit()
     mapping = f'{{"Mizuno Wave Sky 7": {shoe.id}, "": null}}'
-    first = upload(client, "/api/runs/import/strava", token, mapping, sync_mileage=True)
+    first = upload(client, "/api/runs/import/strava", token, mapping)
     assert first.status_code == 200
     assert first.json()["imported"] == 1
     assert first.json()["skipped_unmapped"] == 1
     assert first.json()["synced_mileage"] == 5.25
     db.refresh(shoe)
     assert shoe.mileage == 15.25
-    second = upload(client, "/api/runs/import/strava", token, mapping, sync_mileage=True)
+    monthly = db.query(MonthlyMileage).filter_by(
+        user_id=user.id, year=2026, month=8
+    ).one()
+    assert monthly.km == 5.25
+    second = upload(client, "/api/runs/import/strava", token, mapping)
     assert second.status_code == 200
     assert second.json()["imported"] == 0
     assert second.json()["skipped_duplicate"] == 1
     assert second.json()["synced_mileage"] == 0
     db.refresh(shoe)
+    db.refresh(monthly)
     assert shoe.mileage == 15.25
+    assert monthly.km == 5.25
     assert db.query(Run).filter(Run.user_id == user.id).count() == 1
 
 
