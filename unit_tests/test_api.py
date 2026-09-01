@@ -494,6 +494,38 @@ def test_cannot_delete_shoe_used_by_run_log(client, db, user_with_token):
     assert client.get("/api/runs", headers=headers).json()[0]["shoe_id"] == shoe.id
 
 
+def test_run_update_applies_net_delta_when_totals_were_manually_lowered(
+    client, db, user_with_token
+):
+    user, token = user_with_token
+    shoe = Shoe(user_id=user.id, brand="Mizuno", model="Wave Rider", date="2026-01-01")
+    db.add(shoe)
+    db.commit()
+    headers = _auth_header(token)
+
+    created = client.post("/api/runs", headers=headers, json={
+        "date": "2026-08-12", "km": 8, "shoe_id": shoe.id,
+    })
+    assert created.status_code == 200
+    monthly = db.query(MonthlyMileage).filter_by(
+        user_id=user.id, year=2026, month=8
+    ).one()
+
+    # Manual totals remain supported, so editing a run must apply only its net change.
+    shoe.mileage = 3
+    monthly.km = 2
+    db.commit()
+    updated = client.put(
+        f"/api/runs/{created.json()['id']}", headers=headers, json={"km": 10}
+    )
+
+    assert updated.status_code == 200
+    db.refresh(shoe)
+    db.refresh(monthly)
+    assert shoe.mileage == 5
+    assert monthly.km == 4
+
+
 def test_run_log_orders_newest_first_and_can_change_owned_shoe(client, db, user_with_token):
     user, token = user_with_token
     first_shoe = Shoe(user_id=user.id, brand="Mizuno", model="Rider", date="2026-01-01")

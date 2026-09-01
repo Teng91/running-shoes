@@ -173,9 +173,11 @@ def test_shoe_schema_numeric_and_category_boundaries():
     with pytest.raises(ValidationError, match="non-negative"):
         schemas.ShoeCreate(brand="A", model="B", date="2026-01-01", mileage=-1)
 
-    update = schemas.ShoeUpdate(price=None, categories=None)
-    assert update.price is None
-    assert update.categories is None
+    assert schemas.ShoeUpdate().model_dump(exclude_unset=True) == {}
+    with pytest.raises(ValidationError, match="must not be null"):
+        schemas.ShoeUpdate(price=None)
+    with pytest.raises(ValidationError, match="must not be null"):
+        schemas.ShoeUpdate(categories=None)
     with pytest.raises(ValidationError, match="Invalid categories"):
         schemas.ShoeUpdate(categories=["Other"])
     with pytest.raises(ValidationError, match="finite number"):
@@ -197,6 +199,9 @@ def test_monthly_mileage_schema_rejects_nan_and_invalid_calendar_values():
         schemas.MonthlyMileageCreate(year=1800, month=1, km=1)
     with pytest.raises(ValidationError):
         schemas.MonthlyMileageCreate(year=2026, month=13, km=1)
+    assert schemas.MonthlyMileageUpdate().model_dump(exclude_unset=True) == {}
+    with pytest.raises(ValidationError, match="must not be null"):
+        schemas.MonthlyMileageUpdate(km=None)
     with pytest.raises(ValidationError):
         schemas.MonthlyMileageUpdate(year=2200)
     with pytest.raises(ValidationError):

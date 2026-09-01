@@ -34,15 +34,12 @@ def upload(
     start_date="",
     csv_content=CSV,
     end_date="",
-    sync_mileage=False,
 ):
     data = {"mapping": mapping} if mapping is not None else {}
     if start_date:
         data["start_date"] = start_date
     if end_date:
         data["end_date"] = end_date
-    if sync_mileage:
-        data["sync_shoe_mileage"] = "true"
     return client.post(path, headers=_auth_header(token), files={
         "file": ("activities.csv", io.BytesIO(csv_content.encode("utf-8-sig")), "text/csv")
     }, data=data)
@@ -132,7 +129,6 @@ def test_strava_start_date_filters_older_runs_and_allows_shared_mapping(client, 
         mapping,
         "2025-07-01",
         csv_content,
-        sync_mileage=True,
     )
     assert response.status_code == 200
     assert response.json()["filtered_out"] == 1
