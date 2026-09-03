@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 
 from backend.database import get_db
 from backend.main import StravaUploadLimitMiddleware, _parse_strava_csv, app
-from backend.models import MonthlyMileage, Run, Shoe
+from backend.models import MonthlyMileage, Run, Shoe, StravaImport
 from unit_tests.test_api import _auth_header
 
 CSV = "活動 ID,活動日期,活動類型,活動裝備,距離\n" \
@@ -94,6 +94,14 @@ def test_strava_import_is_idempotent_and_syncs_totals(client, db, user_with_toke
     assert shoe.mileage == 15.25
     assert monthly.km == 5.25
     assert db.query(Run).filter(Run.user_id == user.id).count() == 1
+    history = client.get("/api/runs/import/strava/history", headers=_auth_header(token))
+    assert history.status_code == 200
+    assert len(history.json()) == 2
+    assert history.json()[0]["imported_count"] == 0
+    assert history.json()[0]["duplicate_count"] == 1
+    assert history.json()[0]["imported_at"].endswith("+00:00")
+    assert history.json()[1]["imported_count"] == 1
+    assert history.json()[1]["imported_km"] == 5.25
 
 
 def test_strava_import_rejects_foreign_shoe_mapping(client, db, user_with_token):
@@ -103,6 +111,31 @@ def test_strava_import_rejects_foreign_shoe_mapping(client, db, user_with_token)
     db.commit()
     response = upload(client, "/api/runs/import/strava", token, f'{{"Mizuno Wave Sky 7": {foreign_shoe.id}}}')
     assert response.status_code == 404
+    assert db.query(StravaImport).count() == 0
+
+
+def test_strava_import_history_is_isolated_by_user(client, db, user_with_token):
+    user, token = user_with_token
+    db.add(StravaImport(user_id=user.id, imported_count=2, imported_km=8))
+    db.add(StravaImport(user_id=999, imported_count=9, imported_km=99))
+    db.commit()
+    response = client.get("/api/runs/import/strava/history", headers=_auth_header(token))
+    assert response.status_code == 200
+    assert [item["imported_count"] for item in response.json()] == [2]
+
+
+def test_strava_import_history_is_bounded(client, db, user_with_token, monkeypatch):
+    from backend import main as main_module
+
+    user, token = user_with_token
+    shoe = Shoe(user_id=user.id, brand="Mizuno", model="Wave Sky 7", date="2026-01-01")
+    db.add(shoe)
+    db.commit()
+    monkeypatch.setattr(main_module, "MAX_STRAVA_IMPORT_HISTORY_PER_USER", 2)
+    mapping = f'{{"Mizuno Wave Sky 7": {shoe.id}, "": null}}'
+    for _ in range(3):
+        assert upload(client, "/api/runs/import/strava", token, mapping).status_code == 200
+    assert db.query(StravaImport).filter_by(user_id=user.id).count() == 2
 
 
 def test_strava_preview_rejects_missing_columns(client, user_with_token):

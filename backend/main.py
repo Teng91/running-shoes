@@ -52,6 +52,7 @@ MAX_RUNS_PER_USER = max(1, int(os.environ.get("MAX_RUNS_PER_USER", "5000")))
 MAX_STRAVA_CSV_BYTES = 10 * 1024 * 1024
 MAX_STRAVA_REQUEST_BYTES = MAX_STRAVA_CSV_BYTES + 1024 * 1024
 MAX_STRAVA_CSV_ROWS = 50_000
+MAX_STRAVA_IMPORT_HISTORY_PER_USER = 50
 MODEL_REFRESH_COOLDOWN_SECONDS = max(
     1, int(os.environ.get("MODEL_REFRESH_COOLDOWN_SECONDS", "60"))
 )
@@ -934,11 +935,39 @@ async def import_strava_runs(
         1,
     )
     db.add_all(runs_to_add)
+    import_record = models.StravaImport(
+        user_id=current_user.id,
+        start_date=start_date,
+        end_date=end_date,
+        imported_count=len(runs_to_add),
+        imported_km=synced_mileage,
+        duplicate_count=skipped_duplicate,
+        unmapped_count=skipped_unmapped,
+        invalid_count=invalid,
+    )
+    db.add(import_record)
     try:
+        db.flush()
+        stale_import_ids = [
+            value[0] for value in db.query(models.StravaImport.id).filter(
+                models.StravaImport.user_id == current_user.id,
+            ).order_by(
+                models.StravaImport.imported_at.desc(),
+                models.StravaImport.id.desc(),
+            ).offset(MAX_STRAVA_IMPORT_HISTORY_PER_USER).all()
+        ]
+        if stale_import_ids:
+            db.query(models.StravaImport).filter(
+                models.StravaImport.user_id == current_user.id,
+                models.StravaImport.id.in_(stale_import_ids),
+            ).delete(synchronize_session=False)
         db.commit()
     except IntegrityError as exc:
         db.rollback()
         raise HTTPException(status_code=409, detail="部分 Strava 活動已存在，請重新預覽") from exc
+    except Exception:
+        db.rollback()
+        raise
     return {
         "imported": len(runs_to_add),
         "skipped_duplicate": skipped_duplicate,
@@ -948,6 +977,16 @@ async def import_strava_runs(
         "synced_mileage": round(synced_mileage, 2),
         "total_run_rows": len(rows),
     }
+
+
+@app.get("/api/runs/import/strava/history", response_model=list[schemas.StravaImportOut])
+def list_strava_imports(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return db.query(models.StravaImport).filter(
+        models.StravaImport.user_id == current_user.id,
+    ).order_by(models.StravaImport.imported_at.desc(), models.StravaImport.id.desc()).limit(10).all()
 
 
 @app.get("/api/runs", response_model=list[schemas.RunOut])
