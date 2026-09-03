@@ -30,6 +30,7 @@ class User(Base):
     shoes: Mapped[list["Shoe"]] = relationship(back_populates="owner")
     monthly_mileages: Mapped[list["MonthlyMileage"]] = relationship(back_populates="owner")
     runs: Mapped[list["Run"]] = relationship(back_populates="owner")
+    strava_imports: Mapped[list["StravaImport"]] = relationship(back_populates="owner")
 
 
 class Shoe(Base):
@@ -92,3 +93,23 @@ class Run(Base):
 
     owner: Mapped["User"] = relationship(back_populates="runs")
     shoe: Mapped["Shoe"] = relationship()
+
+
+class StravaImport(Base):
+    __tablename__ = "strava_imports"
+    __table_args__ = (Index("idx_strava_imports_user_time", "user_id", "imported_at"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
+    imported_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(UTC), nullable=False
+    )
+    start_date: Mapped[str] = mapped_column(String, default="", nullable=False)
+    end_date: Mapped[str] = mapped_column(String, default="", nullable=False)
+    imported_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    imported_km: Mapped[float] = mapped_column(Float, default=0, nullable=False)
+    duplicate_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    unmapped_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    invalid_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+    owner: Mapped["User"] = relationship(back_populates="strava_imports")
