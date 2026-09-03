@@ -56,10 +56,19 @@ def test_agent_frontend_always_discloses_web_search_usage():
     assert "link.rel = 'noopener noreferrer'" in source
 
 
-def test_run_log_frontend_keeps_daily_ticks_and_select_state_safe():
+def test_run_log_frontend_keeps_calendar_actions_and_select_state_safe():
     source = (PROJECT_ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
 
-    assert "autoSkip: false" in source
+    assert 'id="run-calendar"' in source
+    assert "Array.from({length:daysInMonth}" in source
+    assert "selectRunCalendarDate('${date}',event)" in source
+    assert "event.stopPropagation();openRunModal(${run.id})" in source
+    assert 'id="run-shoe-legend"' in source
+    assert "percentage.toFixed(1)" in source
+    assert "km.toFixed(2)} km" in source
+    assert "formatDate(next) <= today" in source
+    assert "nextStart ? today" in source
+    assert "apiGet('/runs/import/strava/history').catch" in source
     assert "id === 'edit-run-shoe' && selectedId !== null" in source
     assert "原鞋款已刪除，請重新選擇" in source
     assert "document.getElementById('run-date').value = localDateISO()" in source

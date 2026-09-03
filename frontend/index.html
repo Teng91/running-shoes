@@ -92,6 +92,28 @@ h1 { font-size: 28px; font-weight: 700; margin-bottom: 4px; }
 .run-stats { grid-template-columns: repeat(3, 1fr); }
 .run-stats .card-value { font-size: 25px; }
 .run-shoe-label { display: inline-flex; align-items: center; gap: 7px; }
+.run-source { display:inline-block; padding:3px 7px; border-radius:999px; font-size:11px; background:#334155; color:#cbd5e1; }
+.run-source.strava { background:rgba(249,115,22,.18); color:#fb923c; }
+.strava-last { color:var(--text-dim); font-size:12px; margin-right:10px; }
+.run-calendar { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:5px; }
+.calendar-weekday { color:var(--text-dim); text-align:center; font-size:11px; padding:3px; }
+.calendar-day { min-height:82px; border:1px solid var(--border); border-radius:8px; padding:6px; background:rgba(15,23,42,.35); cursor:pointer; overflow:hidden; }
+.calendar-day:hover { border-color:var(--accent); }
+.calendar-day.outside { visibility:hidden; }
+.calendar-day.today { border-color:#22c55e; }
+.calendar-number { font-size:11px; color:var(--text-dim); }
+.calendar-total { font-size:13px; font-weight:700; margin:3px 0; }
+.calendar-run { display:block; width:100%; border:0; border-radius:4px; margin-top:3px; padding:3px 4px; text-align:left; background:rgba(20,83,45,.72); color:#dcfce7; font-size:10px; cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.run-shoe-chart-box { display:flex; flex-direction:column; }
+.run-shoe-canvas { position:relative; height:300px; flex:0 0 auto; }
+.run-shoe-chart-box .run-shoe-canvas canvas { max-height:none; }
+.run-shoe-legend { display:grid; gap:8px; margin-top:18px; }
+.run-shoe-legend-row { display:grid; grid-template-columns:minmax(0,1fr) 64px 82px; gap:12px; align-items:center; padding:9px 10px; border-radius:7px; background:rgba(15,23,42,.38); font-size:12px; }
+.run-shoe-legend-name { display:flex; align-items:center; min-width:0; }
+.run-shoe-legend-name span:last-child { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.run-shoe-legend-dot { width:9px; height:9px; border-radius:50%; flex:0 0 auto; margin-right:8px; }
+.run-shoe-legend-pct { color:var(--text-dim); text-align:right; }
+.run-shoe-legend-km { font-weight:700; text-align:right; }
 .strava-modal { width: min(680px, calc(100vw - 32px)); }
 .strava-summary, .strava-group { background: rgba(15,23,42,.55); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-top: 10px; }
 .strava-summary { color: var(--text-dim); line-height: 1.6; }
@@ -99,8 +121,7 @@ h1 { font-size: 28px; font-weight: 700; margin-bottom: 4px; }
 .strava-group small { color: var(--text-dim); display: block; }
 .strava-group select { min-width: 220px; }
 .strava-groups { max-height: 300px; overflow-y: auto; margin-top: 12px; }
-.strava-sync { display: flex; align-items: flex-start; gap: 9px; margin-top: 12px; color: var(--text); font-size: 13px; line-height: 1.5; cursor: pointer; }
-.strava-sync input { width: 15px; height: 15px; margin-top: 2px; accent-color: var(--accent); flex: 0 0 auto; }
+.strava-sync { display: flex; align-items: flex-start; gap: 9px; margin-top: 12px; color: var(--text); font-size: 13px; line-height: 1.5; }
 .strava-sync small { display: block; color: var(--text-dim); }
 .empty-state { color: var(--text-dim); text-align: center; padding: 28px 12px; }
 @media (max-width: 760px) {
@@ -108,6 +129,8 @@ h1 { font-size: 28px; font-weight: 700; margin-bottom: 4px; }
   .tab { flex: 0 0 auto; }
   .run-hero { grid-template-columns: 1fr; }
   .run-stats { grid-template-columns: 1fr; }
+  .calendar-day { min-height:62px; padding:4px; }
+  .calendar-run { display:none; }
 }
 
 /* Table */
@@ -499,14 +522,14 @@ tr:hover td { background: rgba(99,102,241,0.05); }
 
     <div class="cards run-stats" id="run-stats"></div>
     <div class="charts">
-      <div class="chart-box"><h3>每日里程</h3><canvas id="chart-run-daily"></canvas></div>
-      <div class="chart-box"><h3>鞋款里程分布</h3><canvas id="chart-run-shoes"></canvas></div>
+      <div class="chart-box"><h3>跑步月曆</h3><div id="run-calendar" class="run-calendar"></div></div>
+      <div class="chart-box run-shoe-chart-box"><h3>鞋款里程分布</h3><div class="run-shoe-canvas"><canvas id="chart-run-shoes"></canvas></div><div id="run-shoe-legend" class="run-shoe-legend"></div></div>
     </div>
     <div class="table-section">
-      <div class="table-header"><h2 id="run-table-title">跑步紀錄</h2><button class="btn btn-sm btn-edit" onclick="openStravaModal()">↗ 匯入 Strava</button></div>
+      <div class="table-header"><h2 id="run-table-title">跑步紀錄</h2><div><span id="strava-last" class="strava-last"></span><button class="btn btn-sm btn-edit" onclick="openStravaModal()">↗ 匯入 Strava</button></div></div>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>日期</th><th>距離</th><th>鞋款</th><th></th></tr></thead>
+          <thead><tr><th>日期</th><th>距離</th><th>鞋款</th><th>來源</th><th></th></tr></thead>
           <tbody id="run-table"></tbody>
         </table>
       </div>
@@ -695,6 +718,7 @@ tr:hover td { background: rgba(99,102,241,0.05); }
   <div class="modal strava-modal">
     <h2>匯入 Strava 跑步紀錄</h2>
     <p style="color:var(--text-dim);font-size:13px;line-height:1.6">請選擇 Strava 匯出資料夾中的 <code>activities.csv</code>。系統只會匯入跑步活動，並以活動 ID 避免重複。</p>
+    <div id="strava-history" class="strava-summary"></div>
     <div class="form-group"><label for="strava-file">activities.csv</label><input id="strava-file" type="file" accept=".csv,text/csv" onchange="previewStravaFile()"></div>
     <div class="form-row">
       <div class="form-group"><label for="strava-start-date">從這一天開始</label><input id="strava-start-date" type="date" onchange="previewStravaFile()"></div>
@@ -1112,6 +1136,7 @@ let retiredShoes = [];
 let monthlyMileages = [];
 let monthlySpending = [];
 let runs = [];
+let stravaImports = [];
 let stravaPreview = null;
 let stravaPreviewKey = '';
 let stravaPreviewRequestId = 0;
@@ -1121,18 +1146,23 @@ let selectedSpendingYear = null;
 
 async function loadData() {
   try {
-    const [active, retired, monthly, spending, runData] = await Promise.all([
+    const [active, retired, monthly, spending, runData, importHistory] = await Promise.all([
       apiGet('/shoes/active'),
       apiGet('/shoes/retired'),
       apiGet('/monthly-mileage'),
       apiGet('/spending/monthly'),
       apiGet('/runs'),
+      apiGet('/runs/import/strava/history').catch(error => {
+        console.warn('載入 Strava 匯入歷史失敗:', error);
+        return [];
+      }),
     ]);
     shoes = active;
     retiredShoes = retired;
     monthlyMileages = monthly;
     monthlySpending = spending;
     runs = runData;
+    stravaImports = importHistory;
   } catch (e) {
     console.error('載入資料失敗:', e);
     shoes = [];
@@ -1140,6 +1170,7 @@ async function loadData() {
     monthlyMileages = [];
     monthlySpending = [];
     runs = [];
+    stravaImports = [];
   }
   // Default selected year to the most recent year present
   if (monthlyMileages.length > 0) {
@@ -1740,6 +1771,7 @@ function openStravaModal() {
   document.getElementById('strava-mapping').innerHTML = '';
   document.getElementById('strava-error').style.display = 'none';
   document.getElementById('strava-import-btn').disabled = true;
+  renderStravaImportHistory();
   const rangeKey = `strava-import-range:${currentUser || 'anonymous'}`;
   let savedRange = null;
   try { savedRange = JSON.parse(localStorage.getItem(rangeKey)); } catch {}
@@ -1747,9 +1779,26 @@ function openStravaModal() {
   const defaultStart = new Date(now.getFullYear(), now.getMonth() - 13, 1);
   const defaultEnd = new Date(now.getFullYear(), now.getMonth(), 0);
   const formatDate = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-  document.getElementById('strava-start-date').value = savedRange?.start || formatDate(defaultStart);
-  document.getElementById('strava-end-date').value = savedRange?.end || formatDate(defaultEnd);
+  const lastEnd = stravaImports[0]?.end_date;
+  let nextStart = '';
+  const today = formatDate(now);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(lastEnd || '')) {
+    const next = new Date(`${lastEnd}T00:00:00`);
+    next.setDate(next.getDate() + 1);
+    nextStart = formatDate(next) <= today ? formatDate(next) : today;
+  }
+  document.getElementById('strava-start-date').value = nextStart || savedRange?.start || formatDate(defaultStart);
+  document.getElementById('strava-end-date').value = nextStart ? today : savedRange?.end || formatDate(defaultEnd);
   document.getElementById('strava-modal').classList.add('active');
+}
+
+function renderStravaImportHistory() {
+  const target = document.getElementById('strava-history');
+  const last = stravaImports[0];
+  if (!last) { target.textContent = '目前沒有 Strava 匯入紀錄。'; return; }
+  const when = new Date(last.imported_at).toLocaleString('zh-TW');
+  const range = last.start_date || last.end_date ? `${last.start_date || '不限'} ～ ${last.end_date || '不限'}` : '未限制日期';
+  target.innerHTML = `<strong>上次成功匯入</strong><br>${esc(when)} · ${esc(range)}<br>新增 ${last.imported_count} 筆／${Number(last.imported_km).toFixed(2)} km · 重複 ${last.duplicate_count} 筆 · 未配對 ${last.unmapped_count} 筆 · 格式略過 ${last.invalid_count} 筆`;
 }
 
 function closeStravaModal() {
@@ -1874,44 +1923,86 @@ function renderRunLog() {
     { label: '跑步天數', value: `${days} 天`, sub: days ? `平均每天 ${(total / days).toFixed(2)} km` : '還沒有紀錄' },
     { label: '本月主力鞋', value: favorite ? esc(favorite.model) : '—', sub: favoriteEntry ? `${favoriteEntry[1].toFixed(2)} km` : '還沒有紀錄' },
   ].map(card => `<div class="card"><div class="card-label">${card.label}</div><div class="card-value">${card.value}</div><div class="card-sub">${card.sub}</div></div>`).join('');
+  renderStravaStatus();
 
   document.getElementById('run-table-title').textContent = `${monthLabel}跑步紀錄`;
   document.getElementById('run-table').innerHTML = filtered.length ? filtered.map(run => {
     const shoe = runShoe(run.shoe_id);
     const color = shoe ? brandColor(shoe.brand, 0) : '#64748b';
     const shoeName = shoe ? `${esc(shoe.brand)} ${esc(shoe.model)}` : '鞋款已刪除';
-    return `<tr><td>${esc(run.date.replace(/-/g, '/'))}</td><td><strong>${run.km.toFixed(2)} km</strong></td><td><span class="run-shoe-label"><span class="brand-dot" style="background:${color}"></span>${shoeName}</span></td><td><button class="btn btn-sm btn-edit" onclick="openRunModal(${run.id})">編輯</button></td></tr>`;
-  }).join('') : '<tr><td colspan="4" class="empty-state">這個月還沒有跑步紀錄。從右上角記下第一跑吧！</td></tr>';
+    const source = run.strava_id ? '<span class="run-source strava">Strava</span>' : '<span class="run-source">手動</span>';
+    return `<tr><td>${esc(run.date.replace(/-/g, '/'))}</td><td><strong>${run.km.toFixed(2)} km</strong></td><td><span class="run-shoe-label"><span class="brand-dot" style="background:${color}"></span>${shoeName}</span></td><td>${source}</td><td><button class="btn btn-sm btn-edit" onclick="openRunModal(${run.id})">編輯</button></td></tr>`;
+  }).join('') : '<tr><td colspan="5" class="empty-state">這個月還沒有跑步紀錄。點月曆日期或從右上角記下第一跑吧！</td></tr>';
 
-  if (typeof Chart === 'undefined') return;
-  renderRunDailyChart(filtered, month);
+  renderRunCalendar(filtered, month);
   renderRunShoeChart(shoeTotals);
 }
 
-function renderRunDailyChart(filtered, month) {
-  if (chartInstances.runDaily) chartInstances.runDaily.destroy();
+function renderStravaStatus() {
+  const target = document.getElementById('strava-last');
+  const last = stravaImports[0];
+  if (!last) { target.textContent = '尚未匯入'; return; }
+  const when = new Date(last.imported_at).toLocaleString('zh-TW', { month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit' });
+  target.textContent = `上次 ${when} · 新增 ${last.imported_count} 筆`;
+}
+
+function selectRunCalendarDate(date, event) {
+  if (event.target.closest('.calendar-run')) return;
+  document.getElementById('run-date').value = date;
+  document.getElementById('run-month').value = date.slice(0, 7);
+  document.getElementById('run-km').focus();
+}
+
+function renderRunCalendar(filtered, month) {
+  const target = document.getElementById('run-calendar');
   const [year, monthNumber] = month.split('-').map(Number);
   const daysInMonth = new Date(year, monthNumber, 0).getDate();
-  const daily = Array(daysInMonth).fill(0);
-  filtered.forEach(run => { daily[parseInt(run.date.slice(8), 10) - 1] += run.km; });
-  chartInstances.runDaily = new Chart(document.getElementById('chart-run-daily'), {
-    type: 'bar',
-    data: { labels: Array.from({ length: daysInMonth }, (_, i) => i + 1), datasets: [{ data: daily, backgroundColor: '#6366f1', borderRadius: 4, maxBarThickness: 16 }] },
-    options: { plugins: { legend: { display: false }, tooltip: { callbacks: { title: items => `${monthNumber}/${items[0].label}`, label: ctx => `${ctx.raw.toFixed(2)} km` } } }, scales: { x: { grid: { display: false }, ticks: { color: '#8b8d9a', autoSkip: false, maxRotation: 0, minRotation: 0, font: { size: 9 } } }, y: { beginAtZero: true, grid: { color: '#2a2d3e' }, ticks: { color: '#8b8d9a', callback: value => value + ' km' } } } }
+  const firstWeekday = (new Date(year, monthNumber - 1, 1).getDay() + 6) % 7;
+  const byDay = new Map();
+  filtered.forEach(run => {
+    const day = Number(run.date.slice(8));
+    if (!byDay.has(day)) byDay.set(day, []);
+    byDay.get(day).push(run);
   });
+  const weekdays = ['一','二','三','四','五','六','日'].map(day => `<div class="calendar-weekday">${day}</div>`);
+  const blanks = Array.from({length:firstWeekday}, () => '<div class="calendar-day outside"></div>');
+  const today = localDateISO();
+  const cells = Array.from({length:daysInMonth}, (_, index) => {
+    const day = index + 1;
+    const date = `${month}-${String(day).padStart(2,'0')}`;
+    const dayRuns = byDay.get(day) || [];
+    const total = dayRuns.reduce((sum, run) => sum + run.km, 0);
+    const intensity = total ? Math.min(.18 + total / 25, .68) : 0;
+    const items = dayRuns.map(run => {
+      const shoe = runShoe(run.shoe_id);
+      return `<button class="calendar-run" onclick="event.stopPropagation();openRunModal(${run.id})">${esc(shoe?.model || '跑鞋')}</button>`;
+    }).join('');
+    return `<div class="calendar-day${date === today ? ' today' : ''}" style="background:rgba(34,197,94,${intensity})" onclick="selectRunCalendarDate('${date}',event)"><div class="calendar-number">${day}</div>${total ? `<div class="calendar-total">${total.toFixed(2)} km</div>` : ''}${items}</div>`;
+  });
+  target.innerHTML = [...weekdays, ...blanks, ...cells].join('');
 }
 
 function renderRunShoeChart(shoeTotals) {
-  if (chartInstances.runShoes) chartInstances.runShoes.destroy();
   const entries = [...shoeTotals.entries()].sort((a, b) => b[1] - a[1]);
   const shoeList = entries.map(([id]) => runShoe(id));
+  const colors = shoeList.map((shoe, i) => shoe ? brandColor(shoe.brand, i) : '#64748b');
+  const total = entries.reduce((sum, [, km]) => sum + km, 0);
+  const legend = document.getElementById('run-shoe-legend');
+  legend.innerHTML = entries.length ? entries.map(([, km], index) => {
+    const shoe = shoeList[index];
+    const name = shoe ? `${shoe.brand} ${shoe.model}` : '鞋款已刪除';
+    const percentage = total > 0 ? km / total * 100 : 0;
+    return `<div class="run-shoe-legend-row"><div class="run-shoe-legend-name"><span class="run-shoe-legend-dot" style="background:${colors[index]}"></span><span>${esc(name)}</span></div><span class="run-shoe-legend-pct">${percentage.toFixed(1)}%</span><span class="run-shoe-legend-km">${km.toFixed(2)} km</span></div>`;
+  }).join('') : '<div class="empty-state">這個月還沒有鞋款里程。</div>';
+  if (typeof Chart === 'undefined') return;
+  if (chartInstances.runShoes) chartInstances.runShoes.destroy();
   chartInstances.runShoes = new Chart(document.getElementById('chart-run-shoes'), {
     type: 'doughnut',
     data: {
       labels: shoeList.map(shoe => shoe ? `${shoe.brand} ${shoe.model}` : '鞋款已刪除'),
-      datasets: [{ data: entries.map(([, km]) => km), backgroundColor: shoeList.map((shoe, i) => shoe ? brandColor(shoe.brand, i) : '#64748b'), borderColor: '#1a1d2e', borderWidth: 3 }],
+      datasets: [{ data: entries.map(([, km]) => km), backgroundColor: colors, borderColor: '#1a1d2e', borderWidth: 3 }],
     },
-    options: { cutout: '62%', plugins: { legend: { position: 'bottom', labels: { color: '#e4e4e7', usePointStyle: true, padding: 14 } }, tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${ctx.raw.toFixed(2)} km` } } } }
+    options: { maintainAspectRatio: false, cutout: '60%', plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${ctx.raw.toFixed(2)} km（${total > 0 ? (ctx.raw / total * 100).toFixed(1) : '0.0'}%）` } } } }
   });
 }
 

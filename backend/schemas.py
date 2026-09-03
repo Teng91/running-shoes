@@ -1,8 +1,16 @@
 import math
+from datetime import UTC, datetime
 from datetime import date as calendar_date
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_serializer,
+    field_validator,
+    model_validator,
+)
 
 # All valid shoe purpose/function categories.
 SHOE_CATEGORIES = ["Daily", "Speed", "Tempo", "Race", "Trail", "Walk"]
@@ -300,3 +308,22 @@ class RunOut(RunBase):
     id: int
     user_id: int
     strava_id: str | None = None
+
+
+class StravaImportOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    imported_at: datetime
+    start_date: str
+    end_date: str
+    imported_count: int
+    imported_km: NonNegativeFiniteKm
+    duplicate_count: int
+    unmapped_count: int
+    invalid_count: int
+
+    @field_serializer("imported_at")
+    def serialize_imported_at(self, value: datetime) -> str:
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=UTC)
+        return value.isoformat()
