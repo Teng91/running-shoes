@@ -79,7 +79,8 @@ h1 { font-size: 28px; font-weight: 700; margin-bottom: 4px; }
 .charts { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 28px; }
 .chart-box { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
 .chart-box h3 { font-size: 14px; color: var(--text-dim); margin-bottom: 12px; font-weight: 500; }
-.chart-box canvas { max-height: 240px; }
+.chart-canvas { position: relative; height: 240px; min-width: 0; }
+.chart-box canvas { max-width: 100%; }
 .chart-title-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
 .chart-title-row h3 { margin-bottom: 0; }
 .year-select { background: var(--bg); border: 1px solid var(--border); color: var(--text); font-size: 12px; padding: 4px 8px; border-radius: 6px; cursor: pointer; }
@@ -364,6 +365,58 @@ tr:hover td { background: rgba(99,102,241,0.05); }
   line-height: 1.6;
 }
 .agent-retry-btn:hover { color: var(--text); border-color: var(--accent); background: rgba(99,102,241,0.08); }
+
+/* Allow grid/flex children to shrink without pushing the viewport wider. */
+.cards > *, .charts > *, .run-hero > *, .run-entry-grid > *,
+.form-row > *, .category-grid > *, .strava-group > * { min-width: 0; }
+.card, .category-card, .shoe-alert, .strava-summary, .strava-group,
+.user-name, .agent-thinking, .agent-tools { overflow-wrap: anywhere; }
+input, select, textarea { min-width: 0; max-width: 100%; }
+.app-header, .user-info, .table-header, .table-header > div,
+.chart-title-row, .agent-config, .run-filter, .modal-actions { flex-wrap: wrap; gap: 10px; }
+.table-header > div { display: flex; align-items: center; }
+.table-wrap { max-width: 100%; }
+.modal-overlay { padding: 16px; }
+.modal { max-width: 100%; max-height: 90dvh; }
+.agent-msg-content { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+.agent-msg-content img { max-width: 100%; height: auto; }
+.agent-input-area textarea { min-width: 0; }
+
+@media (max-width: 760px) {
+  .container { padding: 16px; }
+  .app-header { align-items: flex-start; }
+  .app-header h1 { font-size: 24px; }
+  .user-info { width: 100%; }
+  .subtitle { margin-top: 10px; margin-bottom: 16px; }
+  .card, .chart-box, .table-section, .run-entry, .run-intro { padding: 16px; }
+  .charts, .charts-3col { grid-template-columns: minmax(0, 1fr); }
+  .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .run-stats { grid-template-columns: minmax(0, 1fr); }
+  .card-value { font-size: 24px; }
+  .btn, .tab, .agent-config button { min-height: 44px; }
+  .form-group input, .form-group select, .form-group textarea,
+  .inline-add input, .inline-add select, .year-select,
+  .agent-config select, .agent-config input[type="text"],
+  .agent-input-area textarea { font-size: 16px; }
+  .strava-group { grid-template-columns: minmax(0, 1fr); }
+  .strava-group select { min-width: 0; width: 100%; }
+  .modal { padding: 20px; }
+  .modal-actions > .btn { flex: 1 1 auto; }
+  .run-shoe-canvas { height: 260px; }
+  .run-shoe-legend-row { grid-template-columns: minmax(0,1fr) auto auto; gap: 8px; padding: 9px 6px; }
+  .run-shoe-legend-name span:last-child { white-space: normal; overflow-wrap: anywhere; }
+  .run-calendar { gap: 3px; }
+  .calendar-day { padding: 3px; }
+  .calendar-total { font-size: 11px; overflow-wrap: anywhere; }
+  .agent-config select { flex: 1 1 160px; }
+  .agent-messages { padding: 10px; }
+  .agent-input-area button { padding: 10px 14px; }
+}
+@media (max-width: 380px) {
+  .container { padding: 12px; }
+  .run-entry-grid, .form-row { grid-template-columns: minmax(0, 1fr); }
+  .category-checkboxes label { flex-basis: calc(50% - 8px); }
+}
 </style>
 </head>
 <body>
@@ -468,10 +521,10 @@ tr:hover td { background: rgba(99,102,241,0.05); }
     <div class="shoe-alerts" id="shoe-alerts"></div>
     <div class="category-grid" id="category-summary"></div>
     <div class="charts">
-      <div class="chart-box"><h3>生命進度</h3><canvas id="chart-progress"></canvas></div>
-      <div class="chart-box"><h3>每 km 成本比較</h3><canvas id="chart-cost"></canvas></div>
-      <div class="chart-box"><h3>退役時間軸</h3><canvas id="chart-retire"></canvas></div>
-      <div class="chart-box"><h3>月跑量佔比</h3><canvas id="chart-value"></canvas></div>
+      <div class="chart-box"><h3>生命進度</h3><div class="chart-canvas"><canvas id="chart-progress"></canvas></div></div>
+      <div class="chart-box"><h3>每 km 成本比較</h3><div class="chart-canvas"><canvas id="chart-cost"></canvas></div></div>
+      <div class="chart-box"><h3>退役時間軸</h3><div class="chart-canvas"><canvas id="chart-retire"></canvas></div></div>
+      <div class="chart-box"><h3>月跑量佔比</h3><div class="chart-canvas"><canvas id="chart-value"></canvas></div></div>
     </div>
 
     <div class="table-section">
@@ -562,21 +615,21 @@ tr:hover td { background: rgba(99,102,241,0.05); }
         <div class="chart-title-row">
           <h3>年度總跑量</h3>
         </div>
-        <canvas id="chart-yearly-total"></canvas>
+        <div class="chart-canvas"><canvas id="chart-yearly-total"></canvas></div>
       </div>
       <div class="chart-box">
         <div class="chart-title-row">
           <h3>年度月跑量</h3>
           <select id="year-select" class="year-select" onchange="onYearChange()"></select>
         </div>
-        <canvas id="chart-monthly-year"></canvas>
+        <div class="chart-canvas"><canvas id="chart-monthly-year"></canvas></div>
       </div>
       <div class="chart-box">
         <div class="chart-title-row">
           <h3>跑鞋月度里程堆疊</h3>
           <select id="stacked-year-select" class="year-select" onchange="onStackedYearChange()"></select>
         </div>
-        <canvas id="chart-shoe-stacked"></canvas>
+        <div class="chart-canvas"><canvas id="chart-shoe-stacked"></canvas></div>
       </div>
     </div>
 
@@ -615,14 +668,14 @@ tr:hover td { background: rgba(99,102,241,0.05); }
         <div class="chart-title-row">
           <h3>年度支出總覽</h3>
         </div>
-        <canvas id="chart-spending-yearly"></canvas>
+        <div class="chart-canvas"><canvas id="chart-spending-yearly"></canvas></div>
       </div>
       <div class="chart-box">
         <div class="chart-title-row">
           <h3>年度月支出</h3>
           <select id="spending-year-select" class="year-select" onchange="onSpendingYearChange()"></select>
         </div>
-        <canvas id="chart-spending"></canvas>
+        <div class="chart-canvas"><canvas id="chart-spending"></canvas></div>
       </div>
     </div>
 
@@ -1025,7 +1078,7 @@ function switchTab(name) {
   // Agent tab: fill viewport height; other tabs: natural scroll
   const appView = document.getElementById('app-view');
   if (name === 'agent') {
-    appView.style.height = '100vh';
+    appView.style.height = '100dvh';
     appView.style.overflow = 'hidden';
     appView.style.display = 'flex';
     appView.style.flexDirection = 'column';
@@ -2113,6 +2166,7 @@ function renderCharts() {
       }]
     },
     options: {
+      maintainAspectRatio: false,
       indexAxis: 'y',
       plugins: {
         legend: { labels: { color: textColor, font: { size: 11 } } },
@@ -2155,6 +2209,7 @@ function renderCharts() {
       }]
     },
     options: {
+      maintainAspectRatio: false,
       plugins: { legend: { labels: { color: textColor, font: { size: 11 } } }, tooltip: { callbacks: { label: ctx => '$' + ctx.raw.toFixed(2) + '/km' } } },
       scales: {
         x: { grid: { display: false }, ticks: { color: textColor, font: { size: 10 } } },
@@ -2181,6 +2236,7 @@ function renderCharts() {
       }]
     },
     options: {
+      maintainAspectRatio: false,
       plugins: {
         legend: { display: false },
         tooltip: {
@@ -2234,6 +2290,7 @@ function renderCharts() {
       }]
     },
     options: {
+      maintainAspectRatio: false,
       cutout: '60%',
       plugins: {
         legend: { position: 'right', labels: { color: textColor, font: { size: 11 }, padding: 12 } },
@@ -2359,6 +2416,7 @@ function renderShoeStackedChart() {
     type: 'bar',
     data: { labels, datasets },
     options: {
+      maintainAspectRatio: false,
       responsive: true,
       plugins: {
         legend: { display: false },
@@ -2403,6 +2461,7 @@ function renderYearlyTotalChart() {
       }]
     },
     options: {
+      maintainAspectRatio: false,
       plugins: {
         legend: { display: false },
         tooltip: { callbacks: { label: ctx => ctx.raw.toFixed(2) + ' km' } }
@@ -2463,6 +2522,7 @@ function renderMonthlyYearChart() {
       }]
     },
     options: {
+      maintainAspectRatio: false,
       plugins: {
         legend: { display: false },
         tooltip: { callbacks: { label: ctx => ctx.raw.toFixed(2) + ' km' } }
@@ -2612,6 +2672,7 @@ function renderSpendingChart() {
       }],
     },
     options: {
+      maintainAspectRatio: false,
       plugins: {
         legend: { display: false },
         tooltip: {
@@ -2664,6 +2725,7 @@ function renderSpendingYearlyChart() {
       }],
     },
     options: {
+      maintainAspectRatio: false,
       plugins: {
         legend: { display: false },
         tooltip: {
@@ -3342,7 +3404,7 @@ window.addEventListener('resize', () => {
   const activePanel = document.querySelector('.tab-panel.active');
   if (activePanel && activePanel.dataset.panel === 'agent') {
     const appView = document.getElementById('app-view');
-    appView.style.height = '100vh';
+    appView.style.height = '100dvh';
   }
 });
 </script>
