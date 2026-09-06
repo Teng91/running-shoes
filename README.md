@@ -229,7 +229,15 @@ venv/bin/pytest -q
 venv/bin/pytest -q --cov=backend --cov-branch --cov-report=term-missing
 ```
 
-目前測試基準為 **255 passed**；`backend` 敘述覆蓋率為 **97.35%**（四捨五入為 97%）、分支覆蓋率為 **94.11%**，含分支的整體覆蓋率為 **96.62%**（四捨五入為 97%）。
+後端測試涵蓋 API、帳號隔離、資料庫升級與邊界案例；覆蓋率以執行上述指令的結果為準。
+前端流程回歸測試使用 Node.js 內建測試工具，不需要安裝 npm 套件：
+
+```bash
+node --test unit_tests/frontend_regressions.cjs
+```
+
+鞋款更新會使用版本檢查，舊畫面遇到衝突時請重新載入後再編輯。改密碼後既有登入會失效，需重新登入。
+啟動時會自動為既有資料庫補上鞋款與登入版本欄位，不會重算歷史里程。
 
 ## Docker 部署
 
@@ -238,7 +246,8 @@ venv/bin/pytest -q --cov=backend --cov-branch --cov-report=term-missing
 docker build -t running-shoes .
 
 # 2. 啟動 container（資料持久化）
-docker run -d -p 8000:8000 -v shoes-data:/data --name running-shoes running-shoes
+docker run -d -p 8000:8000 -v shoes-data:/data \
+  -e SECRET_KEY="$(openssl rand -hex 32)" --name running-shoes running-shoes
 
 # 3. 在任何裝置瀏覽器開啟
 open http://你的IP:8000

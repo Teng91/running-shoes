@@ -79,4 +79,6 @@ def get_current_user(
     user = db.query(User).filter(User.username == username).first()
     if user is None:
         raise HTTPException(status_code=401, detail="User not found")
+    if payload.get("token_version", 0) != user.token_version:
+        raise HTTPException(status_code=401, detail="Session expired; please log in again")
     return user

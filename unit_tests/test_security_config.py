@@ -16,6 +16,11 @@ def test_fly_deployment_enables_production_secret_checks():
     assert config["env"]["ENVIRONMENT"] == "production"
 
 
+def test_docker_enables_production_secret_checks():
+    source = (PROJECT_ROOT / "Dockerfile").read_text(encoding="utf-8")
+    assert "ENV ENVIRONMENT=production" in source
+
+
 def test_sqlite_foreign_keys_are_enabled():
     with engine.connect() as connection:
         assert connection.execute(text("PRAGMA foreign_keys")).scalar_one() == 1

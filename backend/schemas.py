@@ -41,6 +41,8 @@ def _validate_iso_date(value: str) -> str:
         parsed = calendar_date.fromisoformat(value)
     except (TypeError, ValueError):
         raise ValueError("date must be a valid YYYY-MM-DD calendar date") from None
+    if not 1900 <= parsed.year <= 2100:
+        raise ValueError("year must be between 1900 and 2100")
     if parsed.isoformat() != value:
         raise ValueError("date must use YYYY-MM-DD format")
     return value
@@ -168,6 +170,7 @@ class ShoeCreate(ShoeBase):
 
 
 class ShoeUpdate(BaseModel):
+    expected_version: int | None = Field(default=None, ge=0)
     brand: ShoeName | None = None
     model: ShoeName | None = None
     date: str | None = None
@@ -223,6 +226,7 @@ class ShoeUpdate(BaseModel):
 
 
 class ShoeOut(ShoeBase):
+    version: int = 0
     model_config = ConfigDict(from_attributes=True)
     id: int
     user_id: int
