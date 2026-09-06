@@ -13,7 +13,7 @@ from pydantic import (
 )
 
 # All valid shoe purpose/function categories.
-SHOE_CATEGORIES = ["Daily", "Speed", "Tempo", "Race", "Trail", "Walk"]
+SHOE_CATEGORIES = ["Daily", "Speed", "Tempo", "Race", "Trail"]
 ReasonableYear = Annotated[int, Field(ge=1900, le=2100)]
 CalendarMonth = Annotated[int, Field(ge=1, le=12)]
 NonNegativeFiniteKm = Annotated[float, Field(ge=0, allow_inf_nan=False)]
@@ -128,7 +128,7 @@ class ShoeBase(BaseModel):
     expected_mileage: float = 800
     monthly_km: float = 60
     is_retired: bool = False
-    categories: list[str] = Field(default_factory=lambda: ["Daily"], max_length=6)
+    categories: list[str] = Field(default_factory=lambda: ["Daily"], max_length=len(SHOE_CATEGORIES))
 
     @field_validator("brand", "model")
     @classmethod
@@ -181,7 +181,7 @@ class ShoeUpdate(BaseModel):
     expected_mileage: float | None = None
     monthly_km: float | None = None
     is_retired: bool | None = None
-    categories: Annotated[list[str], Field(max_length=6)] | None = None
+    categories: Annotated[list[str], Field(max_length=len(SHOE_CATEGORIES))] | None = None
 
     @model_validator(mode="before")
     @classmethod

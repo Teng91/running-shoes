@@ -317,15 +317,31 @@ def test_create_shoe_with_trail_category(client, user_with_token):
     assert res.json()["categories"] == ["Trail"]
 
 
-def test_create_shoe_with_walk_category(client, user_with_token):
-    """Walk is a valid category selectable in the frontend checklist."""
+def test_create_shoe_rejects_walk_category(client, user_with_token):
+    """Discontinued categories cannot be added through the API."""
     _user, token = user_with_token
     res = client.post("/api/shoes", headers=_auth_header(token), json={
         "brand": "Nike", "model": "Free RN", "date": "2026-01-01",
         "categories": ["Walk"],
     })
-    assert res.status_code == 200
-    assert res.json()["categories"] == ["Walk"]
+    assert res.status_code == 422
+
+
+def test_update_shoe_rejects_walk_but_allows_unclassified(client, db, user_with_token):
+    user, token = user_with_token
+    shoe = Shoe(user_id=user.id, brand="Test", model="Retired", date="2026-01-01",
+                is_retired=True, categories=["Daily"])
+    db.add(shoe)
+    db.commit()
+    response = client.put(f"/api/shoes/{shoe.id}", headers=_auth_header(token), json={
+        "categories": ["Walk"],
+    })
+    assert response.status_code == 422
+    response = client.put(f"/api/shoes/{shoe.id}", headers=_auth_header(token), json={
+        "categories": [],
+    })
+    assert response.status_code == 200
+    assert response.json()["categories"] == []
 
 
 def test_create_shoe_with_multiple_categories(client, user_with_token):

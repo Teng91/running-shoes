@@ -4,6 +4,54 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const source = fs.readFileSync('frontend/index.html', 'utf8');
+
+test('unclassified shoes stay unclassified when the form is saved', () => {
+  const context = vm.createContext({ document: { querySelectorAll: () => [] } });
+  vm.runInContext(extract('getSelectedCategories'), context);
+  assert.deepEqual(Array.from(context.getSelectedCategories()), []);
+});
+
+test('replacement alerts require backup for every purpose and handle unclassified shoes', () => {
+  const container = {};
+  const context = vm.createContext({
+    document: { getElementById: () => container },
+    shoes: [{ id: 1, brand: 'A', model: 'Target', categories: ['Daily', 'Tempo'], progress: .95 },
+      { id: 2, categories: ['Daily'], progress: .1 }],
+    calc: s => ({ lifeProgress: s.progress }), shoeCategories: s => s.categories, esc: s => s,
+  });
+  vm.runInContext(extract('renderAlerts'), context);
+  context.renderAlerts();
+  assert.match(container.innerHTML, /Tempo 沒有其他現役鞋/);
+  context.shoes[1].categories.push('Tempo');
+  context.renderAlerts();
+  assert.match(container.innerHTML, /所有用途類別都有其他現役鞋/);
+  context.shoes[0].categories = [];
+  context.renderAlerts();
+  assert.match(container.innerHTML, /尚未設定用途類別/);
+});
+
+test('shoe save ignores duplicate submissions and unlocks after errors', async () => {
+  const definition = source.slice(source.indexOf('class ShoeModal {'), source.indexOf('// 初始化一次'));
+  const context = vm.createContext({ alert() {}, loadData: async () => {} });
+  vm.runInContext(definition + '\nglobalThis.Modal = ShoeModal;', context);
+  const modal = Object.create(context.Modal.prototype);
+  const button = {};
+  Object.assign(modal, { mode: 'create', el: { querySelector: () => button },
+    _payload: () => ({ brand: 'A', model: 'B', date: '2026-09-06' }), close() {} });
+  let resolve, calls = 0;
+  context.apiPost = () => { calls++; return new Promise(r => { resolve = r; }); };
+  const first = modal.submit();
+  await modal.submit();
+  assert.equal(calls, 1);
+  assert.equal(button.disabled, true);
+  resolve();
+  await first;
+  assert.equal(button.disabled, false);
+  context.apiPost = async () => { throw Error('offline'); };
+  await modal.submit();
+  assert.equal(modal.saving, false);
+  assert.equal(button.disabled, false);
+});
 function extract(name) {
   const start = source.search(new RegExp(`(?:async )?function ${name}\\(`));
   return source.slice(start, source.indexOf('\n}', start) + 2);
