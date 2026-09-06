@@ -82,7 +82,7 @@ _TOOL_INTENT_TERMS = (
     "換鞋", "補鞋", "推薦", "比較", "分析", "課表", "訓練", "配速",
     "馬拉松", "半馬", "全馬", "比賽", "競速", "越野", "daily", "tempo",
     "speed", "race", "trail", "資料", "數字", "結果", "重新查", "不對", "錯了",
-    "搜尋", "查詢", "幫我查", "上網", "search", "new balance", "nb", "rebel",
+    "類別", "缺什麼", "搜尋", "查詢", "幫我查", "上網", "search", "new balance", "nb", "rebel",
 )
 
 _AFFIRMATIVE_REPLIES = (
