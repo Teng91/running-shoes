@@ -218,35 +218,46 @@ history 筆數，並套用每帳號、每 IP 與全站請求上限。公開驗�
 
 ## 測試
 
-請使用專案虛擬環境執行，避免誤用系統 Python 而找不到 `ddgs` 等套件：
+專案提供統一的工程 harness，會自動選用 Windows `venv/Scripts/python.exe`、
+Unix `venv/bin/python` 或系統 Python。從 PowerShell／`pwsh` 執行：
 
-```bash
-# 不依賴 shell 是否已 activate；推薦用法
-# 一般測試
-venv/bin/pytest -q
+```powershell
+# 安裝開發依賴
+./scripts/task.ps1 setup
 
-# 同時檢查行覆蓋率與分支覆蓋率
-venv/bin/pytest -q --cov=backend --cov-branch --cov-report=term-missing
+# 完整檢查：Ruff、mypy、pytest、前端 Node 回歸測試
+./scripts/task.ps1 verify
+
+# 日常後端檢查，或只執行 Agent 行為 eval
+./scripts/task.ps1 test-fast
+./scripts/task.ps1 eval-agent
 ```
 
-後端測試涵蓋 API、帳號隔離、資料庫升級與邊界案例；覆蓋率以執行上述指令的結果為準。
+Agent eval 案例位於 `unit_tests/agent_eval_cases.json`，用來固定私人資料、即時搜尋、
+工具選擇和一般對話等行為。後端測試涵蓋 API、帳號隔離、資料庫升級與邊界案例。
+若要查看行與分支覆蓋率，可另外執行：
+
+```powershell
+./venv/Scripts/python.exe -m pytest -q --cov=backend --cov-branch --cov-report=term-missing
+```
+
 前端流程回歸測試使用 Node.js 內建測試工具，不需要安裝 npm 套件：
 
-```bash
-node --test unit_tests/frontend_regressions.cjs
+```powershell
+./scripts/task.ps1 frontend-test
 ```
 
 手機版面回歸檢查另外使用 Playwright（WebKit 與 Chromium），包含亮暗模式、長鞋名、多筆資料、空資料、表單欄位重疊、分頁完整顯示、圖表繪圖區及彈出視窗：
 
-```bash
+```powershell
 npm install --no-save --package-lock=false playwright
 npx playwright install chromium webkit
-node unit_tests/frontend_layout.cjs
+./scripts/task.ps1 frontend-layout
 ```
 
 可設定 `LAYOUT_SCREENSHOT_DIR` 保存手機版截圖供人工檢查；Windows 若使用已安裝的 Edge，可設定 `PLAYWRIGHT_CHROMIUM_CHANNEL=msedge`。WebKit 模擬檢查不等同於 iPhone 實機驗證。
 
-目前驗證結果為後端 **262 passed**，前端回歸測試 **9 passed**；測試數量會隨功能與修正持續增加。
+目前驗證結果為後端 **272 passed**，前端回歸測試 **9 passed**；測試數量會隨功能與修正持續增加。
 版面檢查涵蓋 WebKit／Chromium、亮／暗模式與 7 組直橫向尺寸，共 28 組設定，檢查五個分頁、表單、圖表、彈窗及空資料狀態。
 
 鞋款更新會使用版本檢查，舊畫面遇到衝突時請重新載入後再編輯。改密碼後既有登入會失效，需重新登入。
@@ -254,6 +265,31 @@ node unit_tests/frontend_layout.cjs
 
 現役與退役鞋皆只使用 Daily、Speed、Tempo、Race、Trail 五種用途分類。啟動時會移除既有資料中的 Walk 與舊 Other 標記，保留其他類別、里程及退役狀態；原本只有 Walk 的鞋會顯示「未分類」，不會自動改成 Daily。清理會更新受影響鞋款的版本，重複啟動不會再次修改已清理資料。
 新增跑鞋預設勾選 Daily，也可以取消所有類別；編輯未分類鞋款會保留空分類。換鞋提醒會檢查每個用途是否都有現役替代鞋，未分類鞋款則提示先分類。
+
+## AI 開發萬用指示
+
+在 Codex 或其他 Coding Agent 中開啟本專案後，可以複製以下內容，再把中間的需求換成這次要開發的功能或要修正的問題：
+
+```text
+請先閱讀 AGENTS.md，依照現有架構直接完成以下需求：
+
+[在這裡描述新功能、Bug 的操作方式、目前結果與預期結果]
+
+完成條件：
+- 找出並處理根因，不要只隱藏表面症狀
+- 保留既有行為、使用者資料隔離與安全限制
+- 補上必要的回歸測試
+- 不修改正式 shoes.db
+- 執行 ./scripts/task.ps1 verify
+- 如果有修改畫面版面，再執行 ./scripts/task.ps1 frontend-layout
+- 最後列出修改內容、測試結果與仍存在的限制
+```
+
+如果目前只想討論方案、不希望 AI 修改檔案，請在開頭加上：
+
+```text
+先不要修改程式。請分析需求會影響哪些檔案、資料表和測試，並列出風險與建議方案。
+```
 
 ## Docker 部署
 
