@@ -372,10 +372,26 @@ tr:hover td { background: rgba(99,102,241,0.05); }
 .card, .category-card, .shoe-alert, .strava-summary, .strava-group,
 .user-name, .agent-thinking, .agent-tools { overflow-wrap: anywhere; }
 input, select, textarea { min-width: 0; max-width: 100%; }
+/* Native iOS date controls can keep an intrinsic width inside a grid. */
+input[type="date"], input[type="month"] {
+  display: block; appearance: none; -webkit-appearance: none;
+  min-height: 44px;
+}
+input::-webkit-date-and-time-value { text-align: left; min-width: 0; }
+.chart-legend { display: grid; gap: 6px; margin-top: 12px; }
+.chart-legend button {
+  display: flex; align-items: baseline; gap: 8px; width: 100%; min-width: 0;
+  border: 1px solid var(--border); border-radius: 6px; padding: 8px;
+  background: var(--item-bg); color: var(--text); text-align: left;
+  font: inherit; font-size: 12px; cursor: pointer; overflow-wrap: anywhere;
+}
+.chart-legend button[aria-pressed="false"] { text-decoration: line-through; opacity: .65; }
+.chart-legend-dot { width: 9px; height: 9px; flex: 0 0 9px; border-radius: 50%; }
 .app-header, .user-info, .table-header, .table-header > div,
 .chart-title-row, .agent-config, .run-filter, .modal-actions { flex-wrap: wrap; gap: 10px; }
 .table-header > div { display: flex; align-items: center; }
 .table-wrap { max-width: 100%; }
+.table-scroll-hint { display: none; }
 .modal-overlay { padding: 16px; }
 .modal { max-width: 100%; max-height: 90dvh; }
 .agent-msg-content { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
@@ -384,6 +400,10 @@ input, select, textarea { min-width: 0; max-width: 100%; }
 
 @media (max-width: 760px) {
   .container { padding: 16px; }
+  .tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); overflow: visible; flex-shrink: 0; }
+  .tab { padding: 8px; }
+  .run-entry-grid, .form-row { grid-template-columns: minmax(0, 1fr); }
+  .form-group input:not([type="checkbox"]), .form-group select { min-height: 44px; }
   .app-header { align-items: flex-start; }
   .app-header h1 { font-size: 24px; }
   .user-info { width: 100%; }
@@ -399,7 +419,8 @@ input, select, textarea { min-width: 0; max-width: 100%; }
   .agent-config select, .agent-config input[type="text"],
   .agent-input-area textarea { font-size: 16px; }
   .strava-group { grid-template-columns: minmax(0, 1fr); }
-  .strava-group select { min-width: 0; width: 100%; }
+  .strava-group select { min-width: 0; width: 100%; min-height: 44px; font-size: 16px; }
+  .table-scroll-hint { display: block; margin-bottom: 8px; font-size: 12px; color: var(--text-dim); }
   .modal { padding: 20px; }
   .modal-actions > .btn { flex: 1 1 auto; }
   .run-shoe-canvas { height: 260px; }
@@ -524,7 +545,7 @@ input, select, textarea { min-width: 0; max-width: 100%; }
       <div class="chart-box"><h3>生命進度</h3><div class="chart-canvas"><canvas id="chart-progress"></canvas></div></div>
       <div class="chart-box"><h3>每 km 成本比較</h3><div class="chart-canvas"><canvas id="chart-cost"></canvas></div></div>
       <div class="chart-box"><h3>退役時間軸</h3><div class="chart-canvas"><canvas id="chart-retire"></canvas></div></div>
-      <div class="chart-box"><h3>月跑量佔比</h3><div class="chart-canvas"><canvas id="chart-value"></canvas></div></div>
+      <div class="chart-box"><h3>月跑量佔比</h3><div class="chart-canvas"><canvas id="chart-value"></canvas></div><div id="chart-value-legend" class="chart-legend" aria-label="月跑量佔比圖例"></div></div>
     </div>
 
     <div class="table-section">
@@ -535,7 +556,8 @@ input, select, textarea { min-width: 0; max-width: 100%; }
           <button class="btn btn-sm" style="background:#475569;color:#fff;" onclick="openExportModal()">匯出</button>
         </div>
       </div>
-      <div class="table-wrap">
+      <p class="table-scroll-hint">欄位較多時，可左右滑動表格查看。</p>
+      <div class="table-wrap" tabindex="0" role="region" aria-label="可左右滑動的資料表">
         <table>
           <thead>
             <tr>
@@ -553,7 +575,8 @@ input, select, textarea { min-width: 0; max-width: 100%; }
       <div class="table-header">
         <h2>退役跑鞋</h2>
       </div>
-      <div class="table-wrap">
+      <p class="table-scroll-hint">欄位較多時，可左右滑動表格查看。</p>
+      <div class="table-wrap" tabindex="0" role="region" aria-label="可左右滑動的資料表">
         <table>
           <thead>
             <tr>
@@ -599,7 +622,8 @@ input, select, textarea { min-width: 0; max-width: 100%; }
     </div>
     <div class="table-section">
       <div class="table-header"><h2 id="run-table-title">跑步紀錄</h2><div><span id="strava-last" class="strava-last"></span><button class="btn btn-sm btn-edit" onclick="openStravaModal()">↗ 匯入 Strava</button></div></div>
-      <div class="table-wrap">
+      <p class="table-scroll-hint">欄位較多時，可左右滑動表格查看。</p>
+      <div class="table-wrap" tabindex="0" role="region" aria-label="可左右滑動的資料表">
         <table>
           <thead><tr><th>日期</th><th>距離</th><th>鞋款</th><th>來源</th><th></th></tr></thead>
           <tbody id="run-table"></tbody>
@@ -644,7 +668,8 @@ input, select, textarea { min-width: 0; max-width: 100%; }
         <button class="btn btn-sm btn-primary" onclick="addMonthlyMileage()">新增</button>
         <span class="inline-error" id="add-error"></span>
       </div>
-      <div class="table-wrap">
+      <p class="table-scroll-hint">欄位較多時，可左右滑動表格查看。</p>
+      <div class="table-wrap" tabindex="0" role="region" aria-label="可左右滑動的資料表">
         <table>
           <thead>
             <tr>
@@ -683,7 +708,8 @@ input, select, textarea { min-width: 0; max-width: 100%; }
       <div class="table-header">
         <h2>支出明細</h2>
       </div>
-      <div class="table-wrap">
+      <p class="table-scroll-hint">欄位較多時，可左右滑動表格查看。</p>
+      <div class="table-wrap" tabindex="0" role="region" aria-label="可左右滑動的資料表">
         <table>
           <thead>
             <tr>
@@ -1078,7 +1104,7 @@ function switchTab(name) {
   // Agent tab: fill viewport height; other tabs: natural scroll
   const appView = document.getElementById('app-view');
   if (name === 'agent') {
-    appView.style.height = '100dvh';
+    appView.style.height = 'max(100dvh, 680px)';
     appView.style.overflow = 'hidden';
     appView.style.display = 'flex';
     appView.style.flexDirection = 'column';
@@ -2125,6 +2151,45 @@ function renderRunShoeChart(shoeTotals) {
   });
 }
 
+// Keep full data labels for tooltips; only shorten the axis presentation.
+function fitChartLabel(label, chart, widthFraction) {
+  const text = String(label ?? '');
+  const maxWidth = Math.min(160, chart.width * widthFraction);
+  const ctx = chart.ctx;
+  ctx.save();
+  ctx.font = '11px "Segoe UI", system-ui, sans-serif';
+  let result = text;
+  if (ctx.measureText(result).width > maxWidth) {
+    const chars = Array.from(text);
+    while (chars.length && ctx.measureText(chars.join('') + '…').width > maxWidth) chars.pop();
+    result = chars.join('') + '…';
+  }
+  ctx.restore();
+  return result;
+}
+
+// A wrapping HTML legend cannot take space away from the doughnut itself.
+const shoeShareLegend = {
+  id: 'shoeShareLegend',
+  afterUpdate(chart) {
+    const legend = document.getElementById('chart-value-legend');
+    legend.replaceChildren();
+    chart.data.labels.forEach((label, index) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.setAttribute('aria-pressed', String(chart.getDataVisibility(index)));
+      const dot = document.createElement('span');
+      dot.className = 'chart-legend-dot';
+      dot.style.backgroundColor = chart.data.datasets[0].backgroundColor[index];
+      const name = document.createElement('span');
+      name.textContent = label;
+      button.append(dot, name);
+      button.onclick = () => { chart.toggleDataVisibility(index); chart.update(); };
+      legend.append(button);
+    });
+  }
+};
+
 function renderCharts() {
   ['progress', 'cost', 'retire', 'value'].forEach(key => {
     if (chartInstances[key]) {
@@ -2185,7 +2250,7 @@ function renderCharts() {
       },
       scales: {
         x: { stacked: true, grid: { color: gridColor }, ticks: { color: textColor, callback: v => v + ' km' } },
-        y: { stacked: true, grid: { display: false }, ticks: { color: textColor, font: { size: 11 } } }
+        y: { stacked: true, grid: { display: false }, ticks: { color: textColor, font: { size: 11 }, callback: function(value) { return fitChartLabel(this.getLabelForValue(value), this.chart, 0.3); } } }
       }
     }
   });
@@ -2212,7 +2277,7 @@ function renderCharts() {
       maintainAspectRatio: false,
       plugins: { legend: { labels: { color: textColor, font: { size: 11 } } }, tooltip: { callbacks: { label: ctx => '$' + ctx.raw.toFixed(2) + '/km' } } },
       scales: {
-        x: { grid: { display: false }, ticks: { color: textColor, font: { size: 10 } } },
+        x: { grid: { display: false }, ticks: { color: textColor, font: { size: 10 }, maxRotation: 0, callback: function(value) { return fitChartLabel(this.getLabelForValue(value), this.chart, 0.18); } } },
         y: { grid: { color: gridColor }, ticks: { color: textColor, callback: v => '$' + v } }
       }
     }
@@ -2267,8 +2332,8 @@ function renderCharts() {
           grid: { display: false },
           ticks: {
             color: textColor,
-            callback: v => {
-              if (v >= 0 && v < labels.length) return labels[v];
+            callback: function(v) {
+              if (Number.isInteger(v) && v >= 0 && v < labels.length) return fitChartLabel(labels[v], this.chart, 0.3);
               return '';
             },
             font: { size: 10 }
@@ -2293,11 +2358,11 @@ function renderCharts() {
       maintainAspectRatio: false,
       cutout: '60%',
       plugins: {
-        legend: { position: 'right', labels: { color: textColor, font: { size: 11 }, padding: 12 } },
+        legend: { display: false },
         tooltip: { callbacks: { label: ctx => ctx.raw + ' km/月' } }
       }
     },
-    plugins: [{
+    plugins: [shoeShareLegend, {
       id: 'centerText',
       afterDraw(chart) {
         const { ctx, chartArea: { top, bottom, left, right } } = chart;
@@ -3404,7 +3469,7 @@ window.addEventListener('resize', () => {
   const activePanel = document.querySelector('.tab-panel.active');
   if (activePanel && activePanel.dataset.panel === 'agent') {
     const appView = document.getElementById('app-view');
-    appView.style.height = '100dvh';
+    appView.style.height = 'max(100dvh, 680px)';
   }
 });
 </script>

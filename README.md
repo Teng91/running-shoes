@@ -236,6 +236,16 @@ venv/bin/pytest -q --cov=backend --cov-branch --cov-report=term-missing
 node --test unit_tests/frontend_regressions.cjs
 ```
 
+手機版面回歸檢查另外使用 Playwright（WebKit 與 Chromium），包含亮暗模式、長鞋名、多筆資料、空資料、表單欄位重疊、分頁完整顯示、圖表繪圖區及彈出視窗：
+
+```bash
+npm install --no-save --package-lock=false playwright
+npx playwright install chromium webkit
+node unit_tests/frontend_layout.cjs
+```
+
+可設定 `LAYOUT_SCREENSHOT_DIR` 保存手機版截圖供人工檢查；Windows 若使用已安裝的 Edge，可設定 `PLAYWRIGHT_CHROMIUM_CHANNEL=msedge`。WebKit 模擬檢查不等同於 iPhone 實機驗證。
+
 目前驗證結果為後端 **260 passed**，前端回歸測試 **6 passed**；測試數量會隨功能與修正持續增加。
 
 鞋款更新會使用版本檢查，舊畫面遇到衝突時請重新載入後再編輯。改密碼後既有登入會失效，需重新登入。
