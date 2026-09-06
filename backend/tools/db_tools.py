@@ -17,6 +17,7 @@ from collections.abc import Callable
 from sqlalchemy.orm import Session
 
 from backend import models
+from backend.schemas import SHOE_CATEGORIES
 
 
 def _json_result(tool: str, **payload) -> str:
@@ -289,7 +290,6 @@ def shoe_category_status(db: Session, user_id: int, shoe_name: str = "") -> str:
     一雙鞋可對應多個用途（例如 Daily + Tempo）。退役分析會檢查該鞋
     涵蓋的每個類別是否還有其他現役鞋作為替代。
     """
-    categories = ("Daily", "Speed", "Tempo", "Race", "Trail", "Walk")
     shoes = db.query(models.Shoe).filter(models.Shoe.user_id == user_id).all()
     active = [s for s in shoes if not s.is_retired]
     retired = [s for s in shoes if s.is_retired]
@@ -338,7 +338,7 @@ def shoe_category_status(db: Session, user_id: int, shoe_name: str = "") -> str:
         )
 
     coverage = []
-    for category in categories:
+    for category in SHOE_CATEGORIES:
         active_count = sum(category in (s.categories or []) for s in active)
         retired_count = sum(category in (s.categories or []) for s in retired)
         coverage.append({

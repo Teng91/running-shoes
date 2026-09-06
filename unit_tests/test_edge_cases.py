@@ -1,6 +1,7 @@
 """Focused tests for migrations, dependency cleanup, and schema boundaries."""
 
 import asyncio
+import json
 from unittest.mock import MagicMock
 
 import pytest
@@ -10,7 +11,7 @@ from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from backend import database, schemas
+from backend import database, models, schemas
 from backend.main import lifespan
 
 
@@ -115,6 +116,38 @@ def test_lifespan_converts_legacy_category_and_removes_other(monkeypatch):
         assert rows == [(1, '["Daily"]'), (2, '[]')]
     finally:
         asyncio.run(context.__aexit__(None, None, None))
+
+
+def test_discontinued_category_cleanup_preserves_data_and_is_idempotent(monkeypatch):
+    engine = _memory_engine()
+    database.Base.metadata.create_all(engine)
+    sessions = sessionmaker(bind=engine)
+    with sessions() as db:
+        user = models.User(username="migration-test", hashed_password="hash")
+        db.add(user)
+        db.flush()
+        for index, categories in enumerate([
+            ["Daily", "Walk", "Tempo", "Walk", "Other"], ["Walk"], ["Trail"], [],
+        ]):
+            db.add(models.Shoe(
+                user_id=user.id, brand="Test", model=str(index), date="2026-01-01",
+                categories=categories, is_retired=index == 1, mileage=123.45, version=5,
+            ))
+        db.commit()
+    monkeypatch.setattr("backend.main.engine", engine)
+    monkeypatch.setattr("backend.main.SessionLocal", sessions)
+    monkeypatch.delenv("SEED_DATA", raising=False)
+    for _ in range(2):
+        context = _run_lifespan(FastAPI())
+        asyncio.run(context.__aexit__(None, None, None))
+        with engine.connect() as conn:
+            rows = conn.execute(text(
+                "SELECT categories, version, mileage, is_retired FROM shoes ORDER BY id"
+            )).fetchall()
+        assert [json.loads(row[0]) for row in rows] == [["Daily", "Tempo"], [], ["Trail"], []]
+        assert [row[1] for row in rows] == [6, 6, 5, 5]
+        assert all(row[2] == 123.45 for row in rows)
+        assert rows[1][3] == 1
 
 
 def test_lifespan_repairs_partial_owner_migration_when_users_table_exists(monkeypatch):

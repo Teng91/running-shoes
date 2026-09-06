@@ -774,7 +774,6 @@ input::-webkit-date-and-time-value { text-align: left; min-width: 0; }
           <label><input type="checkbox" value="Tempo"> Tempo</label>
           <label><input type="checkbox" value="Race"> Race</label>
           <label><input type="checkbox" value="Trail"> Trail</label>
-          <label id="walk-category-option" style="display:none"><input type="checkbox" value="Walk"> Walk</label>
         </div>
       </div>
     </div>
@@ -1452,13 +1451,17 @@ function renderAlerts() {
   container.innerHTML = alerts.map(({ shoe: s, calc: c }) => {
     const urgent = c.lifeProgress >= 0.9;
     const pct = Math.round(c.lifeProgress * 100);
-    const remaining = shoes.filter(other => other.id !== s.id && shoeCategories(other).some(c => shoeCategories(s).includes(c))).length;
+    const categories = shoeCategories(s);
+    const uncovered = categories.filter(category => !shoes.some(other =>
+      other.id !== s.id && shoeCategories(other).includes(category)));
     const lifecycleMessage = urgent
       ? `已使用 ${pct}%，可以準備換鞋。`
       : `已使用 ${pct}%，開始注意這雙鞋的使用狀況。`;
-    const coverageMessage = remaining > 0
-      ? `同類別還有 ${remaining} 雙現役鞋，其實不用急著補；目前單純注意這雙鞋即可。`
-      : '同類別沒有其他現役鞋，建議準備補鞋。';
+    const coverageMessage = categories.length === 0
+      ? '尚未設定用途類別，請先分類再評估是否需要補鞋。'
+      : uncovered.length > 0
+        ? `${esc(uncovered.join('、'))} 沒有其他現役鞋，建議準備補鞋。`
+        : '所有用途類別都有其他現役鞋可替代，目前單純注意這雙鞋即可。';
     return `<div class="shoe-alert${urgent ? ' urgent' : ''}">
       <strong>${esc(s.brand)} ${esc(s.model)}</strong>：<span>${lifecycleMessage} ${coverageMessage}</span>
     </div>`;
@@ -1485,7 +1488,7 @@ function renderTable() {
       <td style="color:${pc}">${fmtPct(c.lifeProgress)}</td>
       <td class="editable" ondblclick="inlineEditRow(shoes, ${i}, 'monthly_km', this)">${s.monthly_km}</td>
       <td>${fmtDate(c.retireDate)}</td>
-      <td>${esc(shoeCategories(s).join(', '))}</td>
+      <td>${esc(shoeCategories(s).join(', ') || '未分類')}</td>
       <td>${esc(s.size)}</td>
       <td>${fmtMoney(s.price)}</td>
       <td>${fmtMoney(s.orig_price)}</td>
@@ -1515,7 +1518,7 @@ function renderRetiredTable() {
       <td class="editable" ondblclick="inlineEditRow(retiredShoes, ${i}, 'expected_mileage', this)">${s.expected_mileage}</td>
       <td>${fmtCostPerKm(c.expectedCost)}</td>
       <td style="color:${pc}">${fmtPct(c.lifeProgress)}</td>
-      <td>${esc(shoeCategories(s).join(', '))}</td>
+      <td>${esc(shoeCategories(s).join(', ') || '未分類')}</td>
       <td>${esc(s.size)}</td>
       <td>${fmtMoney(s.price)}</td>
       <td>${fmtMoney(s.orig_price)}</td>
@@ -2828,7 +2831,7 @@ function renderSpendingTable() {
       <td>${fmtMoney(s.price)}</td>
       <td>${fmtMoney(s.orig_price)}</td>
       <td>${discount}%</td>
-      <td>${esc(shoeCategories(s).join(', '))}</td>
+      <td>${esc(shoeCategories(s).join(', ') || '未分類')}</td>
       <td>${status}</td>
     </tr>`;
   }).join('');
@@ -2867,7 +2870,6 @@ async function inlineEditRow(arr, idx, field, el) {
 // ====== Shoe Category Helpers ======
 function getSelectedCategories() {
   const checked = document.querySelectorAll('#f-category-group input[type="checkbox"]:checked');
-  if (checked.length === 0) return ['Daily']; // Default to Daily if none selected
   return Array.from(checked).map(cb => cb.value);
 }
 
@@ -2938,11 +2940,6 @@ class ShoeModal {
   }
 
   _updateUI({ title, showDelete, showMove, moveText, monthly, monthlyVisible }) {
-    // Walk is only selectable for retired shoes. Keep legacy checked values
-    // so editing unrelated fields does not silently erase existing categories.
-    const walkOption = document.getElementById('walk-category-option');
-    walkOption.style.display = this.mode === 'editRetired' ? '' : 'none';
-    walkOption.querySelector('input').disabled = this.mode !== 'editRetired';
     this.titleEl.textContent = title;
     this.btnDelete.style.display = showDelete ? 'inline-block' : 'none';
     this.btnMove.style.display = showMove ? 'inline-block' : 'none';
@@ -2973,17 +2970,25 @@ class ShoeModal {
   }
 
   async submit() {
+    if (this.saving) return;
     const data = this._payload();
     if (!data.brand || !data.model || !data.date) return alert('請填寫品牌、鞋款、日期');
+    this.saving = true;
+    const saveButton = this.el.querySelector('.btn-primary');
+    saveButton.disabled = true;
     try {
       if (this.mode === 'create') await apiPost('/shoes', data);
       else {
         const changes = Object.fromEntries(Object.entries(data).filter(([key, value]) => JSON.stringify(value) !== JSON.stringify(this.shoe[key])));
         await apiPut('/shoes/' + this.shoe.id, { ...changes, expected_version: this.shoe.version });
       }
-    } catch (e) { return alert(e.message || '儲存失敗'); }
-    this.close();
-    await loadData();
+      this.close();
+      await loadData();
+    } catch (e) { alert(e.message || '儲存失敗'); }
+    finally {
+      this.saving = false;
+      saveButton.disabled = false;
+    }
   }
 
   async delete() {
