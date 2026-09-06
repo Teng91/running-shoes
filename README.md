@@ -236,6 +236,8 @@ venv/bin/pytest -q --cov=backend --cov-branch --cov-report=term-missing
 node --test unit_tests/frontend_regressions.cjs
 ```
 
+目前驗證結果為後端 **260 passed**，前端回歸測試 **6 passed**；測試數量會隨功能與修正持續增加。
+
 鞋款更新會使用版本檢查，舊畫面遇到衝突時請重新載入後再編輯。改密碼後既有登入會失效，需重新登入。
 啟動時會自動為既有資料庫補上鞋款與登入版本欄位，不會重算歷史里程。
 
