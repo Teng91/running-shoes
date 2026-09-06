@@ -774,7 +774,7 @@ input::-webkit-date-and-time-value { text-align: left; min-width: 0; }
           <label><input type="checkbox" value="Tempo"> Tempo</label>
           <label><input type="checkbox" value="Race"> Race</label>
           <label><input type="checkbox" value="Trail"> Trail</label>
-          <label><input type="checkbox" value="Walk"> Walk</label>
+          <label id="walk-category-option" style="display:none"><input type="checkbox" value="Walk"> Walk</label>
         </div>
       </div>
     </div>
@@ -1406,9 +1406,9 @@ function renderCards() {
   ).join('');
 }
 
-const SHOE_CATEGORIES = ['Daily', 'Speed', 'Tempo', 'Race', 'Trail', 'Walk'];
+const SHOE_CATEGORIES = ['Daily', 'Speed', 'Tempo', 'Race', 'Trail'];
 // Categories shown in the summary cards ("need to replenish" alert) —
-// Trail/Walk are excluded since you don't track replacement needs for them.
+// Trail is excluded since you don't track replacement needs for it.
 const SUMMARY_CATEGORIES = ['Daily', 'Speed', 'Tempo', 'Race'];
 
 // Safely get a shoe's categories as an array (handles both old string and new array formats)
@@ -2938,6 +2938,11 @@ class ShoeModal {
   }
 
   _updateUI({ title, showDelete, showMove, moveText, monthly, monthlyVisible }) {
+    // Walk is only selectable for retired shoes. Keep legacy checked values
+    // so editing unrelated fields does not silently erase existing categories.
+    const walkOption = document.getElementById('walk-category-option');
+    walkOption.style.display = this.mode === 'editRetired' ? '' : 'none';
+    walkOption.querySelector('input').disabled = this.mode !== 'editRetired';
     this.titleEl.textContent = title;
     this.btnDelete.style.display = showDelete ? 'inline-block' : 'none';
     this.btnMove.style.display = showMove ? 'inline-block' : 'none';
