@@ -6,6 +6,7 @@ COPY backend backend/
 COPY frontend frontend/
 RUN useradd --create-home appuser && mkdir -p /data && chown appuser:appuser /data
 ENV DB_DIR=/data
+ENV ENVIRONMENT=production
 USER appuser
 EXPOSE 8000
 CMD ["sh", "-c", "uvicorn backend.main:app --host 0.0.0.0 --port ${PORT:-8000}"]

@@ -317,6 +317,9 @@ async def lifespan(app: FastAPI):
         # Old schema: create users table, add user_id to shoes, assign to "Joy"
         user_table = cast(Table, models.User.__table__)
         Base.metadata.create_all(bind=engine, tables=[user_table])
+        with engine.begin() as conn:
+            if "token_version" not in {c["name"] for c in inspect(conn).get_columns("users")}:
+                conn.execute(text("ALTER TABLE users ADD COLUMN token_version INTEGER NOT NULL DEFAULT 0"))
         db = SessionLocal()
         try:
             joy_user = db.query(models.User).filter(models.User.username == "Joy").first()
@@ -341,6 +344,13 @@ async def lifespan(app: FastAPI):
             db.close()
 
     Base.metadata.create_all(bind=engine)
+
+    # Add concurrency/session versions to existing databases without changing data.
+    for table, column in (("users", "token_version"), ("shoes", "version")):
+        columns = {item["name"] for item in inspect(engine).get_columns(table)}
+        if column not in columns:
+            with engine.begin() as conn:
+                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} INTEGER NOT NULL DEFAULT 0"))
 
     # Incremental migration for Strava provenance on run records.
     run_columns = {column["name"] for column in inspect(engine).get_columns("runs")}
@@ -481,7 +491,7 @@ def login(request: Request, payload: schemas.UserLogin, db: Session = Depends(ge
     user = db.query(models.User).filter(models.User.username == payload.username).first()
     if not user or not verify_password(payload.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Incorrect username or password")
-    token = create_access_token(data={"sub": user.username})
+    token = create_access_token(data={"sub": user.username, "token_version": user.token_version})
     return {"access_token": token, "token_type": "bearer"}
 
 
@@ -504,6 +514,7 @@ def change_password(
         raise HTTPException(status_code=401, detail="Incorrect username or old password")
     if not verify_password(payload.old_password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Incorrect username or old password")
+    user.token_version += 1
     user.hashed_password = get_password_hash(payload.new_password)
     db.commit()
     return {"ok": True}
@@ -568,9 +579,20 @@ def update_shoe(
     if not shoe:
         raise HTTPException(status_code=404, detail="Shoe not found")
     update_data = payload.model_dump(exclude_unset=True)
-    for k, v in update_data.items():
-        setattr(shoe, k, v)
+    expected_version = update_data.pop("expected_version", None)
+    query = db.query(models.Shoe).filter(
+        models.Shoe.id == shoe_id, models.Shoe.user_id == current_user.id,
+    )
+    if expected_version is not None:
+        query = query.filter(models.Shoe.version == expected_version)
     try:
+        update_data["version"] = models.Shoe.version + 1
+        changed = query.update(
+            {getattr(models.Shoe, key): value for key, value in update_data.items()},
+            synchronize_session=False,
+        )
+        if not changed:
+            raise HTTPException(status_code=409, detail="鞋款已被更新，請重新載入後再編輯")
         db.commit()
     except Exception:
         db.rollback()
@@ -642,6 +664,7 @@ def _apply_run_mileage_deltas(
             models.Shoe.user_id == user_id,
         ).update(
             {
+                models.Shoe.version: models.Shoe.version + 1,
                 models.Shoe.mileage: func.max(
                     0,
                     func.coalesce(models.Shoe.mileage, 0) + round(delta, 2),
@@ -752,6 +775,7 @@ def _parse_strava_csv(raw: bytes) -> tuple[list[dict[str, object]], int, list[st
             try:
                 activity_id = (row.get(fields["id"] or "") or "").strip()
                 date_value = _parse_strava_date(row.get(fields["date"] or "") or "")
+                schemas._validate_iso_date(date_value)
                 distance_m = float((row.get(fields["distance"] or "") or "").replace(",", "").strip())
                 km = round(distance_m / 1000, 2)
                 if (
