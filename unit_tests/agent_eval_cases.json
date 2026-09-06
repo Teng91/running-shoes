@@ -1,0 +1,66 @@
+[
+  {
+    "id": "private-monthly-mileage",
+    "message": "我的最新月跑量是多少？",
+    "expected_database_tools": ["monthly_mileage_stats"],
+    "expected_web_queries": 0,
+    "tools_offered": true
+  },
+  {
+    "id": "private-shoe-list",
+    "message": "列出我的跑鞋",
+    "expected_database_tools": ["list_my_shoes"],
+    "expected_web_queries": 0,
+    "tools_offered": true
+  },
+  {
+    "id": "private-shoe-lifecycle",
+    "message": "我的鞋快壞了嗎？",
+    "expected_database_tools": ["list_my_shoes", "nearing_end_of_life"],
+    "expected_web_queries": 0,
+    "tools_offered": true
+  },
+  {
+    "id": "market-price",
+    "message": "Rebel v5 現在台灣價格多少？",
+    "expected_database_tools": [],
+    "expected_web_queries": 2,
+    "tools_offered": true
+  },
+  {
+    "id": "personal-product-fit",
+    "message": "Rebel v5 適合我嗎？",
+    "expected_database_tools": ["list_my_shoes", "monthly_mileage_stats"],
+    "expected_web_queries": 2,
+    "tools_offered": true
+  },
+  {
+    "id": "category-gap",
+    "message": "我目前缺什麼類別？",
+    "expected_database_tools": ["shoe_category_status"],
+    "expected_web_queries": 0,
+    "tools_offered": true
+  },
+  {
+    "id": "combined-private-context",
+    "message": "分析我的月跑量和鞋櫃",
+    "expected_database_tools": ["list_my_shoes", "monthly_mileage_stats"],
+    "expected_web_queries": 0,
+    "tools_offered": true
+  },
+  {
+    "id": "latest-market-shoes",
+    "message": "最新市售跑鞋有哪些？",
+    "expected_database_tools": [],
+    "expected_web_queries": 2,
+    "tools_offered": true
+  },
+  {
+    "id": "small-talk",
+    "message": "你好",
+    "expected_database_tools": [],
+    "expected_web_queries": 0,
+    "tools_offered": false
+  }
+]
+
