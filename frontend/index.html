@@ -443,6 +443,7 @@ tr:hover td { background: rgba(99,102,241,0.05); }
 
 <!-- App View -->
 <div class="container" id="app-view" style="display:none;">
+  <div id="data-load-error" role="alert" hidden>載入資料失敗，目前顯示上次載入的資料。<button class="btn" onclick="loadData()">重新載入</button></div>
   <div class="app-header">
     <h1>跑鞋追蹤 Dashboard</h1>
     <div class="user-info">
@@ -534,7 +535,7 @@ tr:hover td { background: rgba(99,102,241,0.05); }
           <div class="form-group shoe-field"><label for="run-shoe">穿哪雙鞋</label><select id="run-shoe" required></select></div>
         </div>
         <div class="inline-error" id="run-error"></div>
-        <button class="btn btn-primary" type="submit">+ 新增跑步紀錄</button>
+        <button class="btn btn-primary" id="add-run-btn" type="submit">+ 新增跑步紀錄</button>
       </form>
     </div>
 
@@ -828,6 +829,9 @@ function setAuth(token, username) {
 }
 
 function clearAuth() {
+  shoes = []; retiredShoes = []; monthlyMileages = [];
+  monthlySpending = []; runs = []; stravaImports = [];
+  dataLoadGeneration += 1;
   authToken = null;
   currentUser = null;
   localStorage.removeItem('token');
@@ -851,6 +855,7 @@ function showAppView() {
   document.getElementById('auth-view').style.display = 'none';
   document.getElementById('app-view').style.display = '';
   document.getElementById('user-label').textContent = currentUser || '';
+  render();
   document.body.style.opacity = '1';
 }
 
@@ -914,7 +919,10 @@ async function apiPut(url, body) {
     body: JSON.stringify(body),
   });
   if (res.status === 401) { clearAuth(); showLoginView(); throw new Error('Unauthorized'); }
-  if (!res.ok) throw new Error('PUT ' + url + ' failed: ' + res.status);
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({}));
+    throw new Error(typeof error.detail === 'string' ? error.detail : '儲存失敗：' + res.status);
+  }
   return res.json();
 }
 
@@ -1186,7 +1194,11 @@ function toggleTheme() {
 // Initialize theme immediately on script load
 applyTheme(currentTheme);
 
+let dataLoadGeneration = 0;
 async function loadData() {
+  const generation = ++dataLoadGeneration;
+  const token = authToken;
+  const error = document.getElementById('data-load-error');
   try {
     const [active, retired, monthly, spending, runData, importHistory] = await Promise.all([
       apiGet('/shoes/active'),
@@ -1199,6 +1211,8 @@ async function loadData() {
         return [];
       }),
     ]);
+    if (generation !== dataLoadGeneration || token !== authToken) return;
+    error.hidden = true;
     shoes = active;
     retiredShoes = retired;
     monthlyMileages = monthly;
@@ -1207,12 +1221,9 @@ async function loadData() {
     stravaImports = importHistory;
   } catch (e) {
     console.error('載入資料失敗:', e);
-    shoes = [];
-    retiredShoes = [];
-    monthlyMileages = [];
-    monthlySpending = [];
-    runs = [];
-    stravaImports = [];
+    if (generation !== dataLoadGeneration || token !== authToken) return;
+    error.hidden = false;
+    return;
   }
   // Default selected year to the most recent year present
   if (monthlyMileages.length > 0) {
@@ -1733,7 +1744,9 @@ function monthRuns() {
   return runs.filter(run => run.date.slice(0, 7) === month);
 }
 
+let runSaving = false;
 async function addRun() {
+  if (runSaving) return;
   const error = document.getElementById('run-error');
   error.textContent = '';
   const date = document.getElementById('run-date').value;
@@ -1744,12 +1757,17 @@ async function addRun() {
     return;
   }
   try {
+    runSaving = true;
+    document.getElementById('add-run-btn').disabled = true;
     await apiPost('/runs', { date, km, shoe_id: shoeId });
     document.getElementById('run-km').value = '';
     document.getElementById('run-month').value = date.slice(0, 7);
     await loadData();
   } catch (e) {
     error.textContent = e.message || '新增失敗，請稍後再試。';
+  } finally {
+    runSaving = false;
+    document.getElementById('add-run-btn').disabled = false;
   }
 }
 
@@ -2696,20 +2714,24 @@ async function inlineEditRow(arr, idx, field, el) {
   input.type = 'number';
   input.className = 'inline-input';
   input.value = arr[idx][field];
+  const shoe = { ...arr[idx] };
+  let committed = false;
   const commit = async () => {
+    if (committed) return;
+    committed = true;
     const val = parseFloat(input.value);
-    if (!isNaN(val) && val >= 0) {
-      arr[idx][field] = val;
+    if (Number.isFinite(val) && val >= 0) {
       try {
-        await apiPut('/shoes/' + arr[idx].id, arr[idx]);
+        await apiPut('/shoes/' + shoe.id, { [field]: val, expected_version: shoe.version });
+        await loadData();
       } catch (e) {
-        console.error('更新失敗:', e);
+        alert(e.message || '更新失敗');
       }
     }
     render();
   };
   input.addEventListener('blur', commit);
-  input.addEventListener('keydown', e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') render(); });
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') { committed = true; render(); } });
   el.innerHTML = '';
   el.appendChild(input);
   input.focus();
@@ -2754,7 +2776,7 @@ class ShoeModal {
 
   openForEdit(shoe, isRetired) {
     this.mode = isRetired ? 'editRetired' : 'editActive';
-    this.shoe = shoe;
+    this.shoe = { ...shoe };
     this._fillForm(shoe);
     this._updateUI({
       title: isRetired ? '編輯退役跑鞋' : '編輯跑鞋',
@@ -2770,7 +2792,7 @@ class ShoeModal {
   // ── 內部邏輯 ──────────────────────────────────────────────
   _resetForm() {
     Object.values(this.formIds).forEach(id => document.getElementById(id).value = '');
-    document.getElementById('f-date').value = new Date().toISOString().slice(0, 10);
+    document.getElementById('f-date').value = localDateISO();
     document.getElementById('f-expected').value = 800;
     // Reset category checkboxes — default to "Daily" checked
     document.querySelectorAll('#f-category-group input[type="checkbox"]')
@@ -2823,8 +2845,11 @@ class ShoeModal {
     if (!data.brand || !data.model || !data.date) return alert('請填寫品牌、鞋款、日期');
     try {
       if (this.mode === 'create') await apiPost('/shoes', data);
-      else await apiPut('/shoes/' + this.shoe.id, data);
-    } catch (e) { return alert('儲存失敗'); }
+      else {
+        const changes = Object.fromEntries(Object.entries(data).filter(([key, value]) => JSON.stringify(value) !== JSON.stringify(this.shoe[key])));
+        await apiPut('/shoes/' + this.shoe.id, { ...changes, expected_version: this.shoe.version });
+      }
+    } catch (e) { return alert(e.message || '儲存失敗'); }
     this.close();
     await loadData();
   }
@@ -2841,7 +2866,7 @@ class ShoeModal {
     const targetRetired = this.mode === 'editActive';
     if (!confirm(`確定要移至${targetRetired ? '退役' : '現役'}？`)) return;
     try {
-      const payload = { ...this.shoe, is_retired: targetRetired };
+      const payload = { is_retired: targetRetired, expected_version: this.shoe.version, monthly_km: this.shoe.monthly_km };
       if (targetRetired) {
         payload.monthly_km = 0;
       } else if (!payload.monthly_km) {
@@ -2855,7 +2880,7 @@ class ShoeModal {
           : 60;
       }
       await apiPut('/shoes/' + this.shoe.id, payload);
-    } catch { return alert('移動失敗'); }
+    } catch (e) { return alert(e.message || '移動失敗'); }
     this.close();
     await loadData();
   }
@@ -3132,7 +3157,7 @@ async function sendAgentMessage(retryText) {
       },
       body: JSON.stringify({
         user_message: text,
-        history: agentHistory,
+        history: agentHistory.slice(-20).map(turn => ({ ...turn, content: turn.content.slice(0, 12000) })),
         provider: provider,
         model: model,
       }),
