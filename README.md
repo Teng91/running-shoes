@@ -124,7 +124,7 @@ MODEL_REFRESH_COOLDOWN_SECONDS=60
 
 ## 功能特色
 
-- **跑鞋全生命週期追蹤**：記錄品牌、鞋款、用途類別 (現役可選 Daily / Speed / Tempo / Race / Trail，可多選；Walk 僅供退役鞋選用)、購買日期、尺寸、價格、里程、預期壽命、月跑量
+- **跑鞋全生命週期追蹤**：記錄品牌、鞋款、用途類別 (Daily / Speed / Tempo / Race / Trail，可多選)、購買日期、尺寸、價格、里程、預期壽命、月跑量
 - **鞋櫃類別覆蓋分析**：判斷某雙鞋退役後其所有用途是否仍有其他現役鞋覆蓋，避免不必要地補鞋 (支援多用途鞋款)
 - **智慧試算**：自動計算每 km 成本、折數、生命進度、預估退役日期
 - **圖表視覺化**：生命進度條、每 km 成本比較、退役時間軸、月跑量佔比（Chart.js）
@@ -199,7 +199,7 @@ Strava 匯入後會自動同步跑鞋總里程與對應月份的月跑量，只�
 | `monthly_mileage_stats` | 由後端計算總跑量、月均、近期趨勢及最近六個有跑量月份明細 |
 | `nearing_end_of_life` | 找出達提醒門檻的現役鞋，並判斷同類別是否已有替代鞋 |
 | `compare_shoes` | 比較兩雙鞋的用途、里程、壽命與每公里成本 |
-| `shoe_category_status` | 分析 Daily / Speed / Tempo / Race / Trail / Walk 覆蓋及補鞋需求 |
+| `shoe_category_status` | 分析 Daily / Speed / Tempo / Race / Trail 覆蓋及補鞋需求 |
 | `web_search` | 搜尋市售鞋款、規格、評價與價格來源 |
 
 需要設定 `OPENROUTER_API_KEY`（見上方）。前端預設選取 OpenRouter 最近 7 天 token
@@ -246,10 +246,14 @@ node unit_tests/frontend_layout.cjs
 
 可設定 `LAYOUT_SCREENSHOT_DIR` 保存手機版截圖供人工檢查；Windows 若使用已安裝的 Edge，可設定 `PLAYWRIGHT_CHROMIUM_CHANNEL=msedge`。WebKit 模擬檢查不等同於 iPhone 實機驗證。
 
-目前驗證結果為後端 **260 passed**，前端回歸測試 **6 passed**；測試數量會隨功能與修正持續增加。
+目前驗證結果為後端 **262 passed**，前端回歸測試 **9 passed**；測試數量會隨功能與修正持續增加。
+版面檢查涵蓋 WebKit／Chromium、亮／暗模式與 7 組直橫向尺寸，共 28 組設定，檢查五個分頁、表單、圖表、彈窗及空資料狀態。
 
 鞋款更新會使用版本檢查，舊畫面遇到衝突時請重新載入後再編輯。改密碼後既有登入會失效，需重新登入。
 啟動時會自動為既有資料庫補上鞋款與登入版本欄位，不會重算歷史里程。
+
+現役與退役鞋皆只使用 Daily、Speed、Tempo、Race、Trail 五種用途分類。啟動時會移除既有資料中的 Walk 與舊 Other 標記，保留其他類別、里程及退役狀態；原本只有 Walk 的鞋會顯示「未分類」，不會自動改成 Daily。清理會更新受影響鞋款的版本，重複啟動不會再次修改已清理資料。
+新增跑鞋預設勾選 Daily，也可以取消所有類別；編輯未分類鞋款會保留空分類。換鞋提醒會檢查每個用途是否都有現役替代鞋，未分類鞋款則提示先分類。
 
 ## Docker 部署
 

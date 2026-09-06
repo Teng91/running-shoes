@@ -131,8 +131,8 @@ def test_shoe_category_status_includes_trail(seeded_db):
     assert out["purchase_recommendation"] == "prepare_replacement_purchase"
 
 
-def test_shoe_category_status_counts_walk(seeded_db):
-    """Walk is a valid category in the analysis tuple (frontend allows selecting it)."""
+def test_shoe_category_status_excludes_walk(seeded_db):
+    """Coverage only includes supported running categories."""
     db, uid = seeded_db
     shoe = Shoe(
         user_id=uid, brand="Nike", model="Free RN", date="2026-01-01",
@@ -141,9 +141,9 @@ def test_shoe_category_status_counts_walk(seeded_db):
     db.add(shoe)
     db.commit()
     out = _result(db_tools.shoe_category_status(db, uid))
-    walk = next(item for item in out["categories"] if item["category"] == "Walk")
-    assert walk["active_shoe_count"] == 1
-    assert walk["has_active_coverage"] is True
+    assert {item["category"] for item in out["categories"]} == {
+        "Daily", "Speed", "Tempo", "Race", "Trail",
+    }
 
 
 def test_shoe_category_status_multi_category_counts_for_all_purposes(seeded_db):

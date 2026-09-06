@@ -385,25 +385,19 @@ async def lifespan(app: FastAPI):
             else:
                 # Table exists but has no category column at all — add the new one
                 conn.execute(text("ALTER TABLE shoes ADD COLUMN categories TEXT NOT NULL DEFAULT '[]'"))
-        # Other was a temporary category; remove it from any JSON arrays.
-        # Use a compatible approach: find ids with 'Other' and update individually.
-        # This avoids "UPDATE ... FROM json_each" which requires SQLite 3.38+.
-        # Use `shoes.id` (our primary key) to avoid ambiguous column in join.
-        rows_with_other = conn.execute(text("""
-            SELECT shoes.id FROM shoes,
-            json_each(categories)
-            WHERE json_each.value = 'Other'
-        """)).fetchall()
-        for (sid,) in rows_with_other:
-            conn.execute(text("""
-                UPDATE shoes
-                SET categories = json_remove(categories,
-                    (SELECT '$[' || key || ']'
-                     FROM json_each(categories)
-                     WHERE value = 'Other'
-                     LIMIT 1))
-                WHERE id = :sid
-            """), {"sid": sid})
+        # Remove discontinued categories in one pass, including repeated values.
+        # Preserve the remaining labels and leave formerly Walk-only shoes unclassified.
+        conn.execute(text("""
+            UPDATE shoes
+            SET categories = (
+                SELECT json_group_array(value) FROM json_each(shoes.categories)
+                WHERE value NOT IN ('Other', 'Walk')
+            ), version = version + 1
+            WHERE EXISTS (
+                SELECT 1 FROM json_each(shoes.categories)
+                WHERE value IN ('Other', 'Walk')
+            )
+        """))
 
     seed_default_data()
     yield
