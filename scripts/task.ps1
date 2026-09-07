@@ -1,6 +1,6 @@
 param(
     [Parameter(Position = 0)]
-    [ValidateSet("setup", "test-fast", "frontend-test", "frontend-layout", "eval-agent", "verify")]
+    [ValidateSet("setup", "test-fast", "frontend-test", "frontend-layout", "eval-agent", "docs-check", "verify")]
     [string]$Task = "verify"
 )
 
@@ -58,6 +58,14 @@ function Invoke-FrontendTests {
     Invoke-Checked "Frontend regression tests" { & node --test unit_tests/frontend_regressions.cjs }
 }
 
+function Invoke-DocsCheck {
+    $python = Get-ProjectPython
+    if (-not $env:SECRET_KEY) {
+        $env:SECRET_KEY = "test-only-harness-secret-key-not-for-production"
+    }
+    Invoke-Checked "README consistency" { & $python scripts/check_docs.py }
+}
+
 switch ($Task) {
     "setup" {
         if (-not (Test-Path -LiteralPath (Join-Path $ProjectRoot "venv"))) {
@@ -69,7 +77,7 @@ switch ($Task) {
     }
     "test-fast" {
         $python = Get-ProjectPython
-        Invoke-Checked "Ruff" { & $python -m ruff check backend unit_tests }
+        Invoke-Checked "Ruff" { & $python -m ruff check backend scripts unit_tests }
         Invoke-BackendTests
     }
     "frontend-test" { Invoke-FrontendTests }
@@ -80,10 +88,12 @@ switch ($Task) {
         Invoke-Checked "Frontend layout tests" { & node unit_tests/frontend_layout.cjs }
     }
     "eval-agent" { Invoke-AgentEvals }
+    "docs-check" { Invoke-DocsCheck }
     "verify" {
         $python = Get-ProjectPython
-        Invoke-Checked "Ruff" { & $python -m ruff check backend unit_tests }
+        Invoke-Checked "Ruff" { & $python -m ruff check backend scripts unit_tests }
         Invoke-Checked "mypy" { & $python -m mypy backend }
+        Invoke-DocsCheck
         Invoke-BackendTests
         Invoke-FrontendTests
     }

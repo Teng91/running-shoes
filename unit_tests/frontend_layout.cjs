@@ -105,9 +105,10 @@ async function run(engine, name) {
           }
         }
         await page.locator('.tab[data-tab="shoes"]').click();
-        await page.locator('#chart-value-legend button').first().click();
-        assert.equal(await page.evaluate(() => chartInstances.value.getDataVisibility(0)), false);
-        await page.locator('#chart-value-legend button').first().click();
+        assert.equal(await page.locator('#chart-value-legend').count(), 0, 'monthly share legend is removed');
+        const pairedHeights = await page.locator('#chart-retire, #chart-value').evaluateAll(canvases =>
+          canvases.map(canvas => canvas.closest('.chart-box').getBoundingClientRect().height));
+        assert.ok(Math.abs(pairedHeights[0] - pairedHeights[1]) <= 1, 'retirement and monthly share cards have equal heights');
         for (const id of await page.locator('.modal-overlay').evaluateAll(es => es.map(e => e.id))) {
           await page.evaluate(id => document.getElementById(id).classList.add('active'), id);
           await assertLayout(page, `${name} ${theme} ${width} ${id}`);

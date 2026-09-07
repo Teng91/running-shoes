@@ -378,15 +378,6 @@ input[type="date"], input[type="month"] {
   min-height: 44px;
 }
 input::-webkit-date-and-time-value { text-align: left; min-width: 0; }
-.chart-legend { display: grid; gap: 6px; margin-top: 12px; }
-.chart-legend button {
-  display: flex; align-items: baseline; gap: 8px; width: 100%; min-width: 0;
-  border: 1px solid var(--border); border-radius: 6px; padding: 8px;
-  background: var(--item-bg); color: var(--text); text-align: left;
-  font: inherit; font-size: 12px; cursor: pointer; overflow-wrap: anywhere;
-}
-.chart-legend button[aria-pressed="false"] { text-decoration: line-through; opacity: .65; }
-.chart-legend-dot { width: 9px; height: 9px; flex: 0 0 9px; border-radius: 50%; }
 .app-header, .user-info, .table-header, .table-header > div,
 .chart-title-row, .agent-config, .run-filter, .modal-actions { flex-wrap: wrap; gap: 10px; }
 .table-header > div { display: flex; align-items: center; }
@@ -545,7 +536,7 @@ input::-webkit-date-and-time-value { text-align: left; min-width: 0; }
       <div class="chart-box"><h3>生命進度</h3><div class="chart-canvas"><canvas id="chart-progress"></canvas></div></div>
       <div class="chart-box"><h3>每 km 成本比較</h3><div class="chart-canvas"><canvas id="chart-cost"></canvas></div></div>
       <div class="chart-box"><h3>退役時間軸</h3><div class="chart-canvas"><canvas id="chart-retire"></canvas></div></div>
-      <div class="chart-box"><h3>月跑量佔比</h3><div class="chart-canvas"><canvas id="chart-value"></canvas></div><div id="chart-value-legend" class="chart-legend" aria-label="月跑量佔比圖例"></div></div>
+      <div class="chart-box"><h3>月跑量佔比</h3><div class="chart-canvas"><canvas id="chart-value"></canvas></div></div>
     </div>
 
     <div class="table-section">
@@ -2171,25 +2162,43 @@ function fitChartLabel(label, chart, widthFraction) {
   return result;
 }
 
-// A wrapping HTML legend cannot take space away from the doughnut itself.
-const shoeShareLegend = {
-  id: 'shoeShareLegend',
-  afterUpdate(chart) {
-    const legend = document.getElementById('chart-value-legend');
-    legend.replaceChildren();
-    chart.data.labels.forEach((label, index) => {
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.setAttribute('aria-pressed', String(chart.getDataVisibility(index)));
-      const dot = document.createElement('span');
-      dot.className = 'chart-legend-dot';
-      dot.style.backgroundColor = chart.data.datasets[0].backgroundColor[index];
-      const name = document.createElement('span');
-      name.textContent = label;
-      button.append(dot, name);
-      button.onclick = () => { chart.toggleDataVisibility(index); chart.update(); };
-      legend.append(button);
+// Keep the monthly allocation readable without a tall legend below the chart.
+const shoeShareLabels = {
+  id: 'shoeShareLabels',
+  afterDatasetsDraw(chart) {
+    const dataset = chart.data.datasets[0];
+    const values = dataset.data.map(Number);
+    const total = values.reduce((sum, value) => sum + Math.max(0, value || 0), 0);
+    if (!total) return;
+
+    const meta = chart.getDatasetMeta(0);
+    const { ctx } = chart;
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#fff';
+    ctx.strokeStyle = 'rgba(15, 23, 42, .65)';
+    ctx.lineWidth = 3;
+    ctx.lineJoin = 'round';
+
+    meta.data.forEach((arc, index) => {
+      const value = values[index];
+      if (!(value > 0) || arc.hidden) return;
+      const angle = (arc.startAngle + arc.endAngle) / 2;
+      const radius = (arc.innerRadius + arc.outerRadius) / 2;
+      const x = arc.x + Math.cos(angle) * radius;
+      const y = arc.y + Math.sin(angle) * radius;
+      const km = Number.isInteger(value) ? String(value) : value.toFixed(1);
+      const percentage = value / total * 100;
+
+      ctx.font = '700 10px "Segoe UI", system-ui, sans-serif';
+      ctx.strokeText(`${km} km`, x, y - 6);
+      ctx.fillText(`${km} km`, x, y - 6);
+      ctx.font = '700 9px "Segoe UI", system-ui, sans-serif';
+      ctx.strokeText(`${percentage.toFixed(1)}%`, x, y + 6);
+      ctx.fillText(`${percentage.toFixed(1)}%`, x, y + 6);
     });
+    ctx.restore();
   }
 };
 
@@ -2365,7 +2374,7 @@ function renderCharts() {
         tooltip: { callbacks: { label: ctx => ctx.raw + ' km/月' } }
       }
     },
-    plugins: [shoeShareLegend, {
+    plugins: [shoeShareLabels, {
       id: 'centerText',
       afterDraw(chart) {
         const { ctx, chartArea: { top, bottom, left, right } } = chart;
