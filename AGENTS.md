@@ -28,6 +28,7 @@ Use the repository task runner from PowerShell or `pwsh`:
 - Agent or tool change: `./scripts/task.ps1 eval-agent`, then `./scripts/task.ps1 test-fast`
 - Frontend logic change: `./scripts/task.ps1 frontend-test`
 - Layout change: `./scripts/task.ps1 frontend-layout`
+- README, harness command, test-count, tool-count, or layout-matrix change: `./scripts/task.ps1 docs-check`
 - Release-sensitive or cross-cutting change: `./scripts/task.ps1 verify`
 
 `frontend-layout` is intentionally separate from `verify` because it requires Playwright browser binaries.
@@ -35,7 +36,7 @@ Use the repository task runner from PowerShell or `pwsh`:
 ## Completion criteria
 
 - Relevant verification commands pass.
+- `docs-check` passes whenever documentation or a documented repository fact changes.
 - Ruff and mypy pass for backend changes.
 - Failures are reported with the command and actionable output; partial or timed-out output is not a passing result.
 - No production database, secret, deployment, or external account is modified during verification.
-
