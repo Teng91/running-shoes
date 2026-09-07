@@ -19,6 +19,9 @@ Fly.io 帳號或其他支援 Docker 的平台。
 
 ```
 running-shoes/
+├── .github/
+│   └── workflows/
+│       └── verify.yml    # Push／PR 自動執行完整 harness 驗證
 ├── backend/              # FastAPI 後端
 │   ├── main.py           # API 路由 + 靜態檔案服務
 │   ├── auth.py           # JWT 認證 + 密碼雜湊
@@ -34,8 +37,17 @@ running-shoes/
 ├── frontend/
 │   ├── index.html        # Dashboard 前端（Chart.js）
 │   └── favicon.svg
-├── unit_tests/           # Pytest 測試（API、Agent、LLM、migration 與邊界案例）
+├── scripts/
+│   ├── check_docs.py     # 核對 README 測試數、工具數、版面矩陣與 harness 路徑
+│   └── task.ps1          # setup、測試、eval 與完整驗證的統一入口
+├── unit_tests/           # Pytest、Agent eval、前端邏輯與版面回歸測試
+│   ├── agent_eval_cases.json # Agent 工具選擇與安全行為案例
+│   ├── frontend_regressions.cjs # Node.js 前端邏輯回歸測試
+│   └── frontend_layout.cjs # Playwright 跨瀏覽器版面測試
+├── AGENTS.md             # Coding Agent 專案規則與完成條件
+├── pyproject.toml        # pytest、Ruff 與 mypy 設定
 ├── requirements.txt      # Python 依賴
+├── requirements-dev.txt  # 測試、coverage、lint 與型別檢查依賴
 ├── Dockerfile            # Docker 部署用
 ├── fly.toml              # Fly.io 部署設定
 └── .gitignore
@@ -127,7 +139,7 @@ MODEL_REFRESH_COOLDOWN_SECONDS=60
 - **跑鞋全生命週期追蹤**：記錄品牌、鞋款、用途類別 (Daily / Speed / Tempo / Race / Trail，可多選)、購買日期、尺寸、價格、里程、預期壽命、月跑量
 - **鞋櫃類別覆蓋分析**：判斷某雙鞋退役後其所有用途是否仍有其他現役鞋覆蓋，避免不必要地補鞋 (支援多用途鞋款)
 - **智慧試算**：自動計算每 km 成本、折數、生命進度、預估退役日期
-- **圖表視覺化**：生命進度條、每 km 成本比較、退役時間軸、月跑量佔比（Chart.js）
+- **圖表視覺化**：生命進度條、每 km 成本比較、退役時間軸、月跑量佔比（圓餅圖直接標示公里數與百分比，Chart.js）
 - **亮色 / 暗色主題切換**：右上角一鍵切換，全域 UI 元素與所有 Chart.js 圖表（網格線、刻度文字、數據標籤）皆自動對應色調，偏好透過 `localStorage` 自動記憶
 - **每月跑量統計**：支援年度趨勢圖；跑步日誌新增的距離會自動累加到對應月份
 - **跑步日誌**：預設首頁，記錄每次跑步的日期、公里數與鞋款，自動同步跑鞋里程與月跑量，並以互動月曆及鞋款佔比統計跑量
@@ -231,6 +243,9 @@ Unix `venv/bin/python` 或系統 Python。從 PowerShell／`pwsh` 執行：
 # 日常後端檢查，或只執行 Agent 行為 eval
 ./scripts/task.ps1 test-fast
 ./scripts/task.ps1 eval-agent
+
+# 核對 README 與實際測試數、工具數、版面矩陣及 harness 路徑
+./scripts/task.ps1 docs-check
 ```
 
 Agent eval 案例位於 `unit_tests/agent_eval_cases.json`，用來固定私人資料、即時搜尋、
@@ -257,8 +272,10 @@ npx playwright install chromium webkit
 
 可設定 `LAYOUT_SCREENSHOT_DIR` 保存手機版截圖供人工檢查；Windows 若使用已安裝的 Edge，可設定 `PLAYWRIGHT_CHROMIUM_CHANNEL=msedge`。WebKit 模擬檢查不等同於 iPhone 實機驗證。
 
-目前驗證結果為後端 **272 passed**，前端回歸測試 **9 passed**；測試數量會隨功能與修正持續增加。
+本次驗證基線為 Python **275 passed**、前端回歸測試 **10 passed**；測試數量會隨功能與修正持續增加，實際結果以 `./scripts/task.ps1 verify` 與 CI 當次輸出為準。
 版面檢查涵蓋 WebKit／Chromium、亮／暗模式與 7 組直橫向尺寸，共 28 組設定，檢查五個分頁、表單、圖表、彈窗及空資料狀態。
+
+`docs-check` 會從 pytest collection、前端測試檔、Agent tool registry、Playwright 測試矩陣與實際檔案系統核對上述數字及 harness 路徑。新增測試、工具或版面設定卻忘記同步 README 時，`verify` 和 GitHub Actions 會直接失敗。
 
 鞋款更新會使用版本檢查，舊畫面遇到衝突時請重新載入後再編輯。改密碼後既有登入會失效，需重新登入。
 啟動時會自動為既有資料庫補上鞋款與登入版本欄位，不會重算歷史里程。

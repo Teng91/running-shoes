@@ -5,6 +5,13 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const source = fs.readFileSync('frontend/index.html', 'utf8');
 
+test('monthly shoe share draws values in the doughnut without a separate legend', () => {
+  assert.doesNotMatch(source, /id="chart-value-legend"/);
+  assert.match(source, /id: 'shoeShareLabels'/);
+  assert.match(source, /strokeText\(`\$\{km\} km`/);
+  assert.match(source, /percentage\.toFixed\(1\)/);
+});
+
 test('unclassified shoes stay unclassified when the form is saved', () => {
   const context = vm.createContext({ document: { querySelectorAll: () => [] } });
   vm.runInContext(extract('getSelectedCategories'), context);
