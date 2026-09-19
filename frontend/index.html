@@ -3603,6 +3603,8 @@ async function generateReport() {
   setReportStatus('');
   document.getElementById('report-title').textContent = '報告內容 — ' + reportMonthLabel(selectedReportMonth());
   let fullText = '';
+  let receivedDone = false;
+  let receivedError = false;
 
   try {
     const res = await fetch(API_BASE + '/reports/generate', {
@@ -3643,39 +3645,50 @@ async function generateReport() {
     const decoder = new TextDecoder();
     let buffer = '';
 
+    const handleSseLine = (line) => {
+      if (!line.startsWith('data: ')) return;
+      const data = line.slice(6).trim();
+      if (!data) return;
+      try {
+        const event = JSON.parse(data);
+        if (event.type === 'token') {
+          fullText += event.text;
+          // 串流中用 textContent，避免不完整 markdown 閃爍
+          content.textContent = fullText;
+        } else if (event.type === 'error') {
+          receivedError = true;
+          fullText += '\n\n⚠️ ' + event.text;
+          content.textContent = fullText;
+          setReportStatus('報告未儲存：' + event.text);
+        } else if (event.type === 'done') {
+          receivedDone = true;
+          content.innerHTML = renderMarkdown(fullText);
+          setReportStatus('報告已儲存 · 模型 ' + (event.model || '—') +
+            ' · ' + (event.updated_at || '').replace('T', ' ').slice(0, 16));
+        }
+      } catch (e) {
+        console.error('解析 SSE 事件失敗:', e);
+      }
+    };
+
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
       buffer += decoder.decode(value, { stream: true });
       const lines = buffer.split('\n');
       buffer = lines.pop() || '';
-
-      for (const line of lines) {
-        if (!line.startsWith('data: ')) continue;
-        const data = line.slice(6).trim();
-        if (!data) continue;
-        try {
-          const event = JSON.parse(data);
-          if (event.type === 'token') {
-            fullText += event.text;
-            // 串流中用 textContent，避免不完整 markdown 閃爍
-            content.textContent = fullText;
-          } else if (event.type === 'error') {
-            fullText += '\n\n⚠️ ' + event.text;
-            content.textContent = fullText;
-          } else if (event.type === 'done') {
-            content.innerHTML = renderMarkdown(fullText);
-            setReportStatus('報告已儲存 · 模型 ' + (event.model || '—') +
-              ' · ' + (event.updated_at || '').replace('T', ' ').slice(0, 16));
-          }
-        } catch (e) {
-          console.error('解析 SSE 事件失敗:', e);
-        }
-      }
+      lines.forEach(handleSseLine);
     }
+    // Flush any bytes held by TextDecoder (for example, a split UTF-8 code point)
+    // and process a final SSE line even if the connection omitted its trailing newline.
+    buffer += decoder.decode();
+    if (buffer) handleSseLine(buffer);
     if (fullText) {
-      // 串流結束但未收到 done（連線中斷）也要渲染已收到的內容
+      // 連線中斷時保留已收到的內容，但要明確告知使用者並未儲存。
       content.innerHTML = renderMarkdown(fullText);
+    }
+    if (!receivedDone && !receivedError) {
+      setReportStatus('連線在報告儲存前中斷，目前內容不完整且未儲存，請重新產生。');
     }
     await loadReportHistory();
   } catch (e) {
