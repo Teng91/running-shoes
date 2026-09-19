@@ -636,7 +636,7 @@ input::-webkit-date-and-time-value { text-align: left; min-width: 0; }
     <div class="goal-settings">
       <div class="form-group"><label>目標開始年份</label><input id="goal-start-year" type="number" min="1900" max="2100"></div>
       <div class="form-group"><label>每月目標 (km)</label><input id="goal-monthly-km" type="number" min="0.01" step="0.01"></div>
-      <div class="form-group"><label>每年目標 (km)</label><input id="goal-yearly-km" type="number" min="0.01" step="0.01"></div>
+      <div class="form-group"><label>查看月份</label><select id="goal-month-select" onchange="onGoalMonthChange()"></select></div>
       <button class="btn btn-sm btn-primary" onclick="saveRunningGoal()">儲存目標</button>
       <span id="goal-settings-status" class="goal-settings-status"></span>
     </div>
@@ -1287,6 +1287,7 @@ let stravaPreviewKey = '';
 let stravaPreviewRequestId = 0;
 let stravaPreviewController = null;
 let selectedYear = null;
+let selectedGoalMonth = null;
 let selectedSpendingYear = null;
 let currentTheme = localStorage.getItem('theme') || 'dark';
 
@@ -2497,6 +2498,7 @@ function populateYearSelect() {
 function onYearChange() {
   const sel = document.getElementById('year-select');
   selectedYear = parseInt(sel.value, 10) || null;
+  selectedGoalMonth = null;
   renderGoalProgress();
   renderMonthlyYearChart();
 }
@@ -2506,23 +2508,56 @@ function renderGoalProgress() {
   if (!cards) return;
   document.getElementById('goal-start-year').value = runningGoal.start_year;
   document.getElementById('goal-monthly-km').value = runningGoal.monthly_km;
-  document.getElementById('goal-yearly-km').value = runningGoal.yearly_km;
   const year = selectedYear || new Date().getFullYear();
+  const now = new Date();
+  const rows = monthlyMileages.filter(item => item.year === year);
+  const latestRecordedMonth = rows.length
+    ? Math.max(...rows.map(item => item.month))
+    : null;
+  if (!selectedGoalMonth) {
+    selectedGoalMonth = year === now.getFullYear()
+      ? now.getMonth() + 1
+      : (latestRecordedMonth || 12);
+  }
+  const monthSelect = document.getElementById('goal-month-select');
+  monthSelect.innerHTML = Array.from({length: 12}, (_, index) => {
+    const month = index + 1;
+    return `<option value="${month}" ${month === selectedGoalMonth ? 'selected' : ''}>${month} 月</option>`;
+  }).join('');
   if (year < runningGoal.start_year) {
     cards.innerHTML = `<div class="card"><div class="card-label">${year} 年目標</div><div class="card-value">尚未開始</div><div class="card-sub">目標自 ${runningGoal.start_year} 年起生效</div></div>`;
     return;
   }
-  const rows = monthlyMileages.filter(item => item.year === year);
-  const latest = [...rows].sort((a, b) => b.month - a.month)[0] || null;
-  const monthKm = latest ? latest.km : 0;
+  const selectedRow = rows.find(item => item.month === selectedGoalMonth);
+  const monthKm = selectedRow ? selectedRow.km : 0;
   const monthPct = monthKm / runningGoal.monthly_km * 100;
   const yearKm = rows.reduce((sum, item) => sum + item.km, 0);
   const yearPct = yearKm / runningGoal.yearly_km * 100;
+  const daysInMonth = new Date(year, selectedGoalMonth, 0).getDate();
+  const selectedKey = year * 100 + selectedGoalMonth;
+  const currentKey = now.getFullYear() * 100 + now.getMonth() + 1;
+  let paceText;
+  if (selectedKey < currentKey) {
+    paceText = monthKm >= runningGoal.monthly_km
+      ? `已達成目標，超過 ${(monthKm - runningGoal.monthly_km).toFixed(2)} km`
+      : `月底結算，未達目標 ${(runningGoal.monthly_km - monthKm).toFixed(2)} km`;
+  } else if (selectedKey > currentKey) {
+    paceText = '尚未開始';
+  } else {
+    const elapsedDays = now.getDate();
+    const remainingDays = daysInMonth - elapsedDays;
+    const expectedKm = runningGoal.monthly_km * elapsedDays / daysInMonth;
+    const paceDelta = monthKm - expectedKm;
+    const remainingKm = Math.max(0, runningGoal.monthly_km - monthKm);
+    const dailyNeeded = remainingDays > 0 ? remainingKm / remainingDays : null;
+    paceText = `${paceDelta >= 0 ? '超前' : '落後'} ${Math.abs(paceDelta).toFixed(2)} km · 剩 ${remainingDays} 天` +
+      (dailyNeeded === null ? '' : ` · 每天需 ${dailyNeeded.toFixed(2)} km`);
+  }
   cards.innerHTML = `
     <div class="card">
-      <div class="card-label">${latest ? latest.month + ' 月' : year + ' 年'}月目標</div>
+      <div class="card-label">${year} 年 ${selectedGoalMonth} 月目標</div>
       <div class="card-value">${monthKm.toFixed(2)} / ${Number(runningGoal.monthly_km).toFixed(0)} km</div>
-      <div class="card-sub">達成 ${monthPct.toFixed(1)}% · 尚差 ${Math.max(0, runningGoal.monthly_km - monthKm).toFixed(2)} km</div>
+      <div class="card-sub">達成 ${monthPct.toFixed(1)}% · ${paceText}</div>
       <div class="goal-progress"><span style="width:${Math.min(100, monthPct)}%"></span></div>
     </div>
     <div class="card">
@@ -2533,14 +2568,18 @@ function renderGoalProgress() {
     </div>`;
 }
 
+function onGoalMonthChange() {
+  selectedGoalMonth = Number(document.getElementById('goal-month-select').value) || 1;
+  renderGoalProgress();
+}
+
 async function saveRunningGoal() {
   const status = document.getElementById('goal-settings-status');
   const payload = {
     start_year: Number(document.getElementById('goal-start-year').value),
     monthly_km: Number(document.getElementById('goal-monthly-km').value),
-    yearly_km: Number(document.getElementById('goal-yearly-km').value),
   };
-  if (!Number.isInteger(payload.start_year) || payload.monthly_km <= 0 || payload.yearly_km <= 0) {
+  if (!Number.isInteger(payload.start_year) || payload.monthly_km <= 0) {
     status.textContent = '請輸入有效的年份與正數里程。';
     return;
   }
