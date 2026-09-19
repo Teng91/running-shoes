@@ -270,6 +270,16 @@ class MonthlyMileageOut(MonthlyMileageBase):
     user_id: int
 
 
+class RunningGoalUpdate(BaseModel):
+    start_year: ReasonableYear
+    monthly_km: Annotated[float, Field(gt=0, le=100_000, allow_inf_nan=False)]
+    yearly_km: Annotated[float, Field(gt=0, le=1_000_000, allow_inf_nan=False)]
+
+
+class RunningGoalOut(RunningGoalUpdate):
+    pass
+
+
 # ── Run Log Schemas ────────────────────────────────────
 
 class RunBase(BaseModel):

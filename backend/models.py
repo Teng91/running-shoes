@@ -31,6 +31,7 @@ class User(Base):
 
     shoes: Mapped[list["Shoe"]] = relationship(back_populates="owner")
     monthly_mileages: Mapped[list["MonthlyMileage"]] = relationship(back_populates="owner")
+    running_goal: Mapped["RunningGoal | None"] = relationship(back_populates="owner")
     runs: Mapped[list["Run"]] = relationship(back_populates="owner")
     strava_imports: Mapped[list["StravaImport"]] = relationship(back_populates="owner")
 
@@ -91,6 +92,20 @@ class MonthlyReport(Base):
         default=lambda: datetime.now(UTC),
         onupdate=lambda: datetime.now(UTC),
     )
+
+
+class RunningGoal(Base):
+    __tablename__ = "running_goals"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id"), unique=True, nullable=False
+    )
+    start_year: Mapped[int] = mapped_column(Integer, default=2026, nullable=False)
+    monthly_km: Mapped[float] = mapped_column(Float, default=125, nullable=False)
+    yearly_km: Mapped[float] = mapped_column(Float, default=1500, nullable=False)
+
+    owner: Mapped["User"] = relationship(back_populates="running_goal")
 
 
 class Run(Base):

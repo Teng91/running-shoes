@@ -74,6 +74,12 @@ h1 { font-size: 28px; font-weight: 700; margin-bottom: 4px; }
 .card-label { font-size: 12px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
 .card-value { font-size: 28px; font-weight: 700; }
 .card-sub { font-size: 12px; color: var(--text-dim); margin-top: 4px; }
+.goal-progress { height: 8px; margin-top: 12px; overflow: hidden; border-radius: 999px; background: var(--btn-bg); }
+.goal-progress > span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--accent), var(--green)); }
+.goal-settings { display: flex; align-items: end; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; padding: 14px 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--card); }
+.goal-settings .form-group { margin: 0; }
+.goal-settings input { width: 120px; }
+.goal-settings-status { color: var(--text-dim); font-size: 12px; }
 
 /* Charts */
 .charts { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 28px; }
@@ -627,6 +633,15 @@ input::-webkit-date-and-time-value { text-align: left; min-width: 0; }
 
   <div class="tab-panel" data-panel="monthly">
 
+    <div class="goal-settings">
+      <div class="form-group"><label>目標開始年份</label><input id="goal-start-year" type="number" min="1900" max="2100"></div>
+      <div class="form-group"><label>每月目標 (km)</label><input id="goal-monthly-km" type="number" min="0.01" step="0.01"></div>
+      <div class="form-group"><label>每年目標 (km)</label><input id="goal-yearly-km" type="number" min="0.01" step="0.01"></div>
+      <button class="btn btn-sm btn-primary" onclick="saveRunningGoal()">儲存目標</button>
+      <span id="goal-settings-status" class="goal-settings-status"></span>
+    </div>
+    <div class="cards" id="goal-cards"></div>
+
     <div class="charts charts-3col">
       <div class="chart-box">
         <div class="chart-title-row">
@@ -931,6 +946,7 @@ function setAuth(token, username) {
 function clearAuth() {
   shoes = []; retiredShoes = []; monthlyMileages = [];
   monthlySpending = []; runs = []; stravaImports = [];
+  runningGoal = { start_year: 2026, monthly_km: 125, yearly_km: 1500 };
   dataLoadGeneration += 1;
   authToken = null;
   currentUser = null;
@@ -1265,6 +1281,7 @@ let monthlyMileages = [];
 let monthlySpending = [];
 let runs = [];
 let stravaImports = [];
+let runningGoal = { start_year: 2026, monthly_km: 125, yearly_km: 1500 };
 let stravaPreview = null;
 let stravaPreviewKey = '';
 let stravaPreviewRequestId = 0;
@@ -1306,7 +1323,7 @@ async function loadData() {
   const token = authToken;
   const error = document.getElementById('data-load-error');
   try {
-    const [active, retired, monthly, spending, runData, importHistory] = await Promise.all([
+    const [active, retired, monthly, spending, runData, importHistory, goal] = await Promise.all([
       apiGet('/shoes/active'),
       apiGet('/shoes/retired'),
       apiGet('/monthly-mileage'),
@@ -1316,6 +1333,7 @@ async function loadData() {
         console.warn('載入 Strava 匯入歷史失敗:', error);
         return [];
       }),
+      apiGet('/running-goal'),
     ]);
     if (generation !== dataLoadGeneration || token !== authToken) return;
     error.hidden = true;
@@ -1325,6 +1343,7 @@ async function loadData() {
     monthlySpending = spending;
     runs = runData;
     stravaImports = importHistory;
+    runningGoal = goal;
   } catch (e) {
     console.error('載入資料失敗:', e);
     if (generation !== dataLoadGeneration || token !== authToken) return;
@@ -2442,6 +2461,7 @@ function renderMonthlyCharts() {
   if (chartInstances.shoeStacked) { chartInstances.shoeStacked.destroy(); delete chartInstances.shoeStacked; }
   if (chartInstances.yearlyTotal) { chartInstances.yearlyTotal.destroy(); delete chartInstances.yearlyTotal; }
   populateYearSelect();
+  renderGoalProgress();
   renderMonthlyYearChart();
   renderShoeStackedChart();
   renderYearlyTotalChart();
@@ -2450,7 +2470,11 @@ function renderMonthlyCharts() {
 function populateYearSelect() {
   const sel = document.getElementById('year-select');
   const stackedSel = document.getElementById('stacked-year-select');
-  const years = [...new Set(monthlyMileages.map(m => m.year))].sort((a, b) => b - a);
+  const years = [...new Set([
+    ...monthlyMileages.map(m => m.year),
+    runningGoal.start_year,
+    new Date().getFullYear(),
+  ])].sort((a, b) => b - a);
   if (years.length === 0) {
     sel.innerHTML = '<option value="">無資料</option>';
     if (stackedSel) stackedSel.innerHTML = '<option value="">無資料</option>';
@@ -2473,7 +2497,61 @@ function populateYearSelect() {
 function onYearChange() {
   const sel = document.getElementById('year-select');
   selectedYear = parseInt(sel.value, 10) || null;
+  renderGoalProgress();
   renderMonthlyYearChart();
+}
+
+function renderGoalProgress() {
+  const cards = document.getElementById('goal-cards');
+  if (!cards) return;
+  document.getElementById('goal-start-year').value = runningGoal.start_year;
+  document.getElementById('goal-monthly-km').value = runningGoal.monthly_km;
+  document.getElementById('goal-yearly-km').value = runningGoal.yearly_km;
+  const year = selectedYear || new Date().getFullYear();
+  if (year < runningGoal.start_year) {
+    cards.innerHTML = `<div class="card"><div class="card-label">${year} 年目標</div><div class="card-value">尚未開始</div><div class="card-sub">目標自 ${runningGoal.start_year} 年起生效</div></div>`;
+    return;
+  }
+  const rows = monthlyMileages.filter(item => item.year === year);
+  const latest = [...rows].sort((a, b) => b.month - a.month)[0] || null;
+  const monthKm = latest ? latest.km : 0;
+  const monthPct = monthKm / runningGoal.monthly_km * 100;
+  const yearKm = rows.reduce((sum, item) => sum + item.km, 0);
+  const yearPct = yearKm / runningGoal.yearly_km * 100;
+  cards.innerHTML = `
+    <div class="card">
+      <div class="card-label">${latest ? latest.month + ' 月' : year + ' 年'}月目標</div>
+      <div class="card-value">${monthKm.toFixed(2)} / ${Number(runningGoal.monthly_km).toFixed(0)} km</div>
+      <div class="card-sub">達成 ${monthPct.toFixed(1)}% · 尚差 ${Math.max(0, runningGoal.monthly_km - monthKm).toFixed(2)} km</div>
+      <div class="goal-progress"><span style="width:${Math.min(100, monthPct)}%"></span></div>
+    </div>
+    <div class="card">
+      <div class="card-label">${year} 年度目標</div>
+      <div class="card-value">${yearKm.toFixed(2)} / ${Number(runningGoal.yearly_km).toFixed(0)} km</div>
+      <div class="card-sub">達成 ${yearPct.toFixed(1)}% · 尚差 ${Math.max(0, runningGoal.yearly_km - yearKm).toFixed(2)} km</div>
+      <div class="goal-progress"><span style="width:${Math.min(100, yearPct)}%"></span></div>
+    </div>`;
+}
+
+async function saveRunningGoal() {
+  const status = document.getElementById('goal-settings-status');
+  const payload = {
+    start_year: Number(document.getElementById('goal-start-year').value),
+    monthly_km: Number(document.getElementById('goal-monthly-km').value),
+    yearly_km: Number(document.getElementById('goal-yearly-km').value),
+  };
+  if (!Number.isInteger(payload.start_year) || payload.monthly_km <= 0 || payload.yearly_km <= 0) {
+    status.textContent = '請輸入有效的年份與正數里程。';
+    return;
+  }
+  try {
+    runningGoal = await apiPut('/running-goal', payload);
+    status.textContent = '目標已儲存。';
+    populateYearSelect();
+    renderGoalProgress();
+  } catch (error) {
+    status.textContent = error.message || '目標儲存失敗。';
+  }
 }
 
 function onStackedYearChange() {

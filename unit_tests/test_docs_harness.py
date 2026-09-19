@@ -2,7 +2,7 @@ from scripts import check_docs
 
 
 def test_docs_harness_reads_frontend_test_count():
-    assert check_docs.frontend_test_count() == 14
+    assert check_docs.frontend_test_count() == 15
 
 
 def test_docs_harness_reads_agent_tool_count():
