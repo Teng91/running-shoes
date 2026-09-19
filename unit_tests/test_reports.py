@@ -120,6 +120,9 @@ def test_build_report_stats_computes_month_numbers(db):
     assert stats["prev_month_run_km"] == 20.0
     assert stats["prev_month_delta_km"] == 10.0
     assert stats["ytd_run_km"] == 50.0
+    assert stats["running_goal"]["monthly_km"] == 125.0
+    assert stats["running_goal"]["yearly_km"] == 1500.0
+    assert stats["running_goal"]["active"] is True
     assert stats["overall_monthly_stats"]["status"] == "no_records"
 
 
@@ -153,6 +156,7 @@ def test_build_report_messages_only_provides_backend_numbers(db):
 
     assert [m["role"] for m in messages] == ["system", "user"]
     assert "不得自行計算、估算或杜撰" in messages[0]["content"]
+    assert "目標達成率" in messages[0]["content"]
     serialized = json.dumps(stats, ensure_ascii=False)
     assert '"month_km"' in serialized and "10.0" in serialized
 
