@@ -1,0 +1,249 @@
+"""AI 月度跑步報告：後端算好統計 → one-shot LLM 串流生成 → 存入 monthly_reports。
+
+與 agent.py 的差別：不走 agent loop、不提供工具。所有數字由後端
+計算後以 JSON 餵給模型，LLM 只負責把數字寫成文字（zh-TW markdown）。
+成功產生的報告存入 `monthly_reports`（一人一月一版，重新產生即覆蓋），
+之後由 GET endpoint 直接讀取，不必重打 LLM。
+"""
+
+import json
+from collections.abc import Generator
+from datetime import UTC, datetime
+
+from sqlalchemy import func
+from sqlalchemy.orm import Session
+
+from backend import llm, models
+from backend.tools import db_tools
+
+REPORT_SECTIONS = ["本月總覽", "趨勢解讀", "鞋款輪替與退役提醒", "下月建議"]
+
+
+def _sse(event: dict) -> str:
+    return f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+
+
+def _prev_month(year: int, month: int) -> tuple[int, int]:
+    return (year - 1, 12) if month == 1 else (year, month - 1)
+
+
+def _round(value: float | None, digits: int = 2) -> float:
+    return round(float(value or 0), digits)
+
+
+def _month_run_stats(db: Session, user_id: int, year: int, month: int) -> dict:
+    """以跑步日誌（runs）為準計算單月統計；0 跑量月份也要回傳合法結構。"""
+    prefix = f"{year:04d}-{month:02d}-%"
+    runs = (
+        db.query(models.Run)
+        .filter(models.Run.user_id == user_id, models.Run.date.like(prefix))
+        .all()
+    )
+    total_km = _round(sum(r.km for r in runs))
+    run_days = len({r.date for r in runs})
+
+    per_shoe: dict[int, float] = {}
+    shoe_names: dict[int, str] = {}
+    if runs:
+        shoe_rows = (
+            db.query(models.Shoe.id, models.Shoe.brand, models.Shoe.model)
+            .filter(
+                models.Shoe.user_id == user_id,
+                models.Shoe.id.in_({r.shoe_id for r in runs}),
+            )
+            .all()
+        )
+        shoe_names = {row.id: f"{row.brand} {row.model}" for row in shoe_rows}
+        for run in runs:
+            per_shoe[run.shoe_id] = per_shoe.get(run.shoe_id, 0.0) + run.km
+
+    totals = sorted(per_shoe.items(), key=lambda pair: pair[1], reverse=True)
+    shoe_breakdown = [
+        {"shoe": shoe_names[shoe_id], "km": _round(km)} for shoe_id, km in totals
+    ]
+    primary = shoe_breakdown[0] if shoe_breakdown else None
+
+    return {
+        "month_km": total_km,
+        "run_count": len(runs),
+        "run_days": run_days,
+        "primary_shoe": primary,
+        "runs_per_shoe": shoe_breakdown,
+    }
+
+
+def _sum_runs_prefix(db: Session, user_id: int, prefix: str) -> float:
+    row = (
+        db.query(func.sum(models.Run.km))
+        .filter(models.Run.user_id == user_id, models.Run.date.like(prefix))
+        .first()
+    )
+    return _round(row[0] if row and row[0] is not None else 0)
+
+
+def _shoe_context(shoe: dict) -> dict:
+    keys = (
+        "brand",
+        "model",
+        "categories",
+        "status",
+        "mileage_km",
+        "expected_lifespan_km",
+        "remaining_mileage_km",
+        "usage_percent",
+        "lifecycle_status",
+    )
+    return {key: shoe.get(key) for key in keys if key in shoe}
+
+
+def _end_of_life_context(shoe: dict) -> dict:
+    return {
+        **_shoe_context(shoe),
+        "uncovered_categories": shoe.get("uncovered_categories", []),
+        "replacement_recommendation": shoe.get("replacement_recommendation"),
+    }
+
+
+def build_report_stats(db: Session, user_id: int, year: int, month: int) -> dict:
+    """組出餵給 LLM 與存入 stats_json 的精簡統計快照。"""
+    month_stats = _month_run_stats(db, user_id, year, month)
+    prev_year, prev_month = _prev_month(year, month)
+    prev_km = _sum_runs_prefix(db, user_id, f"{prev_year:04d}-{prev_month:02d}-%")
+    ytd_km = _sum_runs_prefix(db, user_id, f"{year:04d}-%")
+
+    mileage_payload = json.loads(db_tools.monthly_mileage_stats(db, user_id))
+    mileage_keys = (
+        "status",
+        "recorded_month_count",
+        "nonzero_month_count",
+        "total_mileage_km",
+        "overall_nonzero_month_average_km",
+        "recent_period_month_count",
+        "recent_period_total_km",
+        "recent_period_average_km",
+        "recent_vs_overall_trend",
+        "latest_record",
+        "recent_nonzero_months",
+    )
+    overall = {key: mileage_payload.get(key) for key in mileage_keys}
+
+    shoes_payload = json.loads(db_tools.list_my_shoes(db, user_id))
+    shoes_context = [_shoe_context(shoe) for shoe in shoes_payload.get("shoes", [])]
+
+    end_of_life_payload = json.loads(db_tools.nearing_end_of_life(db, user_id))
+    end_of_life = [
+        _end_of_life_context(shoe) for shoe in end_of_life_payload.get("shoes", [])
+    ]
+
+    category_payload = json.loads(db_tools.shoe_category_status(db, user_id))
+    category_keys = (
+        "category",
+        "active_shoe_count",
+        "has_active_coverage",
+        "purchase_recommendation",
+    )
+    categories = [
+        {key: entry.get(key) for key in category_keys}
+        for entry in category_payload.get("categories", [])
+    ]
+
+    return {
+        "report_month": {"year": year, "month": month},
+        "month_run_stats": month_stats,
+        "prev_month_run_km": prev_km,
+        "prev_month_delta_km": _round(month_stats["month_km"] - prev_km),
+        "ytd_run_km": ytd_km,
+        "overall_monthly_stats": overall,
+        "shoes": shoes_context,
+        "nearing_end_of_life": end_of_life,
+        "category_coverage": categories,
+    }
+
+
+def build_report_messages(stats: dict) -> list[dict]:
+    sections = "、".join(f"「{name}」" for name in REPORT_SECTIONS)
+    system = (
+        "你是專業的跑步教練與跑鞋顧問，請用繁體中文撰寫一份月度跑步報告。\n"
+        f"報告必須包含以下章節，依序使用 markdown 標題：{sections}。\n"
+        "規則：\n"
+        "1. 所有數字只能使用使用者訊息中提供的 JSON 數據，不得自行計算、估算或杜撰。\n"
+        "2. JSON 中沒有的資訊（如天氣、配速、心率）一律不提。\n"
+        "3. 里程與壽命數據逐字採用 JSON 欄位值，單位為公里（km）。\n"
+        "4. 鞋款輪替與退役提醒請參考 nearing_end_of_life 與 category_coverage 判斷。\n"
+        "5. 下月建議必須具體可行，若當月沒有任何跑步紀錄請如實說明並鼓勵使用者。\n"
+        "6. 語氣親切務實，總長度控制在 600 字以內。"
+    )
+    return [
+        {"role": "system", "content": system},
+        {"role": "user", "content": json.dumps(stats, ensure_ascii=False)},
+    ]
+
+
+def _persist_report(
+    db: Session, user_id: int, year: int, month: int, content: str, model: str, stats: dict
+) -> datetime:
+    existing = (
+        db.query(models.MonthlyReport)
+        .filter(
+            models.MonthlyReport.user_id == user_id,
+            models.MonthlyReport.year == year,
+            models.MonthlyReport.month == month,
+        )
+        .first()
+    )
+    if existing is None:
+        existing = models.MonthlyReport(user_id=user_id, year=year, month=month)
+        db.add(existing)
+    # JSON 欄位必須整個重新指派，就地改動不會被 SQLAlchemy 偵測。
+    existing.content_md = content
+    existing.model = model
+    existing.stats_json = stats
+    db.commit()
+    db.refresh(existing)
+    return existing.updated_at.replace(tzinfo=UTC) if existing.updated_at else datetime.now(UTC)
+
+
+def generate_report_stream(
+    db: Session,
+    user_id: int,
+    year: int,
+    month: int,
+    model: str,
+) -> Generator[str, None, None]:
+    """產生月度報告的 SSE 串流；成功才寫入 monthly_reports，失敗不留任何資料。"""
+    stats = build_report_stats(db, user_id, year, month)
+    messages = build_report_messages(stats)
+
+    chunks: list[str] = []
+    try:
+        for chunk in llm.call_llm_stream(llm.LLMProvider.openrouter, model, messages, tools=None):
+            chunks.append(chunk)
+            yield _sse({"type": "token", "text": chunk})
+    except llm.LLMError as exc:
+        yield _sse({"type": "error", "text": str(exc)})
+        return
+    except Exception:  # noqa: BLE001
+        yield _sse({"type": "error", "text": "報告產生失敗，請稍後再試。"})
+        return
+
+    content = "".join(chunks)
+    if not content.strip():
+        yield _sse({"type": "error", "text": "模型未回傳任何內容，請稍後再試。"})
+        return
+
+    try:
+        updated_at = _persist_report(db, user_id, year, month, content, model, stats)
+    except Exception:  # noqa: BLE001
+        db.rollback()
+        yield _sse({"type": "error", "text": "報告產生成功，但儲存失敗，請重新產生。"})
+        return
+
+    yield _sse(
+        {
+            "type": "done",
+            "model": model,
+            "year": year,
+            "month": month,
+            "updated_at": updated_at.isoformat(),
+        }
+    )

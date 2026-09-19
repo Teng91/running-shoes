@@ -86,11 +86,11 @@ async function run(engine, name) {
       await page.evaluate(theme => applyTheme(theme), theme);
       for (const [width, height] of [[320, 740], [375, 812], [390, 844], [430, 932], [844, 390], [768, 1024], [1440, 900]]) {
         await page.setViewportSize({ width, height });
-        for (const tab of ['runs', 'shoes', 'monthly', 'spending', 'agent']) {
+        for (const tab of ['runs', 'shoes', 'monthly', 'spending', 'agent', 'report']) {
           await page.locator(`.tab[data-tab="${tab}"]`).click();
           await page.waitForTimeout(100);
           await assertLayout(page, `${name} ${theme} ${width} ${tab}`);
-          const expected = { runs: 1, shoes: 4, monthly: 3, spending: 2, agent: 0 }[tab];
+          const expected = { runs: 1, shoes: 4, monthly: 3, spending: 2, agent: 0, report: 0 }[tab];
           assert.equal(await page.locator('.tab-panel.active canvas').count(), expected);
           assert.equal(await page.evaluate(() => Object.values(chartInstances).filter(c => c.canvas.getClientRects().length).length), expected, 'all charts initialized with data');
           await page.locator('.tab-panel.active .table-wrap').evaluateAll(wrappers => wrappers.forEach(wrapper => {
@@ -119,7 +119,7 @@ async function run(engine, name) {
       }
     }
     await page.evaluate(() => { shoes = []; retiredShoes = []; runs = []; monthlyMileages = []; monthlySpending = []; render(); });
-    for (const tab of ['runs', 'shoes', 'monthly', 'spending']) {
+    for (const tab of ['runs', 'shoes', 'monthly', 'spending', 'report']) {
       await page.locator(`.tab[data-tab="${tab}"]`).click();
       await page.waitForTimeout(100);
       await assertLayout(page, `${name} empty ${tab}`);
