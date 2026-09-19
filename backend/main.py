@@ -1127,6 +1127,7 @@ def update_running_goal(
         db.add(row)
     for key, value in payload.model_dump().items():
         setattr(row, key, value)
+    row.yearly_km = payload.monthly_km * 12
     try:
         db.commit()
     except Exception:

@@ -1,5 +1,7 @@
 """Regression tests for per-user running goals and progress."""
 
+from datetime import date
+
 from fastapi.testclient import TestClient
 
 from backend import goals
@@ -32,7 +34,7 @@ def test_goal_defaults_and_update_are_per_user(db):
             }
             updated = client.put(
                 "/api/running-goal", headers=_headers("goal-a"),
-                json={"start_year": 2027, "monthly_km": 130, "yearly_km": 1560},
+                json={"start_year": 2027, "monthly_km": 130},
             )
             assert updated.status_code == 200
             assert updated.json()["monthly_km"] == 130.0
@@ -55,7 +57,7 @@ def test_goal_update_rejects_non_positive_distance(db, user_with_token):
         with TestClient(app) as client:
             response = client.put(
                 "/api/running-goal", headers={"Authorization": f"Bearer {token}"},
-                json={"start_year": 2026, "monthly_km": 0, "yearly_km": 1500},
+                json={"start_year": 2026, "monthly_km": 0},
             )
         assert response.status_code == 422
     finally:
@@ -71,10 +73,14 @@ def test_goal_progress_stops_ytd_at_requested_month(db, user_with_token):
     ])
     db.commit()
 
-    progress = goals.goal_progress(db, user.id, 2026, 2)
+    progress = goals.goal_progress(db, user.id, 2026, 2, as_of=date(2026, 2, 10))
 
     assert progress["active"] is True
     assert progress["month_achievement_percent"] == 100.0
     assert progress["month_remaining_km"] == 0
+    assert progress["month_state"] == "current"
+    assert progress["remaining_days"] == 18
+    assert progress["pace_delta_km"] == 80.36
+    assert progress["required_daily_km"] == 0
     assert progress["ytd_km"] == 225.0
     assert progress["year_achievement_percent"] == 15.0

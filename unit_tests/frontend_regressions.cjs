@@ -190,8 +190,13 @@ test('running goals are loaded, editable, and rendered as monthly and yearly pro
   assert.match(source, /apiGet\('\/running-goal'\)/);
   assert.match(source, /apiPut\('\/running-goal', payload\)/);
   assert.match(source, /id="goal-cards"/);
+  assert.match(source, /id="goal-month-select"/);
+  assert.doesNotMatch(source, /id="goal-yearly-km"/);
   const renderGoalProgress = extract('renderGoalProgress');
   assert.match(renderGoalProgress, /monthPct/);
   assert.match(renderGoalProgress, /yearPct/);
   assert.match(renderGoalProgress, /runningGoal\.start_year/);
+  assert.match(renderGoalProgress, /remainingDays/);
+  assert.match(renderGoalProgress, /超前/);
+  assert.match(renderGoalProgress, /落後/);
 });
