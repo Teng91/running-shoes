@@ -175,7 +175,9 @@ def build_report_messages(stats: dict) -> list[dict]:
         "3. 里程與壽命數據逐字採用 JSON 欄位值，單位為公里（km）。\n"
         "4. 鞋款輪替與退役提醒請參考 nearing_end_of_life 與 category_coverage 判斷。\n"
         "5. 下月建議必須具體可行，若當月沒有任何跑步紀錄請如實說明並鼓勵使用者。\n"
-        "6. running_goal.active 為 true 時，必須說明當月與年度目標達成率及差距；為 false 時不得套用目標。\n"
+        "6. running_goal.active 為 true 時，必須說明當月與年度目標達成率及差距。"
+        "當 month_state 為 current 時，也要依 pace_delta_km 說明進度超前或落後，"
+        "並參考 remaining_days 與 required_daily_km；為 false 時不得套用目標。\n"
         "7. 語氣親切務實，總長度控制在 600 字以內。"
     )
     return [
