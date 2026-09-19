@@ -185,3 +185,13 @@ test('report streaming distinguishes saved completion from an interrupted respon
   assert.match(generateReport, /!receivedDone && !receivedError/);
   assert.match(generateReport, /內容不完整且未儲存/);
 });
+
+test('running goals are loaded, editable, and rendered as monthly and yearly progress', () => {
+  assert.match(source, /apiGet\('\/running-goal'\)/);
+  assert.match(source, /apiPut\('\/running-goal', payload\)/);
+  assert.match(source, /id="goal-cards"/);
+  const renderGoalProgress = extract('renderGoalProgress');
+  assert.match(renderGoalProgress, /monthPct/);
+  assert.match(renderGoalProgress, /yearPct/);
+  assert.match(renderGoalProgress, /runningGoal\.start_year/);
+});

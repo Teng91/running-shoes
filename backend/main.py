@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from backend import agent, llm, models, reports, schemas
+from backend import agent, goals, llm, models, reports, schemas
 from backend.auth import (
     create_access_token,
     get_current_user,
@@ -1105,6 +1105,36 @@ def delete_run(
 
 
 # ── Monthly Mileage Routes ──
+@app.get("/api/running-goal", response_model=schemas.RunningGoalOut)
+def get_running_goal(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return goals.goal_values(db, current_user.id)
+
+
+@app.put("/api/running-goal", response_model=schemas.RunningGoalOut)
+def update_running_goal(
+    payload: schemas.RunningGoalUpdate,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    row = db.query(models.RunningGoal).filter(
+        models.RunningGoal.user_id == current_user.id
+    ).first()
+    if row is None:
+        row = models.RunningGoal(user_id=current_user.id)
+        db.add(row)
+    for key, value in payload.model_dump().items():
+        setattr(row, key, value)
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return goals.goal_values(db, current_user.id)
+
+
 @app.get("/api/monthly-mileage", response_model=list[schemas.MonthlyMileageOut])
 def list_monthly_mileage(
     current_user: models.User = Depends(get_current_user),

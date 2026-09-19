@@ -13,7 +13,7 @@ from datetime import UTC, datetime
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from backend import llm, models
+from backend import goals, llm, models
 from backend.tools import db_tools
 
 REPORT_SECTIONS = ["本月總覽", "趨勢解讀", "鞋款輪替與退役提醒", "下月建議"]
@@ -109,7 +109,10 @@ def build_report_stats(db: Session, user_id: int, year: int, month: int) -> dict
     month_stats = _month_run_stats(db, user_id, year, month)
     prev_year, prev_month = _prev_month(year, month)
     prev_km = _sum_runs_prefix(db, user_id, f"{prev_year:04d}-{prev_month:02d}-%")
-    ytd_km = _sum_runs_prefix(db, user_id, f"{year:04d}-%")
+    ytd_km = _round(sum(
+        _sum_runs_prefix(db, user_id, f"{year:04d}-{item:02d}-%")
+        for item in range(1, month + 1)
+    ))
 
     mileage_payload = json.loads(db_tools.monthly_mileage_stats(db, user_id))
     mileage_keys = (
@@ -153,6 +156,7 @@ def build_report_stats(db: Session, user_id: int, year: int, month: int) -> dict
         "prev_month_run_km": prev_km,
         "prev_month_delta_km": _round(month_stats["month_km"] - prev_km),
         "ytd_run_km": ytd_km,
+        "running_goal": goals.goal_progress(db, user_id, year, month),
         "overall_monthly_stats": overall,
         "shoes": shoes_context,
         "nearing_end_of_life": end_of_life,
@@ -171,7 +175,8 @@ def build_report_messages(stats: dict) -> list[dict]:
         "3. 里程與壽命數據逐字採用 JSON 欄位值，單位為公里（km）。\n"
         "4. 鞋款輪替與退役提醒請參考 nearing_end_of_life 與 category_coverage 判斷。\n"
         "5. 下月建議必須具體可行，若當月沒有任何跑步紀錄請如實說明並鼓勵使用者。\n"
-        "6. 語氣親切務實，總長度控制在 600 字以內。"
+        "6. running_goal.active 為 true 時，必須說明當月與年度目標達成率及差距；為 false 時不得套用目標。\n"
+        "7. 語氣親切務實，總長度控制在 600 字以內。"
     )
     return [
         {"role": "system", "content": system},
