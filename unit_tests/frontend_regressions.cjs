@@ -176,3 +176,12 @@ test('the report month defaults to the last complete month', () => {
   assert.equal(context.previousMonthValue(new Date(2027, 0, 15)), '2026-12');
   assert.equal(context.previousMonthValue(new Date(2026, 8, 19)), '2026-08');
 });
+
+test('report streaming distinguishes saved completion from an interrupted response', () => {
+  const generateReport = extract('generateReport');
+  assert.match(generateReport, /buffer \+= decoder\.decode\(\)/);
+  assert.match(generateReport, /receivedDone = true/);
+  assert.match(generateReport, /receivedError = true/);
+  assert.match(generateReport, /!receivedDone && !receivedError/);
+  assert.match(generateReport, /內容不完整且未儲存/);
+});
