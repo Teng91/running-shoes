@@ -26,3 +26,6 @@ Thumbs.db
 
 # Docker volumes (not the code itself)
 /data/
+
+# Frontend tooling (Playwright layout checks, installed per README)
+node_modules/

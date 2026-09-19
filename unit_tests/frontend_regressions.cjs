@@ -155,3 +155,24 @@ test('inline edits send only the changed field and guard duplicate commits', asy
   assert.equal(JSON.stringify(writes[0].payload), JSON.stringify({ price: 30, expected_version: 3 }));
   assert.equal(shoe.price, 20);
 });
+
+test('the report tab wires its panel and only loads data after login', () => {
+  assert.match(source, /data-tab="report"/);
+  assert.match(source, /data-panel="report"/);
+  assert.match(source, /onchange="loadSavedReport\(\)"/);
+  const switchTab = extract('switchTab');
+  assert.match(switchTab, /name === 'report' && authToken/);
+});
+
+test('the report tab talks to the monthly report endpoints', () => {
+  assert.match(source, /fetch\(API_BASE \+ '\/reports\/generate'/);
+  assert.match(source, /fetch\(API_BASE \+ '\/reports', \{ headers: authHeaders\(\) \}\)/);
+  assert.match(source, /fetch\(API_BASE \+ '\/reports\/' \+ parts\[0\] \+ '\/' \+ parts\[1\]/);
+});
+
+test('the report month defaults to the last complete month', () => {
+  const context = vm.createContext({ Date });
+  vm.runInContext(extract('previousMonthValue'), context);
+  assert.equal(context.previousMonthValue(new Date(2027, 0, 15)), '2026-12');
+  assert.equal(context.previousMonthValue(new Date(2026, 8, 19)), '2026-08');
+});

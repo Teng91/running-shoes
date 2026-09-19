@@ -288,6 +288,7 @@ tr:hover td { background: rgba(99,102,241,0.05); }
 .agent-msg-content blockquote { border-left: 3px solid var(--accent); padding-left: 12px; margin: 8px 0; color: var(--text-dim); }
 .agent-message.user .agent-msg-content { max-width: 80%; background: var(--accent); color: white; border-bottom-right-radius: 4px; }
 .agent-message.bot .agent-msg-content { background: var(--bg); color: var(--text); border-bottom-left-radius: 4px; }
+.report-content { background: var(--bg); border: 1px solid var(--border); border-radius: 12px; min-height: 60px; }
 .agent-input-area { display: flex; gap: 8px; align-items: flex-end; flex-shrink: 0; }
 .agent-input-area textarea { flex: 1; background: var(--card); border: 1px solid var(--border); color: var(--text); font-size: 14px; padding: 10px 14px; border-radius: 12px; resize: none; font-family: inherit; }
 .agent-input-area textarea:focus { outline: none; border-color: var(--accent); }
@@ -525,6 +526,7 @@ input::-webkit-date-and-time-value { text-align: left; min-width: 0; }
     <button class="tab" data-tab="monthly" onclick="switchTab('monthly')">月跑量</button>
     <button class="tab" data-tab="spending" onclick="switchTab('spending')">支出</button>
     <button class="tab" data-tab="agent" onclick="switchTab('agent')">AI 助手</button>
+    <button class="tab" data-tab="report" onclick="switchTab('report')">月報</button>
   </div>
 
   <div class="tab-panel" data-panel="shoes">
@@ -731,6 +733,35 @@ input::-webkit-date-and-time-value { text-align: left; min-width: 0; }
       <button id="agent-send-btn" onclick="sendAgentMessage()">送出</button>
     </div>
   </div><!-- /tab-panel agent -->
+
+  <!-- Monthly Report Panel -->
+  <div class="tab-panel" data-panel="report">
+    <div class="run-hero">
+      <div class="run-intro">
+        <h2>AI 月度跑步報告</h2>
+        <p>選擇月份後由 AI 整理當月跑量趨勢、鞋款狀態與退役提醒，報告會自動保存，之後可隨時回看。</p>
+        <div class="run-filter">
+          <label for="report-month">報告月份</label>
+          <input id="report-month" class="year-select" type="month" onchange="loadSavedReport()">
+        </div>
+      </div>
+      <div class="run-entry">
+        <h3>產生 / 查看報告</h3>
+        <div class="run-entry-grid">
+          <div class="form-group">
+            <label for="report-history">歷史報告</label>
+            <select id="report-history" onchange="onReportHistoryChange()"><option value="">選擇已儲存的月份…</option></select>
+          </div>
+        </div>
+        <button class="btn btn-primary" id="generate-report-btn" onclick="generateReport()">產生報告</button>
+        <div class="inline-error" id="report-status"></div>
+      </div>
+    </div>
+    <div class="table-section">
+      <div class="table-header"><h2 id="report-title">報告內容</h2></div>
+      <div id="report-content" class="agent-msg-content report-content">尚未選擇報告。</div>
+    </div>
+  </div><!-- /tab-panel report -->
 
 </div>
 
@@ -1090,6 +1121,12 @@ function switchTab(name) {
   }
   if (name === 'runs') {
     requestAnimationFrame(() => renderRunLog());
+  }
+  if (name === 'report' && authToken) {
+    // Layout 回歸測試在無後端的假 origin 執行（authToken 為 null），
+    // 必須先確認已登入才發出 API 請求。
+    loadReportHistory();
+    loadSavedReport();
   }
   // Agent tab: fill viewport height; other tabs: natural scroll
   const appView = document.getElementById('app-view');
@@ -3457,11 +3494,208 @@ async function sendAgentMessage(retryText) {
   setAgentLoading(false);
 }
 
+// ── 月報 ──────────────────────────────────────────────────────
+
+function previousMonthValue(now = new Date()) {
+  const year = now.getFullYear();
+  const month = now.getMonth(); // 0-based；當月尚未結束，預設回上個完整月
+  const prevMonth = month === 0 ? 12 : month;
+  const prevYear = month === 0 ? year - 1 : year;
+  return prevYear + '-' + String(prevMonth).padStart(2, '0');
+}
+
+function reportMonthLabel(value) {
+  const parts = String(value || '').split('-');
+  if (parts.length !== 2 || !parts[0] || !parts[1]) return '';
+  return parts[0] + '年' + parseInt(parts[1], 10) + '月';
+}
+
+function selectedReportMonth() {
+  return document.getElementById('report-month').value;
+}
+
+function reportMonthParts() {
+  const month = selectedReportMonth();
+  if (!month) return null;
+  return month.split('-').map(Number);
+}
+
+function setReportStatus(text) {
+  document.getElementById('report-status').textContent = text || '';
+}
+
+function renderReport(report) {
+  const label = reportMonthLabel(report.year + '-' + String(report.month).padStart(2, '0'));
+  document.getElementById('report-title').textContent = '報告內容 — ' + label;
+  document.getElementById('report-content').innerHTML = renderMarkdown(report.content_md);
+  setReportStatus('已儲存報告 · 模型 ' + (report.model || '—') +
+    ' · 更新於 ' + (report.updated_at || '').replace('T', ' ').slice(0, 16));
+}
+
+async function loadReportHistory() {
+  const select = document.getElementById('report-history');
+  try {
+    const res = await fetch(API_BASE + '/reports', { headers: authHeaders() });
+    if (res.status === 401) {
+      clearAuth();
+      showLoginView();
+      return;
+    }
+    if (!res.ok) return;
+    const rows = await res.json();
+    select.innerHTML = '<option value="">選擇已儲存的月份…</option>' + rows.map(row => {
+      const value = row.year + '-' + String(row.month).padStart(2, '0');
+      return '<option value="' + value + '">' + reportMonthLabel(value) + '（' + (row.model || 'AI') + '）</option>';
+    }).join('');
+  } catch (e) {
+    console.error('載入報告歷史失敗:', e);
+  }
+}
+
+function onReportHistoryChange() {
+  const value = document.getElementById('report-history').value;
+  if (!value) return;
+  document.getElementById('report-month').value = value;
+  loadSavedReport();
+}
+
+async function loadSavedReport() {
+  const parts = reportMonthParts();
+  if (!parts) return;
+  setReportStatus('');
+  const content = document.getElementById('report-content');
+  document.getElementById('report-title').textContent = '報告內容 — ' + reportMonthLabel(selectedReportMonth());
+  content.textContent = '載入中…';
+  try {
+    const res = await fetch(API_BASE + '/reports/' + parts[0] + '/' + parts[1], { headers: authHeaders() });
+    if (res.status === 404) {
+      content.textContent = '此月份尚無報告，按「產生報告」由 AI 生成。';
+      return;
+    }
+    if (res.status === 401) {
+      clearAuth();
+      showLoginView();
+      return;
+    }
+    if (!res.ok) {
+      content.textContent = '尚未選擇報告。';
+      setReportStatus('讀取報告失敗（HTTP ' + res.status + '）');
+      return;
+    }
+    renderReport(await res.json());
+  } catch (e) {
+    console.error('讀取報告失敗:', e);
+    content.textContent = '尚未選擇報告。';
+    setReportStatus('連線失敗，請確認後端服務已啟動。');
+  }
+}
+
+async function generateReport() {
+  const parts = reportMonthParts();
+  if (!parts) {
+    setReportStatus('請先選擇報告月份。');
+    return;
+  }
+  const btn = document.getElementById('generate-report-btn');
+  const content = document.getElementById('report-content');
+  btn.disabled = true;
+  btn.textContent = '產生中...';
+  setReportStatus('');
+  document.getElementById('report-title').textContent = '報告內容 — ' + reportMonthLabel(selectedReportMonth());
+  let fullText = '';
+
+  try {
+    const res = await fetch(API_BASE + '/reports/generate', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + authToken,
+      },
+      body: JSON.stringify({
+        year: parts[0],
+        month: parts[1],
+        model: document.getElementById('agent-model').value || null,
+      }),
+    });
+    if (res.status === 401) {
+      clearAuth();
+      showLoginView();
+      throw new Error('登入已過期，請重新登入。');
+    }
+    if (!res.ok) {
+      let message = '報告請求失敗（HTTP ' + res.status + '）';
+      try {
+        const errorBody = await res.json();
+        if (typeof errorBody.detail === 'string') {
+          message = errorBody.detail;
+        } else if (Array.isArray(errorBody.detail)) {
+          message = errorBody.detail.map(item => item.msg || String(item)).join('；');
+        }
+      } catch {}
+      throw new Error(message);
+    }
+    const contentType = res.headers.get('content-type') || '';
+    if (!contentType.includes('text/event-stream') || !res.body) {
+      throw new Error('伺服器回傳了非預期格式，請稍後再試。');
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const data = line.slice(6).trim();
+        if (!data) continue;
+        try {
+          const event = JSON.parse(data);
+          if (event.type === 'token') {
+            fullText += event.text;
+            // 串流中用 textContent，避免不完整 markdown 閃爍
+            content.textContent = fullText;
+          } else if (event.type === 'error') {
+            fullText += '\n\n⚠️ ' + event.text;
+            content.textContent = fullText;
+          } else if (event.type === 'done') {
+            content.innerHTML = renderMarkdown(fullText);
+            setReportStatus('報告已儲存 · 模型 ' + (event.model || '—') +
+              ' · ' + (event.updated_at || '').replace('T', ' ').slice(0, 16));
+          }
+        } catch (e) {
+          console.error('解析 SSE 事件失敗:', e);
+        }
+      }
+    }
+    if (fullText) {
+      // 串流結束但未收到 done（連線中斷）也要渲染已收到的內容
+      content.innerHTML = renderMarkdown(fullText);
+    }
+    await loadReportHistory();
+  } catch (e) {
+    const message = e instanceof TypeError
+      ? '連線失敗，請確認後端服務已啟動。'
+      : (e.message || '報告請求失敗，請稍後再試。');
+    content.textContent = '⚠️ ' + message;
+    console.error('報告請求失敗:', e);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '產生報告';
+  }
+}
+
 // Check stored token on load
 async function init() {
   populateAddSelects();
   document.getElementById('run-date').value = localDateISO();
   document.getElementById('run-month').value = localDateISO().slice(0, 7);
+  document.getElementById('report-month').value = previousMonthValue();
   loadAgentModels();
   if (authToken) {
     try {

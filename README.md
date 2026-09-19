@@ -29,6 +29,7 @@ running-shoes/
 │   ├── models.py         # 資料表定義
 │   ├── schemas.py        # Pydantic schema
 │   ├── agent.py          # AI 助手 agent loop（工具呼叫 + SSE 串流，僅保留 streaming 版）
+│   ├── reports.py        # AI 月度跑步報告（後端算統計 + one-shot LLM 串流 + 報告留存）
 │   ├── llm.py            # LLM 抽象層（OpenRouter）
 │   ├── tools/            # AI 助手工具
 │   │   ├── db_tools.py   # 讀取使用者跑鞋 / 跑量資料
@@ -146,6 +147,7 @@ MODEL_REFRESH_COOLDOWN_SECONDS=60
 - **Strava 歷史匯入**：從 Strava 匯出的 `activities.csv` 預覽並批次匯入跑步活動，依活動 ID 去重，支援匯入前逐鞋款配對
 - **跑鞋資料匯出**：一鍵匯出 **XLSX / CSV**，支援 **現役 / 退役 / 全部** 三種範圍，欄位完整含品牌、鞋款、日期、尺寸、價格、里程、成本、生命進度、月跑量
 - **AI 跑鞋推薦助手**：依你的實際資料給換鞋與選鞋建議（需設定 OpenRouter API Key），可從目前免費且支援工具呼叫的模型中選擇
+- **AI 月度跑步報告**：一鍵由 AI 產生指定月份的跑步報告（跑量趨勢、鞋款狀態、退役提醒與下月建議），報告自動保存、可隨時回看，不需重打 LLM
 - **多使用者隔離**：每人資料完全獨立，支援註冊/登入/改密碼
 
 ## 跑步日誌
@@ -228,6 +230,22 @@ Strava 匯入後會自動同步跑鞋總里程與對應月份的月跑量，只�
 history 筆數，並套用每帳號、每 IP 與全站請求上限。公開驗證端點、註冊帳號總數、
 每人跑鞋筆數、跑步紀錄筆數及模型列表刷新頻率也都有可透過環境變數調整的防濫用限制。
 
+## AI 月度跑步報告
+
+「月報」分頁可為指定月份一鍵產生 AI 訓練報告，固定包含「本月總覽、趨勢解讀、鞋款輪替與退役提醒、下月建議」四個章節。
+
+- 統計數字全部由後端計算：當月里程、跑步次數與跑步天數、逐鞋里程與主力鞋、上月差額、年度累計、整體月跑量趨勢、接近壽命的鞋款及用途覆蓋缺口
+- 產生過程以 SSE 串流顯示；模型只負責把後端算好的數字寫成文字，不得自行計算或杜撰
+- 報告成功產生後存入資料庫（一人一月一版），同月重新產生會覆蓋舊版；之後從「歷史報告」或月份選擇器讀取，不會重打 LLM
+- 與 AI 助手共用 OpenRouter 模型選擇（沿用 AI 助手分頁選的模型）、每帳號／每 IP／全站請求上限，未來月份不可產生
+- 需設定 `OPENROUTER_API_KEY`（見上方），免費模型的可用性可能波動；產生失敗時不會寫入任何資料
+
+| API | 用途 |
+| --- | --- |
+| `POST /api/reports/generate` | 串流產生指定月份的跑步報告，成功後自動保存 |
+| `GET /api/reports` | 列出目前帳號所有已儲存的報告（不含內文） |
+| `GET /api/reports/{year}/{month}` | 取得指定月份的完整報告內容 |
+
 ## 測試
 
 專案提供統一的工程 harness，會自動選用 Windows `venv/Scripts/python.exe`、
@@ -272,7 +290,7 @@ npx playwright install chromium webkit
 
 可設定 `LAYOUT_SCREENSHOT_DIR` 保存手機版截圖供人工檢查；Windows 若使用已安裝的 Edge，可設定 `PLAYWRIGHT_CHROMIUM_CHANNEL=msedge`。WebKit 模擬檢查不等同於 iPhone 實機驗證。
 
-本次驗證基線為 Python **275 passed**、前端回歸測試 **10 passed**；測試數量會隨功能與修正持續增加，實際結果以 `./scripts/task.ps1 verify` 與 CI 當次輸出為準。
+本次驗證基線為 Python **288 passed**、前端回歸測試 **13 passed**；測試數量會隨功能與修正持續增加，實際結果以 `./scripts/task.ps1 verify` 與 CI 當次輸出為準。
 版面檢查涵蓋 WebKit／Chromium、亮／暗模式與 7 組直橫向尺寸，共 28 組設定，檢查五個分頁、表單、圖表、彈窗及空資料狀態。
 
 `docs-check` 會從 pytest collection、前端測試檔、Agent tool registry、Playwright 測試矩陣與實際檔案系統核對上述數字及 harness 路徑。新增測試、工具或版面設定卻忘記同步 README 時，`verify` 和 GitHub Actions 會直接失敗。
