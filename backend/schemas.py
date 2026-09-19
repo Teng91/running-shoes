@@ -104,6 +104,13 @@ class AgentChatRequest(BaseModel):
         return value
 
 
+class ReportGenerateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    year: ReasonableYear
+    month: CalendarMonth
+    model: str | None = Field(default=None, min_length=1, max_length=200)
+
+
 class UserChangePassword(BaseModel):
     username: Username
     old_password: str

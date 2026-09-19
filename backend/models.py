@@ -9,6 +9,7 @@ from sqlalchemy import (
     Index,
     Integer,
     String,
+    Text,
     UniqueConstraint,
     text,
 )
@@ -67,6 +68,29 @@ class MonthlyMileage(Base):
     km: Mapped[float] = mapped_column(Float, default=0)
 
     owner: Mapped["User"] = relationship(back_populates="monthly_mileages")
+
+
+class MonthlyReport(Base):
+    __tablename__ = "monthly_reports"
+    __table_args__ = (
+        UniqueConstraint("user_id", "year", "month", name="uq_user_year_month_report"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
+    year: Mapped[int] = mapped_column(Integer, nullable=False)
+    month: Mapped[int] = mapped_column(Integer, nullable=False)
+    content_md: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    model: Mapped[str] = mapped_column(String, default="", nullable=False)
+    stats_json: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(UTC)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+    )
 
 
 class Run(Base):
