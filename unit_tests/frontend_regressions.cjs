@@ -5,6 +5,19 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const source = fs.readFileSync('frontend/index.html', 'utf8');
 
+test('PWA metadata and service worker registration are present', () => {
+  assert.match(source, /rel="manifest" href="\/manifest\.webmanifest"/);
+  assert.match(source, /rel="apple-touch-icon" href="\/icons\/apple-touch-icon\.png"/);
+  assert.match(source, /navigator\.serviceWorker\.register\('\/service-worker\.js'\)/);
+});
+
+test('temporary auth connectivity failures preserve the stored session', () => {
+  const initSource = source.slice(source.indexOf('async function init()'), source.indexOf('\ninit();'));
+  assert.match(initSource, /response\.status === 401/);
+  assert.match(initSource, /catch \(error\)[\s\S]+showAppView\(\);[\s\S]+loadData\(\);/);
+  assert.doesNotMatch(initSource.match(/catch \(error\) \{[\s\S]+?\n    \}/)[0], /clearAuth\(\)/);
+});
+
 test('monthly shoe share draws values in the doughnut without a separate legend', () => {
   assert.doesNotMatch(source, /id="chart-value-legend"/);
   assert.match(source, /id: 'shoeShareLabels'/);

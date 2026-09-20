@@ -1,12 +1,20 @@
 # Running Shoes Dashboard
 
-跑鞋追蹤 Dashboard — 記錄每雙跑鞋的里程、成本與生命週期，並以跑步日誌追蹤每次跑步的日期、公里數及穿著鞋款。支援每月跑量與鞋款里程圖表，並內建 AI 跑鞋推薦助手。支援多使用者帳號，每人資料獨立隔離。
+跑鞋追蹤 Dashboard — 記錄每雙跑鞋的里程、成本與生命週期，並以跑步日誌追蹤每次跑步的日期、公里數及穿著鞋款。支援每月跑量與鞋款里程圖表，並內建 AI 跑鞋推薦助手。支援多使用者帳號，每人資料獨立隔離，也可在手機上安裝為 PWA。
 
 ## 使用方式
 
 ### 直接使用線上服務
 
 開啟部署好的網址，註冊帳號即可開始使用，每個人的跑鞋資料完全隔離。
+
+#### 安裝到 iPhone 主畫面
+
+1. 使用 Safari 開啟線上服務。
+2. 點選 Safari 的「分享」按鈕。
+3. 選擇「加入主畫面」，再按「新增」。
+
+之後可從主畫面以獨立 App 視窗開啟。PWA 本身免費，不需要 TestFlight 或 Apple Developer 帳號。登入、資料同步與 AI 功能仍需要網路連線；離線時會保留登入狀態，待重新連線後繼續使用。
 
 > 所有使用者共用同一個 Fly.io 免費容器（256MB RAM），人數或資料量過多可能影響效能。
 
@@ -38,6 +46,10 @@ running-shoes/
 │   └── run.py            # 本機開發啟動入口
 ├── frontend/
 │   ├── index.html        # Dashboard 前端（Chart.js）
+│   ├── manifest.webmanifest # PWA 名稱、顏色與圖示設定
+│   ├── service-worker.js # App shell 快取與離線 fallback
+│   ├── offline.html      # 無快取頁面可用時的離線提示
+│   ├── icons/            # PWA 與 iOS 主畫面圖示
 │   └── favicon.svg
 ├── scripts/
 │   ├── check_docs.py     # 核對 README 測試數、工具數、版面矩陣與 harness 路徑
@@ -293,7 +305,7 @@ npx playwright install chromium webkit
 
 可設定 `LAYOUT_SCREENSHOT_DIR` 保存手機版截圖供人工檢查；Windows 若使用已安裝的 Edge，可設定 `PLAYWRIGHT_CHROMIUM_CHANNEL=msedge`。WebKit 模擬檢查不等同於 iPhone 實機驗證。
 
-本次驗證基線為 Python **291 passed**、前端回歸測試 **15 passed**；測試數量會隨功能與修正持續增加，實際結果以 `./scripts/task.ps1 verify` 與 CI 當次輸出為準。
+本次驗證基線為 Python **291 passed**、前端回歸測試 **17 passed**；測試數量會隨功能與修正持續增加，實際結果以 `./scripts/task.ps1 verify` 與 CI 當次輸出為準。
 版面檢查涵蓋 WebKit／Chromium、亮／暗模式與 7 組直橫向尺寸，共 28 組設定，檢查五個分頁、表單、圖表、彈窗及空資料狀態。
 
 `docs-check` 會從 pytest collection、前端測試檔、Agent tool registry、Playwright 測試矩陣與實際檔案系統核對上述數字及 harness 路徑。新增測試、工具或版面設定卻忘記同步 README 時，`verify` 和 GitHub Actions 會直接失敗。

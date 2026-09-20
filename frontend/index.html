@@ -2,9 +2,15 @@
 <html lang="zh-TW">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>跑鞋追蹤 Dashboard</title>
+<meta name="theme-color" content="#0f1117">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="跑鞋追蹤">
+<link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4" onerror="console.error('Chart.js CDN failed')"></script>
 <script src="https://cdn.jsdelivr.net/npm/marked@15/marked.min.js" onerror="console.error('marked.js CDN failed')"></script>
 <style>
@@ -40,7 +46,7 @@ body.light-theme {
 }
 * { margin:0; padding:0; box-sizing:border-box; }
 body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; opacity: 0; transition: opacity 0.15s, background-color 0.1s, color 0.1s; }
-.container { max-width: 1400px; margin: 0 auto; padding: 24px; }
+.container { max-width: 1400px; margin: 0 auto; padding: max(24px, env(safe-area-inset-top)) max(24px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(24px, env(safe-area-inset-left)); }
 h1 { font-size: 28px; font-weight: 700; margin-bottom: 4px; }
 .subtitle { color: var(--text-dim); font-size: 14px; margin-bottom: 24px; }
 
@@ -3829,15 +3835,24 @@ async function init() {
   loadAgentModels();
   if (authToken) {
     try {
-      await fetch(API_BASE + '/auth/me', { headers: authHeaders() });
+      const response = await fetch(API_BASE + '/auth/me', { headers: authHeaders() });
+      if (response.status === 401) {
+        clearAuth();
+        showLoginView();
+        document.body.style.opacity = '1';
+        return;
+      }
+      if (!response.ok) throw new Error('驗證服務暫時無法使用');
       showAppView();
       // 還原 F5 之前的 tab（init 走 stored token，沒經過 resetAppLayout）。
       const savedTab = localStorage.getItem('activeTab');
       if (savedTab && savedTab !== 'runs') switchTab(savedTab);
       loadData();
-    } catch {
-      clearAuth();
-      showLoginView();
+    } catch (error) {
+      // 離線或伺服器暫時無法連線時保留 token，避免 PWA 被迫重新登入。
+      console.warn('無法驗證登入狀態，保留目前工作階段:', error);
+      showAppView();
+      loadData();
     }
   } else {
     showLoginView();
@@ -3846,6 +3861,13 @@ async function init() {
 }
 
 init();
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/service-worker.js')
+      .catch(error => console.warn('Service Worker 註冊失敗:', error));
+  });
+}
 
 // Resize handler — re-apply agent tab layout on window resize
 window.addEventListener('resize', () => {
