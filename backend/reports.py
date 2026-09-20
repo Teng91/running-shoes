@@ -179,6 +179,11 @@ def build_report_messages(stats: dict) -> list[dict]:
         "當 month_state 為 current 時，也要依 pace_delta_km 說明進度超前或落後，"
         "並參考 remaining_days 與 required_daily_km；為 false 時不得套用目標。\n"
         "7. 語氣親切務實，總長度控制在 600 字以內。"
+        "\n排版格式：\n"
+        "- 不要輸出一級標題（#），開頭先用 markdown 引用（>）寫一行『本月一句話摘要』。\n"
+        "- 接著用 markdown 表格整理 3 到 6 個 JSON 已提供的關鍵指標；沒有的指標不要補。\n"
+        "- 四個指定章節一律使用二級標題（##），段落以短句與條列為主。\n"
+        "- 關鍵數字可用粗體標示，但不要使用 HTML、程式碼區塊或額外章節。"
     )
     return [
         {"role": "system", "content": system},
