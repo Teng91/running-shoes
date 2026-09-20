@@ -300,7 +300,45 @@ tr:hover td { background: rgba(99,102,241,0.05); }
 .agent-msg-content blockquote { border-left: 3px solid var(--accent); padding-left: 12px; margin: 8px 0; color: var(--text-dim); }
 .agent-message.user .agent-msg-content { max-width: 80%; background: var(--accent); color: white; border-bottom-right-radius: 4px; }
 .agent-message.bot .agent-msg-content { background: var(--bg); color: var(--text); border-bottom-left-radius: 4px; }
-.report-content { background: var(--bg); border: 1px solid var(--border); border-radius: 12px; min-height: 60px; }
+.report-content {
+  max-width: 920px;
+  margin: 0 auto;
+  padding: clamp(20px, 4vw, 38px);
+  background: linear-gradient(145deg, var(--bg), rgba(99,102,241,.045));
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  min-height: 120px;
+  font-size: 15px;
+  line-height: 1.85;
+}
+.report-content > :first-child { margin-top: 0; }
+.report-content > :last-child { margin-bottom: 0; }
+.report-content h1 { font-size: 24px; margin-bottom: 18px; }
+.report-content h2 {
+  font-size: 18px;
+  margin: 28px 0 12px;
+  padding: 9px 12px;
+  border-left: 4px solid var(--accent);
+  border-radius: 0 8px 8px 0;
+  background: rgba(99,102,241,.09);
+}
+.report-content h3 { color: var(--accent-light); margin-top: 20px; }
+.report-content p { margin: 10px 0; }
+.report-content ul, .report-content ol { margin: 10px 0 14px; padding-left: 24px; }
+.report-content li { margin: 6px 0; padding-left: 3px; }
+.report-content blockquote {
+  margin: 0 0 22px;
+  padding: 14px 18px;
+  border-left: 4px solid var(--green);
+  border-radius: 0 10px 10px 0;
+  background: rgba(34,197,94,.08);
+  color: var(--text);
+  font-size: 16px;
+}
+.report-content table { display: table; width: 100%; margin: 14px 0 22px; }
+.report-content th, .report-content td { white-space: normal; padding: 9px 12px; }
+.report-content strong { color: var(--accent-light); }
+.report-content.is-streaming::after { content: '▍'; color: var(--accent-light); animation: blink 1s step-end infinite; }
 .agent-input-area { display: flex; gap: 8px; align-items: flex-end; flex-shrink: 0; }
 .agent-input-area textarea { flex: 1; background: var(--card); border: 1px solid var(--border); color: var(--text); font-size: 14px; padding: 10px 14px; border-radius: 12px; resize: none; font-family: inherit; }
 .agent-input-area textarea:focus { outline: none; border-color: var(--accent); }
@@ -436,6 +474,10 @@ input::-webkit-date-and-time-value { text-align: left; min-width: 0; }
   .agent-config select { flex: 1 1 160px; }
   .agent-messages { padding: 10px; }
   .agent-input-area button { padding: 10px 14px; }
+  .report-content { padding: 18px 16px; font-size: 14px; }
+  .report-content h1 { font-size: 21px; }
+  .report-content h2 { font-size: 17px; margin-top: 22px; }
+  .report-content table { display: block; }
 }
 @media (max-width: 380px) {
   .container { padding: 12px; }
@@ -3728,8 +3770,18 @@ async function generateReport() {
   let fullText = '';
   let receivedDone = false;
   let receivedError = false;
+  let markdownFrame = null;
+
+  const scheduleMarkdownRender = () => {
+    if (markdownFrame !== null) return;
+    markdownFrame = requestAnimationFrame(() => {
+      markdownFrame = null;
+      content.innerHTML = renderMarkdown(fullText);
+    });
+  };
 
   try {
+    content.classList.add('is-streaming');
     const res = await fetch(API_BASE + '/reports/generate', {
       method: 'POST',
       headers: {
@@ -3776,12 +3828,13 @@ async function generateReport() {
         const event = JSON.parse(data);
         if (event.type === 'token') {
           fullText += event.text;
-          // 串流中用 textContent，避免不完整 markdown 閃爍
-          content.textContent = fullText;
+          // marked 可以處理尚未完成的 Markdown；每個畫面幀最多重繪一次，
+          // 讓標題、清單與表格在串流期間逐步成形而不造成過度重排。
+          scheduleMarkdownRender();
         } else if (event.type === 'error') {
           receivedError = true;
           fullText += '\n\n⚠️ ' + event.text;
-          content.textContent = fullText;
+          scheduleMarkdownRender();
           setReportStatus('報告未儲存：' + event.text);
         } else if (event.type === 'done') {
           receivedDone = true;
@@ -3821,6 +3874,7 @@ async function generateReport() {
     content.textContent = '⚠️ ' + message;
     console.error('報告請求失敗:', e);
   } finally {
+    content.classList.remove('is-streaming');
     btn.disabled = false;
     btn.textContent = '產生報告';
   }

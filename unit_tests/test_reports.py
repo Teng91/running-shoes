@@ -157,6 +157,9 @@ def test_build_report_messages_only_provides_backend_numbers(db):
     assert [m["role"] for m in messages] == ["system", "user"]
     assert "不得自行計算、估算或杜撰" in messages[0]["content"]
     assert "目標達成率" in messages[0]["content"]
+    assert "本月一句話摘要" in messages[0]["content"]
+    assert "markdown 表格" in messages[0]["content"]
+    assert "二級標題（##）" in messages[0]["content"]
     serialized = json.dumps(stats, ensure_ascii=False)
     assert '"month_km"' in serialized and "10.0" in serialized
 
