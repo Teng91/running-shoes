@@ -11,6 +11,14 @@ test('PWA metadata and service worker registration are present', () => {
   assert.match(source, /navigator\.serviceWorker\.register\('\/service-worker\.js'\)/);
 });
 
+test('monthly reports progressively render markdown with document styling', () => {
+  assert.match(source, /class="agent-msg-content report-content"/);
+  assert.match(source, /\.report-content h2 \{/);
+  assert.match(source, /\.report-content blockquote \{/);
+  assert.match(source, /scheduleMarkdownRender\(\)/);
+  assert.match(source, /content\.classList\.add\('is-streaming'\)/);
+});
+
 test('temporary auth connectivity failures preserve the stored session', () => {
   const initSource = source.slice(source.indexOf('async function init()'), source.indexOf('\ninit();'));
   assert.match(initSource, /response\.status === 401/);
