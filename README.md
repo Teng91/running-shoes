@@ -6,7 +6,7 @@
 
 ### 直接使用線上服務
 
-開啟部署好的網址，註冊帳號即可開始使用，每個人的跑鞋資料完全隔離。
+開啟 [running-shoes.fly.dev](https://running-shoes.fly.dev/)，註冊帳號即可開始使用，每個人的跑鞋資料完全隔離。
 
 #### 安裝到 iPhone 主畫面
 
@@ -14,7 +14,9 @@
 2. 點選 Safari 的「分享」按鈕。
 3. 選擇「加入主畫面」，再按「新增」。
 
-之後可從主畫面以獨立 App 視窗開啟。PWA 本身免費，不需要 TestFlight 或 Apple Developer 帳號。登入、資料同步與 AI 功能仍需要網路連線；離線時會保留登入狀態，待重新連線後繼續使用。
+之後可從主畫面以獨立 App 視窗開啟，並使用跑鞋搭配里程進度環的專屬圖示。PWA 本身免費，不需要 TestFlight 或 Apple Developer 帳號。登入、資料同步與 AI 功能仍需要網路連線；離線時會保留登入狀態，待重新連線後繼續使用。
+
+如果主畫面仍顯示舊圖示，請先刪除原本的主畫面捷徑，再從 Safari 重新執行「加入主畫面」，讓 iOS 重新取得圖示。
 
 > 所有使用者共用同一個 Fly.io 免費容器（256MB RAM），人數或資料量過多可能影響效能。
 
@@ -49,7 +51,7 @@ running-shoes/
 │   ├── manifest.webmanifest # PWA 名稱、顏色與圖示設定
 │   ├── service-worker.js # App shell 快取與離線 fallback
 │   ├── offline.html      # 無快取頁面可用時的離線提示
-│   ├── icons/            # PWA 與 iOS 主畫面圖示
+│   ├── icons/            # PWA、iOS 主畫面圖示與高解析度來源檔
 │   └── favicon.svg
 ├── scripts/
 │   ├── check_docs.py     # 核對 README 測試數、工具數、版面矩陣與 harness 路徑
