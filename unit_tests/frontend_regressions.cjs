@@ -198,6 +198,13 @@ test('the report month defaults to the last complete month', () => {
   assert.equal(context.previousMonthValue(new Date(2026, 8, 19)), '2026-08');
 });
 
+test('shoe purposes use four full-width, non-shrinking options', () => {
+  assert.match(source, /\.form-row \.category-field \{ grid-column: 1 \/ -1; \}/);
+  assert.match(source, /grid-template-columns: repeat\(4, minmax\(0, 1fr\)\)/);
+  assert.match(source, /flex: 0 0 14px/);
+  assert.doesNotMatch(source, /value="Trail"/);
+});
+
 test('report streaming distinguishes saved completion from an interrupted response', () => {
   const generateReport = extract('generateReport');
   assert.match(generateReport, /buffer \+= decoder\.decode\(\)/);
