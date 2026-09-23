@@ -307,14 +307,13 @@ def test_update_shoe_categories(client, db, user_with_token):
     assert res.json()["categories"] == ["Tempo"]
 
 
-def test_create_shoe_with_trail_category(client, user_with_token):
+def test_create_shoe_rejects_trail_category(client, user_with_token):
     _user, token = user_with_token
     res = client.post("/api/shoes", headers=_auth_header(token), json={
         "brand": "Salomon", "model": "Sense Ride", "date": "2026-01-01",
         "categories": ["Trail"],
     })
-    assert res.status_code == 200
-    assert res.json()["categories"] == ["Trail"]
+    assert res.status_code == 422
 
 
 def test_create_shoe_rejects_walk_category(client, user_with_token):
@@ -492,7 +491,7 @@ def test_run_log_crud(client, db, user_with_token):
     assert september.km == 0
 
 
-def test_cannot_delete_shoe_used_by_run_log(client, db, user_with_token):
+def test_delete_shoe_with_run_log_preserves_history(client, db, user_with_token):
     user, token = user_with_token
     shoe = Shoe(user_id=user.id, brand="Mizuno", model="Wave Rider", date="2026-01-01")
     db.add(shoe)
@@ -505,9 +504,20 @@ def test_cannot_delete_shoe_used_by_run_log(client, db, user_with_token):
     assert created.status_code == 200
 
     deleted = client.delete(f"/api/shoes/{shoe.id}", headers=headers)
-    assert deleted.status_code == 409
-    assert deleted.json()["detail"] == "這雙跑鞋已有跑步紀錄，請保留或移至退役"
+    assert deleted.status_code == 200
+    assert client.get("/api/shoes/active", headers=headers).json() == []
     assert client.get("/api/runs", headers=headers).json()[0]["shoe_id"] == shoe.id
+    db.refresh(shoe)
+    assert shoe.is_deleted is True
+
+    # A deleted shoe cannot be edited, selected for a new run, or deleted again.
+    assert client.put(
+        f"/api/shoes/{shoe.id}", headers=headers, json={"brand": "Hidden"}
+    ).status_code == 404
+    assert client.post("/api/runs", headers=headers, json={
+        "date": "2026-08-13", "km": 5, "shoe_id": shoe.id,
+    }).status_code == 404
+    assert client.delete(f"/api/shoes/{shoe.id}", headers=headers).status_code == 404
 
 
 def test_run_update_applies_net_delta_when_totals_were_manually_lowered(

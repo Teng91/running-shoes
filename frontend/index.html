@@ -215,16 +215,13 @@ tr:hover td { background: rgba(99,102,241,0.05); }
 .category-card span { color: var(--text-dim); }
 @media (max-width: 700px) { .category-grid { grid-template-columns: 1fr 1fr; } }
 
-/* Category checkboxes in modal — flex-wrap so items pack tightly
-   without leaving an empty cell on the right of the last row. */
 .category-checkboxes {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
   margin-top: 4px;
 }
 .category-checkboxes label {
-  flex: 1 1 calc(33% - 8px);
   min-width: 0;
 }
 .category-checkboxes label {
@@ -482,7 +479,7 @@ input::-webkit-date-and-time-value { text-align: left; min-width: 0; }
 @media (max-width: 380px) {
   .container { padding: 12px; }
   .run-entry-grid, .form-row { grid-template-columns: minmax(0, 1fr); }
-  .category-checkboxes label { flex-basis: calc(50% - 8px); }
+  .category-checkboxes { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 </style>
 </head>
@@ -858,7 +855,6 @@ input::-webkit-date-and-time-value { text-align: left; min-width: 0; }
           <label><input type="checkbox" value="Speed"> Speed</label>
           <label><input type="checkbox" value="Tempo"> Tempo</label>
           <label><input type="checkbox" value="Race"> Race</label>
-          <label><input type="checkbox" value="Trail"> Trail</label>
         </div>
       </div>
     </div>
@@ -1501,10 +1497,8 @@ function renderCards() {
   ).join('');
 }
 
-const SHOE_CATEGORIES = ['Daily', 'Speed', 'Tempo', 'Race', 'Trail'];
-// Categories shown in the summary cards ("need to replenish" alert) —
-// Trail is excluded since you don't track replacement needs for it.
-const SUMMARY_CATEGORIES = ['Daily', 'Speed', 'Tempo', 'Race'];
+const SHOE_CATEGORIES = ['Daily', 'Speed', 'Tempo', 'Race'];
+const SUMMARY_CATEGORIES = SHOE_CATEGORIES;
 
 // Safely get a shoe's categories as an array (handles both old string and new array formats)
 function shoeCategories(s) {
@@ -3203,7 +3197,7 @@ class ShoeModal {
   }
 
   async delete() {
-    if (!confirm(`確定刪除 ${this.shoe.brand} ${this.shoe.model}？此動作無法復原。`)) return;
+    if (!confirm(`確定刪除 ${this.shoe.brand} ${this.shoe.model}？跑步紀錄會保留，但鞋款無法復原。`)) return;
     try { await apiDelete('/shoes/' + this.shoe.id); }
     catch (e) { return alert(e.message || '刪除失敗'); }
     this.close();

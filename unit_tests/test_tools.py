@@ -116,7 +116,7 @@ def test_shoe_category_status_checks_specific_retirement(seeded_db):
     assert out["purchase_recommendation"] == "no_purchase_needed"
 
 
-def test_shoe_category_status_includes_trail(seeded_db):
+def test_shoe_category_status_ignores_discontinued_trail(seeded_db):
     db, uid = seeded_db
     shoe = Shoe(
         user_id=uid, brand="Salomon", model="Sense Ride", date="2026-01-01",
@@ -126,9 +126,8 @@ def test_shoe_category_status_includes_trail(seeded_db):
     db.commit()
     out = _result(db_tools.shoe_category_status(db, uid, "Sense Ride"))
     assert out["shoe"]["model"] == "Sense Ride"
-    assert out["coverage_after_target_retirement"][0]["category"] == "Trail"
-    assert out["all_categories_remain_covered"] is False
-    assert out["purchase_recommendation"] == "prepare_replacement_purchase"
+    assert out["shoe"]["categories"] == []
+    assert out["category_status"] == "categories_not_configured"
 
 
 def test_shoe_category_status_excludes_walk(seeded_db):
@@ -142,7 +141,7 @@ def test_shoe_category_status_excludes_walk(seeded_db):
     db.commit()
     out = _result(db_tools.shoe_category_status(db, uid))
     assert {item["category"] for item in out["categories"]} == {
-        "Daily", "Speed", "Tempo", "Race", "Trail",
+        "Daily", "Speed", "Tempo", "Race",
     }
 
 
@@ -160,7 +159,6 @@ def test_shoe_category_status_multi_category_counts_for_all_purposes(seeded_db):
     categories = {item["category"]: item for item in out["categories"]}
     assert categories["Speed"]["active_shoe_count"] == 2
     assert categories["Tempo"]["active_shoe_count"] == 2
-    assert categories["Trail"]["active_shoe_count"] == 0
 
 
 def test_nearing_end_of_life_requires_backup_for_every_category(seeded_db):
@@ -169,7 +167,7 @@ def test_nearing_end_of_life_requires_backup_for_every_category(seeded_db):
     shoe = Shoe(
         user_id=uid, brand="Saucony", model="Endorphin", date="2026-01-01",
         mileage=460, expected_mileage=500, monthly_km=30,
-        categories=["Daily", "Trail"],
+        categories=["Daily", "Race"],
     )
     db.add(shoe)
     db.commit()
@@ -178,8 +176,8 @@ def test_nearing_end_of_life_requires_backup_for_every_category(seeded_db):
     assert result["usage_percent"] == 92
     assert result["has_active_category_replacement"] is False
     assert result["all_categories_have_active_replacement"] is False
-    assert result["uncovered_categories"] == ["Trail"]
-    assert result["category_replacement_coverage"] == {"Daily": 2, "Trail": 0}
+    assert result["uncovered_categories"] == ["Race"]
+    assert result["category_replacement_coverage"] == {"Daily": 2, "Race": 0}
     assert result["replacement_recommendation"] == "prepare_replacement_purchase"
     assert result["active_replacement_count_sharing_any_category"] == 2
 
