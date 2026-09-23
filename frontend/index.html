@@ -219,24 +219,35 @@ tr:hover td { background: rgba(99,102,241,0.05); }
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
-  margin-top: 4px;
-}
-.category-checkboxes label {
-  min-width: 0;
+  margin-top: 6px;
 }
 .category-checkboxes label {
   display: flex;
+  justify-content: center;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+  padding: 8px 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
   font-size: 13px;
   color: var(--text);
   cursor: pointer;
 }
+.category-checkboxes label:has(input:checked) {
+  border-color: var(--accent);
+  background: rgba(99,102,241,0.12);
+}
 .category-checkboxes input[type="checkbox"] {
+  flex: 0 0 14px;
   width: 14px;
   height: 14px;
+  margin: 0;
   accent-color: var(--accent);
 }
+.form-row .category-field { grid-column: 1 / -1; }
 
 /* Inline edit */
 .inline-input { width: 70px; padding: 2px 6px; background: var(--bg); border: 1px solid var(--accent); border-radius: 4px; color: var(--text); font-size: 13px; text-align: right; }
@@ -479,7 +490,6 @@ input::-webkit-date-and-time-value { text-align: left; min-width: 0; }
 @media (max-width: 380px) {
   .container { padding: 12px; }
   .run-entry-grid, .form-row { grid-template-columns: minmax(0, 1fr); }
-  .category-checkboxes { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 </style>
 </head>
@@ -849,7 +859,7 @@ input::-webkit-date-and-time-value { text-align: left; min-width: 0; }
       <div class="form-group"><label>月跑量 (km)</label><input id="f-monthly" type="number" placeholder="60"></div>
     </div>
     <div class="form-row">
-      <div class="form-group"><label>用途類別 (可多選)</label>
+      <div class="form-group category-field"><label>用途類別 (可多選)</label>
         <div id="f-category-group" class="category-checkboxes">
           <label><input type="checkbox" value="Daily"> Daily</label>
           <label><input type="checkbox" value="Speed"> Speed</label>
