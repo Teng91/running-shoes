@@ -346,7 +346,7 @@ async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
 
     # Add concurrency/session versions to existing databases without changing data.
-    for table, column in (("users", "token_version"), ("shoes", "version")):
+    for table, column in (("users", "token_version"), ("shoes", "version"), ("shoes", "is_deleted")):
         columns = {item["name"] for item in inspect(engine).get_columns(table)}
         if column not in columns:
             with engine.begin() as conn:
@@ -386,16 +386,16 @@ async def lifespan(app: FastAPI):
                 # Table exists but has no category column at all — add the new one
                 conn.execute(text("ALTER TABLE shoes ADD COLUMN categories TEXT NOT NULL DEFAULT '[]'"))
         # Remove discontinued categories in one pass, including repeated values.
-        # Preserve the remaining labels and leave formerly Walk-only shoes unclassified.
+        # Preserve the remaining labels and leave shoes with no remaining purpose unclassified.
         conn.execute(text("""
             UPDATE shoes
             SET categories = (
                 SELECT json_group_array(value) FROM json_each(shoes.categories)
-                WHERE value NOT IN ('Other', 'Walk')
+                WHERE value NOT IN ('Other', 'Walk', 'Trail')
             ), version = version + 1
             WHERE EXISTS (
                 SELECT 1 FROM json_each(shoes.categories)
-                WHERE value IN ('Other', 'Walk')
+                WHERE value IN ('Other', 'Walk', 'Trail')
             )
         """))
 
@@ -524,6 +524,7 @@ def list_active(
 ):
     return db.query(models.Shoe).filter(
         models.Shoe.is_retired.is_(False),
+        models.Shoe.is_deleted.is_(False),
         models.Shoe.user_id == current_user.id,
     ).all()
 
@@ -535,6 +536,7 @@ def list_retired(
 ):
     return db.query(models.Shoe).filter(
         models.Shoe.is_retired.is_(True),
+        models.Shoe.is_deleted.is_(False),
         models.Shoe.user_id == current_user.id,
     ).all()
 
@@ -545,7 +547,10 @@ def create_shoe(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    shoe_count = db.query(models.Shoe).filter(models.Shoe.user_id == current_user.id).count()
+    shoe_count = db.query(models.Shoe).filter(
+        models.Shoe.user_id == current_user.id,
+        models.Shoe.is_deleted.is_(False),
+    ).count()
     if isinstance(shoe_count, int) and shoe_count >= MAX_SHOES_PER_USER:
         raise HTTPException(status_code=409, detail="跑鞋資料已達上限")
     shoe = models.Shoe(**payload.model_dump(), user_id=current_user.id)
@@ -569,6 +574,7 @@ def update_shoe(
     shoe = db.query(models.Shoe).filter(
         models.Shoe.id == shoe_id,
         models.Shoe.user_id == current_user.id,
+        models.Shoe.is_deleted.is_(False),
     ).first()
     if not shoe:
         raise HTTPException(status_code=404, detail="Shoe not found")
@@ -576,6 +582,7 @@ def update_shoe(
     expected_version = update_data.pop("expected_version", None)
     query = db.query(models.Shoe).filter(
         models.Shoe.id == shoe_id, models.Shoe.user_id == current_user.id,
+        models.Shoe.is_deleted.is_(False),
     )
     if expected_version is not None:
         query = query.filter(models.Shoe.version == expected_version)
@@ -604,18 +611,14 @@ def delete_shoe(
     shoe = db.query(models.Shoe).filter(
         models.Shoe.id == shoe_id,
         models.Shoe.user_id == current_user.id,
+        models.Shoe.is_deleted.is_(False),
     ).first()
     if not shoe:
         raise HTTPException(status_code=404, detail="Shoe not found")
-    if db.query(models.Run).filter(
-        models.Run.user_id == current_user.id,
-        models.Run.shoe_id == shoe_id,
-    ).first():
-        raise HTTPException(
-            status_code=409,
-            detail="這雙跑鞋已有跑步紀錄，請保留或移至退役",
-        )
-    db.delete(shoe)
+    # Soft-delete the shoe so linked run history and aggregate mileage remain intact.
+    # Deleted shoes are excluded from the shoe cabinet and future run selection.
+    shoe.is_deleted = True
+    shoe.version = getattr(shoe, "version", 0) + 1
     try:
         db.commit()
     except Exception:
@@ -629,6 +632,7 @@ def _user_shoe_or_404(db: Session, user_id: int, shoe_id: int) -> models.Shoe:
     shoe = db.query(models.Shoe).filter(
         models.Shoe.id == shoe_id,
         models.Shoe.user_id == user_id,
+        models.Shoe.is_deleted.is_(False),
     ).first()
     if not shoe:
         raise HTTPException(status_code=404, detail="Shoe not found")
@@ -834,7 +838,10 @@ def _strava_preview(db: Session, user_id: int, rows: list[dict[str, object]], in
             models.Run.user_id == user_id, models.Run.strava_id.isnot(None)
         ).all()
     }
-    shoes = db.query(models.Shoe).filter(models.Shoe.user_id == user_id).all()
+    shoes = db.query(models.Shoe).filter(
+        models.Shoe.user_id == user_id,
+        models.Shoe.is_deleted.is_(False),
+    ).all()
     shoes_by_key: dict[str, list[models.Shoe]] = {}
     for shoe in shoes:
         key = _normalize_gear(f"{shoe.brand} {shoe.model}")
@@ -904,7 +911,10 @@ async def import_strava_runs(
     raw = await _read_strava_upload(file)
     rows, invalid, _ = _parse_strava_csv(raw)
     rows, filtered_out = _filter_strava_rows(rows, start_date, end_date)
-    shoes = {shoe.id: shoe for shoe in db.query(models.Shoe).filter(models.Shoe.user_id == current_user.id).all()}
+    shoes = {shoe.id: shoe for shoe in db.query(models.Shoe).filter(
+        models.Shoe.user_id == current_user.id,
+        models.Shoe.is_deleted.is_(False),
+    ).all()}
     normalized_mapping: dict[str, int | None] = {}
     for gear, shoe_id in parsed_mapping.items():
         if shoe_id in (None, "", 0, "0"):
@@ -1292,7 +1302,10 @@ def export_shoes(
     - mode: all(全部) | active(現役) | retired(退役) (預設 active)
     """
     # 查詢鞋款
-    query = db.query(models.Shoe).filter(models.Shoe.user_id == current_user.id)
+    query = db.query(models.Shoe).filter(
+        models.Shoe.user_id == current_user.id,
+        models.Shoe.is_deleted.is_(False),
+    )
     if mode == "active":
         query = query.filter(models.Shoe.is_retired == False)  # noqa: E712
     elif mode == "retired":
@@ -1387,6 +1400,7 @@ def monthly_spending(
     """回傳每月鞋款支出統計（依購買日期 grouped）。"""
     shoes = db.query(models.Shoe).filter(
         models.Shoe.user_id == current_user.id,
+        models.Shoe.is_deleted.is_(False),
     ).all()
 
     buckets: dict[tuple[int, int], dict] = {}

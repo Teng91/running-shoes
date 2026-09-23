@@ -144,8 +144,8 @@ def test_discontinued_category_cleanup_preserves_data_and_is_idempotent(monkeypa
             rows = conn.execute(text(
                 "SELECT categories, version, mileage, is_retired FROM shoes ORDER BY id"
             )).fetchall()
-        assert [json.loads(row[0]) for row in rows] == [["Daily", "Tempo"], [], ["Trail"], []]
-        assert [row[1] for row in rows] == [6, 6, 5, 5]
+        assert [json.loads(row[0]) for row in rows] == [["Daily", "Tempo"], [], [], []]
+        assert [row[1] for row in rows] == [6, 6, 6, 5]
         assert all(row[2] == 123.45 for row in rows)
         assert rows[1][3] == 1
 

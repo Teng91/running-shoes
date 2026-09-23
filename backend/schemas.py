@@ -13,7 +13,7 @@ from pydantic import (
 )
 
 # All valid shoe purpose/function categories.
-SHOE_CATEGORIES = ["Daily", "Speed", "Tempo", "Race", "Trail"]
+SHOE_CATEGORIES = ["Daily", "Speed", "Tempo", "Race"]
 ReasonableYear = Annotated[int, Field(ge=1900, le=2100)]
 CalendarMonth = Annotated[int, Field(ge=1, le=12)]
 NonNegativeFiniteKm = Annotated[float, Field(ge=0, allow_inf_nan=False)]
