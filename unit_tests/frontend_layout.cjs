@@ -14,7 +14,10 @@ async function assertLayout(page, label) {
     for (const e of document.querySelectorAll('.form-group input, .form-group select, .form-group textarea')) {
       if (!visible(e)) continue;
       const box = e.getBoundingClientRect(), parent = e.parentElement.getBoundingClientRect();
-      if (box.left < parent.left - 1 || box.right > parent.right + 1) problems.push(`control exceeds field: ${e.id}`);
+      if (box.left < parent.left - 1 || box.right > parent.right + 1) {
+        const identity = e.id || `${e.type}:${e.value || e.name || 'unnamed'}`;
+        problems.push(`control exceeds field: ${identity}`);
+      }
       if (innerWidth <= 760 && e.type === 'date' && e.closest('.form-row, .run-entry-grid')) {
         const grid = e.closest('.form-row, .run-entry-grid').getBoundingClientRect();
         if (box.width < grid.width - 2) problems.push(`mobile date field needs a full row: ${e.id}`);

@@ -2,7 +2,8 @@ from scripts import check_docs
 
 
 def test_docs_harness_reads_frontend_test_count():
-    assert check_docs.frontend_test_count() == 18
+    _python_count, documented_frontend_count = check_docs.documented_counts()
+    assert check_docs.frontend_test_count() == documented_frontend_count
 
 
 def test_docs_harness_reads_agent_tool_count():
