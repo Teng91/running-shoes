@@ -66,7 +66,9 @@ def _shoe_data(shoe: models.Shoe) -> dict:
         "shoe_id": shoe.id,
         "brand": shoe.brand,
         "model": shoe.model,
-        "categories": shoe.categories or [],
+        "categories": [
+            category for category in (shoe.categories or []) if category in SHOE_CATEGORIES
+        ],
         "status": "retired" if shoe.is_retired else "active",
         "purchase_date": shoe.date,
         "size": shoe.size,
@@ -82,7 +84,7 @@ def _shoe_data(shoe: models.Shoe) -> dict:
 def list_my_shoes(db: Session, user_id: int) -> str:
     shoes = (
         db.query(models.Shoe)
-        .filter(models.Shoe.user_id == user_id)
+        .filter(models.Shoe.user_id == user_id, models.Shoe.is_deleted.is_(False))
         .order_by(models.Shoe.is_retired, models.Shoe.date.desc())
         .all()
     )
@@ -102,7 +104,9 @@ def list_my_shoes(db: Session, user_id: int) -> str:
 
 
 def shoe_summary(db: Session, user_id: int) -> str:
-    shoes = db.query(models.Shoe).filter(models.Shoe.user_id == user_id).all()
+    shoes = db.query(models.Shoe).filter(
+        models.Shoe.user_id == user_id, models.Shoe.is_deleted.is_(False)
+    ).all()
     active = [s for s in shoes if not s.is_retired]
     retired = [s for s in shoes if s.is_retired]
     active_lifecycle = sorted(
@@ -175,7 +179,11 @@ def monthly_mileage_stats(db: Session, user_id: int) -> str:
 def nearing_end_of_life(db: Session, user_id: int, threshold: float = 0.8) -> str:
     shoes = (
         db.query(models.Shoe)
-        .filter(models.Shoe.user_id == user_id, models.Shoe.is_retired.is_(False))
+        .filter(
+            models.Shoe.user_id == user_id,
+            models.Shoe.is_retired.is_(False),
+            models.Shoe.is_deleted.is_(False),
+        )
         .all()
     )
     candidates = []
@@ -190,7 +198,9 @@ def nearing_end_of_life(db: Session, user_id: int, threshold: float = 0.8) -> st
     candidates.sort(key=lambda item: item[0], reverse=True)
     results = []
     for _pct, s, _remain in candidates:
-        target_categories = list(s.categories or [])
+        target_categories = [
+            category for category in (s.categories or []) if category in SHOE_CATEGORIES
+        ]
         category_coverage = {
             category: sum(
                 other.id != s.id and category in (other.categories or [])
@@ -232,7 +242,9 @@ def nearing_end_of_life(db: Session, user_id: int, threshold: float = 0.8) -> st
 
 def compare_shoes(db: Session, user_id: int, shoe_a: str = "", shoe_b: str = "") -> str:
     """比較目前使用者的兩雙鞋，名稱可用「品牌 鞋款」或其中一段文字。"""
-    shoes = db.query(models.Shoe).filter(models.Shoe.user_id == user_id).all()
+    shoes = db.query(models.Shoe).filter(
+        models.Shoe.user_id == user_id, models.Shoe.is_deleted.is_(False)
+    ).all()
 
     def find_shoe(query: str):
         query = (query or "").strip().lower()
@@ -290,7 +302,9 @@ def shoe_category_status(db: Session, user_id: int, shoe_name: str = "") -> str:
     一雙鞋可對應多個用途（例如 Daily + Tempo）。退役分析會檢查該鞋
     涵蓋的每個類別是否還有其他現役鞋作為替代。
     """
-    shoes = db.query(models.Shoe).filter(models.Shoe.user_id == user_id).all()
+    shoes = db.query(models.Shoe).filter(
+        models.Shoe.user_id == user_id, models.Shoe.is_deleted.is_(False)
+    ).all()
     active = [s for s in shoes if not s.is_retired]
     retired = [s for s in shoes if s.is_retired]
 
@@ -305,7 +319,9 @@ def shoe_category_status(db: Session, user_id: int, shoe_name: str = "") -> str:
             return _json_result(
                 "shoe_category_status", ok=False, error="shoe_not_found", query=shoe_name
             )
-        target_cats = target.categories or []
+        target_cats = [
+            category for category in (target.categories or []) if category in SHOE_CATEGORIES
+        ]
         if not target_cats:
             return _json_result(
                 "shoe_category_status", ok=True, mode="specific_shoe",
