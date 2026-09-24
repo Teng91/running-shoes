@@ -5,10 +5,16 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const source = fs.readFileSync('frontend/index.html', 'utf8');
 
-test('PWA metadata and service worker registration are present', () => {
+test('PWA metadata, local dependencies and service worker registration are present', () => {
   assert.match(source, /rel="manifest" href="\/manifest\.webmanifest"/);
   assert.match(source, /rel="apple-touch-icon" href="\/icons\/apple-touch-icon\.png"/);
   assert.match(source, /navigator\.serviceWorker\.register\('\/service-worker\.js'\)/);
+  assert.match(source, /src="\/vendor\/chart\.umd\.min\.js"/);
+  assert.match(source, /src="\/vendor\/marked\.min\.js"/);
+  assert.doesNotMatch(source, /cdn\.jsdelivr\.net/);
+  const serviceWorker = fs.readFileSync('frontend/service-worker.js', 'utf8');
+  assert.match(serviceWorker, /'\/vendor\/chart\.umd\.min\.js'/);
+  assert.match(serviceWorker, /'\/vendor\/marked\.min\.js'/);
 });
 
 test('monthly reports progressively render markdown with document styling', () => {

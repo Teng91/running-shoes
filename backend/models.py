@@ -36,6 +36,19 @@ class User(Base):
     strava_imports: Mapped[list["StravaImport"]] = relationship(back_populates="owner")
 
 
+class RateLimitBucket(Base):
+    """Shared fixed-window counters used across server processes."""
+
+    __tablename__ = "rate_limit_buckets"
+    __table_args__ = (UniqueConstraint("scope", "bucket_key", name="uq_rate_limit_bucket"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    scope: Mapped[str] = mapped_column(String(40), nullable=False)
+    bucket_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    window_started: Mapped[float] = mapped_column(Float, nullable=False)
+    event_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+
 class Shoe(Base):
     __tablename__ = "shoes"
 
