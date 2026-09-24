@@ -59,8 +59,20 @@ async function run(engine, name) {
     const page = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, locale: 'zh-TW' });
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
-    await page.route('http://layout.test/**', route => route.fulfill({ contentType: 'text/html',
-      body: fs.readFileSync(path.join(__dirname, '../frontend/index.html'), 'utf8') }));
+    await page.route('http://layout.test/**', route => {
+      const url = new URL(route.request().url());
+      const relative = url.pathname === '/' ? 'index.html' : url.pathname.slice(1);
+      const asset = path.resolve(__dirname, '../frontend', relative);
+      const frontendRoot = path.resolve(__dirname, '../frontend');
+      if (asset !== frontendRoot && !asset.startsWith(frontendRoot + path.sep)) {
+        return route.abort();
+      }
+      const contentTypes = { '.html': 'text/html', '.js': 'application/javascript',
+        '.json': 'application/json', '.webmanifest': 'application/manifest+json',
+        '.svg': 'image/svg+xml', '.png': 'image/png' };
+      return route.fulfill({ contentType: contentTypes[path.extname(asset)] || 'application/octet-stream',
+        body: fs.readFileSync(asset) });
+    });
     await page.goto('http://layout.test');
     await page.waitForFunction(() => typeof Chart !== 'undefined');
     await page.evaluate(() => {

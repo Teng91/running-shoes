@@ -189,7 +189,69 @@ def _enforce_window_limit(
         events.append(current)
 
 
-def _enforce_auth_rate_limit(request: Request) -> None:
+def _enforce_shared_window_limit(
+    db: Session,
+    scope: str,
+    key: str,
+    limit: int,
+    detail: str,
+    window_seconds: int = 60,
+    now: float | None = None,
+) -> None:
+    """Atomically enforce a fixed window in SQLite so workers share limits."""
+    current = time.time() if now is None else now
+    cutoff = current - window_seconds
+    db.query(models.RateLimitBucket).filter(
+        models.RateLimitBucket.window_started <= current - 3600
+    ).delete(synchronize_session=False)
+    result = db.execute(
+        text("""
+            INSERT INTO rate_limit_buckets
+                (scope, bucket_key, window_started, event_count)
+            VALUES (:scope, :key, :current, 1)
+            ON CONFLICT(scope, bucket_key) DO UPDATE SET
+                window_started = CASE
+                    WHEN rate_limit_buckets.window_started <= :cutoff THEN :current
+                    ELSE rate_limit_buckets.window_started
+                END,
+                event_count = CASE
+                    WHEN rate_limit_buckets.window_started <= :cutoff THEN 1
+                    ELSE rate_limit_buckets.event_count + 1
+                END
+            WHERE rate_limit_buckets.window_started <= :cutoff
+               OR rate_limit_buckets.event_count < :limit
+            RETURNING window_started
+        """),
+        {
+            "scope": scope,
+            "key": key[:128],
+            "current": current,
+            "cutoff": cutoff,
+            "limit": limit,
+        },
+    ).scalar_one_or_none()
+    db.commit()
+    if result is None:
+        bucket = db.query(models.RateLimitBucket).filter(
+            models.RateLimitBucket.scope == scope,
+            models.RateLimitBucket.bucket_key == key[:128],
+        ).first()
+        retry_after = max(
+            1,
+            int(window_seconds - (current - bucket.window_started)) if bucket else window_seconds,
+        )
+        raise HTTPException(
+            status_code=429,
+            detail=detail,
+            headers={"Retry-After": str(retry_after)},
+        )
+
+
+def _enforce_auth_rate_limit(request: Request, db: Session) -> None:
+    _enforce_shared_window_limit(
+        db, "auth-global", "global", AUTH_GLOBAL_RATE_LIMIT_PER_MINUTE,
+        "驗證服務目前忙碌，請稍後再試。",
+    )
     _enforce_window_limit(
         _auth_global_rate_events,
         "global",
@@ -202,9 +264,17 @@ def _enforce_auth_rate_limit(request: Request) -> None:
         AUTH_RATE_LIMIT_PER_MINUTE,
         "驗證請求過於頻繁，請稍後再試。",
     )
+    _enforce_shared_window_limit(
+        db, "auth-ip", _client_key(request), AUTH_RATE_LIMIT_PER_MINUTE,
+        "驗證請求過於頻繁，請稍後再試。",
+    )
 
 
-def _enforce_agent_request_limits(request: Request, user_id: int) -> None:
+def _enforce_agent_request_limits(request: Request, user_id: int, db: Session) -> None:
+    _enforce_shared_window_limit(
+        db, "agent-global", "global", AGENT_GLOBAL_RATE_LIMIT_PER_MINUTE,
+        "AI 服務目前忙碌，請稍後再試。",
+    )
     _enforce_window_limit(
         _agent_global_rate_events,
         "global",
@@ -218,6 +288,14 @@ def _enforce_agent_request_limits(request: Request, user_id: int) -> None:
         "此網路的 AI 請求過於頻繁，請稍後再試。",
     )
     _enforce_agent_rate_limit(user_id)
+    _enforce_shared_window_limit(
+        db, "agent-ip", _client_key(request), AGENT_IP_RATE_LIMIT_PER_MINUTE,
+        "此網路的 AI 請求過於頻繁，請稍後再試。",
+    )
+    _enforce_shared_window_limit(
+        db, "agent-user", str(user_id), AGENT_RATE_LIMIT_PER_MINUTE,
+        "AI 請求過於頻繁，請稍後再試。",
+    )
 
 
 def _enforce_model_refresh_cooldown(user_id: int, now: float | None = None) -> None:
@@ -452,7 +530,7 @@ async def http_exception_handler(request, exc):
 # ── Auth Routes ───────────────────────────────────────────────
 @app.post("/api/auth/register", response_model=schemas.UserOut)
 def register(request: Request, payload: schemas.UserCreate, db: Session = Depends(get_db)):
-    _enforce_auth_rate_limit(request)
+    _enforce_auth_rate_limit(request, db)
     if len(payload.password) < 4:
         raise HTTPException(status_code=400, detail="Password must be at least 4 characters")
     username = payload.username.strip()
@@ -481,7 +559,7 @@ def register(request: Request, payload: schemas.UserCreate, db: Session = Depend
 
 @app.post("/api/auth/login", response_model=schemas.Token)
 def login(request: Request, payload: schemas.UserLogin, db: Session = Depends(get_db)):
-    _enforce_auth_rate_limit(request)
+    _enforce_auth_rate_limit(request, db)
     user = db.query(models.User).filter(models.User.username == payload.username).first()
     if not user or not verify_password(payload.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Incorrect username or password")
@@ -500,7 +578,7 @@ def change_password(
     payload: schemas.UserChangePassword,
     db: Session = Depends(get_db),
 ):
-    _enforce_auth_rate_limit(request)
+    _enforce_auth_rate_limit(request, db)
     if len(payload.new_password) < 4:
         raise HTTPException(status_code=400, detail="Password must be at least 4 characters")
     user = db.query(models.User).filter(models.User.username == payload.username).first()
@@ -1424,7 +1502,9 @@ def monthly_spending(
 
 # ── Agent / Chat Routes ────────────────────────────────────────
 @app.get("/api/agent/providers")
-def list_agent_providers():
+def list_agent_providers(
+    current_user: models.User = Depends(get_current_user),
+):
     """回傳 provider/model 清單（含 key 是否已設定）。"""
     return llm.list_providers()
 
@@ -1446,7 +1526,7 @@ def agent_chat_stream(
     db: Session = Depends(get_db),
 ):
     """SSE 串流版：與 /api/agent/chat 相同，但 LLM token 會逐字即時送達。"""
-    _enforce_agent_request_limits(request, current_user.id)
+    _enforce_agent_request_limits(request, current_user.id, db)
     try:
         provider = llm.LLMProvider.from_str(payload.provider)
         model = llm.resolve_allowed_model(provider, payload.model)
@@ -1475,7 +1555,7 @@ def generate_monthly_report(
     db: Session = Depends(get_db),
 ):
     """以 one-shot LLM 串流產生指定月份的跑步報告，成功後存入資料庫。"""
-    _enforce_agent_request_limits(request, current_user.id)
+    _enforce_agent_request_limits(request, current_user.id, db)
     now = datetime.now(UTC)
     if (payload.year, payload.month) > (now.year, now.month):
         raise HTTPException(status_code=422, detail="未來月份無法產生報告")
