@@ -219,9 +219,11 @@ def test_agent_provider_routes_delegate_to_llm(client, user_with_token, monkeypa
     monkeypatch.setattr("backend.main.llm.list_providers", list_providers)
 
     public_response = client.get("/api/agent/providers")
+    authenticated_response = client.get("/api/agent/providers", headers=_auth(token))
     refresh_response = client.post("/api/agent/models/refresh", headers=_auth(token))
 
-    assert public_response.json() == [{"id": "openrouter"}]
+    assert public_response.status_code == 401
+    assert authenticated_response.json() == [{"id": "openrouter"}]
     assert refresh_response.json() == [{"id": "openrouter"}]
     assert list_providers.call_args_list[0].kwargs == {}
     assert list_providers.call_args_list[1].kwargs == {"force": True}
@@ -628,7 +630,7 @@ def test_static_asset_and_non404_http_errors(client):
 
     service_worker = client.get("/service-worker.js")
     assert service_worker.status_code == 200
-    assert "running-shoes-shell-v3" in service_worker.text
+    assert "running-shoes-shell-v4" in service_worker.text
 
     method_error = client.post("/api/agent/providers")
     assert method_error.status_code == 405

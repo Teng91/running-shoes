@@ -11,8 +11,8 @@
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" type="image/png" href="/icons/icon-192.png">
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4" onerror="console.error('Chart.js CDN failed')"></script>
-<script src="https://cdn.jsdelivr.net/npm/marked@15/marked.min.js" onerror="console.error('marked.js CDN failed')"></script>
+<script src="/vendor/chart.umd.min.js"></script>
+<script src="/vendor/marked.min.js"></script>
 <style>
 :root {
   --bg: #0f1117;
@@ -1251,6 +1251,7 @@ async function handleLogin() {
     resetAgentChat();  // 保險：確保進入時對話是乾淨的，不殘留上一位使用者
     resetAppLayout();  // 清掉上一位使用者切到 AI 助手留下的 inline 樣式，並回到跑步日誌
     showAppView();
+    loadAgentModels();
     loadData();
   } catch (e) {
     showAuthError(e.message);
@@ -1292,6 +1293,7 @@ async function handleRegister() {
     setAuth(data.access_token, username);
     resetAppLayout();  // 清掉殘留 inline 樣式並回到跑步日誌
     showAppView();
+    loadAgentModels();
     loadData();
   } catch (e) {
     showRegError(e.message);
@@ -3895,7 +3897,6 @@ async function init() {
   document.getElementById('run-date').value = localDateISO();
   document.getElementById('run-month').value = localDateISO().slice(0, 7);
   document.getElementById('report-month').value = previousMonthValue();
-  loadAgentModels();
   if (authToken) {
     try {
       const response = await fetch(API_BASE + '/auth/me', { headers: authHeaders() });
@@ -3907,6 +3908,7 @@ async function init() {
       }
       if (!response.ok) throw new Error('驗證服務暫時無法使用');
       showAppView();
+      loadAgentModels();
       // 還原 F5 之前的 tab（init 走 stored token，沒經過 resetAppLayout）。
       const savedTab = localStorage.getItem('activeTab');
       if (savedTab && savedTab !== 'runs') switchTab(savedTab);
@@ -3915,6 +3917,7 @@ async function init() {
       // 離線或伺服器暫時無法連線時保留 token，避免 PWA 被迫重新登入。
       console.warn('無法驗證登入狀態，保留目前工作階段:', error);
       showAppView();
+      loadAgentModels();
       loadData();
     }
   } else {

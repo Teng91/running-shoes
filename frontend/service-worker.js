@@ -1,4 +1,4 @@
-const CACHE_NAME = 'running-shoes-shell-v3';
+const CACHE_NAME = 'running-shoes-shell-v4';
 const APP_SHELL = [
   '/',
   '/offline.html',
@@ -7,6 +7,8 @@ const APP_SHELL = [
   '/icons/icon-192.png',
   '/icons/icon-512.png',
   '/icons/apple-touch-icon.png',
+  '/vendor/chart.umd.min.js',
+  '/vendor/marked.min.js',
 ];
 
 self.addEventListener('install', event => {
