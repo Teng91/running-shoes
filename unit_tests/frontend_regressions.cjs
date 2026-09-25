@@ -17,6 +17,13 @@ test('PWA metadata, local dependencies and service worker registration are prese
   assert.match(serviceWorker, /'\/vendor\/marked\.min\.js'/);
 });
 
+test('mobile page gutters preserve standalone safe-area insets', () => {
+  assert.match(source, /padding:\s*max\(var\(--page-gutter\), env\(safe-area-inset-top\)\)[\s\S]*max\(var\(--page-gutter\), env\(safe-area-inset-right\)\)[\s\S]*max\(var\(--page-gutter\), env\(safe-area-inset-bottom\)\)[\s\S]*max\(var\(--page-gutter\), env\(safe-area-inset-left\)\)/);
+  assert.match(source, /@media \(max-width: 760px\)[\s\S]*?\.container \{ --page-gutter: 16px; \}/);
+  assert.match(source, /@media \(max-width: 380px\)[\s\S]*?\.container \{ --page-gutter: 12px; \}/);
+  assert.doesNotMatch(source, /@media \(max-width: (?:760|380)px\)[\s\S]*?\.container \{ padding:/);
+});
+
 test('monthly reports progressively render markdown with document styling', () => {
   assert.match(source, /class="agent-msg-content report-content"/);
   assert.match(source, /\.report-content h2 \{/);
