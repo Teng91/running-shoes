@@ -50,7 +50,7 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
   --page-gutter: 24px;
   max-width: 1400px;
   margin: 0 auto;
-  padding: max(var(--page-gutter), env(safe-area-inset-top))
+  padding: calc(var(--page-gutter) + env(safe-area-inset-top))
     max(var(--page-gutter), env(safe-area-inset-right))
     max(var(--page-gutter), env(safe-area-inset-bottom))
     max(var(--page-gutter), env(safe-area-inset-left));
