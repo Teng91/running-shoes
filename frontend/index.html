@@ -146,12 +146,13 @@ h1 { font-size: 28px; font-weight: 700; margin-bottom: 4px; }
 .run-shoe-canvas { position:relative; height:300px; flex:0 0 auto; }
 .run-shoe-chart-box .run-shoe-canvas canvas { max-height:none; }
 .run-shoe-legend { display:grid; gap:8px; margin-top:18px; }
-.run-shoe-legend-row { display:grid; grid-template-columns:minmax(0,1fr) 64px 82px; gap:12px; align-items:center; padding:9px 10px; border-radius:7px; background:var(--item-bg); font-size:12px; }
+.run-shoe-legend-row { display:grid; grid-template-columns:minmax(0,1fr) 64px 82px 52px; gap:12px; align-items:center; padding:9px 10px; border-radius:7px; background:var(--item-bg); font-size:12px; }
 .run-shoe-legend-name { display:flex; align-items:center; min-width:0; }
 .run-shoe-legend-name span:last-child { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .run-shoe-legend-dot { width:9px; height:9px; border-radius:50%; flex:0 0 auto; margin-right:8px; }
 .run-shoe-legend-pct { color:var(--text-dim); text-align:right; }
 .run-shoe-legend-km { font-weight:700; text-align:right; }
+.run-shoe-legend-count { color:var(--text-dim); text-align:right; white-space:nowrap; }
 .strava-modal { width: min(680px, calc(100vw - 32px)); }
 .strava-summary, .strava-group { background: var(--item-bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-top: 10px; }
 .strava-summary { color: var(--text-dim); line-height: 1.6; }
@@ -482,7 +483,7 @@ input::-webkit-date-and-time-value { text-align: left; min-width: 0; }
   .modal { padding: 20px; }
   .modal-actions > .btn { flex: 1 1 auto; }
   .run-shoe-canvas { height: 260px; }
-  .run-shoe-legend-row { grid-template-columns: minmax(0,1fr) auto auto; gap: 8px; padding: 9px 6px; }
+  .run-shoe-legend-row { grid-template-columns: minmax(0,1fr) auto auto auto; gap: 8px; padding: 9px 6px; }
   .run-shoe-legend-name span:last-child { white-space: normal; overflow-wrap: anywhere; }
   .run-calendar { gap: 3px; }
   .calendar-day { padding: 3px; }
@@ -2170,15 +2171,18 @@ function renderRunLog() {
   const filtered = monthRuns();
   const total = filtered.reduce((sum, run) => sum + run.km, 0);
   const days = new Set(filtered.map(run => run.date)).size;
-  const shoeTotals = new Map();
-  filtered.forEach(run => shoeTotals.set(run.shoe_id, (shoeTotals.get(run.shoe_id) || 0) + run.km));
-  const favoriteEntry = [...shoeTotals.entries()].sort((a, b) => b[1] - a[1])[0];
+  const shoeStats = new Map();
+  filtered.forEach(run => {
+    const current = shoeStats.get(run.shoe_id) || { km: 0, count: 0 };
+    shoeStats.set(run.shoe_id, { km: current.km + run.km, count: current.count + 1 });
+  });
+  const favoriteEntry = [...shoeStats.entries()].sort((a, b) => b[1].km - a[1].km)[0];
   const favorite = favoriteEntry ? runShoe(favoriteEntry[0]) : null;
   const monthLabel = `${parseInt(month.slice(5), 10)} 月`;
   document.getElementById('run-stats').innerHTML = [
     { label: '本月總里程', value: `${total.toFixed(2)} km`, sub: `${filtered.length} 次跑步` },
     { label: '跑步天數', value: `${days} 天`, sub: days ? `平均每天 ${(total / days).toFixed(2)} km` : '還沒有紀錄' },
-    { label: '本月主力鞋', value: favorite ? esc(favorite.model) : '—', sub: favoriteEntry ? `${favoriteEntry[1].toFixed(2)} km` : '還沒有紀錄' },
+    { label: '本月主力鞋', value: favorite ? esc(favorite.model) : '—', sub: favoriteEntry ? `${favoriteEntry[1].km.toFixed(2)} km` : '還沒有紀錄' },
   ].map(card => `<div class="card"><div class="card-label">${card.label}</div><div class="card-value">${card.value}</div><div class="card-sub">${card.sub}</div></div>`).join('');
   renderStravaStatus();
 
@@ -2192,7 +2196,7 @@ function renderRunLog() {
   }).join('') : '<tr><td colspan="5" class="empty-state">這個月還沒有跑步紀錄。點月曆日期或從右上角記下第一跑吧！</td></tr>';
 
   renderRunCalendar(filtered, month);
-  renderRunShoeChart(shoeTotals);
+  renderRunShoeChart(shoeStats);
 }
 
 function renderStravaStatus() {
@@ -2244,17 +2248,17 @@ function getThemeColor(varName, fallback) {
   return val || fallback;
 }
 
-function renderRunShoeChart(shoeTotals) {
-  const entries = [...shoeTotals.entries()].sort((a, b) => b[1] - a[1]);
+function renderRunShoeChart(shoeStats) {
+  const entries = [...shoeStats.entries()].sort((a, b) => b[1].km - a[1].km);
   const shoeList = entries.map(([id]) => runShoe(id));
   const colors = shoeList.map((shoe, i) => shoe ? brandColor(shoe.brand, i) : '#64748b');
-  const total = entries.reduce((sum, [, km]) => sum + km, 0);
+  const total = entries.reduce((sum, [, stats]) => sum + stats.km, 0);
   const legend = document.getElementById('run-shoe-legend');
-  legend.innerHTML = entries.length ? entries.map(([, km], index) => {
+  legend.innerHTML = entries.length ? entries.map(([, stats], index) => {
     const shoe = shoeList[index];
     const name = shoe ? `${shoe.brand} ${shoe.model}` : '鞋款已刪除';
-    const percentage = total > 0 ? km / total * 100 : 0;
-    return `<div class="run-shoe-legend-row"><div class="run-shoe-legend-name"><span class="run-shoe-legend-dot" style="background:${colors[index]}"></span><span>${esc(name)}</span></div><span class="run-shoe-legend-pct">${percentage.toFixed(1)}%</span><span class="run-shoe-legend-km">${km.toFixed(2)} km</span></div>`;
+    const percentage = total > 0 ? stats.km / total * 100 : 0;
+    return `<div class="run-shoe-legend-row"><div class="run-shoe-legend-name"><span class="run-shoe-legend-dot" style="background:${colors[index]}"></span><span>${esc(name)}</span></div><span class="run-shoe-legend-pct">${percentage.toFixed(1)}%</span><span class="run-shoe-legend-km">${stats.km.toFixed(2)} km</span><span class="run-shoe-legend-count">${stats.count} 次</span></div>`;
   }).join('') : '<div class="empty-state">這個月還沒有鞋款里程。</div>';
   if (typeof Chart === 'undefined') return;
   if (chartInstances.runShoes) chartInstances.runShoes.destroy();
@@ -2263,9 +2267,9 @@ function renderRunShoeChart(shoeTotals) {
     type: 'doughnut',
     data: {
       labels: shoeList.map(shoe => shoe ? `${shoe.brand} ${shoe.model}` : '鞋款已刪除'),
-      datasets: [{ data: entries.map(([, km]) => km), backgroundColor: colors, borderColor: cardBg, borderWidth: 3 }],
+      datasets: [{ data: entries.map(([, stats]) => stats.km), backgroundColor: colors, borderColor: cardBg, borderWidth: 3 }],
     },
-    options: { maintainAspectRatio: false, cutout: '60%', plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${ctx.raw.toFixed(2)} km（${total > 0 ? (ctx.raw / total * 100).toFixed(1) : '0.0'}%）` } } } }
+    options: { maintainAspectRatio: false, cutout: '60%', plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${total > 0 ? (ctx.raw / total * 100).toFixed(1) : '0.0'}% / ${ctx.raw.toFixed(2)} km / ${entries[ctx.dataIndex][1].count} 次` } } } }
   });
 }
 

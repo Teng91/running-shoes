@@ -46,6 +46,22 @@ test('monthly shoe share draws values in the doughnut without a separate legend'
   assert.match(source, /percentage\.toFixed\(1\)/);
 });
 
+test('run shoe distribution shows monthly percentage, mileage, and wear count', () => {
+  const legend = {};
+  const context = vm.createContext({
+    document: { getElementById: () => legend },
+    runShoe: id => ({ brand: 'Test', model: `Shoe ${id}` }),
+    brandColor: () => '#123456', esc: value => value,
+  });
+  vm.runInContext(extract('renderRunShoeChart'), context);
+  context.renderRunShoeChart(new Map([
+    [1, { km: 15, count: 2 }],
+    [2, { km: 5, count: 1 }],
+  ]));
+  assert.match(legend.innerHTML, /75\.0%<\/span><span class="run-shoe-legend-km">15\.00 km<\/span><span class="run-shoe-legend-count">2 次/);
+  assert.match(legend.innerHTML, /25\.0%<\/span><span class="run-shoe-legend-km">5\.00 km<\/span><span class="run-shoe-legend-count">1 次/);
+});
+
 test('unclassified shoes stay unclassified when the form is saved', () => {
   const context = vm.createContext({ document: { querySelectorAll: () => [] } });
   vm.runInContext(extract('getSelectedCategories'), context);
