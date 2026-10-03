@@ -64,13 +64,10 @@ _DAILY_USAGE_POOL_LIMIT = 50
 _LLM_MAX_OUTPUT_TOKENS = max(
     256, int(os.environ.get("LLM_MAX_OUTPUT_TOKENS", "4096"))
 )
-_LLM_TIMEOUT = httpx.Timeout(
-    timeout=90.0,
-    connect=10.0,
-    read=90.0,
-    write=30.0,
-    pool=10.0,
-)
+# OpenAI SDK 2.47+ uses httpx2 internally while older supported releases use
+# httpx. A plain number is accepted by both clients and keeps the application
+# independent of either transport's private Timeout type.
+_LLM_TIMEOUT_SECONDS = 90.0
 
 
 def _fetch_free_models() -> list[dict[str, str]]:
@@ -261,7 +258,7 @@ def _build_client(provider: LLMProvider) -> OpenAI:
     return OpenAI(
         base_url=cfg["base_url"],
         api_key=api_key,
-        timeout=_LLM_TIMEOUT,
+        timeout=_LLM_TIMEOUT_SECONDS,
     )
 
 
