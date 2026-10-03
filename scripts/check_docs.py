@@ -82,7 +82,9 @@ def require_readme_number(pattern: str, actual: int, label: str) -> None:
 def main() -> None:
     required_paths = (
         ".github/workflows/verify.yml",
+        ".claude/settings.json",
         "AGENTS.md",
+        "CLAUDE.md",
         "backend/agent.py",
         "backend/main.py",
         "backend/tools",
@@ -90,6 +92,8 @@ def main() -> None:
         "pyproject.toml",
         "requirements-dev.txt",
         "requirements.txt",
+        "scripts/claude_stop_hook.py",
+        "scripts/claude_stop_hook_launcher.cjs",
         "scripts/check_docs.py",
         "scripts/task.ps1",
         "unit_tests/agent_eval_cases.json",
@@ -108,6 +112,7 @@ def main() -> None:
         "eval-agent",
         "docs-check",
         "verify",
+        "verify-all",
     )
     for task in required_tasks:
         command = f"./scripts/task.ps1 {task}"

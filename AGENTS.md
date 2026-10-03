@@ -30,8 +30,14 @@ Use the repository task runner from PowerShell or `pwsh`:
 - Layout change: `./scripts/task.ps1 frontend-layout`
 - README, harness command, test-count, tool-count, or layout-matrix change: `./scripts/task.ps1 docs-check`
 - Release-sensitive or cross-cutting change: `./scripts/task.ps1 verify`
+- Everything at once before handing off a large change: `./scripts/task.ps1 verify-all`
 
 `frontend-layout` is intentionally separate from `verify` because it requires Playwright browser binaries.
+`verify-all` includes it, but warns and skips instead of failing when those binaries are unavailable.
+
+Claude Code imports this file through `CLAUDE.md`. Its project Stop hook runs the deterministic
+repository checks after a changed worktree reaches a stopping point and returns failures to the
+agent. The hook does not call an LLM or send repository content to an external service.
 
 ## Completion criteria
 

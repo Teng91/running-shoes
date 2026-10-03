@@ -1,6 +1,6 @@
 param(
     [Parameter(Position = 0)]
-    [ValidateSet("setup", "test-fast", "frontend-test", "frontend-layout", "eval-agent", "docs-check", "verify")]
+    [ValidateSet("setup", "test-fast", "frontend-test", "frontend-layout", "eval-agent", "docs-check", "verify", "verify-all")]
     [string]$Task = "verify"
 )
 
@@ -66,6 +66,33 @@ function Invoke-DocsCheck {
     Invoke-Checked "README consistency" { & $python scripts/check_docs.py }
 }
 
+function Test-LayoutDependencies {
+    if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
+        return $false
+    }
+    & node -e "const fs=require('fs'),p=require('playwright');process.exit(fs.existsSync(p.chromium.executablePath())&&fs.existsSync(p.webkit.executablePath())?0:1)" 2>$null
+    return ($LASTEXITCODE -eq 0)
+}
+
+function Invoke-LayoutTests {
+    if (-not (Test-LayoutDependencies)) {
+        Write-Host "`n==> Frontend layout tests"
+        Write-Warning "Playwright or its browser binaries are not installed, so frontend-layout was skipped."
+        Write-Warning "Install them with 'npm install --no-save --package-lock=false playwright' and 'npx playwright install chromium webkit'."
+        return
+    }
+    Invoke-Checked "Frontend layout tests" { & node unit_tests/frontend_layout.cjs }
+}
+
+function Invoke-Verify {
+    $python = Get-ProjectPython
+    Invoke-Checked "Ruff" { & $python -m ruff check backend scripts unit_tests }
+    Invoke-Checked "mypy" { & $python -m mypy backend }
+    Invoke-DocsCheck
+    Invoke-BackendTests
+    Invoke-FrontendTests
+}
+
 switch ($Task) {
     "setup" {
         if (-not (Test-Path -LiteralPath (Join-Path $ProjectRoot "venv"))) {
@@ -89,13 +116,10 @@ switch ($Task) {
     }
     "eval-agent" { Invoke-AgentEvals }
     "docs-check" { Invoke-DocsCheck }
-    "verify" {
-        $python = Get-ProjectPython
-        Invoke-Checked "Ruff" { & $python -m ruff check backend scripts unit_tests }
-        Invoke-Checked "mypy" { & $python -m mypy backend }
-        Invoke-DocsCheck
-        Invoke-BackendTests
-        Invoke-FrontendTests
+    "verify" { Invoke-Verify }
+    "verify-all" {
+        Invoke-Verify
+        Invoke-LayoutTests
     }
 }
 

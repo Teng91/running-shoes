@@ -32,6 +32,8 @@ running-shoes/
 ├── .github/
 │   └── workflows/
 │       └── verify.yml    # Push／PR 自動執行完整 harness 驗證
+├── .claude/
+│   └── settings.json     # Claude Code 完成回覆前執行確定性驗證的 Stop hook
 ├── backend/              # FastAPI 後端
 │   ├── main.py           # API 路由 + 靜態檔案服務
 │   ├── auth.py           # JWT 認證 + 密碼雜湊
@@ -56,6 +58,8 @@ running-shoes/
 │   ├── vendor/           # 固定版本的 Chart.js 與 marked.js 離線資源
 │   └── favicon.svg
 ├── scripts/
+│   ├── claude_stop_hook.py # Claude Code 本機驗證與失敗回饋
+│   ├── claude_stop_hook_launcher.cjs # 跨 Windows／Unix 尋找專案 Python
 │   ├── check_docs.py     # 核對 README 測試數、工具數、版面矩陣與 harness 路徑
 │   └── task.ps1          # setup、測試、eval 與完整驗證的統一入口
 ├── unit_tests/           # Pytest、Agent eval、前端邏輯與版面回歸測試
@@ -63,6 +67,7 @@ running-shoes/
 │   ├── frontend_regressions.cjs # Node.js 前端邏輯回歸測試
 │   └── frontend_layout.cjs # Playwright 跨瀏覽器版面測試
 ├── AGENTS.md             # Coding Agent 專案規則與完成條件
+├── CLAUDE.md             # 讓 Claude Code 匯入共用的 AGENTS.md
 ├── pyproject.toml        # pytest、Ruff 與 mypy 設定
 ├── requirements.txt      # Python 依賴
 ├── requirements-dev.txt  # 測試、coverage、lint 與型別檢查依賴
@@ -286,6 +291,9 @@ Unix `venv/bin/python` 或系統 Python。從 PowerShell／`pwsh` 執行：
 # 完整檢查：Ruff、mypy、pytest、前端 Node 回歸測試
 ./scripts/task.ps1 verify
 
+# 一次跑完 verify 與 frontend-layout（缺 Playwright 時會警告並跳過版面檢查）
+./scripts/task.ps1 verify-all
+
 # 日常後端檢查，或只執行 Agent 行為 eval
 ./scripts/task.ps1 test-fast
 ./scripts/task.ps1 eval-agent
@@ -318,7 +326,18 @@ npx playwright install chromium webkit
 
 可設定 `LAYOUT_SCREENSHOT_DIR` 保存手機版截圖供人工檢查；Windows 若使用已安裝的 Edge，可設定 `PLAYWRIGHT_CHROMIUM_CHANNEL=msedge`。WebKit 模擬檢查不等同於 iPhone 實機驗證。
 
-本次驗證基線為 Python **302 passed**、前端回歸測試 **23 passed**；測試數量會隨功能與修正持續增加，實際結果以 `./scripts/task.ps1 verify` 與 CI 當次輸出為準。
+### AI 開發規範與自動驗證
+
+`AGENTS.md` 是 Codex 等 Coding Agent 共用的專案規範；`CLAUDE.md` 會把同一份規範匯入
+Claude Code，避免兩份規則日後分歧。Claude Code 的專案 Stop hook 只要發現工作樹有變更，
+就會在完成回覆前執行 Ruff、mypy、文件一致性、Python 測試與前端回歸測試；版面檔案有變更且
+Playwright／Chromium／WebKit 齊全時，也會執行版面測試。
+
+驗證失敗會把指令輸出送回 Claude 繼續修正。同一個 session 的同一份 diff 會重用本機快取，
+避免每次停止都重跑。Hook 不會呼叫其他模型、外部 API，或傳送提示、diff、原始碼與測試輸出。
+GitHub Actions 仍會在 push／pull request 執行 `verify`，作為不依賴任何特定 Coding Agent 的共同關卡。
+
+本次驗證基線為 Python **309 passed**、前端回歸測試 **23 passed**；測試數量會隨功能與修正持續增加，實際結果以 `./scripts/task.ps1 verify` 與 CI 當次輸出為準。
 版面檢查涵蓋 WebKit／Chromium、亮／暗模式與 7 組直橫向尺寸，共 28 組設定，檢查五個分頁、表單、圖表、彈窗及空資料狀態。
 
 `docs-check` 會從 pytest collection、前端測試檔、Agent tool registry、Playwright 測試矩陣與實際檔案系統核對上述數字及 harness 路徑。新增測試、工具或版面設定卻忘記同步 README 時，`verify` 和 GitHub Actions 會直接失敗。
