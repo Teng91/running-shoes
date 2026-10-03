@@ -137,7 +137,7 @@ def test_fetch_free_models_sorts_by_today_usage(monkeypatch):
     ]
 
 
-def test_fetch_free_models_keeps_models_when_popularity_lookup_fails(monkeypatch):
+def test_fetch_free_models_rejects_catalog_only_fallback_when_ranking_fails(monkeypatch):
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     models_response = MagicMock()
     models_response.json.return_value = {
@@ -156,8 +156,62 @@ def test_fetch_free_models_keeps_models_when_popularity_lookup_fails(monkeypatch
         MagicMock(side_effect=[models_response, httpx.ConnectError("offline")]),
     )
 
+    with pytest.raises(llm.LLMError, match="本日模型排行榜失敗"):
+        llm._fetch_free_models()
+
+
+def test_fetch_free_models_only_keeps_free_tool_models_in_overall_top_50(monkeypatch):
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    models_response = MagicMock()
+    models_response.json.return_value = {
+        "data": [
+            {
+                "id": "vendor/in-top-50:free",
+                "name": "In Top 50",
+                "pricing": {"prompt": "0", "completion": "0"},
+                "supported_parameters": ["tools"],
+            },
+            {
+                "id": "vendor/outside-top-50:free",
+                "name": "Outside Top 50",
+                "pricing": {"prompt": "0", "completion": "0"},
+                "supported_parameters": ["tools"],
+            },
+        ]
+    }
+    paid_rows = [
+        {
+            "date": "2026-10-03",
+            "model_permaslug": f"vendor/paid-{index}",
+            "total_tokens": str(1_000 - index),
+        }
+        for index in range(49)
+    ]
+    ranking_response = MagicMock()
+    ranking_response.json.return_value = {
+        "data": [
+            *paid_rows,
+            {
+                "date": "2026-10-03",
+                "model_permaslug": "vendor/in-top-50:free",
+                "total_tokens": "100",
+            },
+            {
+                "date": "2026-10-03",
+                "model_permaslug": "vendor/outside-top-50:free",
+                "total_tokens": "99",
+            },
+        ],
+        "meta": {"end_date": "2026-10-03"},
+    }
+    monkeypatch.setattr(
+        llm.httpx,
+        "get",
+        MagicMock(side_effect=[models_response, ranking_response]),
+    )
+
     assert llm._fetch_free_models() == [
-        {"id": "vendor/model:free", "display": "Model"},
+        {"id": "vendor/in-top-50:free", "display": "In Top 50"},
     ]
 
 

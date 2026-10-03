@@ -90,6 +90,7 @@ async function run(engine, name) {
       monthlySpending = Array.from({ length: 12 }, (_, i) => ({ year: 2026, month: i + 1, total_paid: 4000, total_orig: 5000 }));
       document.querySelector('#run-month').value = '2026-09';
       document.querySelector('#agent-model').innerHTML = '<option>Very long model provider and model name</option>';
+      document.querySelector('#report-model').innerHTML = '<option>Very long model provider and model name</option>';
       document.querySelector('#agent-messages').innerHTML += '<div class="agent-message bot"><div class="agent-msg-content"><p>' + 'long-message'.repeat(40) + '</p><pre>' + 'code'.repeat(100) + '</pre><table><tr><td>' + 'wide-table'.repeat(50) + '</td></tr></table></div></div>';
       document.querySelector('#strava-mapping').innerHTML = '<div class="strava-group"><div>Very long imported shoe name from Strava</div><select><option>Very long matching running shoe name</option></select></div>';
       document.querySelectorAll('input[type="date"]').forEach(e => { e.value = '2026-09-06'; });

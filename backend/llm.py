@@ -58,15 +58,16 @@ _REMOVED_MODELS = {"openrouter/free"}
 
 _MODELS_URL = "https://openrouter.ai/api/v1/models?supported_parameters=tools"
 _RANKINGS_URL = "https://openrouter.ai/api/v1/datasets/rankings-daily"
+_DAILY_USAGE_POOL_LIMIT = 50
 
 
 def _fetch_free_models() -> list[dict[str, str]]:
-    """抓取今日可用的免費工具模型，並依今日使用量排序。
+    """抓取今日使用量前 50 名中的免費工具模型。
 
-    This mirrors ai-usagebar's daily free leaderboard: pricing comes from the
-    live model catalog, while the ordering comes from ``rankings-daily``.  If
-    the ranking endpoint is temporarily unavailable, the live free catalog is
-    still returned in a stable name order; no stale hard-coded model is used.
+    Pricing and tool support come from the live catalog. Popularity comes from
+    ``rankings-daily``: rank every model first, keep the top 50, then intersect
+    that pool with the free, tool-capable catalog. This avoids presenting
+    obscure catalog entries as today's usable models.
     """
     cfg = _PROVIDER_CONFIG[LLMProvider.openrouter]
     api_key = os.environ.get(cfg["key_env"])
@@ -84,7 +85,7 @@ def _fetch_free_models() -> list[dict[str, str]]:
     except (httpx.HTTPError, TypeError, ValueError) as exc:
         raise LLMError(f"抓取 OpenRouter 模型列表失敗：{exc}") from exc
 
-    models: list[dict[str, str]] = []
+    models_by_id: dict[str, dict[str, str]] = {}
     model_keys: dict[str, str] = {}
     for item in data.get("data", []):
         pricing = item.get("pricing") or {}
@@ -98,16 +99,20 @@ def _fetch_free_models() -> list[dict[str, str]]:
         supports_tools = "tools" in supported
         if is_free and supports_tools and item.get("id") not in _REMOVED_MODELS:
             model_id = item["id"]
-            models.append({"id": model_id, "display": item.get("name", model_id)})
+            models_by_id[model_id] = {
+                "id": model_id,
+                "display": item.get("name", model_id),
+            }
             model_keys[model_id] = model_id
             canonical = item.get("canonical_slug")
             if canonical:
-                model_keys[canonical] = model_id
-                variant = model_id.rsplit("/", 1)[-1].split(":", 1)
-                if len(variant) == 2:
-                    model_keys[f"{canonical}:{variant[1]}"] = model_id
+                tail = model_id.rsplit("/", 1)[-1]
+                if ":" in tail:
+                    variant = tail.split(":", 1)[1]
+                    model_keys.setdefault(f"{canonical}:{variant}", model_id)
+                else:
+                    model_keys.setdefault(canonical, model_id)
 
-    models.sort(key=lambda model: model["display"].casefold())
     try:
         rankings = httpx.get(
             _RANKINGS_URL,
@@ -130,16 +135,26 @@ def _fetch_free_models() -> list[dict[str, str]]:
             if end_date and row.get("date") != end_date:
                 continue
             ranked_slug = row.get("model_permaslug")
-            if not isinstance(ranked_slug, str):
+            if not isinstance(ranked_slug, str) or ranked_slug == "other":
                 continue
-            model_id = model_keys.get(ranked_slug)
-            if model_id:
-                totals[model_id] = totals.get(model_id, 0) + int(row.get("total_tokens") or 0)
-        models.sort(key=lambda model: (-totals.get(model["id"], 0), model["display"].casefold()))
-    except (httpx.HTTPError, TypeError, ValueError, KeyError):
-        # Catalog freshness is still useful when daily ranking is unavailable.
-        pass
+            try:
+                total_tokens = int(row.get("total_tokens") or 0)
+            except (TypeError, ValueError):
+                continue
+            totals[ranked_slug] = totals.get(ranked_slug, 0) + total_tokens
+    except (httpx.HTTPError, TypeError, ValueError, KeyError) as exc:
+        raise LLMError(f"抓取 OpenRouter 本日模型排行榜失敗：{exc}") from exc
 
+    ranked_slugs = sorted(totals, key=lambda slug: (-totals[slug], slug))[
+        :_DAILY_USAGE_POOL_LIMIT
+    ]
+    models: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for ranked_slug in ranked_slugs:
+        model_id = model_keys.get(ranked_slug)
+        if model_id and model_id not in seen:
+            models.append(models_by_id[model_id])
+            seen.add(model_id)
     return models
 
 # Optional local preference; it is honored only when the model is present in

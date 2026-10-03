@@ -863,6 +863,10 @@ input::-webkit-date-and-time-value { text-align: left; min-width: 0; }
             <label for="report-history">歷史報告</label>
             <select id="report-history" onchange="onReportHistoryChange()"><option value="">選擇已儲存的月份…</option></select>
           </div>
+          <div class="form-group">
+            <label for="report-model">本日免費模型</label>
+            <select id="report-model"></select>
+          </div>
         </div>
         <button class="btn btn-primary" id="generate-report-btn" onclick="generateReport()">產生報告</button>
         <div class="inline-error" id="report-status"></div>
@@ -3471,11 +3475,28 @@ async function loadAgentModels() {
     const providers = await apiGet('/agent/providers');
     const orProv = providers.find(p => p.id === 'openrouter');
     if (!orProv) return;
-    const modelSel = document.getElementById('agent-model');
-    modelSel.innerHTML = orProv.models.length
-      ? orProv.models.map(m => `<option value="${m.id}">${m.display}</option>`).join('')
-      : '<option value="">今日沒有可用的免費工具模型</option>';
-    modelSel.disabled = !orProv.models.length;
+    for (const selectId of ['agent-model', 'report-model']) {
+      const modelSel = document.getElementById(selectId);
+      const previous = modelSel.value;
+      modelSel.replaceChildren();
+      if (orProv.models.length) {
+        orProv.models.forEach((model, index) => {
+          const option = document.createElement('option');
+          option.value = model.id;
+          option.textContent = '#' + (index + 1) + ' ' + model.display;
+          modelSel.appendChild(option);
+        });
+        if (orProv.models.some(model => model.id === previous)) {
+          modelSel.value = previous;
+        }
+      } else {
+        const option = document.createElement('option');
+        option.value = '';
+        option.textContent = '今日沒有可用的熱門免費工具模型';
+        modelSel.appendChild(option);
+      }
+      modelSel.disabled = !orProv.models.length;
+    }
   } catch (e) {
     console.error('載入模型清單失敗:', e);
   }
@@ -3889,6 +3910,10 @@ function renderReport(report) {
   const label = reportMonthLabel(report.year + '-' + String(report.month).padStart(2, '0'));
   document.getElementById('report-title').textContent = '報告內容 — ' + label;
   document.getElementById('report-content').innerHTML = renderMarkdown(report.content_md);
+  const modelSelect = document.getElementById('report-model');
+  if (report.model && [...modelSelect.options].some(option => option.value === report.model)) {
+    modelSelect.value = report.model;
+  }
   setReportStatus('已儲存報告 · 模型 ' + (report.model || '—') +
     ' · 更新於 ' + (report.updated_at || '').replace('T', ' ').slice(0, 16));
 }
@@ -3957,6 +3982,11 @@ async function generateReport() {
     setReportStatus('請先選擇報告月份。');
     return;
   }
+  const reportModel = document.getElementById('report-model').value;
+  if (!reportModel) {
+    setReportStatus('目前沒有可用的本日免費模型，請稍後刷新再試。');
+    return;
+  }
   const btn = document.getElementById('generate-report-btn');
   const content = document.getElementById('report-content');
   btn.disabled = true;
@@ -3987,7 +4017,7 @@ async function generateReport() {
       body: JSON.stringify({
         year: parts[0],
         month: parts[1],
-        model: document.getElementById('agent-model').value || null,
+        model: reportModel,
       }),
     });
     if (res.status === 401) {

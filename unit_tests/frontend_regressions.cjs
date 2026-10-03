@@ -220,6 +220,16 @@ test('the report tab talks to the monthly report endpoints', () => {
   assert.match(source, /fetch\(API_BASE \+ '\/reports\/' \+ parts\[0\] \+ '\/' \+ parts\[1\]/);
 });
 
+test('monthly reports have their own selector backed by the daily model list', () => {
+  assert.match(source, /<select id="report-model"><\/select>/);
+  const loadModels = extract('loadAgentModels');
+  const generateReport = extract('generateReport');
+  assert.match(loadModels, /\['agent-model', 'report-model'\]/);
+  assert.match(loadModels, /'#' \+ \(index \+ 1\) \+ ' ' \+ model\.display/);
+  assert.match(generateReport, /getElementById\('report-model'\)\.value/);
+  assert.doesNotMatch(generateReport, /getElementById\('agent-model'\)/);
+});
+
 test('the report month defaults to the last complete month', () => {
   const context = vm.createContext({ Date });
   vm.runInContext(extract('previousMonthValue'), context);
