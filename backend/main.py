@@ -8,15 +8,17 @@ import time
 from collections import deque
 from collections.abc import Sequence
 from contextlib import asynccontextmanager
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta, timezone
+from ipaddress import ip_address
 from pathlib import Path
 from threading import Lock
-from typing import ClassVar, cast
+from typing import Annotated, ClassVar, cast
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from sqlalchemy import Table, func, inspect, text
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -56,12 +58,18 @@ MAX_STRAVA_IMPORT_HISTORY_PER_USER = 50
 MODEL_REFRESH_COOLDOWN_SECONDS = max(
     1, int(os.environ.get("MODEL_REFRESH_COOLDOWN_SECONDS", "60"))
 )
+MODEL_REFRESH_GLOBAL_PER_MINUTE = max(
+    1, int(os.environ.get("MODEL_REFRESH_GLOBAL_PER_MINUTE", "10"))
+)
+TAIPEI_TIMEZONE = timezone(timedelta(hours=8))
+IS_FLY_RUNTIME = bool(os.environ.get("FLY_APP_NAME"))
 _agent_rate_events: dict[int, deque[float]] = {}
 _agent_ip_rate_events: dict[str, deque[float]] = {}
 _agent_global_rate_events: dict[str, deque[float]] = {}
 _auth_rate_events: dict[str, deque[float]] = {}
 _auth_global_rate_events: dict[str, deque[float]] = {}
 _model_refresh_times: dict[int, float] = {}
+_model_refresh_global_events: dict[str, deque[float]] = {}
 _agent_rate_lock = Lock()
 _registration_lock = Lock()
 
@@ -155,11 +163,18 @@ def _enforce_agent_rate_limit(user_id: int, now: float | None = None) -> None:
 
 
 def _client_key(request: Request) -> str:
-    """Use Fly's authenticated client-IP header, falling back to the peer address."""
+    """Trust Fly's client-IP header only when running behind Fly's proxy."""
     fly_ip = request.headers.get("fly-client-ip", "").strip()
-    if fly_ip:
-        return fly_ip[:64]
+    if IS_FLY_RUNTIME and fly_ip:
+        try:
+            return str(ip_address(fly_ip))
+        except ValueError:
+            pass
     return (request.client.host if request.client else "unknown")[:64]
+
+
+def _local_today() -> date:
+    return datetime.now(TAIPEI_TIMEZONE).date()
 
 
 def _enforce_window_limit(
@@ -428,7 +443,13 @@ async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
 
     # Add concurrency/session versions to existing databases without changing data.
-    for table, column in (("users", "token_version"), ("shoes", "version"), ("shoes", "is_deleted")):
+    for table, column in (
+        ("users", "token_version"),
+        ("shoes", "version"),
+        ("shoes", "is_deleted"),
+        ("runs", "version"),
+        ("monthly_mileages", "version"),
+    ):
         columns = {item["name"] for item in inspect(engine).get_columns(table)}
         if column not in columns:
             with engine.begin() as conn:
@@ -733,6 +754,7 @@ def update_shoe(
 @app.delete("/api/shoes/{shoe_id}")
 def delete_shoe(
     shoe_id: int,
+    expected_version: Annotated[int | None, Query(ge=0)] = None,
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -743,11 +765,25 @@ def delete_shoe(
     ).first()
     if not shoe:
         raise HTTPException(status_code=404, detail="Shoe not found")
-    # Soft-delete the shoe so linked run history and aggregate mileage remain intact.
-    # Deleted shoes are excluded from the shoe cabinet and future run selection.
-    shoe.is_deleted = True
-    shoe.version = getattr(shoe, "version", 0) + 1
+    version = getattr(shoe, "version", 0) if expected_version is None else expected_version
     try:
+        changed = db.query(models.Shoe).filter(
+            models.Shoe.id == shoe_id,
+            models.Shoe.user_id == current_user.id,
+            models.Shoe.is_deleted.is_(False),
+            models.Shoe.version == version,
+        ).update(
+            {
+                models.Shoe.is_deleted: True,
+                models.Shoe.version: models.Shoe.version + 1,
+            },
+            synchronize_session=False,
+        )
+        if not changed:
+            raise HTTPException(
+                status_code=409,
+                detail="鞋款已被更新，請重新載入後再刪除",
+            )
         db.commit()
     except Exception:
         db.rollback()
@@ -785,6 +821,8 @@ def _apply_run_mileage_deltas(
         total_delta += delta
 
     for shoe_id, delta in shoe_deltas.items():
+        if abs(delta) < 0.005:
+            continue
         db.query(models.Shoe).filter(
             models.Shoe.id == shoe_id,
             models.Shoe.user_id == user_id,
@@ -800,32 +838,48 @@ def _apply_run_mileage_deltas(
         )
 
     for (year, month), delta in month_deltas.items():
-        entry = db.query(models.MonthlyMileage).filter(
-            models.MonthlyMileage.user_id == user_id,
-            models.MonthlyMileage.year == year,
-            models.MonthlyMileage.month == month,
-        ).first()
-        if entry:
+        if abs(delta) < 0.005:
+            continue
+        rounded_delta = round(delta, 2)
+        if rounded_delta > 0:
+            # A single SQLite upsert avoids a query-then-insert race when two
+            # runs create the first aggregate row for the same month.
+            statement = sqlite_insert(models.MonthlyMileage).values(
+                user_id=user_id,
+                year=year,
+                month=month,
+                km=rounded_delta,
+                adjustment_km=0,
+                version=0,
+            )
+            statement = statement.on_conflict_do_update(
+                index_elements=["user_id", "year", "month"],
+                set_={
+                    "km": func.max(
+                        0,
+                        func.coalesce(models.MonthlyMileage.km, 0)
+                        + rounded_delta,
+                    ),
+                    "version": models.MonthlyMileage.version + 1,
+                },
+            )
+            db.execute(statement)
+        else:
             db.query(models.MonthlyMileage).filter(
-                models.MonthlyMileage.id == entry.id,
                 models.MonthlyMileage.user_id == user_id,
+                models.MonthlyMileage.year == year,
+                models.MonthlyMileage.month == month,
             ).update(
                 {
+                    models.MonthlyMileage.version: models.MonthlyMileage.version + 1,
                     models.MonthlyMileage.km: func.max(
                         0,
                         func.coalesce(models.MonthlyMileage.km, 0)
-                        + round(delta, 2),
+                        + rounded_delta,
                     )
                 },
                 synchronize_session=False,
             )
-        elif delta > 0:
-            db.add(models.MonthlyMileage(
-                user_id=user_id,
-                year=year,
-                month=month,
-                km=round(delta, 2),
-            ))
     return round(total_delta, 2)
 
 
@@ -1198,18 +1252,41 @@ def update_run(
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
     update_data = payload.model_dump(exclude_unset=True)
+    expected_version = update_data.pop("expected_version", getattr(run, "version", 0))
     if "shoe_id" in update_data:
         _user_shoe_or_404(db, current_user.id, update_data["shoe_id"])
     old_values = (run.shoe_id, run.date, run.km)
-    for key, value in update_data.items():
-        setattr(run, key, value)
+    new_values = (
+        int(update_data.get("shoe_id", run.shoe_id)),
+        str(update_data.get("date", run.date)),
+        float(update_data.get("km", run.km)),
+    )
     try:
+        changed = db.query(models.Run).filter(
+            models.Run.id == run_id,
+            models.Run.user_id == current_user.id,
+            models.Run.version == expected_version,
+        ).update(
+            {
+                **{
+                    getattr(models.Run, key): value
+                    for key, value in update_data.items()
+                },
+                models.Run.version: models.Run.version + 1,
+            },
+            synchronize_session=False,
+        )
+        if not changed:
+            raise HTTPException(
+                status_code=409,
+                detail="跑步紀錄已被更新，請重新載入後再編輯",
+            )
         _apply_run_mileage_deltas(
             db,
             current_user.id,
             [
                 (old_values[0], old_values[1], -old_values[2]),
-                (run.shoe_id, run.date, run.km),
+                new_values,
             ],
             1,
         )
@@ -1224,6 +1301,7 @@ def update_run(
 @app.delete("/api/runs/{run_id}")
 def delete_run(
     run_id: int,
+    expected_version: Annotated[int | None, Query(ge=0)] = None,
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -1234,8 +1312,18 @@ def delete_run(
     if not run:
         raise HTTPException(status_code=404, detail="Run not found")
     run_values = (run.shoe_id, run.date, run.km)
-    db.delete(run)
+    version = getattr(run, "version", 0) if expected_version is None else expected_version
     try:
+        changed = db.query(models.Run).filter(
+            models.Run.id == run_id,
+            models.Run.user_id == current_user.id,
+            models.Run.version == version,
+        ).delete(synchronize_session=False)
+        if not changed:
+            raise HTTPException(
+                status_code=409,
+                detail="跑步紀錄已被更新，請重新載入後再刪除",
+            )
         _apply_run_mileage_deltas(db, current_user.id, [run_values], -1)
         db.commit()
     except Exception:
@@ -1313,6 +1401,9 @@ def create_monthly_mileage(
     db.add(entry)
     try:
         db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="該月份已有紀錄") from exc
     except Exception:
         db.rollback()
         raise
@@ -1335,6 +1426,9 @@ def update_monthly_mileage(
         raise HTTPException(status_code=404, detail="Monthly mileage not found")
 
     update_data = payload.model_dump(exclude_unset=True)
+    expected_version = update_data.pop(
+        "expected_version", getattr(entry, "version", 0)
+    )
     new_month = update_data.get("month", entry.month)
     new_year = update_data.get("year", entry.year)
 
@@ -1359,10 +1453,30 @@ def update_monthly_mileage(
         models.Run.date.like(f"{new_year:04d}-{new_month:02d}-%"),
     ).scalar()
     update_data["adjustment_km"] = round(desired_total - float(logged_km or 0), 2)
-    for k, v in update_data.items():
-        setattr(entry, k, v)
     try:
+        changed = db.query(models.MonthlyMileage).filter(
+            models.MonthlyMileage.id == entry_id,
+            models.MonthlyMileage.user_id == current_user.id,
+            models.MonthlyMileage.version == expected_version,
+        ).update(
+            {
+                **{
+                    getattr(models.MonthlyMileage, key): value
+                    for key, value in update_data.items()
+                },
+                models.MonthlyMileage.version: models.MonthlyMileage.version + 1,
+            },
+            synchronize_session=False,
+        )
+        if not changed:
+            raise HTTPException(
+                status_code=409,
+                detail="月跑量已被更新，請重新載入後再編輯",
+            )
         db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="該月份已有紀錄") from exc
     except Exception:
         db.rollback()
         raise
@@ -1373,6 +1487,7 @@ def update_monthly_mileage(
 @app.delete("/api/monthly-mileage/{entry_id}")
 def delete_monthly_mileage(
     entry_id: int,
+    expected_version: Annotated[int | None, Query(ge=0)] = None,
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -1382,18 +1497,38 @@ def delete_monthly_mileage(
     ).first()
     if not entry:
         raise HTTPException(status_code=404, detail="Monthly mileage not found")
+    version = getattr(entry, "version", 0) if expected_version is None else expected_version
     logged_km = db.query(func.sum(models.Run.km)).filter(
         models.Run.user_id == current_user.id,
         models.Run.date.like(f"{entry.year:04d}-{entry.month:02d}-%"),
     ).scalar()
-    if logged_km:
-        # Detailed runs are the source of truth.  "Delete" removes only the
-        # historical/manual adjustment when run-log rows still exist.
-        entry.adjustment_km = 0
-        entry.km = round(float(logged_km), 2)
-    else:
-        db.delete(entry)
     try:
+        if logged_km:
+            # Detailed runs are the source of truth.  "Delete" removes only the
+            # historical/manual adjustment when run-log rows still exist.
+            changed = db.query(models.MonthlyMileage).filter(
+                models.MonthlyMileage.id == entry_id,
+                models.MonthlyMileage.user_id == current_user.id,
+                models.MonthlyMileage.version == version,
+            ).update(
+                {
+                    models.MonthlyMileage.adjustment_km: 0,
+                    models.MonthlyMileage.km: round(float(logged_km), 2),
+                    models.MonthlyMileage.version: models.MonthlyMileage.version + 1,
+                },
+                synchronize_session=False,
+            )
+        else:
+            changed = db.query(models.MonthlyMileage).filter(
+                models.MonthlyMileage.id == entry_id,
+                models.MonthlyMileage.user_id == current_user.id,
+                models.MonthlyMileage.version == version,
+            ).delete(synchronize_session=False)
+        if not changed:
+            raise HTTPException(
+                status_code=409,
+                detail="月跑量已被更新，請重新載入後再刪除",
+            )
         db.commit()
     except Exception:
         db.rollback()
@@ -1687,9 +1822,30 @@ def list_agent_providers(
 @app.post("/api/agent/models/refresh")
 def refresh_agent_models(
     current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     """強制刷新 OpenRouter 免費模型快取，回傳更新後的 provider/model 清單。"""
     _enforce_model_refresh_cooldown(current_user.id)
+    try:
+        _enforce_shared_window_limit(
+            db,
+            "model-refresh-global",
+            "global",
+            MODEL_REFRESH_GLOBAL_PER_MINUTE,
+            "模型列表更新目前忙碌，請稍後再試。",
+        )
+        _enforce_window_limit(
+            _model_refresh_global_events,
+            "global",
+            MODEL_REFRESH_GLOBAL_PER_MINUTE,
+            "模型列表更新目前忙碌，請稍後再試。",
+        )
+    except Exception:
+        # A rejected global attempt did not refresh anything and must not leave
+        # this account in cooldown.
+        with _agent_rate_lock:
+            _model_refresh_times.pop(current_user.id, None)
+        raise
     return llm.list_providers(force=True)
 
 
@@ -1731,8 +1887,8 @@ def generate_monthly_report(
 ):
     """以 one-shot LLM 串流產生指定月份的跑步報告，成功後存入資料庫。"""
     _enforce_agent_request_limits(request, current_user.id, db)
-    now = datetime.now(UTC)
-    if (payload.year, payload.month) > (now.year, now.month):
+    today = _local_today()
+    if (payload.year, payload.month) > (today.year, today.month):
         raise HTTPException(status_code=422, detail="未來月份無法產生報告")
     try:
         model = llm.resolve_allowed_model(llm.LLMProvider.openrouter, payload.model)

@@ -19,6 +19,7 @@ CalendarMonth = Annotated[int, Field(ge=1, le=12)]
 NonNegativeFiniteKm = Annotated[float, Field(ge=0, allow_inf_nan=False)]
 PositiveFiniteKm = Annotated[float, Field(gt=0, le=1000, allow_inf_nan=False)]
 MAX_PASSWORD_BYTES = 72
+MAX_AGENT_CONTEXT_CHARS = 60_000
 Username = Annotated[str, Field(min_length=1, max_length=50)]
 ShoeName = Annotated[str, Field(min_length=1, max_length=100)]
 ShoeSize = Annotated[str, Field(max_length=50)]
@@ -102,6 +103,18 @@ class AgentChatRequest(BaseModel):
         if not value.strip():
             raise ValueError("user_message cannot be blank")
         return value
+
+    @model_validator(mode="after")
+    def limit_total_context(self):
+        total_chars = len(self.user_message) + sum(
+            len(turn.content) for turn in self.history
+        )
+        if total_chars > MAX_AGENT_CONTEXT_CHARS:
+            raise ValueError(
+                f"agent conversation context must be at most "
+                f"{MAX_AGENT_CONTEXT_CHARS} characters"
+            )
+        return self
 
 
 class ReportGenerateRequest(BaseModel):
@@ -253,6 +266,7 @@ class MonthlyMileageCreate(MonthlyMileageBase):
 
 
 class MonthlyMileageUpdate(BaseModel):
+    expected_version: int | None = Field(default=None, ge=0)
     year: ReasonableYear | None = None
     month: CalendarMonth | None = None
     km: NonNegativeFiniteKm | None = None
@@ -269,6 +283,7 @@ class MonthlyMileageOut(MonthlyMileageBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
     user_id: int
+    version: int = 0
     adjustment_km: float = 0
 
 
@@ -299,6 +314,7 @@ class RunCreate(RunBase):
 
 
 class RunUpdate(BaseModel):
+    expected_version: int | None = Field(default=None, ge=0)
     date: str | None = None
     km: PositiveFiniteKm | None = None
     shoe_id: int | None = Field(default=None, gt=0)
@@ -339,6 +355,7 @@ class RunOut(RunBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
     user_id: int
+    version: int = 0
     strava_id: str | None = None
 
 

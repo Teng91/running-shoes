@@ -1,5 +1,7 @@
 """Tests for the OpenRouter LLM integration and model selection."""
 
+import time
+from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -389,7 +391,29 @@ def test_build_client_requires_key_and_uses_openrouter_endpoint(monkeypatch):
     constructor.assert_called_once_with(
         base_url="https://openrouter.ai/api/v1",
         api_key="test-key",
+        timeout=llm._LLM_TIMEOUT,
     )
+
+
+def test_cold_model_cache_is_fetched_once_across_threads(monkeypatch):
+    llm._MODELS_CACHE.clear()
+    llm._MODELS_CACHE_META.clear()
+    models = [{"id": "vendor/free:free", "display": "Free"}]
+
+    def fetch():
+        time.sleep(0.05)
+        return models
+
+    fetch_mock = MagicMock(side_effect=fetch)
+    monkeypatch.setattr(llm, "_fetch_free_models", fetch_mock)
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        results = list(pool.map(
+            lambda _index: llm._get_models(llm.LLMProvider.openrouter),
+            range(4),
+        ))
+
+    assert results == [models] * 4
+    fetch_mock.assert_called_once_with()
 
 
 def test_call_llm_stream_yields_content(monkeypatch):
@@ -414,6 +438,7 @@ def test_call_llm_stream_yields_content(monkeypatch):
     assert chunks == ["跑鞋", "建議"]
     assert create.call_args.kwargs["model"] == "openrouter/free"
     assert create.call_args.kwargs["stream"] is True
+    assert create.call_args.kwargs["max_tokens"] == llm._LLM_MAX_OUTPUT_TOKENS
 
 
 def test_call_llm_stream_closes_provider_stream_when_consumer_stops_early(monkeypatch):
