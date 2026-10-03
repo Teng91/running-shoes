@@ -41,8 +41,8 @@ def _month_run_stats(db: Session, user_id: int, year: int, month: int) -> dict:
     )
     total_km = _round(sum(r.km for r in runs))
     run_days = len({r.date for r in runs})
-
     per_shoe: dict[int, float] = {}
+    per_shoe_count: dict[int, int] = {}
     shoe_names: dict[int, str] = {}
     if runs:
         shoe_rows = (
@@ -56,12 +56,21 @@ def _month_run_stats(db: Session, user_id: int, year: int, month: int) -> dict:
         shoe_names = {row.id: f"{row.brand} {row.model}" for row in shoe_rows}
         for run in runs:
             per_shoe[run.shoe_id] = per_shoe.get(run.shoe_id, 0.0) + run.km
+            per_shoe_count[run.shoe_id] = per_shoe_count.get(run.shoe_id, 0) + 1
 
     totals = sorted(per_shoe.items(), key=lambda pair: pair[1], reverse=True)
     shoe_breakdown = [
-        {"shoe": shoe_names[shoe_id], "km": _round(km)} for shoe_id, km in totals
+        {
+            "shoe": shoe_names[shoe_id],
+            "km": _round(km),
+            "wear_count": per_shoe_count[shoe_id],
+        }
+        for shoe_id, km in totals
     ]
-    primary = shoe_breakdown[0] if shoe_breakdown else None
+    primary = (
+        {"shoe": shoe_breakdown[0]["shoe"], "km": shoe_breakdown[0]["km"]}
+        if shoe_breakdown else None
+    )
 
     return {
         "month_km": total_km,
@@ -171,7 +180,7 @@ def build_report_messages(stats: dict) -> list[dict]:
         f"報告必須包含以下章節，依序使用 markdown 標題：{sections}。\n"
         "規則：\n"
         "1. 所有數字只能使用使用者訊息中提供的 JSON 數據，不得自行計算、估算或杜撰。\n"
-        "2. JSON 中沒有的資訊（如天氣、配速、心率）一律不提。\n"
+        "2. JSON 中沒有的資訊（如天氣、心率或其他未記錄的訓練欄位）一律不提。\n"
         "3. 里程與壽命數據逐字採用 JSON 欄位值，單位為公里（km）。\n"
         "4. 鞋款輪替與退役提醒請參考 nearing_end_of_life 與 category_coverage 判斷。\n"
         "5. 下月建議必須具體可行，若當月沒有任何跑步紀錄請如實說明並鼓勵使用者。\n"

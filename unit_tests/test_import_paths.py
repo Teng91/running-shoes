@@ -9,17 +9,16 @@ from unittest.mock import MagicMock, patch
 from backend import auth, llm
 
 
-def test_llm_applies_new_and_existing_or_model_env_defaults():
+def test_llm_does_not_inject_stale_or_model_env_defaults():
     original = os.environ.get("OR_MODEL")
     try:
         os.environ["OR_MODEL"] = "vendor/custom:free"
         importlib.reload(llm)
-        assert llm.MODELS["openrouter"][0]["id"] == "vendor/custom:free"
-        assert llm.MODELS["openrouter"][0]["display"].endswith("(env)")
+        assert llm.MODELS["openrouter"] == []
 
         os.environ["OR_MODEL"] = "nvidia/nemotron-3-ultra-550b-a55b:free"
         importlib.reload(llm)
-        assert llm.MODELS["openrouter"][0]["id"] == "nvidia/nemotron-3-ultra-550b-a55b:free"
+        assert llm.MODELS["openrouter"] == []
 
         os.environ["OR_MODEL"] = "openrouter/free"
         importlib.reload(llm)

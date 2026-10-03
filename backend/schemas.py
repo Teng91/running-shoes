@@ -234,6 +234,7 @@ class ShoeUpdate(BaseModel):
 
 class ShoeOut(ShoeBase):
     version: int = 0
+    baseline_mileage: float = 0
     model_config = ConfigDict(from_attributes=True)
     id: int
     user_id: int
@@ -268,6 +269,7 @@ class MonthlyMileageOut(MonthlyMileageBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
     user_id: int
+    adjustment_km: float = 0
 
 
 class RunningGoalUpdate(BaseModel):
@@ -320,6 +322,16 @@ class RunUpdate(BaseModel):
     def validate_shoe_id(cls, value: int | None) -> int:
         if value is None:
             raise ValueError("shoe_id must not be null")
+        return value
+
+    @model_validator(mode="before")
+    @classmethod
+    def reject_explicit_nulls_except_optional_metrics(cls, value):
+        if not isinstance(value, dict):
+            return value
+        required_when_present = {"date", "km", "shoe_id"}
+        if any(key in value and value[key] is None for key in required_when_present):
+            raise ValueError("run fields may be omitted but must not be null")
         return value
 
 

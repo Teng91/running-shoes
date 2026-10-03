@@ -3,7 +3,7 @@
 import json
 
 from backend import agent
-from backend.models import MonthlyMileage, Shoe, User
+from backend.models import MonthlyMileage, Run, Shoe, User
 from backend.tools import db_tools
 
 
@@ -327,3 +327,29 @@ def test_native_tool_definitions_match_dispatchable_tools():
         assert definition["type"] == "function"
         assert function["description"]
         assert function["parameters"]["type"] == "object"
+
+
+def test_shoe_usage_analytics_returns_backend_calculated_wear_data(seeded_db):
+    db, uid = seeded_db
+    shoe = db.query(Shoe).filter(Shoe.model == "Wave Sky 7").one()
+    shoe.baseline_mileage = 530
+    db.add_all([
+        Run(
+            user_id=uid, shoe_id=shoe.id, date="2026-09-01", km=5,
+        ),
+        Run(
+            user_id=uid, shoe_id=shoe.id, date="2026-09-03", km=5,
+        ),
+    ])
+    db.commit()
+
+    result = _result(db_tools.shoe_usage_analytics(db, uid, "Wave Sky 7"))
+
+    assert result["ok"] is True
+    assert result["shoe_count"] == 1
+    usage = result["shoes"][0]
+    assert usage["wear_count"] == 2
+    assert usage["logged_mileage_km"] == 10
+    assert usage["historical_adjustment_km"] == 530
+    assert "average_run_km" not in usage
+    assert "average_pace_seconds_per_km" not in usage

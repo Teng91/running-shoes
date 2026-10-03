@@ -16,7 +16,7 @@ from collections.abc import Callable
 
 from sqlalchemy.orm import Session
 
-from backend import models
+from backend import analytics, models
 from backend.schemas import SHOE_CATEGORIES
 
 
@@ -371,6 +371,50 @@ def shoe_category_status(db: Session, user_id: int, shoe_name: str = "") -> str:
     )
 
 
+def shoe_usage_analytics(db: Session, user_id: int, shoe_name: str = "") -> str:
+    """Return deterministic run-log usage and retirement forecasts per shoe."""
+    query = db.query(models.Shoe).filter(
+        models.Shoe.user_id == user_id,
+        models.Shoe.is_deleted.is_(False),
+    )
+    shoes = query.all()
+    if shoe_name.strip():
+        needle = shoe_name.strip().casefold()
+        shoes = [
+            shoe for shoe in shoes
+            if needle in f"{shoe.brand} {shoe.model}".casefold()
+        ]
+        if not shoes:
+            return _json_result(
+                "shoe_usage_analytics", ok=False, error="shoe_not_found", query=shoe_name
+            )
+    results = []
+    for shoe in shoes:
+        payload = analytics.shoe_analytics(db, user_id, shoe.id)
+        if payload is None:
+            continue
+        life = payload["lifecycle"]
+        usage = payload["usage"]
+        results.append({
+            "shoe_id": shoe.id,
+            "shoe": f"{shoe.brand} {shoe.model}",
+            "status": "retired" if shoe.is_retired else "active",
+            "total_mileage_km": life["total_mileage_km"],
+            "logged_mileage_km": life["logged_mileage_km"],
+            "historical_adjustment_km": life["historical_adjustment_km"],
+            "wear_count": usage["count"],
+            "last_run_date": usage["last_run_date"],
+            "km_30_days": usage["km_30_days"],
+            "km_90_days": usage["km_90_days"],
+            "actual_monthly_km_90_days": usage["actual_monthly_km_90_days"],
+            "forecast_retirement_date": life["forecast_retirement_date"],
+            "forecast_source": life["forecast_source"],
+        })
+    return _json_result(
+        "shoe_usage_analytics", ok=True, shoe_count=len(results), shoes=results
+    )
+
+
 # ── 派發表：讓 agent 用 tool name 找到對應函式 ────────────────
 REGISTRY: dict[str, Callable[..., str]] = {
     "list_my_shoes": list_my_shoes,
@@ -379,12 +423,27 @@ REGISTRY: dict[str, Callable[..., str]] = {
     "nearing_end_of_life": nearing_end_of_life,
     "compare_shoes": compare_shoes,
     "shoe_category_status": shoe_category_status,
+    "shoe_usage_analytics": shoe_usage_analytics,
 }
 
 
 # ── OpenRouter / OpenAI 原生 function-calling schema ─────────────
 # 不啟用 provider-specific strict mode，讓更多 OpenRouter 免費模型能使用。
 TOOL_DEFINITIONS: list[dict] = [
+    {
+        "type": "function",
+        "function": {
+            "name": "shoe_usage_analytics",
+            "description": "以 JSON 取得跑鞋的穿著次數、近期實際里程與實際退役預測。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "shoe_name": {"type": "string", "description": "選填，指定品牌或鞋款名稱。"}
+                },
+                "additionalProperties": False,
+            },
+        },
+    },
     {
         "type": "function",
         "function": {

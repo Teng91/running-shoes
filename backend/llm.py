@@ -43,56 +43,31 @@ _PROVIDER_CONFIG = {
     },
 }
 
-# 各家免費/低成本的建議模型清單。display 是給前端顯示的名稱。
-MODELS: dict[str, list[dict[str, str]]] = {
-    "openrouter": [
-        {"id": "nvidia/nemotron-3-ultra-550b-a55b:free", "display": "Nemotron 3 Ultra 550B (free)"},
-        {"id": "poolside/laguna-s-2.1:free", "display": "Laguna S 2.1 (free)"},
-        {"id": "nvidia/nemotron-3.5-lightning:free", "display": "Nemotron 3.5 Lightning (free)"},
-        {"id": "nvidia/nemotron-3-super-120b-a12b:free", "display": "Nemotron 3 Super 120B (free)"},
-    ],
-}
+# There is deliberately no hard-coded model allowlist.  OpenRouter's free
+# catalog changes during the day, so stale IDs must never be presented as if
+# they were still usable.
+MODELS: dict[str, list[dict[str, str]]] = {"openrouter": []}
 
 # 動態模型快取
 _MODELS_CACHE: dict[str, list[dict[str, str]]] = {}
 _MODELS_CACHE_META: dict[str, float] = {}  # provider -> cached_at
-_MODELS_CACHE_TTL = 3600  # 1 小時
+_MODELS_CACHE_TTL = 900  # 15 分鐘；讓「今日免費」清單保持新鮮
 
-_DEFAULT_MODEL = "nvidia/nemotron-3-ultra-550b-a55b:free"
+_DEFAULT_MODEL: str | None = None
 _REMOVED_MODELS = {"openrouter/free"}
-_POPULARITY_URL = (
-    "https://openrouter.ai/api/frontend/v1/models/find"
-    "?supported_parameters=tools&max_price=0&max_output_price=0"
-    "&order=top-weekly&active=true"
-)
 
-
-def _fetch_popularity_ranks() -> dict[str, int]:
-    """取得 OpenRouter Models 頁的近 7 天 token 使用量排序。
-
-    這是顯示順序的輔助資料；若端點暫時不可用，模型清單仍應正常回傳。
-    """
-    try:
-        resp = httpx.get(_POPULARITY_URL, timeout=15)
-        resp.raise_for_status()
-        body = resp.json()
-        data = body.get("data") if isinstance(body, dict) else None
-        raw_models = data.get("models") if isinstance(data, dict) else None
-        payload: list[Any] = raw_models if isinstance(raw_models, list) else []
-    except (httpx.HTTPError, TypeError, ValueError):
-        return {}
-
-    ranks: dict[str, int] = {}
-    for rank, item in enumerate(payload):
-        endpoint = item.get("endpoint") or {}
-        model_id = endpoint.get("model_variant_slug") or item.get("slug")
-        if model_id:
-            ranks[model_id] = rank
-    return ranks
+_MODELS_URL = "https://openrouter.ai/api/v1/models?supported_parameters=tools"
+_RANKINGS_URL = "https://openrouter.ai/api/v1/datasets/rankings-daily"
 
 
 def _fetch_free_models() -> list[dict[str, str]]:
-    """抓取免費 Agent 模型，並依近 7 天 token 使用量由高到低排列。"""
+    """抓取今日可用的免費工具模型，並依今日使用量排序。
+
+    This mirrors ai-usagebar's daily free leaderboard: pricing comes from the
+    live model catalog, while the ordering comes from ``rankings-daily``.  If
+    the ranking endpoint is temporarily unavailable, the live free catalog is
+    still returned in a stable name order; no stale hard-coded model is used.
+    """
     cfg = _PROVIDER_CONFIG[LLMProvider.openrouter]
     api_key = os.environ.get(cfg["key_env"])
     if not api_key:
@@ -100,50 +75,76 @@ def _fetch_free_models() -> list[dict[str, str]]:
 
     try:
         resp = httpx.get(
-            "https://openrouter.ai/api/v1/models?supported_parameters=tools",
+            _MODELS_URL,
             headers={"Authorization": f"Bearer {api_key}"},
             timeout=15,
         )
         resp.raise_for_status()
         data = resp.json()
-    except httpx.HTTPError as exc:
+    except (httpx.HTTPError, TypeError, ValueError) as exc:
         raise LLMError(f"抓取 OpenRouter 模型列表失敗：{exc}") from exc
 
-    popularity_ranks = _fetch_popularity_ranks()
-    models = []
+    models: list[dict[str, str]] = []
+    model_keys: dict[str, str] = {}
     for item in data.get("data", []):
         pricing = item.get("pricing") or {}
         supported = item.get("supported_parameters") or []
-        is_free = pricing.get("prompt") == "0" and pricing.get("completion") == "0"
+        try:
+            prompt_price = pricing.get("prompt")
+            completion_price = pricing.get("completion")
+            is_free = float(str(prompt_price)) == 0 and float(str(completion_price)) == 0
+        except (TypeError, ValueError):
+            is_free = False
         supports_tools = "tools" in supported
         if is_free and supports_tools and item.get("id") not in _REMOVED_MODELS:
-            models.append({"id": item["id"], "display": item.get("name", item["id"])})
+            model_id = item["id"]
+            models.append({"id": model_id, "display": item.get("name", model_id)})
+            model_keys[model_id] = model_id
+            canonical = item.get("canonical_slug")
+            if canonical:
+                model_keys[canonical] = model_id
+                variant = model_id.rsplit("/", 1)[-1].split(":", 1)
+                if len(variant) == 2:
+                    model_keys[f"{canonical}:{variant[1]}"] = model_id
 
-    # OpenRouter 的 Models 頁以最近 7 天處理的 token 數排序。新模型若尚未
-    # 出現在排名資料中，放在已排名模型之後，再以名稱確保順序穩定。
-    models.sort(key=lambda model: (
-        popularity_ranks.get(model["id"], len(popularity_ranks)),
-        model["display"].casefold(),
-    ))
+    models.sort(key=lambda model: model["display"].casefold())
+    try:
+        rankings = httpx.get(
+            _RANKINGS_URL,
+            headers={"Authorization": f"Bearer {api_key}"},
+            timeout=15,
+        )
+        rankings.raise_for_status()
+        ranking_body = rankings.json()
+        ranking_data = ranking_body.get("data", []) if isinstance(ranking_body, dict) else []
+        ranking_rows: list[dict[str, Any]] = [
+            row for row in ranking_data if isinstance(row, dict)
+        ] if isinstance(ranking_data, list) else []
+        meta = ranking_body.get("meta", {}) if isinstance(ranking_body, dict) else {}
+        end_date = meta.get("end_date") if isinstance(meta, dict) else None
+        if not end_date:
+            dates = [str(row["date"]) for row in ranking_rows if row.get("date")]
+            end_date = max(dates) if dates else None
+        totals: dict[str, int] = {}
+        for row in ranking_rows:
+            if end_date and row.get("date") != end_date:
+                continue
+            ranked_slug = row.get("model_permaslug")
+            if not isinstance(ranked_slug, str):
+                continue
+            model_id = model_keys.get(ranked_slug)
+            if model_id:
+                totals[model_id] = totals.get(model_id, 0) + int(row.get("total_tokens") or 0)
+        models.sort(key=lambda model: (-totals.get(model["id"], 0), model["display"].casefold()))
+    except (httpx.HTTPError, TypeError, ValueError, KeyError):
+        # Catalog freshness is still useful when daily ranking is unavailable.
+        pass
 
     return models
 
-# 各 provider 的預設模型可被環境變數覆寫（使用者可在 .env 指定，
-# 例如轉用付費模型時不必改程式碼）。
+# Optional local preference; it is honored only when the model is present in
+# today's live free catalog, so it can never opt into a paid or stale model.
 _OR_DEFAULT = os.environ.get("OR_MODEL")
-if _OR_DEFAULT in _REMOVED_MODELS or (
-    _OR_DEFAULT is not None and not _OR_DEFAULT.endswith(":free")
-):
-    _OR_DEFAULT = None
-if _OR_DEFAULT:
-    _existing = [m["id"] for m in MODELS["openrouter"]]
-    if _OR_DEFAULT not in _existing:
-        MODELS["openrouter"] = [{"id": _OR_DEFAULT, "display": _OR_DEFAULT + " (env)"}] + MODELS["openrouter"]
-    else:
-        MODELS["openrouter"] = (
-            [next(m for m in MODELS["openrouter"] if m["id"] == _OR_DEFAULT)]
-            + [m for m in MODELS["openrouter"] if m["id"] != _OR_DEFAULT]
-        )
 
 
 def _get_models(provider: LLMProvider, force: bool = False) -> list[dict[str, str]]:
@@ -160,14 +161,16 @@ def _get_models(provider: LLMProvider, force: bool = False) -> list[dict[str, st
         models = _fetch_free_models()
         if not models:
             raise LLMError("OpenRouter 沒有回傳可用的免費工具模型。")
-        # Without an explicit override, preserve the weekly-usage ordering.
-        if _OR_DEFAULT:
+        # A local preference may move a model to the front only when it is
+        # present in today's live free list; it can never add a stale/paid ID.
+        if _OR_DEFAULT in {model["id"] for model in models}:
             models = sorted(models, key=lambda m: 0 if m["id"] == _OR_DEFAULT else 1)
         _MODELS_CACHE[provider.value] = models
         _MODELS_CACHE_META[provider.value] = now
         return models
     except LLMError:
-        return MODELS.get(provider.value, [])
+        cached = _MODELS_CACHE.get(provider.value)
+        return cached if cached is not None else MODELS.get(provider.value, [])
 
 
 def resolve_allowed_model(provider: LLMProvider, requested_model: str | None) -> str:
@@ -175,7 +178,7 @@ def resolve_allowed_model(provider: LLMProvider, requested_model: str | None) ->
 
     Client input must never be forwarded directly to OpenRouter because every
     request uses the server-owned API key. The dynamic list is already filtered
-    to zero-price tool models; the static list is the outage fallback allowlist.
+    to zero-price tool models; there is no stale static fallback allowlist.
     """
     models = _get_models(provider)
     if not models:

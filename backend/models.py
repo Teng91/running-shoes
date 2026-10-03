@@ -63,6 +63,10 @@ class Shoe(Base):
     price: Mapped[float] = mapped_column(Float, default=0)
     orig_price: Mapped[float] = mapped_column(Float, default=0)
     mileage: Mapped[float] = mapped_column(Float, default=0)
+    # Portion of total mileage that predates (or was manually adjusted outside)
+    # the run log.  Keeping it explicit makes mileage provenance auditable while
+    # preserving imported historical totals.
+    baseline_mileage: Mapped[float] = mapped_column(Float, default=0, nullable=False)
     expected_mileage: Mapped[float] = mapped_column(Float, default=800)
     monthly_km: Mapped[float] = mapped_column(Float, default=60)
     is_retired: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -81,6 +85,9 @@ class MonthlyMileage(Base):
     year: Mapped[int] = mapped_column(Integer, nullable=False)
     month: Mapped[int] = mapped_column(Integer, nullable=False)
     km: Mapped[float] = mapped_column(Float, default=0)
+    # Historical/manual contribution.  ``km`` remains the materialized total
+    # for backwards compatibility: adjustment_km + the matching run log sum.
+    adjustment_km: Mapped[float] = mapped_column(Float, default=0, nullable=False)
 
     owner: Mapped["User"] = relationship(back_populates="monthly_mileages")
 
