@@ -53,6 +53,7 @@ SYSTEM_PROMPT = """你是「跑鞋推薦助手」，服務一位熱愛跑步的�
   - `remaining_mileage_km` 是剩餘里程。
   - `usage_percent` 是「已使用」百分比，不是剩餘百分比。
   - `assigned_monthly_km` 是分配給該鞋的每月目標，不是累積里程，也不是使用者整體月跑量。
+  - `wear_count`、近 30／90 天里程與退役預測來自 `shoe_usage_analytics`，不可自行推算。
 - 直接採用工具提供的數值與後端判定，不要自行重算、交換欄位、推估或補造月份明細。若要列數字表格，必須逐欄複製本輪工具結果。
 - 先給文字分析與行動建議；除非使用者要求表格，否則不要重製大篇數字表格。
 - 使用者要求分析資料、追問數字或指出數字有誤時，本輪必須重新呼叫相關資料庫工具；不要把先前 assistant 回覆中的數字當成資料來源。
@@ -79,7 +80,7 @@ SOURCE_SUMMARY_LIMIT = 8
 
 _TOOL_INTENT_TERMS = (
     "跑鞋", "鞋", "鞋款", "鞋況", "鞋櫃", "跑量", "里程", "壽命", "退役",
-    "換鞋", "補鞋", "推薦", "比較", "分析", "課表", "訓練", "配速",
+    "換鞋", "補鞋", "推薦", "比較", "分析", "課表", "訓練",
     "馬拉松", "半馬", "全馬", "比賽", "競速", "越野", "daily", "tempo",
     "speed", "race", "trail", "資料", "數字", "結果", "重新查", "不對", "錯了",
     "類別", "缺什麼", "搜尋", "查詢", "幫我查", "上網", "search", "new balance", "nb", "rebel",
@@ -108,6 +109,10 @@ _MONTHLY_DATA_TERMS = ("月跑量", "跑量", "跑量趨勢")
 _SHOE_DATA_TERMS = ("我的跑鞋", "我的鞋", "鞋櫃", "鞋況", "跑鞋里程")
 _LIFECYCLE_TERMS = ("壽命", "退役", "快壞", "換鞋", "剩餘里程")
 _CATEGORY_TERMS = ("缺什麼", "缺少", "類別", "覆蓋", "補鞋")
+_USAGE_ANALYTICS_TERMS = (
+    "穿幾次", "穿著次數", "使用次數", "輪替", "平均距離",
+    "最後穿", "最近里程", "實際月跑量",
+)
 _PRODUCT_FRESHNESS_TERMS = (
     "跑鞋", "鞋款", "new balance", "nb", "nike", "adidas", "asics",
     "mizuno", "puma", "hoka", "brooks", "saucony", "rebel", "elite",
@@ -221,7 +226,8 @@ def _build_query_plan(
         marker in lowered for marker in ("我", "我的", "目前", "最近")
     )
     if has_personal_marker:
-        if any(term in lowered for term in _SHOE_DATA_TERMS):
+        needs_usage_analytics = any(term in lowered for term in _USAGE_ANALYTICS_TERMS)
+        if any(term in lowered for term in _SHOE_DATA_TERMS) and not needs_usage_analytics:
             database_tool_list.append("list_my_shoes")
         if any(term in lowered for term in _MONTHLY_DATA_TERMS):
             database_tool_list.append("monthly_mileage_stats")
@@ -229,6 +235,8 @@ def _build_query_plan(
             database_tool_list.append("nearing_end_of_life")
         if any(term in lowered for term in _CATEGORY_TERMS):
             database_tool_list.append("shoe_category_status")
+        if needs_usage_analytics:
+            database_tool_list.append("shoe_usage_analytics")
     if any(term in lowered for term in _PERSONAL_FIT_TERMS):
         database_tool_list.extend(("list_my_shoes", "monthly_mileage_stats"))
 
