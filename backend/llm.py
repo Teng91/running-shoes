@@ -84,12 +84,21 @@ def _fetch_free_models() -> list[dict[str, str]]:
         data = resp.json()
     except (httpx.HTTPError, TypeError, ValueError) as exc:
         raise LLMError(f"抓取 OpenRouter 模型列表失敗：{exc}") from exc
+    if not isinstance(data, dict) or not isinstance(data.get("data"), list):
+        raise LLMError("抓取 OpenRouter 模型列表失敗：回傳格式無效。")
 
     models_by_id: dict[str, dict[str, str]] = {}
     model_keys: dict[str, str] = {}
     for item in data.get("data", []):
-        pricing = item.get("pricing") or {}
-        supported = item.get("supported_parameters") or []
+        if not isinstance(item, dict):
+            continue
+        model_id = item.get("id")
+        if not isinstance(model_id, str) or not model_id:
+            continue
+        pricing = item.get("pricing")
+        pricing = pricing if isinstance(pricing, dict) else {}
+        supported = item.get("supported_parameters")
+        supported = supported if isinstance(supported, list) else []
         try:
             prompt_price = pricing.get("prompt")
             completion_price = pricing.get("completion")
@@ -97,15 +106,14 @@ def _fetch_free_models() -> list[dict[str, str]]:
         except (TypeError, ValueError):
             is_free = False
         supports_tools = "tools" in supported
-        if is_free and supports_tools and item.get("id") not in _REMOVED_MODELS:
-            model_id = item["id"]
+        if is_free and supports_tools and model_id not in _REMOVED_MODELS:
             models_by_id[model_id] = {
                 "id": model_id,
-                "display": item.get("name", model_id),
+                "display": str(item.get("name") or model_id),
             }
             model_keys[model_id] = model_id
             canonical = item.get("canonical_slug")
-            if canonical:
+            if isinstance(canonical, str) and canonical:
                 tail = model_id.rsplit("/", 1)[-1]
                 if ":" in tail:
                     variant = tail.split(":", 1)[1]
