@@ -597,7 +597,8 @@ def test_delete_routes_roll_back_failed_commits():
         delete_shoe(1, current_user=user, db=shoe_db)
     shoe_db.rollback.assert_called_once_with()
 
-    mileage_db = _failing_db(existing=SimpleNamespace(id=1))
+    mileage_db = _failing_db(existing=SimpleNamespace(id=1, year=2026, month=8))
+    mileage_db.query.return_value.filter.return_value.scalar.return_value = 0
     with pytest.raises(RuntimeError, match="commit failed"):
         delete_monthly_mileage(1, current_user=user, db=mileage_db)
     mileage_db.rollback.assert_called_once_with()

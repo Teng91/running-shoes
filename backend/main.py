@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from backend import agent, goals, llm, models, reports, schemas
+from backend import agent, analytics, goals, llm, models, reports, schemas
 from backend.auth import (
     create_access_token,
     get_current_user,
@@ -345,6 +345,8 @@ def seed_default_data():
                 models.Shoe(user_id=joy_user.id, brand="Asics", model="Gel-Excite 8", date="2024-01-05", size="us11/29cm", price=1780, orig_price=2280, mileage=625, expected_mileage=600, monthly_km=0, is_retired=True, categories=["Daily"]),
                 models.Shoe(user_id=joy_user.id, brand="FILA", model="Bon Voyage", date="2025-08-10", size="us11/29cm", price=2200, orig_price=2880, mileage=418, expected_mileage=400, monthly_km=0, is_retired=True, categories=["Daily"]),
             ]
+            for shoe in defaults:
+                shoe.baseline_mileage = shoe.mileage
             db.add_all(defaults)
             db.commit()
 
@@ -363,7 +365,9 @@ def seed_default_data():
                 (2026, 5, 149.12), (2026, 6, 128.2),
             ]
             entries = [
-                models.MonthlyMileage(user_id=joy_user.id, year=y, month=m, km=km)
+                models.MonthlyMileage(
+                    user_id=joy_user.id, year=y, month=m, km=km, adjustment_km=km
+                )
                 for y, m, km in mileage_data
             ]
             db.add_all(entries)
@@ -429,6 +433,40 @@ async def lifespan(app: FastAPI):
         if column not in columns:
             with engine.begin() as conn:
                 conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} INTEGER NOT NULL DEFAULT 0"))
+
+    # Make historical/manual mileage explicit while preserving the exact totals
+    # shown before this migration.  These baselines remain unchanged as runs are
+    # added, edited, or deleted.
+    shoe_columns = {column["name"] for column in inspect(engine).get_columns("shoes")}
+    if "baseline_mileage" not in shoe_columns:
+        with engine.begin() as conn:
+            conn.execute(text(
+                "ALTER TABLE shoes ADD COLUMN baseline_mileage FLOAT NOT NULL DEFAULT 0"
+            ))
+            # Extremely old test/legacy tables may not yet have a mileage
+            # column; their new baseline safely remains zero.
+            if "mileage" in shoe_columns:
+                conn.execute(text(
+                    "UPDATE shoes SET baseline_mileage = mileage - COALESCE(("
+                    "SELECT SUM(runs.km) FROM runs WHERE runs.shoe_id = shoes.id "
+                    "AND runs.user_id = shoes.user_id), 0)"
+                ))
+
+    monthly_columns = {
+        column["name"] for column in inspect(engine).get_columns("monthly_mileages")
+    }
+    if "adjustment_km" not in monthly_columns:
+        with engine.begin() as conn:
+            conn.execute(text(
+                "ALTER TABLE monthly_mileages "
+                "ADD COLUMN adjustment_km FLOAT NOT NULL DEFAULT 0"
+            ))
+            conn.execute(text(
+                "UPDATE monthly_mileages SET adjustment_km = km - COALESCE(("
+                "SELECT SUM(runs.km) FROM runs WHERE runs.user_id = monthly_mileages.user_id "
+                "AND CAST(substr(runs.date, 1, 4) AS INTEGER) = monthly_mileages.year "
+                "AND CAST(substr(runs.date, 6, 2) AS INTEGER) = monthly_mileages.month), 0)"
+            ))
 
     # Incremental migration for Strava provenance on run records.
     run_columns = {column["name"] for column in inspect(engine).get_columns("runs")}
@@ -631,7 +669,11 @@ def create_shoe(
     ).count()
     if isinstance(shoe_count, int) and shoe_count >= MAX_SHOES_PER_USER:
         raise HTTPException(status_code=409, detail="跑鞋資料已達上限")
-    shoe = models.Shoe(**payload.model_dump(), user_id=current_user.id)
+    shoe = models.Shoe(
+        **payload.model_dump(),
+        baseline_mileage=payload.mileage,
+        user_id=current_user.id,
+    )
     db.add(shoe)
     try:
         db.commit()
@@ -658,6 +700,14 @@ def update_shoe(
         raise HTTPException(status_code=404, detail="Shoe not found")
     update_data = payload.model_dump(exclude_unset=True)
     expected_version = update_data.pop("expected_version", None)
+    if "mileage" in update_data:
+        logged_mileage = db.query(func.sum(models.Run.km)).filter(
+            models.Run.user_id == current_user.id,
+            models.Run.shoe_id == shoe_id,
+        ).scalar()
+        update_data["baseline_mileage"] = round(
+            float(update_data["mileage"]) - float(logged_mileage or 0), 2
+        )
     query = db.query(models.Shoe).filter(
         models.Shoe.id == shoe_id, models.Shoe.user_id == current_user.id,
         models.Shoe.is_deleted.is_(False),
@@ -786,6 +836,7 @@ _STRAVA_HEADERS = {
     "gear": ("活動裝備", "Activity Gear", "Gear"),
     "distance": ("距離", "Distance"),
 }
+_STRAVA_REQUIRED_FIELDS = {"id", "date", "type", "gear", "distance"}
 _STRAVA_RUN_TYPES = {"跑步", "Run", "TrailRun", "Trail Run", "VirtualRun", "Virtual Run"}
 
 
@@ -833,7 +884,7 @@ def _parse_strava_csv(raw: bytes) -> tuple[list[dict[str, object]], int, list[st
     reader = csv.DictReader(io.StringIO(csv_text))
     headers = reader.fieldnames or []
     fields = {key: _strava_field(headers, key) for key in _STRAVA_HEADERS}
-    missing = [key for key, field in fields.items() if field is None]
+    missing = [key for key in _STRAVA_REQUIRED_FIELDS if fields[key] is None]
     if missing:
         raise HTTPException(status_code=400, detail="CSV 缺少必要欄位：" + ", ".join(missing))
     rows: list[dict[str, object]] = []
@@ -870,6 +921,7 @@ def _parse_strava_csv(raw: bytes) -> tuple[list[dict[str, object]], int, list[st
                 "date": date_value,
                 "km": km,
                 "gear": (row.get(fields["gear"] or "") or "").strip(),
+                "activity_type": (row.get(fields["type"] or "") or "").strip(),
             })
     except csv.Error as exc:
         raise HTTPException(status_code=400, detail="CSV 格式錯誤") from exc
@@ -1249,7 +1301,15 @@ def create_monthly_mileage(
     if existing:
         raise HTTPException(status_code=400, detail="該月份已有紀錄")
 
-    entry = models.MonthlyMileage(**payload.model_dump(), user_id=current_user.id)
+    logged_km = db.query(func.sum(models.Run.km)).filter(
+        models.Run.user_id == current_user.id,
+        models.Run.date.like(f"{payload.year:04d}-{payload.month:02d}-%"),
+    ).scalar()
+    entry = models.MonthlyMileage(
+        **payload.model_dump(),
+        adjustment_km=round(payload.km - float(logged_km or 0), 2),
+        user_id=current_user.id,
+    )
     db.add(entry)
     try:
         db.commit()
@@ -1291,6 +1351,14 @@ def update_monthly_mileage(
         if clash:
             raise HTTPException(status_code=400, detail="該月份已有紀錄")
 
+    # A manually entered total is represented as an adjustment alongside the
+    # immutable sum of detailed run-log rows for that target month.
+    desired_total = float(update_data.get("km", entry.km))
+    logged_km = db.query(func.sum(models.Run.km)).filter(
+        models.Run.user_id == current_user.id,
+        models.Run.date.like(f"{new_year:04d}-{new_month:02d}-%"),
+    ).scalar()
+    update_data["adjustment_km"] = round(desired_total - float(logged_km or 0), 2)
     for k, v in update_data.items():
         setattr(entry, k, v)
     try:
@@ -1314,7 +1382,17 @@ def delete_monthly_mileage(
     ).first()
     if not entry:
         raise HTTPException(status_code=404, detail="Monthly mileage not found")
-    db.delete(entry)
+    logged_km = db.query(func.sum(models.Run.km)).filter(
+        models.Run.user_id == current_user.id,
+        models.Run.date.like(f"{entry.year:04d}-{entry.month:02d}-%"),
+    ).scalar()
+    if logged_km:
+        # Detailed runs are the source of truth.  "Delete" removes only the
+        # historical/manual adjustment when run-log rows still exist.
+        entry.adjustment_km = 0
+        entry.km = round(float(logged_km), 2)
+    else:
+        db.delete(entry)
     try:
         db.commit()
     except Exception:
@@ -1324,6 +1402,103 @@ def delete_monthly_mileage(
 
 
 # ── Export Routes ─────────────────────────────────────────────────
+@app.get("/api/analytics/dashboard")
+def dashboard_analytics(
+    year: int = Query(..., ge=1900, le=2100),
+    month: int = Query(..., ge=1, le=12),
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return analytics.dashboard_analytics(db, current_user.id, year, month)
+
+
+@app.get("/api/shoes/{shoe_id}/analytics")
+def get_shoe_analytics(
+    shoe_id: int,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    result = analytics.shoe_analytics(db, current_user.id, shoe_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Shoe not found")
+    return result
+
+
+@app.get("/api/analytics/reconciliation")
+def get_mileage_reconciliation(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return analytics.mileage_reconciliation(db, current_user.id)
+
+
+@app.get("/api/export/account")
+def export_account_data(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Export all user-owned product records without credentials or secrets."""
+    shoes = db.query(models.Shoe).filter(models.Shoe.user_id == current_user.id).all()
+    runs = db.query(models.Run).filter(models.Run.user_id == current_user.id).all()
+    months = db.query(models.MonthlyMileage).filter(
+        models.MonthlyMileage.user_id == current_user.id
+    ).all()
+    report_rows = db.query(models.MonthlyReport).filter(
+        models.MonthlyReport.user_id == current_user.id
+    ).all()
+    imports = db.query(models.StravaImport).filter(
+        models.StravaImport.user_id == current_user.id
+    ).all()
+    goal = db.query(models.RunningGoal).filter(
+        models.RunningGoal.user_id == current_user.id
+    ).first()
+    payload = {
+        "format": "running-shoes-account-backup",
+        "version": 1,
+        "exported_at": datetime.now(UTC).isoformat(),
+        "username": current_user.username,
+        "shoes": [{
+            "id": shoe.id, "brand": shoe.brand, "model": shoe.model,
+            "date": shoe.date, "size": shoe.size, "price": shoe.price,
+            "orig_price": shoe.orig_price, "mileage": shoe.mileage,
+            "baseline_mileage": shoe.baseline_mileage,
+            "expected_mileage": shoe.expected_mileage, "monthly_km": shoe.monthly_km,
+            "is_retired": shoe.is_retired, "is_deleted": shoe.is_deleted,
+            "categories": shoe.categories,
+        } for shoe in shoes],
+        "runs": [{
+            "id": run.id, "shoe_id": run.shoe_id, "date": run.date, "km": run.km,
+            "strava_id": run.strava_id,
+        } for run in runs],
+        "monthly_mileages": [{
+            "year": row.year, "month": row.month, "km": row.km,
+            "adjustment_km": row.adjustment_km,
+        } for row in months],
+        "running_goal": ({
+            "start_year": goal.start_year, "monthly_km": goal.monthly_km,
+            "yearly_km": goal.yearly_km,
+        } if goal else None),
+        "monthly_reports": [{
+            "year": row.year, "month": row.month, "content_md": row.content_md,
+            "model": row.model, "stats_json": row.stats_json,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+            "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+        } for row in report_rows],
+        "strava_imports": [{
+            "imported_at": row.imported_at.isoformat() if row.imported_at else None,
+            "start_date": row.start_date, "end_date": row.end_date,
+            "imported_count": row.imported_count, "imported_km": row.imported_km,
+            "duplicate_count": row.duplicate_count, "unmapped_count": row.unmapped_count,
+            "invalid_count": row.invalid_count,
+        } for row in imports],
+    }
+    filename = f"running_shoes_account_{datetime.now().astimezone():%Y%m%d_%H%M%S}.json"
+    return JSONResponse(
+        payload,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
 def _spreadsheet_safe(value):
     """Prevent user-controlled text becoming a CSV/XLSX formula."""
     if isinstance(value, str) and value.lstrip().startswith(("=", "+", "-", "@")):

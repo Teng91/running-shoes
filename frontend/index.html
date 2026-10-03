@@ -129,6 +129,29 @@ h1 { font-size: 28px; font-weight: 700; margin-bottom: 4px; }
 .run-entry .btn { width: 100%; margin-top: 14px; }
 .run-stats { grid-template-columns: repeat(3, 1fr); }
 .run-stats .card-value { font-size: 25px; }
+.dashboard-insights { margin: -10px 0 28px; }
+.insight-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; }
+.dashboard-insights .insight-grid { grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; }
+.insight-card { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:12px 14px; }
+.dashboard-insights .insight-card { border-radius:12px; padding:20px; }
+.insight-card-label { color:var(--text-dim); font-size:11px; margin-bottom:5px; }
+.insight-card-value { font-size:18px; font-weight:700; }
+.insight-card-sub { color:var(--text-dim); font-size:11px; margin-top:4px; line-height:1.45; }
+.dashboard-insights .insight-card-label { font-size:12px; margin-bottom:6px; }
+.dashboard-insights .insight-card-value { font-size:25px; }
+.dashboard-insights .insight-card-sub { font-size:12px; }
+.insight-alerts { display:grid; gap:7px; margin-top:10px; }
+.insight-alert { border-left:3px solid var(--accent); background:var(--item-bg); border-radius:7px; padding:9px 11px; font-size:12px; }
+.insight-alert.warning { border-left-color:var(--orange); }
+.insight-alert.urgent { border-left-color:var(--red); }
+.shoe-analysis-modal { width:min(860px,calc(100vw - 32px)); }
+.shoe-analysis-header { display:flex; justify-content:space-between; gap:12px; align-items:flex-start; }
+.shoe-analysis-sub { color:var(--text-dim); font-size:12px; margin-top:4px; }
+.shoe-analysis-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:9px; margin:16px 0; }
+.shoe-analysis-chart { height:240px; position:relative; margin:14px 0; }
+.shoe-analysis-section { margin-top:18px; }
+.shoe-analysis-section h3 { font-size:14px; margin-bottom:9px; }
+.metric-source { display:inline-block; color:var(--text-dim); font-size:10px; margin-left:5px; }
 .run-shoe-label { display: inline-flex; align-items: center; gap: 7px; }
 .run-source { display:inline-block; padding:3px 7px; border-radius:999px; font-size:11px; background:var(--btn-bg); color:var(--text); border:1px solid var(--border); }
 .run-source.strava { background:rgba(249,115,22,.18); color:#fb923c; border:none; }
@@ -483,6 +506,8 @@ input::-webkit-date-and-time-value { text-align: left; min-width: 0; }
   .modal { padding: 20px; }
   .modal-actions > .btn { flex: 1 1 auto; }
   .run-shoe-canvas { height: 260px; }
+  .insight-grid, .shoe-analysis-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .dashboard-insights .insight-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
   .run-shoe-legend-row { grid-template-columns: minmax(0,1fr) auto auto auto; gap: 8px; padding: 9px 6px; }
   .run-shoe-legend-name span:last-child { white-space: normal; overflow-wrap: anywhere; }
   .run-calendar { gap: 3px; }
@@ -501,6 +526,7 @@ input::-webkit-date-and-time-value { text-align: left; min-width: 0; }
   .run-entry-grid, .form-row { grid-template-columns: minmax(0, 1fr); }
   .modal-overlay { padding: 8px; }
   .modal { padding: 16px; }
+  .dashboard-insights .insight-grid { grid-template-columns:1fr; }
   .category-checkboxes { gap: 4px; }
   .category-checkboxes label { gap: 3px; padding: 7px 2px; font-size: 11.5px; }
   .category-checkboxes input[type="checkbox"] { flex-basis: 13px; width: 13px; height: 13px; }
@@ -684,6 +710,7 @@ input::-webkit-date-and-time-value { text-align: left; min-width: 0; }
     </div>
 
     <div class="cards run-stats" id="run-stats"></div>
+    <div id="dashboard-insights" class="dashboard-insights"></div>
     <div class="charts">
       <div class="chart-box"><h3>跑步月曆</h3><div id="run-calendar" class="run-calendar"></div></div>
       <div class="chart-box run-shoe-chart-box"><h3>鞋款里程分布</h3><div class="run-shoe-canvas"><canvas id="chart-run-shoes"></canvas></div><div id="run-shoe-legend" class="run-shoe-legend"></div></div>
@@ -750,7 +777,7 @@ input::-webkit-date-and-time-value { text-align: left; min-width: 0; }
         <table>
           <thead>
             <tr>
-              <th>年份</th><th>月份</th><th>跑量 (km)</th><th></th>
+              <th>年份</th><th>月份</th><th>日誌里程</th><th>歷史／手動調整</th><th>合計 (km)</th><th></th>
             </tr>
           </thead>
           <tbody id="monthly-table"></tbody>
@@ -803,7 +830,7 @@ input::-webkit-date-and-time-value { text-align: left; min-width: 0; }
   <!-- Agent Chat Panel -->
   <div class="tab-panel agent-panel" data-panel="agent">
     <div class="agent-config">
-      <label style="font-size:13px;color:var(--text-dim);white-space:nowrap;">Model Provider</label>
+      <label style="font-size:13px;color:var(--text-dim);white-space:nowrap;">今日免費模型</label>
       <select id="agent-model"></select>
       <button id="agent-refresh-btn" onclick="refreshAgentModels()">🔄 刷新模型列表</button>
     </div>
@@ -894,7 +921,7 @@ input::-webkit-date-and-time-value { text-align: left; min-width: 0; }
 
 <!-- Run Edit Modal -->
 <div class="modal-overlay" id="run-modal">
-  <form class="modal" style="width: 400px;" onsubmit="saveRun(); return false;">
+  <form class="modal" style="width: 520px;" onsubmit="saveRun(); return false;">
     <h2>編輯跑步紀錄</h2>
     <div class="form-row">
       <div class="form-group"><label for="edit-run-date">日期</label><input id="edit-run-date" type="date" required></div>
@@ -981,7 +1008,19 @@ input::-webkit-date-and-time-value { text-align: left; min-width: 0; }
       <span style="flex:1"></span>
       <button class="btn btn-cancel" onclick="closeExportModal()">取消</button>
       <button class="btn btn-primary" onclick="doExport()">匯出</button>
+      <button class="btn btn-edit" onclick="exportAccountData()">完整備份 JSON</button>
     </div>
+  </div>
+</div>
+
+<!-- Shoe Analytics Modal -->
+<div class="modal-overlay" id="shoe-analysis-modal">
+  <div class="modal shoe-analysis-modal">
+    <div class="shoe-analysis-header">
+      <div><h2 id="shoe-analysis-title">跑鞋分析</h2><div id="shoe-analysis-sub" class="shoe-analysis-sub"></div></div>
+      <button class="btn btn-sm btn-cancel" onclick="closeShoeAnalytics()">關閉</button>
+    </div>
+    <div id="shoe-analysis-content"><div class="empty-state">載入中…</div></div>
   </div>
 </div>
 
@@ -1359,6 +1398,8 @@ let stravaPreviewController = null;
 let selectedYear = null;
 let selectedGoalMonth = null;
 let selectedSpendingYear = null;
+let dashboardAnalyticsCache = new Map();
+let dashboardAnalyticsRequest = 0;
 let currentTheme = localStorage.getItem('theme') || 'dark';
 
 function applyTheme(theme) {
@@ -1415,6 +1456,7 @@ async function loadData() {
     runs = runData;
     stravaImports = importHistory;
     runningGoal = goal;
+    if (typeof dashboardAnalyticsCache !== 'undefined') dashboardAnalyticsCache.clear();
   } catch (e) {
     console.error('載入資料失敗:', e);
     if (generation !== dataLoadGeneration || token !== authToken) return;
@@ -1456,7 +1498,6 @@ function fmtPct(v) { return (v * 100).toFixed(2) + '%'; }
 function fmtMoney(v) { return '$' + Math.round(v).toLocaleString(); }
 function fmtDate(d) { if (!d) return '-'; return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`; }
 function fmtCostPerKm(v) { return v !== null ? '$' + v.toFixed(2) : '-'; }
-
 function progressColor(pct) {
   if (pct < 0.2) return '#16a34a';
   if (pct < 0.4) return '#4ade80';
@@ -1610,6 +1651,7 @@ function renderTable() {
       <td>${fmtMoney(s.orig_price)}</td>
       <td>${fmtPct(c.discount)}</td>
       <td>
+        <button class="btn btn-sm" onclick="openShoeAnalytics(${s.id})">分析</button>
         <button class="btn btn-sm btn-edit" onclick="openEditModal(${i})">編輯</button>
       </td>
     </tr>`;
@@ -1639,7 +1681,7 @@ function renderRetiredTable() {
       <td>${fmtMoney(s.price)}</td>
       <td>${fmtMoney(s.orig_price)}</td>
       <td>${fmtPct(c.discount)}</td>
-      <td><button class="btn btn-sm btn-edit" onclick="openRetiredEditModal(${i})">編輯</button></td>
+      <td><button class="btn btn-sm" onclick="openShoeAnalytics(${s.id})">分析</button> <button class="btn btn-sm btn-edit" onclick="openRetiredEditModal(${i})">編輯</button></td>
     </tr>`;
   }).join('');
 }
@@ -1648,14 +1690,16 @@ function renderRetiredTable() {
 function renderMonthlyTable() {
   const tbody = document.getElementById('monthly-table');
   if (monthlyMileages.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--text-dim);padding:24px;">尚無月跑量紀錄，使用上方表單新增</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-dim);padding:24px;">尚無月跑量紀錄，使用上方表單新增</td></tr>';
     return;
   }
   tbody.innerHTML = monthlyMileages.map((m, i) => `
     <tr>
       <td>${m.year}</td>
       <td>${m.month}</td>
-      <td class="editable" ondblclick="inlineEditMonthly(${i},'km',this)">${m.km.toFixed(2)}</td>
+      <td>${(m.km - (m.adjustment_km || 0)).toFixed(2)} km</td>
+      <td>${(m.adjustment_km || 0).toFixed(2)} km</td>
+      <td class="editable" ondblclick="inlineEditMonthly(${i},'km',this)"><strong>${m.km.toFixed(2)}</strong></td>
       <td>
         <button class="btn btn-sm btn-edit" onclick="editMonthlyMileage(${i})">編輯</button>
         <button class="btn btn-sm btn-delete" onclick="deleteMonthlyMileage(${i})">刪除</button>
@@ -1872,6 +1916,30 @@ async function doExport() {
   }
 }
 
+async function exportAccountData() {
+  const error = document.getElementById('export-error');
+  error.textContent = '';
+  try {
+    const res = await fetch(API_BASE + '/export/account', { headers: authHeaders() });
+    if (res.status === 401) { clearAuth(); showLoginView(); throw new Error('Unauthorized'); }
+    if (!res.ok) throw new Error('完整備份失敗：' + res.status);
+    const disposition = res.headers.get('Content-Disposition') || '';
+    const match = disposition.match(/filename="([^"]+)"/);
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = match ? match[1] : `running_shoes_account_${localDateISO()}.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+    closeExportModal();
+  } catch (e) {
+    error.textContent = e.message || '完整備份失敗';
+  }
+}
+
 async function saveMonthlyMileage() {
   const year = parseInt(document.getElementById('m-year').value, 10);
   const month = parseInt(document.getElementById('m-month').value, 10);
@@ -1957,7 +2025,9 @@ async function addRun() {
   try {
     runSaving = true;
     document.getElementById('add-run-btn').disabled = true;
-    await apiPost('/runs', { date, km, shoe_id: shoeId });
+    await apiPost('/runs', {
+      date, km, shoe_id: shoeId,
+    });
     document.getElementById('run-km').value = '';
     document.getElementById('run-month').value = date.slice(0, 7);
     await loadData();
@@ -2197,6 +2267,42 @@ function renderRunLog() {
 
   renderRunCalendar(filtered, month);
   renderRunShoeChart(shoeStats);
+  loadDashboardAnalytics(month);
+}
+
+async function loadDashboardAnalytics(month) {
+  const target = document.getElementById('dashboard-insights');
+  if (!target || !authToken) return;
+  if (dashboardAnalyticsCache.has(month)) {
+    renderDashboardInsights(dashboardAnalyticsCache.get(month));
+    return;
+  }
+  const requestId = ++dashboardAnalyticsRequest;
+  target.innerHTML = '<div class="insight-card"><div class="insight-card-sub">分析載入中…</div></div>';
+  try {
+    const [year, monthNumber] = month.split('-').map(Number);
+    const data = await apiGet(`/analytics/dashboard?year=${year}&month=${monthNumber}`);
+    if (requestId !== dashboardAnalyticsRequest || selectedRunMonth() !== month) return;
+    dashboardAnalyticsCache.set(month, data);
+    renderDashboardInsights(data);
+  } catch (error) {
+    if (requestId !== dashboardAnalyticsRequest) return;
+    target.innerHTML = `<div class="insight-alert warning">進階分析暫時無法載入：${esc(error.message || '未知錯誤')}</div>`;
+  }
+}
+
+function renderDashboardInsights(data) {
+  const target = document.getElementById('dashboard-insights');
+  const goal = data.goal || {};
+  const delta = Number(data.month_delta_km || 0);
+  const recent = data.recent_7_days || {};
+  const cards = [
+    { label: '與上月比較', value: `${delta >= 0 ? '+' : ''}${delta.toFixed(2)} km`, sub: `上月 ${Number(data.previous_month.km || 0).toFixed(2)} km` },
+    { label: '近 7 天趨勢', value: `${Number(recent.km || 0).toFixed(2)} km`, sub: `較前 7 天 ${Number(recent.delta_km || 0) >= 0 ? '+' : ''}${Number(recent.delta_km || 0).toFixed(2)} km` },
+    { label: '月目標', value: goal.active ? `${Number(goal.month_achievement_percent || 0).toFixed(1)}%` : '尚未啟用', sub: goal.active ? `還差 ${Number(goal.month_remaining_km || 0).toFixed(2)} km` : `從 ${goal.start_year || '—'} 年開始` },
+  ];
+  const alerts = (data.alerts || []).map(alert => `<div class="insight-alert ${esc(alert.severity || '')}">${esc(alert.message)}</div>`).join('');
+  target.innerHTML = `<div class="insight-grid">${cards.map(card => `<div class="insight-card"><div class="insight-card-label">${card.label}</div><div class="insight-card-value">${card.value}</div><div class="insight-card-sub">${card.sub}</div></div>`).join('')}</div>${alerts ? `<div class="insight-alerts">${alerts}</div>` : ''}`;
 }
 
 function renderStravaStatus() {
@@ -2270,6 +2376,69 @@ function renderRunShoeChart(shoeStats) {
       datasets: [{ data: entries.map(([, stats]) => stats.km), backgroundColor: colors, borderColor: cardBg, borderWidth: 3 }],
     },
     options: { maintainAspectRatio: false, cutout: '60%', plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${total > 0 ? (ctx.raw / total * 100).toFixed(1) : '0.0'}% / ${ctx.raw.toFixed(2)} km / ${entries[ctx.dataIndex][1].count} 次` } } } }
+  });
+}
+
+async function openShoeAnalytics(shoeId) {
+  const modal = document.getElementById('shoe-analysis-modal');
+  const content = document.getElementById('shoe-analysis-content');
+  modal.classList.add('active');
+  content.innerHTML = '<div class="empty-state">載入跑鞋分析…</div>';
+  try {
+    const data = await apiGet(`/shoes/${shoeId}/analytics`);
+    renderShoeAnalytics(data);
+  } catch (error) {
+    content.innerHTML = `<div class="insight-alert warning">分析載入失敗：${esc(error.message || '未知錯誤')}</div>`;
+  }
+}
+
+function closeShoeAnalytics() {
+  document.getElementById('shoe-analysis-modal').classList.remove('active');
+  if (chartInstances.shoeAnalytics) {
+    chartInstances.shoeAnalytics.destroy();
+    delete chartInstances.shoeAnalytics;
+  }
+}
+
+function renderShoeAnalytics(data) {
+  const shoe = data.shoe;
+  const life = data.lifecycle;
+  const usage = data.usage;
+  document.getElementById('shoe-analysis-title').textContent = `${shoe.brand} ${shoe.model}`;
+  document.getElementById('shoe-analysis-sub').textContent = `${shoe.is_retired ? '已退役' : '使用中'} · ${shoe.categories.join(' / ') || '未分類'} · 購入 ${shoe.purchase_date.replace(/-/g, '/')}`;
+  const forecast = life.forecast_retirement_date
+    ? life.forecast_retirement_date.replace(/-/g, '/')
+    : '無法預估';
+  const source = life.forecast_source === 'recent_90_days' ? '依近 90 天實際使用' : '依計畫月跑量';
+  const cards = [
+    { label: '總里程', value: `${Number(life.total_mileage_km).toFixed(2)} km`, sub: `日誌 ${Number(life.logged_mileage_km).toFixed(2)} + 歷史調整 ${Number(life.historical_adjustment_km).toFixed(2)}` },
+    { label: '穿著次數', value: `${usage.count} 次`, sub: usage.count ? '已納入逐筆日誌' : '尚無日誌紀錄' },
+    { label: '近 30／90 天', value: `${Number(usage.km_30_days).toFixed(1)} / ${Number(usage.km_90_days).toFixed(1)} km`, sub: `實際月均 ${Number(usage.actual_monthly_km_90_days).toFixed(1)} km` },
+    { label: '壽命進度', value: life.usage_percent === null ? '—' : `${Number(life.usage_percent).toFixed(1)}%`, sub: `剩餘 ${Number(life.remaining_mileage_km).toFixed(2)} km` },
+    { label: '預估退役', value: forecast, sub: `${source} · ${Number(life.forecast_monthly_km).toFixed(1)} km／月` },
+    { label: '每公里成本', value: usage.cost_per_km === null ? '—' : `$${Number(usage.cost_per_km).toFixed(2)}`, sub: usage.cost_per_wear === null ? '無穿著紀錄' : `每次穿著 $${Number(usage.cost_per_wear).toFixed(0)}` },
+    { label: '最後使用', value: usage.last_run_date ? usage.last_run_date.replace(/-/g, '/') : '—', sub: usage.first_run_date ? `首次紀錄 ${usage.first_run_date.replace(/-/g, '/')}` : '尚無日誌紀錄' },
+  ];
+  const difference = Math.abs(Number(life.reconciliation_difference_km || 0));
+  const warning = difference >= 0.01
+    ? `<div class="insight-alert warning">里程對帳差異 ${difference.toFixed(2)} km，請檢查手動調整。</div>` : '';
+  const recentRows = data.recent_runs.length ? data.recent_runs.map(run => `
+    <tr><td>${run.date.replace(/-/g, '/')}</td><td>${Number(run.km).toFixed(2)} km</td></tr>`).join('')
+    : '<tr><td colspan="2" class="empty-state">尚無逐筆跑步紀錄。</td></tr>';
+  document.getElementById('shoe-analysis-content').innerHTML = `${warning}<div class="shoe-analysis-grid">${cards.map(card => `<div class="insight-card"><div class="insight-card-label">${card.label}</div><div class="insight-card-value">${card.value}</div><div class="insight-card-sub">${card.sub}</div></div>`).join('')}</div>
+    <div class="shoe-analysis-section"><h3>近 12 個月使用趨勢</h3><div class="shoe-analysis-chart"><canvas id="chart-shoe-analytics"></canvas></div></div>
+    <div class="shoe-analysis-section"><h3>最近跑步</h3><div class="table-wrap" tabindex="0" role="region" aria-label="跑鞋最近跑步"><table><thead><tr><th>日期</th><th>距離</th></tr></thead><tbody>${recentRows}</tbody></table></div></div>`;
+  if (typeof Chart === 'undefined') return;
+  if (chartInstances.shoeAnalytics) chartInstances.shoeAnalytics.destroy();
+  const textColor = getThemeColor('--text-dim', '#8b8d9a');
+  const gridColor = getThemeColor('--chart-grid', '#334155');
+  chartInstances.shoeAnalytics = new Chart(document.getElementById('chart-shoe-analytics'), {
+    type: 'bar',
+    data: {
+      labels: data.monthly_history.map(item => `${item.year}/${item.month}`),
+      datasets: [{ label: '里程', data: data.monthly_history.map(item => item.km), backgroundColor: '#22c55e', borderRadius: 4 }],
+    },
+    options: { maintainAspectRatio:false, plugins:{ legend:{display:false}, tooltip:{callbacks:{label:ctx => `${Number(ctx.raw).toFixed(2)} km · ${data.monthly_history[ctx.dataIndex].count} 次`}}}, scales:{x:{grid:{display:false},ticks:{color:textColor}},y:{beginAtZero:true,grid:{color:gridColor},ticks:{color:textColor,callback:value => value + ' km'}}} },
   });
 }
 
@@ -3276,6 +3445,9 @@ document.getElementById('export-modal').addEventListener('click', e => {
 document.getElementById('run-modal').addEventListener('click', e => {
   if (e.target.id === 'run-modal') closeRunModal();
 });
+document.getElementById('shoe-analysis-modal').addEventListener('click', e => {
+  if (e.target.id === 'shoe-analysis-modal') closeShoeAnalytics();
+});
 
 // ====== Agent / Chat ======
 let agentHistory = [];
@@ -3300,9 +3472,10 @@ async function loadAgentModels() {
     const orProv = providers.find(p => p.id === 'openrouter');
     if (!orProv) return;
     const modelSel = document.getElementById('agent-model');
-    modelSel.innerHTML = orProv.models.map(m =>
-      `<option value="${m.id}">${m.display}</option>`
-    ).join('');
+    modelSel.innerHTML = orProv.models.length
+      ? orProv.models.map(m => `<option value="${m.id}">${m.display}</option>`).join('')
+      : '<option value="">今日沒有可用的免費工具模型</option>';
+    modelSel.disabled = !orProv.models.length;
   } catch (e) {
     console.error('載入模型清單失敗:', e);
   }

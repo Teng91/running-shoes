@@ -172,6 +172,7 @@ def test_personal_fit_stream_executes_complete_plan_before_model(monkeypatch):
         ("我最新的月跑量是多少？", ("monthly_mileage_stats",)),
         ("查我最新的跑鞋里程", ("list_my_shoes",)),
         ("我的鞋櫃最新狀態", ("list_my_shoes",)),
+        ("我的鞋這個月穿幾次？", ("shoe_usage_analytics",)),
     ],
 )
 def test_latest_personal_data_uses_database_not_web(message, expected_tools):
@@ -426,7 +427,7 @@ def test_plain_response_streams_tokens_and_uses_default_model(monkeypatch):
 
     assert _event_types(events) == ["token", "token", "done"]
     assert "".join(event.get("text", "") for event in events) == "跑鞋建議"
-    assert call.call_args.args[1] == llm._DEFAULT_MODEL
+    assert call.call_args.args[1] == ""
     assert call.call_args.args[2][-1] == {"role": "user", "content": "請推薦"}
 
 
