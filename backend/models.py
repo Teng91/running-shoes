@@ -82,6 +82,7 @@ class MonthlyMileage(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     year: Mapped[int] = mapped_column(Integer, nullable=False)
     month: Mapped[int] = mapped_column(Integer, nullable=False)
     km: Mapped[float] = mapped_column(Float, default=0)
@@ -144,6 +145,7 @@ class Run(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
+    version: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     shoe_id: Mapped[int] = mapped_column(
         Integer,
         ForeignKey("shoes.id", ondelete="RESTRICT"),

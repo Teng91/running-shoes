@@ -10,6 +10,7 @@ import os
 import time
 from collections.abc import Generator
 from enum import StrEnum
+from threading import Lock
 from typing import Any
 
 import httpx
@@ -51,6 +52,7 @@ MODELS: dict[str, list[dict[str, str]]] = {"openrouter": []}
 # 動態模型快取
 _MODELS_CACHE: dict[str, list[dict[str, str]]] = {}
 _MODELS_CACHE_META: dict[str, float] = {}  # provider -> cached_at
+_MODELS_CACHE_LOCK = Lock()
 _MODELS_CACHE_TTL = 900  # 15 分鐘；讓「今日免費」清單保持新鮮
 
 _DEFAULT_MODEL: str | None = None
@@ -59,6 +61,16 @@ _REMOVED_MODELS = {"openrouter/free"}
 _MODELS_URL = "https://openrouter.ai/api/v1/models?supported_parameters=tools"
 _RANKINGS_URL = "https://openrouter.ai/api/v1/datasets/rankings-daily"
 _DAILY_USAGE_POOL_LIMIT = 50
+_LLM_MAX_OUTPUT_TOKENS = max(
+    256, int(os.environ.get("LLM_MAX_OUTPUT_TOKENS", "4096"))
+)
+_LLM_TIMEOUT = httpx.Timeout(
+    timeout=90.0,
+    connect=10.0,
+    read=90.0,
+    write=30.0,
+    pool=10.0,
+)
 
 
 def _fetch_free_models() -> list[dict[str, str]]:
@@ -180,20 +192,28 @@ def _get_models(provider: LLMProvider, force: bool = False) -> list[dict[str, st
     if not force and cached is not None and (now - cached_at) < _MODELS_CACHE_TTL:
         return cached
 
-    try:
-        models = _fetch_free_models()
-        if not models:
-            raise LLMError("OpenRouter 沒有回傳可用的免費工具模型。")
-        # A local preference may move a model to the front only when it is
-        # present in today's live free list; it can never add a stale/paid ID.
-        if _OR_DEFAULT in {model["id"] for model in models}:
-            models = sorted(models, key=lambda m: 0 if m["id"] == _OR_DEFAULT else 1)
-        _MODELS_CACHE[provider.value] = models
-        _MODELS_CACHE_META[provider.value] = now
-        return models
-    except LLMError:
+    with _MODELS_CACHE_LOCK:
+        # Another request may have filled the cold cache while this request
+        # waited for the lock. Avoid duplicate outbound catalog/ranking calls.
+        now = time.time()
         cached = _MODELS_CACHE.get(provider.value)
-        return cached if cached is not None else MODELS.get(provider.value, [])
+        cached_at = _MODELS_CACHE_META.get(provider.value, 0)
+        if not force and cached is not None and (now - cached_at) < _MODELS_CACHE_TTL:
+            return cached
+        try:
+            models = _fetch_free_models()
+            if not models:
+                raise LLMError("OpenRouter 沒有回傳可用的免費工具模型。")
+            # A local preference may move a model to the front only when it is
+            # present in today's live free list; it can never add a stale/paid ID.
+            if _OR_DEFAULT in {model["id"] for model in models}:
+                models = sorted(models, key=lambda m: 0 if m["id"] == _OR_DEFAULT else 1)
+            _MODELS_CACHE[provider.value] = models
+            _MODELS_CACHE_META[provider.value] = now
+            return models
+        except LLMError:
+            cached = _MODELS_CACHE.get(provider.value)
+            return cached if cached is not None else MODELS.get(provider.value, [])
 
 
 def resolve_allowed_model(provider: LLMProvider, requested_model: str | None) -> str:
@@ -238,7 +258,11 @@ def _build_client(provider: LLMProvider) -> OpenAI:
     api_key = os.environ.get(cfg["key_env"])
     if not api_key:
         raise LLMError(f"未設定 {cfg['key_label']}，無法使用 {provider.value}。")
-    return OpenAI(base_url=cfg["base_url"], api_key=api_key)
+    return OpenAI(
+        base_url=cfg["base_url"],
+        api_key=api_key,
+        timeout=_LLM_TIMEOUT,
+    )
 
 
 def call_llm_stream(
@@ -263,6 +287,7 @@ def call_llm_stream(
         "model": model,
         "messages": messages,
         "temperature": 0.3,
+        "max_tokens": _LLM_MAX_OUTPUT_TOKENS,
         "stream": True,
         "stream_options": {"include_usage": False},
     }

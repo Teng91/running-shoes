@@ -71,6 +71,15 @@ test('shoe analytics ignores stale responses after a second open or close', () =
   assert.match(closeAnalytics, /shoeAnalyticsRequestId \+= 1/);
 });
 
+test('shoe analytics uses the requested six-card order without cost or reconciliation copy', () => {
+  const analytics = extract('renderShoeAnalytics');
+  const cards = analytics.slice(analytics.indexOf('const cards'), analytics.indexOf('const difference'));
+  const labels = [...cards.matchAll(/label: '([^']+)'/g)].map(match => match[1]);
+  assert.deepEqual(labels, ['總里程', '穿著次數', '近 30／90 天', '最後使用', '壽命進度', '預估退役']);
+  assert.doesNotMatch(analytics, /每公里成本|每次穿著|日誌 .*歷史調整/);
+  assert.match(analytics, /card\.sub \? `<div class="insight-card-sub">/);
+});
+
 test('unclassified shoes stay unclassified when the form is saved', () => {
   const context = vm.createContext({ document: { querySelectorAll: () => [] } });
   vm.runInContext(extract('getSelectedCategories'), context);
@@ -170,16 +179,60 @@ test('failed reload retains previous data and exposes a retry; recovery hides er
   assert.equal(error.hidden, true);
 });
 
-test('long conversations fit the backend history and content limits', () => {
-  const expression = source.match(/history: (agentHistory[^\n]+),/)[1];
+test('long conversations fit the backend aggregate history and content limits', () => {
   const history = Array.from({ length: 30 }, (_, i) => ({
     role: i % 2 ? 'assistant' : 'user', content: 'x'.repeat(15000),
   }));
-  const result = vm.runInNewContext(expression, { agentHistory: history });
-  assert.equal(result.length, 20);
-  assert.equal(result[0].role, 'user');
+  const context = vm.createContext({ agentHistory: history });
+  vm.runInContext('const AGENT_HISTORY_CHAR_BUDGET = 48000;\n' + extract('agentHistoryForRequest'), context);
+  const result = context.agentHistoryForRequest();
+  assert.equal(result.length, 4);
+  assert.equal(result.reduce((total, turn) => total + turn.content.length, 0), 48000);
   assert.ok(result.every(turn => turn.content.length === 12000));
   assert.equal(history[0].content.length, 15000);
+  assert.match(source, /history: agentHistoryForRequest\(\)/);
+});
+
+test('run edits send an optimistic concurrency version', () => {
+  const save = extract('saveRun');
+  assert.match(save, /expected_version: editingRun\.version \|\| 0/);
+  assert.match(extract('deleteEditingRun'), /expected_version=' \+ \(run\.version \|\| 0\)/);
+});
+
+test('monthly inline edits commit once and include the loaded version', async () => {
+  const handlers = {};
+  const input = { addEventListener: (event, fn) => { handlers[event] = fn; }, focus() {} };
+  const writes = [];
+  const context = vm.createContext({
+    monthlyMileages: [{ id: 8, km: 50, version: 3 }],
+    document: { createElement: () => input },
+    apiPut: async (url, payload) => { writes.push({ url, payload }); },
+    loadData: async () => {}, render() {}, alert() {},
+  });
+  vm.runInContext(extract('inlineEditMonthly'), context);
+  await context.inlineEditMonthly(0, 'km', { innerHTML: '', appendChild() {} });
+  input.value = '60';
+  handlers.keydown({ key: 'Enter' });
+  await handlers.blur();
+  await Promise.resolve();
+
+  assert.equal(writes.length, 1);
+  assert.equal(JSON.stringify(writes[0]), JSON.stringify({
+    url: '/monthly-mileage/8', payload: { km: 60, expected_version: 3 },
+  }));
+});
+
+test('monthly, run, and shoe deletes carry optimistic versions', () => {
+  assert.match(extract('deleteMonthlyMileage'), /expected_version=' \+ \(m\.version \|\| 0\)/);
+  const modal = source.slice(source.indexOf('class ShoeModal {'), source.indexOf('// 初始化一次'));
+  assert.match(modal, /expected_version=' \+ \(this\.shoe\.version \|\| 0\)/);
+});
+
+test('report history model labels are inserted as text, not HTML', () => {
+  const history = extract('loadReportHistory');
+  assert.match(history, /select\.replaceChildren\(\)/);
+  assert.match(history, /option\.textContent = reportMonthLabel/);
+  assert.doesNotMatch(history, /innerHTML/);
 });
 
 test('shoe default uses the local calendar date', () => {
