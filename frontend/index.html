@@ -147,7 +147,9 @@ h1 { font-size: 28px; font-weight: 700; margin-bottom: 4px; }
 .shoe-analysis-modal { width:min(860px,calc(100vw - 32px)); }
 .shoe-analysis-header { display:flex; justify-content:space-between; gap:12px; align-items:flex-start; }
 .shoe-analysis-sub { color:var(--text-dim); font-size:12px; margin-top:4px; }
-.shoe-analysis-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:9px; margin:16px 0; }
+.shoe-analysis-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:9px; margin:16px 0; }
+.shoe-analysis-grid > .insight-card { min-width:0; overflow-wrap:anywhere; }
+.shoe-analysis-grid .insight-card-value { overflow-wrap:anywhere; word-break:break-word; line-height:1.25; }
 .shoe-analysis-chart { height:240px; position:relative; margin:14px 0; }
 .shoe-analysis-section { margin-top:18px; }
 .shoe-analysis-section h3 { font-size:14px; margin-bottom:9px; }
@@ -1970,6 +1972,7 @@ async function saveMonthlyMileage() {
 
 // ====== Charts ======
 let chartInstances = {};
+let shoeAnalyticsRequestId = 0;
 
 // ====== Run Log ======
 let editingRunId = null;
@@ -2386,17 +2389,21 @@ function renderRunShoeChart(shoeStats) {
 async function openShoeAnalytics(shoeId) {
   const modal = document.getElementById('shoe-analysis-modal');
   const content = document.getElementById('shoe-analysis-content');
+  const requestId = ++shoeAnalyticsRequestId;
   modal.classList.add('active');
   content.innerHTML = '<div class="empty-state">載入跑鞋分析…</div>';
   try {
     const data = await apiGet(`/shoes/${shoeId}/analytics`);
+    if (requestId !== shoeAnalyticsRequestId || !modal.classList.contains('active')) return;
     renderShoeAnalytics(data);
   } catch (error) {
+    if (requestId !== shoeAnalyticsRequestId || !modal.classList.contains('active')) return;
     content.innerHTML = `<div class="insight-alert warning">分析載入失敗：${esc(error.message || '未知錯誤')}</div>`;
   }
 }
 
 function closeShoeAnalytics() {
+  shoeAnalyticsRequestId += 1;
   document.getElementById('shoe-analysis-modal').classList.remove('active');
   if (chartInstances.shoeAnalytics) {
     chartInstances.shoeAnalytics.destroy();

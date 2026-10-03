@@ -243,6 +243,22 @@ def test_fetch_free_models_returns_empty_when_api_has_no_compatible_models(monke
     assert llm._fetch_free_models() == []
 
 
+@pytest.mark.parametrize("payload", [{"data": {}}, {"data": [None, "bad"]}, []])
+def test_fetch_free_models_rejects_or_skips_malformed_catalog(monkeypatch, payload):
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    response = MagicMock()
+    response.json.return_value = payload
+    monkeypatch.setattr(llm.httpx, "get", MagicMock(return_value=response))
+
+    if isinstance(payload, dict) and isinstance(payload.get("data"), list):
+        # A malformed item is ignored, then the empty ranking response produces
+        # an empty usable list rather than a server error.
+        assert llm._fetch_free_models() == []
+    else:
+        with pytest.raises(llm.LLMError, match="回傳格式無效"):
+            llm._fetch_free_models()
+
+
 def test_get_models_preserves_today_usage_order(monkeypatch):
     llm._MODELS_CACHE.clear()
     llm._MODELS_CACHE_META.clear()
