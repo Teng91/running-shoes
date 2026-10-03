@@ -190,6 +190,28 @@ def test_generate_report_streams_and_persists(client, db, user_with_token, mock_
     assert row.stats_json["month_run_stats"]["month_km"] == 10.0
 
 
+def test_generate_report_uses_the_model_selected_in_report_tab(
+    client, user_with_token, monkeypatch
+):
+    _user, token = user_with_token
+    resolve = MagicMock(return_value="vendor/selected:free")
+    stream = MagicMock(return_value=iter(["完成"]))
+    monkeypatch.setattr(llm, "resolve_allowed_model", resolve)
+    monkeypatch.setattr(llm, "call_llm_stream", stream)
+
+    response = client.post(
+        "/api/reports/generate",
+        headers={**_auth_header(token), "Fly-Client-IP": "198.51.100.11"},
+        json={"year": 2026, "month": 6, "model": "vendor/selected:free"},
+    )
+
+    assert response.status_code == 200
+    resolve.assert_called_once_with(
+        llm.LLMProvider.openrouter, "vendor/selected:free"
+    )
+    assert stream.call_args.args[1] == "vendor/selected:free"
+
+
 def test_generate_report_regenerate_overwrites_same_month(
     client, db, user_with_token, mock_llm
 ):
