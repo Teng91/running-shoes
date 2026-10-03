@@ -161,7 +161,7 @@ MODEL_REFRESH_COOLDOWN_SECONDS=60
 - **可對帳的里程統計**：跑鞋與月跑量都明確區分「逐筆跑步日誌」與「歷史／手動調整」，總里程保持相容且可追溯
 - **跑步日誌**：預設首頁，可記錄日期、公里數與鞋款，並同步里程
 - **跑步洞察首頁**：即時顯示與上月差異、近 7 天趨勢、目標達成率、輪替偏重與壽命提醒
-- **單鞋分析**：可檢視穿著次數、平均距離、30／90 天里程、成本、近 12 月趨勢與最近跑步
+- **單鞋分析**：可檢視穿著次數、30／90 天里程、成本、近 12 月趨勢與最近跑步
 - **Strava 歷史匯入**：從 Strava 匯出的 `activities.csv` 預覽並批次匯入跑步活動，依活動 ID 去重，支援匯入前逐鞋款配對
 - **資料匯出與備份**：跑鞋可匯出 **XLSX / CSV**，並可下載不含密碼或 token 的完整 JSON 帳號備份（跑鞋、日誌、月跑量、目標、月報與 Strava 匯入摘要）
 - **AI 跑鞋推薦助手**：依你的實際資料給換鞋與選鞋建議（需設定 OpenRouter API Key），可從本日熱門、免費且支援工具呼叫的模型中選擇
@@ -318,7 +318,7 @@ npx playwright install chromium webkit
 
 可設定 `LAYOUT_SCREENSHOT_DIR` 保存手機版截圖供人工檢查；Windows 若使用已安裝的 Edge，可設定 `PLAYWRIGHT_CHROMIUM_CHANNEL=msedge`。WebKit 模擬檢查不等同於 iPhone 實機驗證。
 
-本次驗證基線為 Python **298 passed**、前端回歸測試 **22 passed**；測試數量會隨功能與修正持續增加，實際結果以 `./scripts/task.ps1 verify` 與 CI 當次輸出為準。
+本次驗證基線為 Python **302 passed**、前端回歸測試 **23 passed**；測試數量會隨功能與修正持續增加，實際結果以 `./scripts/task.ps1 verify` 與 CI 當次輸出為準。
 版面檢查涵蓋 WebKit／Chromium、亮／暗模式與 7 組直橫向尺寸，共 28 組設定，檢查五個分頁、表單、圖表、彈窗及空資料狀態。
 
 `docs-check` 會從 pytest collection、前端測試檔、Agent tool registry、Playwright 測試矩陣與實際檔案系統核對上述數字及 harness 路徑。新增測試、工具或版面設定卻忘記同步 README 時，`verify` 和 GitHub Actions 會直接失敗。

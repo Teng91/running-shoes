@@ -152,6 +152,7 @@ def dashboard_analytics(
     if shoe_ids:
         shoe_rows = db.query(models.Shoe).filter(
             models.Shoe.user_id == user_id,
+            models.Shoe.is_deleted.is_(False),
             models.Shoe.id.in_(shoe_ids),
         ).all()
     shoe_map = {shoe.id: shoe for shoe in shoe_rows}

@@ -62,6 +62,15 @@ test('run shoe distribution shows monthly percentage, mileage, and wear count', 
   assert.match(legend.innerHTML, /25\.0%<\/span><span class="run-shoe-legend-km">5\.00 km<\/span><span class="run-shoe-legend-count">1 次/);
 });
 
+test('shoe analytics ignores stale responses after a second open or close', () => {
+  const openAnalytics = extract('openShoeAnalytics');
+  const closeAnalytics = extract('closeShoeAnalytics');
+  assert.match(source, /let shoeAnalyticsRequestId = 0/);
+  assert.match(openAnalytics, /const requestId = \+\+shoeAnalyticsRequestId/);
+  assert.match(openAnalytics, /requestId !== shoeAnalyticsRequestId/);
+  assert.match(closeAnalytics, /shoeAnalyticsRequestId \+= 1/);
+});
+
 test('unclassified shoes stay unclassified when the form is saved', () => {
   const context = vm.createContext({ document: { querySelectorAll: () => [] } });
   vm.runInContext(extract('getSelectedCategories'), context);

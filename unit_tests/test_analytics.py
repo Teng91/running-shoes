@@ -91,6 +91,33 @@ def test_dashboard_flags_rotation_and_reports_goal_progress(db, user_with_token)
     assert {alert["type"] for alert in result["alerts"]} == {"lifecycle", "rotation"}
 
 
+def test_dashboard_hides_soft_deleted_shoe_names_but_keeps_run_totals(
+    db, user_with_token
+):
+    user, _token = user_with_token
+    deleted = Shoe(
+        user_id=user.id, brand="Hidden", model="History", date="2026-01-01",
+        is_deleted=True,
+    )
+    db.add(deleted)
+    db.flush()
+    db.add(Run(user_id=user.id, shoe_id=deleted.id, date="2026-10-01", km=8))
+    db.commit()
+
+    result = analytics.dashboard_analytics(
+        db, user.id, 2026, 10, today=date(2026, 10, 3)
+    )
+
+    assert result["month"]["km"] == 8
+    assert result["shoe_usage"] == [{
+        "shoe_id": deleted.id,
+        "name": "鞋款已刪除",
+        "km": 8.0,
+        "count": 1,
+        "share_percent": 100.0,
+    }]
+
+
 def test_manual_totals_become_explicit_adjustments_and_backup_is_private(
     client, db, user_with_token
 ):
