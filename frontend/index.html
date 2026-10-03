@@ -771,7 +771,7 @@ input::-webkit-date-and-time-value { text-align: left; min-width: 0; }
         <select id="add-year"></select>
         <select id="add-month"></select>
         <input id="add-km" type="number" min="0" step="0.01" placeholder="km">
-        <button class="btn btn-sm btn-primary" onclick="addMonthlyMileage()">新增</button>
+        <button class="btn btn-sm btn-primary" id="add-monthly-btn" onclick="addMonthlyMileage()">新增</button>
         <span class="inline-error" id="add-error"></span>
       </div>
       <p class="table-scroll-hint">欄位較多時，可左右滑動表格查看。</p>
@@ -985,7 +985,7 @@ input::-webkit-date-and-time-value { text-align: left; min-width: 0; }
     <div class="modal-actions">
       <span style="flex:1"></span>
       <button class="btn btn-cancel" onclick="closeMonthlyModal()">取消</button>
-      <button class="btn btn-primary" onclick="saveMonthlyMileage()">儲存</button>
+      <button class="btn btn-primary" id="save-monthly-btn" onclick="saveMonthlyMileage()">儲存</button>
     </div>
   </div>
 </div>
@@ -1715,28 +1715,36 @@ function renderMonthlyTable() {
 }
 
 async function inlineEditMonthly(idx, field, el) {
-  const current = monthlyMileages[idx][field];
+  const entry = { ...monthlyMileages[idx] };
+  const current = entry[field];
   const input = document.createElement('input');
   input.type = 'number';
   input.className = 'inline-input';
   input.step = '0.01';
   input.min = '0';
   input.value = current;
-  input.focus();
+  let committed = false;
   const commit = async () => {
+    if (committed) return;
+    committed = true;
     const val = parseFloat(input.value);
     if (!isNaN(val) && val >= 0) {
-      monthlyMileages[idx][field] = val;
       try {
-        await apiPut('/monthly-mileage/' + monthlyMileages[idx].id, { km: val });
+        await apiPut('/monthly-mileage/' + entry.id, {
+          km: val,
+          expected_version: entry.version || 0,
+        });
       } catch (e) {
-        console.error('更新失敗:', e);
+        alert(e.message || '更新失敗');
       }
     }
-    render();
+    await loadData();
   };
   input.addEventListener('blur', commit);
-  input.addEventListener('keydown', e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') render(); });
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') commit();
+    if (e.key === 'Escape') { committed = true; render(); }
+  });
   el.innerHTML = '';
   el.appendChild(input);
   input.focus();
@@ -1746,10 +1754,10 @@ async function deleteMonthlyMileage(idx) {
   const m = monthlyMileages[idx];
   if (!confirm(`確定要刪除 ${m.year} 年 ${m.month} 月的紀錄？`)) return;
   try {
-    await apiDelete('/monthly-mileage/' + m.id);
+    await apiDelete('/monthly-mileage/' + m.id + '?expected_version=' + (m.version || 0));
   } catch (e) {
     console.error('刪除失敗:', e);
-    alert('刪除失敗');
+    alert(e.message || '刪除失敗');
     return;
   }
   await loadData();
@@ -1780,7 +1788,9 @@ function populateAddSelects() {
   }
 }
 
+let monthlySaving = false;
 async function addMonthlyMileage() {
+  if (monthlySaving) return;
   const year = parseInt(document.getElementById('add-year').value, 10);
   const month = parseInt(document.getElementById('add-month').value, 10);
   const rawKm = parseFloat(document.getElementById('add-km').value);
@@ -1788,12 +1798,18 @@ async function addMonthlyMileage() {
   const errEl = document.getElementById('add-error');
   errEl.style.display = 'none';
 
+  const button = document.getElementById('add-monthly-btn');
   try {
+    monthlySaving = true;
+    button.disabled = true;
     await apiPost('/monthly-mileage', { year, month, km });
   } catch (e) {
     errEl.textContent = translateError(e.message) || '儲存失敗';
     errEl.style.display = '';
     return;
+  } finally {
+    monthlySaving = false;
+    button.disabled = false;
   }
   document.getElementById('add-km').value = '';
   await loadData();
@@ -1947,6 +1963,7 @@ async function exportAccountData() {
 }
 
 async function saveMonthlyMileage() {
+  if (monthlySaving) return;
   const year = parseInt(document.getElementById('m-year').value, 10);
   const month = parseInt(document.getElementById('m-month').value, 10);
   const rawKm = parseFloat(document.getElementById('m-km').value);
@@ -1954,10 +1971,15 @@ async function saveMonthlyMileage() {
   const errEl = document.getElementById('monthly-error');
   errEl.style.display = 'none';
 
+  const button = document.getElementById('save-monthly-btn');
   try {
+    monthlySaving = true;
+    button.disabled = true;
     if (editingMonthlyIdx >= 0) {
-      const id = monthlyMileages[editingMonthlyIdx].id;
-      await apiPut('/monthly-mileage/' + id, { year, month, km });
+      const entry = monthlyMileages[editingMonthlyIdx];
+      await apiPut('/monthly-mileage/' + entry.id, {
+        year, month, km, expected_version: entry.version || 0,
+      });
     } else {
       await apiPost('/monthly-mileage', { year, month, km });
     }
@@ -1965,6 +1987,9 @@ async function saveMonthlyMileage() {
     errEl.textContent = translateError(e.message) || '儲存失敗';
     errEl.style.display = 'block';
     return;
+  } finally {
+    monthlySaving = false;
+    button.disabled = false;
   }
   closeMonthlyModal();
   await loadData();
@@ -2065,10 +2090,17 @@ function closeRunModal() {
 async function saveRun() {
   if (!editingRunId) return;
   const error = document.getElementById('edit-run-error');
+  const editingRun = runs.find(item => item.id === editingRunId);
+  if (!editingRun) {
+    error.textContent = '找不到這筆跑步紀錄，請重新載入。';
+    error.style.display = 'block';
+    return;
+  }
   const payload = {
     date: document.getElementById('edit-run-date').value,
     km: parseFloat(document.getElementById('edit-run-km').value),
     shoe_id: parseInt(document.getElementById('edit-run-shoe').value, 10),
+    expected_version: editingRun.version || 0,
   };
   if (!payload.date || !Number.isFinite(payload.km) || payload.km <= 0 || !payload.shoe_id) {
     error.textContent = '請完整填寫紀錄。';
@@ -2090,10 +2122,10 @@ async function deleteEditingRun() {
   const run = runs.find(item => item.id === editingRunId);
   if (!run || !confirm(`確定刪除 ${run.date.replace(/-/g, '/')} 的 ${run.km} km 紀錄？`)) return;
   try {
-    await apiDelete('/runs/' + editingRunId);
+    await apiDelete('/runs/' + editingRunId + '?expected_version=' + (run.version || 0));
     closeRunModal();
     await loadData();
-  } catch { alert('刪除失敗'); }
+  } catch (e) { alert(e.message || '刪除失敗'); }
 }
 
 function openStravaModal() {
@@ -2422,13 +2454,12 @@ function renderShoeAnalytics(data) {
     : '無法預估';
   const source = life.forecast_source === 'recent_90_days' ? '依近 90 天實際使用' : '依計畫月跑量';
   const cards = [
-    { label: '總里程', value: `${Number(life.total_mileage_km).toFixed(2)} km`, sub: `日誌 ${Number(life.logged_mileage_km).toFixed(2)} + 歷史調整 ${Number(life.historical_adjustment_km).toFixed(2)}` },
+    { label: '總里程', value: `${Number(life.total_mileage_km).toFixed(2)} km`, sub: '' },
     { label: '穿著次數', value: `${usage.count} 次`, sub: usage.count ? '已納入逐筆日誌' : '尚無日誌紀錄' },
     { label: '近 30／90 天', value: `${Number(usage.km_30_days).toFixed(1)} / ${Number(usage.km_90_days).toFixed(1)} km`, sub: `實際月均 ${Number(usage.actual_monthly_km_90_days).toFixed(1)} km` },
+    { label: '最後使用', value: usage.last_run_date ? usage.last_run_date.replace(/-/g, '/') : '—', sub: usage.first_run_date ? `首次紀錄 ${usage.first_run_date.replace(/-/g, '/')}` : '尚無日誌紀錄' },
     { label: '壽命進度', value: life.usage_percent === null ? '—' : `${Number(life.usage_percent).toFixed(1)}%`, sub: `剩餘 ${Number(life.remaining_mileage_km).toFixed(2)} km` },
     { label: '預估退役', value: forecast, sub: `${source} · ${Number(life.forecast_monthly_km).toFixed(1)} km／月` },
-    { label: '每公里成本', value: usage.cost_per_km === null ? '—' : `$${Number(usage.cost_per_km).toFixed(2)}`, sub: usage.cost_per_wear === null ? '無穿著紀錄' : `每次穿著 $${Number(usage.cost_per_wear).toFixed(0)}` },
-    { label: '最後使用', value: usage.last_run_date ? usage.last_run_date.replace(/-/g, '/') : '—', sub: usage.first_run_date ? `首次紀錄 ${usage.first_run_date.replace(/-/g, '/')}` : '尚無日誌紀錄' },
   ];
   const difference = Math.abs(Number(life.reconciliation_difference_km || 0));
   const warning = difference >= 0.01
@@ -2436,7 +2467,7 @@ function renderShoeAnalytics(data) {
   const recentRows = data.recent_runs.length ? data.recent_runs.map(run => `
     <tr><td>${run.date.replace(/-/g, '/')}</td><td>${Number(run.km).toFixed(2)} km</td></tr>`).join('')
     : '<tr><td colspan="2" class="empty-state">尚無逐筆跑步紀錄。</td></tr>';
-  document.getElementById('shoe-analysis-content').innerHTML = `${warning}<div class="shoe-analysis-grid">${cards.map(card => `<div class="insight-card"><div class="insight-card-label">${card.label}</div><div class="insight-card-value">${card.value}</div><div class="insight-card-sub">${card.sub}</div></div>`).join('')}</div>
+  document.getElementById('shoe-analysis-content').innerHTML = `${warning}<div class="shoe-analysis-grid">${cards.map(card => `<div class="insight-card"><div class="insight-card-label">${card.label}</div><div class="insight-card-value">${card.value}</div>${card.sub ? `<div class="insight-card-sub">${card.sub}</div>` : ''}</div>`).join('')}</div>
     <div class="shoe-analysis-section"><h3>近 12 個月使用趨勢</h3><div class="shoe-analysis-chart"><canvas id="chart-shoe-analytics"></canvas></div></div>
     <div class="shoe-analysis-section"><h3>最近跑步</h3><div class="table-wrap" tabindex="0" role="region" aria-label="跑鞋最近跑步"><table><thead><tr><th>日期</th><th>距離</th></tr></thead><tbody>${recentRows}</tbody></table></div></div>`;
   if (typeof Chart === 'undefined') return;
@@ -3407,7 +3438,7 @@ class ShoeModal {
 
   async delete() {
     if (!confirm(`確定刪除 ${this.shoe.brand} ${this.shoe.model}？跑步紀錄會保留，但鞋款無法復原。`)) return;
-    try { await apiDelete('/shoes/' + this.shoe.id); }
+    try { await apiDelete('/shoes/' + this.shoe.id + '?expected_version=' + (this.shoe.version || 0)); }
     catch (e) { return alert(e.message || '刪除失敗'); }
     this.close();
     await loadData();
@@ -3664,6 +3695,21 @@ function setAgentLoading(loading) {
 }
 
 let lastUserText = '';
+const AGENT_HISTORY_CHAR_BUDGET = 48000;
+
+function agentHistoryForRequest() {
+  const selected = [];
+  let remaining = AGENT_HISTORY_CHAR_BUDGET;
+  for (const turn of agentHistory.slice(-20).reverse()) {
+    if (remaining <= 0) break;
+    const content = String(turn.content || '').slice(0, 12000);
+    if (!content) continue;
+    const kept = content.length <= remaining ? content : content.slice(-remaining);
+    selected.unshift({ role: turn.role, content: kept });
+    remaining -= kept.length;
+  }
+  return selected;
+}
 
 async function sendAgentMessage(retryText) {
   const input = document.getElementById('agent-input');
@@ -3729,7 +3775,7 @@ async function sendAgentMessage(retryText) {
       },
       body: JSON.stringify({
         user_message: text,
-        history: agentHistory.slice(-20).map(turn => ({ ...turn, content: turn.content.slice(0, 12000) })),
+        history: agentHistoryForRequest(),
         provider: provider,
         model: model,
       }),
@@ -3936,10 +3982,18 @@ async function loadReportHistory() {
     }
     if (!res.ok) return;
     const rows = await res.json();
-    select.innerHTML = '<option value="">選擇已儲存的月份…</option>' + rows.map(row => {
+    select.replaceChildren();
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = '選擇已儲存的月份…';
+    select.appendChild(placeholder);
+    rows.forEach(row => {
       const value = row.year + '-' + String(row.month).padStart(2, '0');
-      return '<option value="' + value + '">' + reportMonthLabel(value) + '（' + (row.model || 'AI') + '）</option>';
-    }).join('');
+      const option = document.createElement('option');
+      option.value = value;
+      option.textContent = reportMonthLabel(value) + '（' + (row.model || 'AI') + '）';
+      select.appendChild(option);
+    });
   } catch (e) {
     console.error('載入報告歷史失敗:', e);
   }

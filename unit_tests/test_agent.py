@@ -365,10 +365,12 @@ def test_execute_tool_dispatches_all_argument_shapes(monkeypatch):
     nearing = MagicMock(return_value="near")
     compare = MagicMock(return_value="compare")
     category = MagicMock(return_value="category")
+    usage = MagicMock(return_value="usage")
     generic = MagicMock(return_value="generic")
     monkeypatch.setitem(db_tools.REGISTRY, "nearing_end_of_life", nearing)
     monkeypatch.setitem(db_tools.REGISTRY, "compare_shoes", compare)
     monkeypatch.setitem(db_tools.REGISTRY, "shoe_category_status", category)
+    monkeypatch.setitem(db_tools.REGISTRY, "shoe_usage_analytics", usage)
     monkeypatch.setitem(db_tools.REGISTRY, "generic", generic)
 
     assert agent._execute_tool("nearing_end_of_life", {"threshold": "invalid"}, "db", 7) == "near"
@@ -383,8 +385,31 @@ def test_execute_tool_dispatches_all_argument_shapes(monkeypatch):
 
     assert agent._execute_tool("shoe_category_status", {"shoe_name": "A"}, "db", 7) == "category"
     category.assert_called_once_with("db", 7, shoe_name="A")
+    assert agent._execute_tool(
+        "shoe_usage_analytics", {"shoe_name": "Rider"}, "db", 7
+    ) == "usage"
+    usage.assert_called_once_with("db", 7, shoe_name="Rider")
+    agent._execute_tool("compare_shoes", {"shoe_a": [], "shoe_b": 3}, "db", 7)
+    assert compare.call_args.kwargs == {"shoe_a": "", "shoe_b": ""}
+    agent._execute_tool("shoe_category_status", {"shoe_name": {}}, "db", 7)
+    assert category.call_args.kwargs == {"shoe_name": ""}
     assert agent._execute_tool("generic", {}, "db", 7) == "generic"
     generic.assert_called_once_with("db", 7)
+
+
+def test_execute_tool_safely_contains_failures_and_rolls_back(monkeypatch):
+    database = MagicMock()
+    monkeypatch.setattr(agent, "_execute_tool", MagicMock(side_effect=RuntimeError("secret")))
+
+    output = agent._execute_tool_safely("shoe_summary", [], database, 7)
+    payload = json.loads(output)
+    event = _events([agent._tool_done_event("shoe_summary", output)])[0]
+
+    database.rollback.assert_called_once_with()
+    assert payload["status"] == "tool_execution_failed"
+    assert "secret" not in output
+    assert event["ok"] is False
+    assert event["message"] == "資料工具執行失敗"
 
 
 def test_tool_done_event_marks_structured_search_failure():

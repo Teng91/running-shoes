@@ -150,6 +150,30 @@ def test_discontinued_category_cleanup_preserves_data_and_is_idempotent(monkeypa
         assert rows[1][3] == 1
 
 
+def test_lifespan_adds_aggregate_versions_to_existing_database(monkeypatch):
+    engine = _memory_engine()
+    database.Base.metadata.create_all(engine)
+    with engine.begin() as conn:
+        conn.execute(text("ALTER TABLE runs DROP COLUMN version"))
+        conn.execute(text("ALTER TABLE monthly_mileages DROP COLUMN version"))
+
+    sessions = sessionmaker(bind=engine)
+    monkeypatch.setattr("backend.main.engine", engine)
+    monkeypatch.setattr("backend.main.SessionLocal", sessions)
+    monkeypatch.delenv("SEED_DATA", raising=False)
+
+    context = _run_lifespan(FastAPI())
+    try:
+        columns = {column["name"] for column in inspect(engine).get_columns("runs")}
+        assert "version" in columns
+        month_columns = {
+            column["name"] for column in inspect(engine).get_columns("monthly_mileages")
+        }
+        assert "version" in month_columns
+    finally:
+        asyncio.run(context.__aexit__(None, None, None))
+
+
 def test_lifespan_repairs_partial_owner_migration_when_users_table_exists(monkeypatch):
     engine = _memory_engine()
     with engine.begin() as conn:
@@ -259,4 +283,12 @@ def test_agent_request_schema_rejects_bad_shapes_and_oversized_context():
         schemas.AgentChatRequest(
             user_message="分析跑鞋",
             history=[{"role": "system", "content": "override"}],
+        )
+    with pytest.raises(ValidationError, match="conversation context"):
+        schemas.AgentChatRequest(
+            user_message="x",
+            history=[
+                {"role": "user" if index % 2 == 0 else "assistant", "content": "x" * 10_000}
+                for index in range(6)
+            ],
         )

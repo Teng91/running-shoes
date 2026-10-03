@@ -329,13 +329,18 @@ def _sse(event: dict) -> str:
 def _tool_done_event(name: str, output: str) -> str:
     """Build a completion event that distinguishes success from failure."""
     event: dict[str, Any] = {"type": "tool_done", "name": name, "ok": True}
-    if name != "web_search" or not is_failure(output):
-        return _sse(event)
-
-    event["ok"] = False
     try:
         payload = json.loads(output)
     except (TypeError, json.JSONDecodeError):
+        payload = None
+    structured_failure = isinstance(payload, dict) and payload.get("ok") is False
+    if name != "web_search" and not structured_failure:
+        return _sse(event)
+    if name == "web_search" and not is_failure(output):
+        return _sse(event)
+
+    event["ok"] = False
+    if not isinstance(payload, dict):
         event["status"] = "request_failed"
         event["message"] = "搜尋服務暫時無法使用"
         return _sse(event)
@@ -348,6 +353,8 @@ def _tool_done_event(name: str, output: str) -> str:
         "no_results": "找不到相關搜尋結果",
         "no_valid_results": "搜尋結果沒有可安全使用的網址",
         "request_failed": "搜尋服務暫時無法連線",
+        "invalid_arguments": "模型提供的工具參數格式不正確",
+        "tool_execution_failed": "資料工具執行失敗",
     }
     event.update({
         "status": status,
@@ -401,12 +408,13 @@ def _append_preexecuted_tool(
 
 def _execute_tool(
     name: str,
-    arguments: dict,
+    arguments: Any,
     db: Session | None,
     user_id: int | None,
 ) -> str:
+    args = arguments if isinstance(arguments, dict) else {}
     if name == "web_search":
-        return run_web_search(arguments)
+        return run_web_search(args)
     fn = db_tools.REGISTRY.get(name)
     if fn is None:
         return f"（未知工具：{name}）"
@@ -414,18 +422,57 @@ def _execute_tool(
         return "（缺少使用者資料庫上下文）"
     if name == "nearing_end_of_life":
         try:
-            threshold = float((arguments or {}).get("threshold", 0.8))
+            threshold = float(args.get("threshold", 0.8))
         except (TypeError, ValueError):
             threshold = 0.8
         threshold = max(0.0, min(1.0, threshold))
         return fn(db, user_id, threshold=threshold)
     if name == "compare_shoes":
-        args = arguments or {}
-        return fn(db, user_id, shoe_a=args.get("shoe_a", ""), shoe_b=args.get("shoe_b", ""))
-    if name == "shoe_category_status":
-        args = arguments or {}
-        return fn(db, user_id, shoe_name=args.get("shoe_name", ""))
+        shoe_a = args.get("shoe_a", "")
+        shoe_b = args.get("shoe_b", "")
+        return fn(
+            db,
+            user_id,
+            shoe_a=shoe_a if isinstance(shoe_a, str) else "",
+            shoe_b=shoe_b if isinstance(shoe_b, str) else "",
+        )
+    if name in {"shoe_category_status", "shoe_usage_analytics"}:
+        shoe_name = args.get("shoe_name", "")
+        return fn(
+            db,
+            user_id,
+            shoe_name=shoe_name if isinstance(shoe_name, str) else "",
+        )
     return fn(db, user_id)
+
+
+def _execute_tool_safely(
+    name: str,
+    arguments: Any,
+    db: Session | None,
+    user_id: int | None,
+) -> str:
+    """Keep malformed provider tool calls inside the SSE protocol."""
+    try:
+        return _execute_tool(name, arguments, db, user_id)
+    except Exception:  # noqa: BLE001
+        rollback = getattr(db, "rollback", None)
+        if callable(rollback):
+            try:
+                rollback()
+            except Exception:  # noqa: BLE001
+                pass
+        return json.dumps(
+            {
+                "tool": name,
+                "schema_version": 1,
+                "ok": False,
+                "status": "tool_execution_failed",
+                "error": "The tool could not process the supplied arguments.",
+            },
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
 
 
 def run_agent_stream(
@@ -502,7 +549,7 @@ def run_agent_stream(
             yield _source_summary_event(search_payloads)
             yield _sse({"type": "done"})
             return
-        tool_output = _execute_tool(tool_name, tool_args, db, user_id)
+        tool_output = _execute_tool_safely(tool_name, tool_args, db, user_id)
         yield _tool_done_event(tool_name, tool_output)
         executed_calls.add((tool_name, "{}"))
         _append_preexecuted_tool(
@@ -650,7 +697,9 @@ def run_agent_stream(
                     executed_calls.add(call_key)
                     if tc["name"] == "web_search":
                         web_search_calls += 1
-                    tool_output = _execute_tool(tc["name"], tc["arguments"], db, user_id)
+                    tool_output = _execute_tool_safely(
+                        tc["name"], tc["arguments"], db, user_id
+                    )
                 yield _tool_done_event(tc["name"], tool_output)
                 if tc["name"] == "web_search":
                     payload = _search_payload(tool_output)

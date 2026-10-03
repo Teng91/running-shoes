@@ -2,9 +2,11 @@
 
 import tomllib
 from pathlib import Path
+from types import SimpleNamespace
 
 from sqlalchemy import text
 
+from backend import main as main_module
 from backend.database import engine
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -14,6 +16,21 @@ def test_fly_deployment_enables_production_secret_checks():
     config = tomllib.loads((PROJECT_ROOT / "fly.toml").read_text(encoding="utf-8"))
 
     assert config["env"]["ENVIRONMENT"] == "production"
+    assert config["env"].get("SEED_DATA") != "true"
+
+
+def test_client_ip_header_is_only_trusted_on_fly(monkeypatch):
+    request = SimpleNamespace(
+        headers={"fly-client-ip": "198.51.100.9"},
+        client=SimpleNamespace(host="203.0.113.7"),
+    )
+    monkeypatch.setattr(main_module, "IS_FLY_RUNTIME", False)
+    assert main_module._client_key(request) == "203.0.113.7"
+
+    monkeypatch.setattr(main_module, "IS_FLY_RUNTIME", True)
+    assert main_module._client_key(request) == "198.51.100.9"
+    request.headers["fly-client-ip"] = "not-an-ip"
+    assert main_module._client_key(request) == "203.0.113.7"
 
 
 def test_docker_enables_production_secret_checks():

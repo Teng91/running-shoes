@@ -1,7 +1,7 @@
 """Tests for the AI monthly report feature (one-shot generation + persistence)."""
 
 import json
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from unittest.mock import MagicMock
 
 import pytest
@@ -11,6 +11,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from backend import llm, reports
+from backend import main as main_module
 from backend.auth import create_access_token, get_password_hash
 from backend.database import Base, get_db
 from backend.main import _agent_global_rate_events, _agent_ip_rate_events, _agent_rate_events, app
@@ -239,6 +240,22 @@ def test_generate_report_rejects_future_month(client, user_with_token, mock_llm)
 
     assert res.status_code == 422
     assert mock_llm.call_count == 0
+
+
+def test_generate_report_uses_taipei_calendar_day(
+    client, user_with_token, mock_llm, monkeypatch
+):
+    _user, token = user_with_token
+    monkeypatch.setattr(main_module, "_local_today", lambda: date(2026, 11, 1))
+
+    response = client.post(
+        "/api/reports/generate",
+        headers=_auth_header(token),
+        json={"year": 2026, "month": 11},
+    )
+
+    assert response.status_code == 200
+    assert mock_llm.call_count == 1
 
 
 def test_generate_report_rejects_invalid_month(client, user_with_token):

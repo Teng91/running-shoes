@@ -130,7 +130,7 @@ which python
 venv/bin/python -c "import sys; from ddgs import DDGS; print(sys.executable); print(sys.prefix); print(DDGS)"
 ```
 
-第一次啟動會自動建立 `shoes.db`（資料表結構）。預設範例資料只在 `SEED_DATA=true` 時才會寫入（Fly.io 部署預設會 seed，本機開發則不會）。
+第一次啟動會自動建立 `shoes.db`（資料表結構）。本機與 Fly.io 都預設建立空資料庫；只有明確設定 `SEED_DATA=true` 時才會寫入範例資料，且此時必須同時設定 `MIGRATION_PASSWORD`。
 
 ### 本機使用 AI 助手
 
@@ -152,6 +152,10 @@ MAX_REGISTERED_USERS=100
 MAX_SHOES_PER_USER=500
 MAX_RUNS_PER_USER=5000
 MODEL_REFRESH_COOLDOWN_SECONDS=60
+# 選填：全站每分鐘最多強制刷新模型清單次數（預設 10）
+MODEL_REFRESH_GLOBAL_PER_MINUTE=10
+# 選填：每次 LLM 回覆最多輸出 token 數（預設 4096，最低 256）
+LLM_MAX_OUTPUT_TOKENS=4096
 ```
 
 `.env` 會被自動載入，不需要手動 `export`。沒設定也不影響 Dashboard 的其他功能，只是 AI 助手無法使用。
@@ -166,7 +170,7 @@ MODEL_REFRESH_COOLDOWN_SECONDS=60
 - **可對帳的里程統計**：跑鞋與月跑量都明確區分「逐筆跑步日誌」與「歷史／手動調整」，總里程保持相容且可追溯
 - **跑步日誌**：預設首頁，可記錄日期、公里數與鞋款，並同步里程
 - **跑步洞察首頁**：即時顯示與上月差異、近 7 天趨勢、目標達成率、輪替偏重與壽命提醒
-- **單鞋分析**：可檢視穿著次數、30／90 天里程、成本、近 12 月趨勢與最近跑步
+- **單鞋分析**：可檢視穿著次數、30／90 天里程、最後使用日期、壽命進度、預估退役、近 12 月趨勢與最近跑步
 - **Strava 歷史匯入**：從 Strava 匯出的 `activities.csv` 預覽並批次匯入跑步活動，依活動 ID 去重，支援匯入前逐鞋款配對
 - **資料匯出與備份**：跑鞋可匯出 **XLSX / CSV**，並可下載不含密碼或 token 的完整 JSON 帳號備份（跑鞋、日誌、月跑量、目標、月報與 Strava 匯入摘要）
 - **AI 跑鞋推薦助手**：依你的實際資料給換鞋與選鞋建議（需設定 OpenRouter API Key），可從本日熱門、免費且支援工具呼叫的模型中選擇
@@ -191,7 +195,7 @@ MODEL_REFRESH_COOLDOWN_SECONDS=60
 - 與上月、前 7 天的趨勢比較，以及月目標與輪替提醒
 - 每雙鞋的日誌里程、歷史／手動調整及可驗證的里程合計
 
-跑步紀錄儲存在 SQLite `runs` 資料表，每筆資料都會綁定帳號與該帳號擁有的鞋款。後端會驗證鞋款擁有權，並啟用 SQLite 外鍵約束，避免無效或跨帳號的鞋款關聯。刪除已有跑步紀錄的鞋款時，鞋款會從鞋櫃與未來選項中移除，但歷史跑步紀錄與月跑量仍會保留。每個帳號預設最多儲存 5,000 筆跑步紀錄，可用 `MAX_RUNS_PER_USER` 調整。
+跑步紀錄儲存在 SQLite `runs` 資料表，每筆資料都會綁定帳號與該帳號擁有的鞋款。後端會驗證鞋款擁有權，並啟用 SQLite 外鍵約束，避免無效或跨帳號的鞋款關聯。編輯時會檢查紀錄版本；同一筆紀錄若已在其他分頁被修改，較舊的畫面會收到衝突提示，避免重複套用里程差額。刪除已有跑步紀錄的鞋款時，鞋款會從鞋櫃與未來選項中移除，但歷史跑步紀錄與月跑量仍會保留。每個帳號預設最多儲存 5,000 筆跑步紀錄，可用 `MAX_RUNS_PER_USER` 調整。
 
 | API | 用途 |
 | --- | --- |
@@ -258,8 +262,8 @@ OpenRouter 的 `tools` 參數。
 
 後端會再次驗證請求模型必須位於目前的免費工具模型清單，前端傳入任意模型 ID
 不會直接使用伺服器的 OpenRouter API Key 呼叫。Agent API 同時限制單則訊息長度、
-history 筆數，並套用每帳號、每 IP 與全站請求上限。公開驗證端點、註冊帳號總數、
-每人跑鞋筆數、跑步紀錄筆數及模型列表刷新頻率也都有可透過環境變數調整的防濫用限制。驗證與 AI 請求的限流同時使用程序內滑動視窗和 SQLite 共享計數，因此多個伺服器 worker 會共用上限。
+history 筆數與整段對話總字數，並套用每帳號、每 IP 與全站請求上限。公開驗證端點、註冊帳號總數、
+每人跑鞋筆數、跑步紀錄筆數，以及模型列表的每帳號冷卻與全站刷新頻率，也都有可透過環境變數調整的防濫用限制。驗證與 AI 請求的限流同時使用程序內滑動視窗和 SQLite 共享計數，因此多個伺服器 worker 會共用上限。LLM 請求另有連線與整體逾時，外部服務卡住時不會無限等待。
 
 ## AI 月度跑步報告
 
@@ -337,13 +341,13 @@ Playwright／Chromium／WebKit 齊全時，也會執行版面測試。
 避免每次停止都重跑。Hook 不會呼叫其他模型、外部 API，或傳送提示、diff、原始碼與測試輸出。
 GitHub Actions 仍會在 push／pull request 執行 `verify`，作為不依賴任何特定 Coding Agent 的共同關卡。
 
-本次驗證基線為 Python **309 passed**、前端回歸測試 **23 passed**；測試數量會隨功能與修正持續增加，實際結果以 `./scripts/task.ps1 verify` 與 CI 當次輸出為準。
+本次驗證基線為 Python **318 passed**、前端回歸測試 **28 passed**；測試數量會隨功能與修正持續增加，實際結果以 `./scripts/task.ps1 verify` 與 CI 當次輸出為準。
 版面檢查涵蓋 WebKit／Chromium、亮／暗模式與 7 組直橫向尺寸，共 28 組設定，檢查五個分頁、表單、圖表、彈窗及空資料狀態。
 
 `docs-check` 會從 pytest collection、前端測試檔、Agent tool registry、Playwright 測試矩陣與實際檔案系統核對上述數字及 harness 路徑。新增測試、工具或版面設定卻忘記同步 README 時，`verify` 和 GitHub Actions 會直接失敗。
 
-鞋款更新會使用版本檢查，舊畫面遇到衝突時請重新載入後再編輯。改密碼後既有登入會失效，需重新登入。
-啟動時會自動為既有資料庫補上鞋款與登入版本欄位，並依當前顯示總里程建立歷史調整基準；升級前後的顯示總里程不會改變。
+鞋款、跑步日誌與月跑量的更新及刪除都會使用版本檢查，舊畫面遇到衝突時請重新載入後再操作。跑步日誌造成的鞋款與月跑量增減會在同一交易中處理；同月份的新增彙總使用原子更新，避免同時寫入遺失里程。改密碼後既有登入會失效，需重新登入。
+啟動時會自動為既有資料庫補上鞋款、跑步日誌、月跑量與登入版本欄位，並依當前顯示總里程建立歷史調整基準；升級前後的顯示總里程不會改變。
 
 現役與退役鞋皆只使用 Daily、Speed、Tempo、Race 四種用途分類。啟動時會移除既有資料中的 Trail、Walk 與舊 Other 標記，保留其他類別、里程及退役狀態；清理後沒有用途的鞋會顯示「未分類」，不會自動改成 Daily。清理會更新受影響鞋款的版本，重複啟動不會再次修改已清理資料。
 新增跑鞋預設勾選 Daily，也可以取消所有類別；編輯未分類鞋款會保留空分類。換鞋提醒會檢查每個用途是否都有現役替代鞋，未分類鞋款則提示先分類。
@@ -389,14 +393,9 @@ open http://你的IP:8000
 
 ## Fly.io 部署流程
 
-第一次部署需要設定以下 secrets：
+第一次部署至少需要設定 JWT 簽章密鑰；AI 功能另需 OpenRouter 金鑰：
 
 ```bash
-# 必要：管理員帳號的初始密碼（輸入時不會顯示；沒設會啟動失敗）
-read -rsp 'MIGRATION_PASSWORD: ' MIGRATION_PASSWORD_VALUE && echo
-fly secrets set MIGRATION_PASSWORD="$MIGRATION_PASSWORD_VALUE"
-unset MIGRATION_PASSWORD_VALUE
-
 # 必要：自動產生 256-bit JWT 簽章密鑰
 fly secrets set SECRET_KEY="$(openssl rand -hex 32)"
 
@@ -405,6 +404,14 @@ fly secrets set SECRET_KEY="$(openssl rand -hex 32)"
 read -rsp 'OPENROUTER_API_KEY: ' OPENROUTER_KEY_VALUE && echo
 fly secrets set OPENROUTER_API_KEY="$OPENROUTER_KEY_VALUE"
 unset OPENROUTER_KEY_VALUE
+```
+
+全新空資料庫不需要 `MIGRATION_PASSWORD`。只有升級尚未綁定使用者的舊版資料庫，或明確啟用 `SEED_DATA=true` 範例資料時才需要設定：
+
+```bash
+read -rsp 'MIGRATION_PASSWORD: ' MIGRATION_PASSWORD_VALUE && echo
+fly secrets set MIGRATION_PASSWORD="$MIGRATION_PASSWORD_VALUE"
+unset MIGRATION_PASSWORD_VALUE
 ```
 
 之後每次部署只要：

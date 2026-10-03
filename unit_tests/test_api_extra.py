@@ -229,7 +229,9 @@ def test_agent_provider_routes_delegate_to_llm(client, user_with_token, monkeypa
     assert list_providers.call_args_list[1].kwargs == {"force": True}
 
 
-def test_model_refresh_has_per_user_cooldown(client, user_with_token, monkeypatch):
+def test_model_refresh_has_per_user_cooldown(
+    client, db, user_with_token, monkeypatch
+):
     user, token = user_with_token
     main_module._model_refresh_times.pop(user.id, None)
     monkeypatch.setattr("backend.main.llm.list_providers", MagicMock(return_value=[]))
@@ -237,7 +239,40 @@ def test_model_refresh_has_per_user_cooldown(client, user_with_token, monkeypatc
     second = client.post("/api/agent/models/refresh", headers=_auth(token))
     assert first.status_code == 200
     assert second.status_code == 429
+    bucket = db.query(main_module.models.RateLimitBucket).filter_by(
+        scope="model-refresh-global", bucket_key="global"
+    ).one()
+    assert bucket.event_count == 1
     main_module._model_refresh_times.pop(user.id, None)
+
+
+def test_model_refresh_has_global_limit_across_users(
+    client, db, user_with_token, monkeypatch
+):
+    first_user, first_token = user_with_token
+    second_user = main_module.models.User(
+        username="second-refresh-user",
+        hashed_password=main_module.get_password_hash("pass1234"),
+    )
+    db.add(second_user)
+    db.commit()
+    second_token = create_access_token(data={"sub": second_user.username})
+    main_module._model_refresh_global_events.clear()
+    main_module._model_refresh_times.pop(first_user.id, None)
+    main_module._model_refresh_times.pop(second_user.id, None)
+    monkeypatch.setattr(main_module, "MODEL_REFRESH_GLOBAL_PER_MINUTE", 1)
+    monkeypatch.setattr("backend.main.llm.list_providers", MagicMock(return_value=[]))
+
+    first = client.post("/api/agent/models/refresh", headers=_auth(first_token))
+    second = client.post("/api/agent/models/refresh", headers=_auth(second_token))
+
+    assert first.status_code == 200
+    assert second.status_code == 429
+    assert "模型列表更新" in second.json()["detail"]
+    assert second_user.id not in main_module._model_refresh_times
+    main_module._model_refresh_global_events.clear()
+    main_module._model_refresh_times.pop(first_user.id, None)
+    main_module._model_refresh_times.pop(second_user.id, None)
 
 
 def test_registration_capacity_is_enforced(client, db, monkeypatch):
@@ -281,6 +316,7 @@ def test_auth_global_limit_rejects_before_creating_new_ip_bucket(
     main_module._auth_global_rate_events.clear()
     monkeypatch.setattr(main_module, "AUTH_RATE_LIMIT_PER_MINUTE", 100)
     monkeypatch.setattr(main_module, "AUTH_GLOBAL_RATE_LIMIT_PER_MINUTE", 1)
+    monkeypatch.setattr(main_module, "IS_FLY_RUNTIME", True)
 
     payload = {"username": "nobody", "password": "pass1234"}
     first = client.post(
@@ -349,6 +385,7 @@ def test_agent_global_limit_rejects_before_creating_ip_or_account_buckets(
     monkeypatch.setattr(main_module, "AGENT_GLOBAL_RATE_LIMIT_PER_MINUTE", 1)
     monkeypatch.setattr(main_module, "AGENT_IP_RATE_LIMIT_PER_MINUTE", 100)
     monkeypatch.setattr(main_module, "AGENT_RATE_LIMIT_PER_MINUTE", 100)
+    monkeypatch.setattr(main_module, "IS_FLY_RUNTIME", True)
     monkeypatch.setattr("backend.main.llm.resolve_allowed_model", MagicMock(return_value="free"))
     monkeypatch.setattr(
         "backend.main.agent.run_agent_stream",

@@ -390,6 +390,31 @@ def test_delete_shoe(client, db, user_with_token):
     assert res.status_code == 200
 
 
+def test_stale_shoe_delete_is_rejected(client, db, user_with_token):
+    user, token = user_with_token
+    shoe = Shoe(user_id=user.id, brand="Mizuno", model="Rider", date="2026-01-01")
+    db.add(shoe)
+    db.commit()
+    db.refresh(shoe)
+    stale_version = shoe.version
+    updated = client.put(
+        f"/api/shoes/{shoe.id}",
+        headers=_auth_header(token),
+        json={"price": 100, "expected_version": stale_version},
+    )
+
+    deleted = client.delete(
+        f"/api/shoes/{shoe.id}?expected_version={stale_version}",
+        headers=_auth_header(token),
+    )
+
+    assert updated.status_code == 200
+    assert deleted.status_code == 409
+    assert client.get("/api/shoes/active", headers=_auth_header(token)).json()[0][
+        "price"
+    ] == 100
+
+
 def test_shoe_isolation_between_users(client, db):
     user_a = User(username="alice", hashed_password=get_password_hash("pass1234"))
     user_b = User(username="bob", hashed_password=get_password_hash("pass1234"))
@@ -454,6 +479,7 @@ def test_run_log_crud(client, db, user_with_token):
     })
     assert created.status_code == 200
     run_id = created.json()["id"]
+    assert created.json()["version"] == 0
     db.refresh(shoe)
     assert shoe.mileage == 8.25
     august = db.query(MonthlyMileage).filter_by(
@@ -470,6 +496,7 @@ def test_run_log_crud(client, db, user_with_token):
     })
     assert updated.status_code == 200
     assert updated.json()["km"] == 10.5
+    assert updated.json()["version"] == 1
     db.refresh(shoe)
     db.refresh(august)
     september = db.query(MonthlyMileage).filter_by(
@@ -489,6 +516,69 @@ def test_run_log_crud(client, db, user_with_token):
     db.refresh(september)
     assert shoe.mileage == 0
     assert september.km == 0
+
+
+def test_multiple_runs_atomically_share_one_monthly_aggregate(
+    client, db, user_with_token
+):
+    user, token = user_with_token
+    shoe = Shoe(user_id=user.id, brand="Mizuno", model="Rider", date="2026-01-01")
+    db.add(shoe)
+    db.commit()
+    headers = _auth_header(token)
+
+    first = client.post("/api/runs", headers=headers, json={
+        "date": "2026-08-12", "km": 5, "shoe_id": shoe.id,
+    })
+    second = client.post("/api/runs", headers=headers, json={
+        "date": "2026-08-20", "km": 7, "shoe_id": shoe.id,
+    })
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    db.expire_all()
+    aggregates = db.query(MonthlyMileage).filter_by(
+        user_id=user.id, year=2026, month=8
+    ).all()
+    assert len(aggregates) == 1
+    assert aggregates[0].km == 12
+    assert aggregates[0].version == 1
+
+
+def test_run_update_rejects_stale_version_without_double_applying_mileage(
+    client, db, user_with_token
+):
+    user, token = user_with_token
+    shoe = Shoe(user_id=user.id, brand="Mizuno", model="Rider", date="2026-01-01")
+    db.add(shoe)
+    db.commit()
+    headers = _auth_header(token)
+    created = client.post("/api/runs", headers=headers, json={
+        "date": "2026-08-12", "km": 8, "shoe_id": shoe.id,
+    }).json()
+
+    first = client.put(f"/api/runs/{created['id']}", headers=headers, json={
+        "km": 10, "expected_version": created["version"],
+    })
+    stale = client.put(f"/api/runs/{created['id']}", headers=headers, json={
+        "km": 12, "expected_version": created["version"],
+    })
+
+    assert first.status_code == 200
+    assert first.json()["version"] == 1
+    assert stale.status_code == 409
+    assert "重新載入" in stale.json()["detail"]
+    stale_delete = client.delete(
+        f"/api/runs/{created['id']}?expected_version={created['version']}",
+        headers=headers,
+    )
+    assert stale_delete.status_code == 409
+    db.expire_all()
+    assert db.get(Shoe, shoe.id).mileage == 10
+    monthly = db.query(MonthlyMileage).filter_by(
+        user_id=user.id, year=2026, month=8
+    ).one()
+    assert monthly.km == 10
 
 
 def test_delete_shoe_with_run_log_preserves_history(client, db, user_with_token):
@@ -728,9 +818,24 @@ def test_update_monthly_mileage(client, db, user_with_token):
     db.add(entry)
     db.commit()
     db.refresh(entry)
-    res = client.put(f"/api/monthly-mileage/{entry.id}", headers=_auth_header(token), json={"km": 75.5})
+    res = client.put(f"/api/monthly-mileage/{entry.id}", headers=_auth_header(token), json={
+        "km": 75.5, "expected_version": entry.version,
+    })
     assert res.status_code == 200
     assert res.json()["km"] == 75.5
+    assert res.json()["version"] == 1
+    stale = client.put(f"/api/monthly-mileage/{entry.id}", headers=_auth_header(token), json={
+        "km": 90, "expected_version": 0,
+    })
+    stale_delete = client.delete(
+        f"/api/monthly-mileage/{entry.id}?expected_version=0",
+        headers=_auth_header(token),
+    )
+    assert stale.status_code == 409
+    assert stale_delete.status_code == 409
+    assert client.get("/api/monthly-mileage", headers=_auth_header(token)).json()[0][
+        "km"
+    ] == 75.5
 
 
 def test_update_monthly_mileage_not_found(client, user_with_token):

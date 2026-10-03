@@ -92,7 +92,7 @@ async function run(engine, name) {
       document.querySelector('#agent-model').innerHTML = '<option>Very long model provider and model name</option>';
       document.querySelector('#report-model').innerHTML = '<option>Very long model provider and model name</option>';
       document.querySelector('#shoe-analysis-content').innerHTML = '<div class="shoe-analysis-grid">' +
-        ['627.62 km', '87 次', '61.9 / 222.7 km', '78.5%', '2026/12/12', '$3.91', '2026/10/01'].map((value, i) =>
+        ['627.62 km', '87 次', '61.9 / 222.7 km', '2026/10/01', '78.5%', '2026/12/12'].map((value, i) =>
           '<div class="insight-card"><div class="insight-card-label">指標 ' + i + '</div><div class="insight-card-value">' + value + '</div><div class="insight-card-sub">長內容測試</div></div>').join('') +
         '</div><div class="shoe-analysis-chart"></div>';
       document.querySelector('#agent-messages').innerHTML += '<div class="agent-message bot"><div class="agent-msg-content"><p>' + 'long-message'.repeat(40) + '</p><pre>' + 'code'.repeat(100) + '</pre><table><tr><td>' + 'wide-table'.repeat(50) + '</td></tr></table></div></div>';
