@@ -11,6 +11,9 @@ venv/
 .coverage
 htmlcov/
 
+# Claude Code hook state
+.claude/.hook-cache/
+
 # IDE
 .vscode/
 .idea/
