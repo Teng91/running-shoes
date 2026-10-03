@@ -391,7 +391,7 @@ def test_build_client_requires_key_and_uses_openrouter_endpoint(monkeypatch):
     constructor.assert_called_once_with(
         base_url="https://openrouter.ai/api/v1",
         api_key="test-key",
-        timeout=llm._LLM_TIMEOUT,
+        timeout=llm._LLM_TIMEOUT_SECONDS,
     )
 
 
