@@ -1129,6 +1129,11 @@ def test_lifespan_skips_migration_when_new_schema(monkeypatch):
             assert "shoes" in tables
             assert "monthly_mileages" in tables
             assert "runs" in tables
+            assert "operation_history" in tables
+            goal_columns = [row[1] for row in conn.execute(
+                text("PRAGMA table_info('running_goals')")
+            ).fetchall()]
+            assert "version" in goal_columns
             run_indexes = [row[1] for row in conn.execute(
                 text("PRAGMA index_list('runs')")
             ).fetchall()]

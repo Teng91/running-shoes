@@ -351,3 +351,27 @@ test('dashboard monthly goal shows whether current progress is ahead or behind',
   const insights = extract('renderDashboardInsights');
   assert.match(insights, /dashboardGoalSummary\(goal\)/);
 });
+
+test('dashboard analytics cache expires by local date and goals invalidate it', () => {
+  const loader = extract('loadDashboardAnalytics');
+  const saveGoal = extract('saveRunningGoal');
+  assert.match(loader, /const cacheKey = `\$\{localDateISO\(\)\}\|\$\{month\}`/);
+  assert.match(loader, /!key\.startsWith\(`/);
+  assert.match(saveGoal, /expected_version: Number\(runningGoal\.version \|\| 0\)/);
+  assert.match(saveGoal, /dashboardAnalyticsCache\.clear\(\)/);
+});
+
+test('selected-month YTD, forecasts, rotation, heatmap, health and undo are wired', () => {
+  const goalProgress = extract('renderGoalProgress');
+  const insights = extract('renderDashboardInsights');
+  assert.match(goalProgress, /item\.month <= selectedGoalMonth/);
+  assert.match(goalProgress, /截至 \$\{selectedGoalMonth\} 月年度進度/);
+  assert.match(insights, /較上月同期|comparison\.label/);
+  assert.match(insights, /月底預測與跑步規律/);
+  assert.match(insights, /鞋款輪替建議/);
+  assert.match(insights, /renderYearHeatmap/);
+  assert.match(source, /apiGet\('\/operations'\)/);
+  assert.match(source, /apiGet\('\/analytics\/reconciliation'\)/);
+  assert.match(source, /apiPost\(`\/operations\/\$\{operationId\}\/undo`/);
+  assert.match(source, /apiPost\('\/analytics\/reconciliation\/repair'/);
+});

@@ -30,13 +30,15 @@ def test_goal_defaults_and_update_are_per_user(db):
         with TestClient(app) as client:
             default = client.get("/api/running-goal", headers=_headers("goal-a"))
             assert default.json() == {
-                "start_year": 2026, "monthly_km": 125.0, "yearly_km": 1500.0,
+                "version": 0, "start_year": 2026,
+                "monthly_km": 125.0, "yearly_km": 1500.0,
             }
             updated = client.put(
                 "/api/running-goal", headers=_headers("goal-a"),
                 json={"start_year": 2027, "monthly_km": 130},
             )
             assert updated.status_code == 200
+            assert updated.json()["version"] == 1
             assert updated.json()["monthly_km"] == 130.0
             assert client.get(
                 "/api/running-goal", headers=_headers("goal-b")
@@ -60,6 +62,32 @@ def test_goal_update_rejects_non_positive_distance(db, user_with_token):
                 json={"start_year": 2026, "monthly_km": 0},
             )
         assert response.status_code == 422
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_goal_update_rejects_stale_version(db, user_with_token):
+    _user, token = user_with_token
+
+    def override_get_db():
+        yield db
+
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        with TestClient(app) as client:
+            headers = {"Authorization": f"Bearer {token}"}
+            first = client.put(
+                "/api/running-goal", headers=headers,
+                json={"expected_version": 0, "start_year": 2026, "monthly_km": 130},
+            )
+            stale = client.put(
+                "/api/running-goal", headers=headers,
+                json={"expected_version": 0, "start_year": 2026, "monthly_km": 140},
+            )
+        assert first.status_code == 200
+        assert first.json()["version"] == 1
+        assert stale.status_code == 409
+        assert goals.goal_values(db, _user.id)["monthly_km"] == 130
     finally:
         app.dependency_overrides.clear()
 
