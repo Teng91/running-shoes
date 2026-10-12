@@ -5,9 +5,7 @@ from __future__ import annotations
 from calendar import monthrange
 from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
-from typing import Any
 
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from backend import goals, models
@@ -29,7 +27,6 @@ def _run_metrics(runs: list[models.Run]) -> dict:
         "count": len(runs),
         "days": len({run.date for run in runs}),
     }
-
 
 def shoe_analytics(db: Session, user_id: int, shoe_id: int, *, today: date | None = None) -> dict | None:
     shoe = db.query(models.Shoe).filter(
@@ -77,7 +74,6 @@ def shoe_analytics(db: Session, user_id: int, shoe_id: int, *, today: date | Non
             "count": int(values["count"]),
         })
 
-    reconciled_total = _round(shoe.baseline_mileage + metrics["km"])
     return {
         "shoe": {
             "id": shoe.id,
@@ -91,8 +87,6 @@ def shoe_analytics(db: Session, user_id: int, shoe_id: int, *, today: date | Non
             "total_mileage_km": _round(shoe.mileage),
             "logged_mileage_km": metrics["km"],
             "historical_adjustment_km": _round(shoe.baseline_mileage),
-            "reconciled_total_km": reconciled_total,
-            "reconciliation_difference_km": _round(shoe.mileage - reconciled_total),
             "expected_mileage_km": _round(shoe.expected_mileage),
             "remaining_mileage_km": remaining,
             "usage_percent": (
@@ -241,92 +235,6 @@ def dashboard_analytics(
                 "shoe_id": shoe.id,
                 "message": f"{shoe.brand} {shoe.model} 已使用 {pct:.1f}% 預期壽命",
             })
-    # 30/90-day shoe rotation uses the selected period's effective end date.
-    analysis_end = (
-        date(year, month, monthrange(year, month)[1])
-        if selected < current
-        else as_of if selected == current else None
-    )
-    recent_90: list[models.Run] = []
-    if analysis_end is not None:
-        recent_90 = db.query(models.Run).filter(
-            models.Run.user_id == user_id,
-            models.Run.date >= (analysis_end - timedelta(days=89)).isoformat(),
-            models.Run.date <= analysis_end.isoformat(),
-        ).all()
-    rotation_totals: dict[int, dict[str, float | int]] = defaultdict(
-        lambda: {"km_30": 0.0, "count_30": 0, "km_90": 0.0, "count_90": 0}
-    )
-    cutoff_30 = analysis_end - timedelta(days=29) if analysis_end else None
-    for run in recent_90:
-        values = rotation_totals[run.shoe_id]
-        values["km_90"] = float(values["km_90"]) + run.km
-        values["count_90"] = int(values["count_90"]) + 1
-        if cutoff_30 and run.date >= cutoff_30.isoformat():
-            values["km_30"] = float(values["km_30"]) + run.km
-            values["count_30"] = int(values["count_30"]) + 1
-    total_30 = sum(float(item["km_30"]) for item in rotation_totals.values())
-    total_90 = sum(float(item["km_90"]) for item in rotation_totals.values())
-    rotation_shoes: list[dict[str, Any]] = []
-    for shoe in active_shoes:
-        values = rotation_totals[shoe.id]
-        km_30 = _round(float(values["km_30"]))
-        km_90 = _round(float(values["km_90"]))
-        usage_percent = (
-            _round(shoe.mileage / shoe.expected_mileage * 100, 1)
-            if shoe.expected_mileage > 0 else None
-        )
-        rotation_shoes.append({
-            "shoe_id": shoe.id,
-            "name": f"{shoe.brand} {shoe.model}",
-            "categories": shoe.categories or [],
-            "km_30": km_30,
-            "count_30": int(values["count_30"]),
-            "share_30_percent": _round(km_30 / total_30 * 100, 1) if total_30 else 0.0,
-            "km_90": km_90,
-            "count_90": int(values["count_90"]),
-            "share_90_percent": _round(km_90 / total_90 * 100, 1) if total_90 else 0.0,
-            "usage_percent": usage_percent,
-        })
-    rotation_shoes.sort(key=lambda item: float(item["km_90"]), reverse=True)
-    concentrated = bool(
-        rotation_shoes
-        and total_90 > 0
-        and float(rotation_shoes[0]["share_90_percent"]) >= 70
-        and int(rotation_shoes[0]["count_90"]) >= 3
-    )
-    if concentrated:
-        leader = rotation_shoes[0]
-        alerts.append({
-            "type": "rotation",
-            "severity": "info",
-            "shoe_id": int(leader["shoe_id"]),
-            "message": f"{leader['name']} 承擔近 90 天 {leader['share_90_percent']:.1f}% 里程，可考慮增加輪替",
-        })
-    categories = ("Daily", "Speed", "Tempo", "Race")
-    coverage: list[dict[str, Any]] = []
-    for category in categories:
-        matches = [shoe for shoe in rotation_shoes if category in shoe["categories"]]
-        coverage.append({
-            "category": category,
-            "active_count": len(matches),
-            "nearing_retirement_count": sum(
-                1 for shoe in matches
-                if shoe["usage_percent"] is not None and float(shoe["usage_percent"]) >= 80
-            ),
-        })
-    uncovered = [entry["category"] for entry in coverage if entry["active_count"] == 0]
-    fragile = [
-        entry["category"] for entry in coverage
-        if entry["active_count"] > 0
-        and entry["active_count"] == entry["nearing_retirement_count"]
-    ]
-    next_category = (uncovered or fragile or [None])[0]
-    simultaneous_retirement = [
-        str(shoe["name"]) for shoe in rotation_shoes
-        if shoe["usage_percent"] is not None and float(shoe["usage_percent"]) >= 80
-    ]
-
     goal = goals.goal_progress(db, user_id, year, month, as_of=as_of)
     days_in_month = monthrange(year, month)[1]
     if selected == current:
@@ -353,67 +261,6 @@ def dashboard_analytics(
         "projected_goal_delta_km": _round(projected - goal["monthly_km"]),
     }
 
-    weekly: list[dict[str, Any]] = []
-    rest_streak: int | None
-    if analysis_end is not None:
-        last_28_start = analysis_end - timedelta(days=27)
-        runs_28 = [run for run in recent_90 if run.date >= last_28_start.isoformat()]
-        for offset in range(3, -1, -1):
-            week_end = analysis_end - timedelta(days=offset * 7)
-            week_start = week_end - timedelta(days=6)
-            week_runs = [
-                run for run in runs_28
-                if week_start.isoformat() <= run.date <= week_end.isoformat()
-            ]
-            weekly.append({
-                "start": week_start.isoformat(),
-                "end": week_end.isoformat(),
-                **_run_metrics(week_runs),
-            })
-        all_past_runs = db.query(models.Run.date).filter(
-            models.Run.user_id == user_id,
-            models.Run.date <= analysis_end.isoformat(),
-        ).all()
-        run_dates = {row[0] for row in all_past_runs}
-        if analysis_end.isoformat() in run_dates:
-            run_streak = 0
-            cursor = analysis_end
-            while cursor.isoformat() in run_dates:
-                run_streak += 1
-                cursor -= timedelta(days=1)
-            rest_streak = 0
-        else:
-            run_streak = 0
-            latest = max(run_dates) if run_dates else None
-            rest_streak = (
-                (analysis_end - date.fromisoformat(latest)).days if latest else None
-            )
-    else:
-        weekly = []
-        run_streak = 0
-        rest_streak = None
-    rolling_4_week_km = _round(sum(float(week["km"]) for week in weekly))
-    if previous_7_km >= 5:
-        change_percent = _round((latest_7_km - previous_7_km) / previous_7_km * 100, 1)
-        load_status = "increase" if change_percent >= 50 else "decrease" if change_percent <= -50 else "steady"
-    elif latest_7_km >= 10:
-        change_percent = None
-        load_status = "increase"
-    else:
-        change_percent = None
-        load_status = "steady"
-
-    year_runs = db.query(models.Run).filter(
-        models.Run.user_id == user_id,
-        models.Run.date.like(f"{year:04d}-%"),
-    ).all()
-    activity: dict[str, dict[str, float | int]] = defaultdict(
-        lambda: {"km": 0.0, "count": 0}
-    )
-    for run in year_runs:
-        activity[run.date]["km"] = float(activity[run.date]["km"]) + run.km
-        activity[run.date]["count"] = int(activity[run.date]["count"]) + 1
-
     return {
         "period": {"year": year, "month": month},
         "month": month_metrics,
@@ -436,137 +283,6 @@ def dashboard_analytics(
         },
         "goal": goal,
         "forecast": forecast,
-        "consistency": {
-            "weeks": weekly,
-            "rolling_4_week_km": rolling_4_week_km,
-            "average_weekly_km": _round(rolling_4_week_km / 4) if weekly else 0.0,
-            "average_running_days": (
-                _round(sum(int(week["days"]) for week in weekly) / 4, 1)
-                if weekly else 0.0
-            ),
-            "run_streak_days": run_streak,
-            "rest_streak_days": rest_streak,
-            "load_status": load_status,
-            "week_change_percent": change_percent,
-        },
-        "year_activity": [
-            {"date": day, "km": _round(values["km"]), "count": int(values["count"])}
-            for day, values in sorted(activity.items())
-        ],
         "shoe_usage": shoe_usage,
-        "rotation": {
-            "shoes": rotation_shoes,
-            "concentrated": concentrated,
-            "category_coverage": coverage,
-            "simultaneous_retirement": simultaneous_retirement,
-            "next_category": next_category,
-        },
         "alerts": alerts,
-    }
-
-
-def mileage_reconciliation(db: Session, user_id: int) -> dict:
-    shoes = db.query(models.Shoe).filter(
-        models.Shoe.user_id == user_id,
-    ).all()
-    shoe_rows = []
-    consistent = True
-    for shoe in shoes:
-        logged = db.query(func.sum(models.Run.km)).filter(
-            models.Run.user_id == user_id,
-            models.Run.shoe_id == shoe.id,
-        ).scalar()
-        expected = _round(max(0, shoe.baseline_mileage) + float(logged or 0))
-        difference = _round(shoe.mileage - expected)
-        consistent = consistent and shoe.baseline_mileage >= 0 and abs(difference) < 0.01
-        shoe_rows.append({
-            "shoe_id": shoe.id,
-            "name": f"{shoe.brand} {shoe.model}",
-            "total_km": _round(shoe.mileage),
-            "logged_km": _round(logged),
-            "historical_adjustment_km": _round(shoe.baseline_mileage),
-            "difference_km": difference,
-        })
-
-    months = db.query(models.MonthlyMileage).filter(
-        models.MonthlyMileage.user_id == user_id,
-    ).order_by(models.MonthlyMileage.year, models.MonthlyMileage.month).all()
-    run_month_totals: dict[tuple[int, int], float] = defaultdict(float)
-    for run in db.query(models.Run).filter(models.Run.user_id == user_id).all():
-        run_month_totals[(int(run.date[:4]), int(run.date[5:7]))] += run.km
-    month_map = {(row.year, row.month): row for row in months}
-    month_rows = []
-    for year, month in sorted(set(month_map) | set(run_month_totals)):
-        row = month_map.get((year, month))
-        logged = _round(run_month_totals[(year, month)])
-        adjustment = float(row.adjustment_km) if row else 0.0
-        total = float(row.km) if row else 0.0
-        expected = _round(max(0, adjustment) + logged)
-        difference = _round(total - expected)
-        consistent = consistent and row is not None and adjustment >= 0 and abs(difference) < 0.01
-        month_rows.append({
-            "year": year,
-            "month": month,
-            "total_km": _round(total),
-            "logged_km": _round(logged),
-            "historical_adjustment_km": _round(adjustment),
-            "difference_km": difference,
-            "missing_aggregate": row is None,
-        })
-    return {
-        "ok": consistent,
-        "shoes": shoe_rows,
-        "months": month_rows,
-    }
-
-
-def repair_mileage_reconciliation(db: Session, user_id: int) -> dict:
-    """Repair only derived totals and clamp invalid historical adjustments to zero."""
-    repaired_shoes = 0
-    repaired_months = 0
-    created_months = 0
-    shoes = db.query(models.Shoe).filter(models.Shoe.user_id == user_id).all()
-    run_rows = db.query(models.Run).filter(models.Run.user_id == user_id).all()
-    shoe_totals: dict[int, float] = defaultdict(float)
-    month_totals: dict[tuple[int, int], float] = defaultdict(float)
-    for run in run_rows:
-        shoe_totals[run.shoe_id] += run.km
-        month_totals[(int(run.date[:4]), int(run.date[5:7]))] += run.km
-    for shoe in shoes:
-        baseline = _round(max(0, shoe.baseline_mileage))
-        total = _round(baseline + shoe_totals[shoe.id])
-        if abs(shoe.mileage - total) >= 0.005 or abs(shoe.baseline_mileage - baseline) >= 0.005:
-            shoe.baseline_mileage = baseline
-            shoe.mileage = total
-            shoe.version += 1
-            repaired_shoes += 1
-    month_rows = db.query(models.MonthlyMileage).filter(
-        models.MonthlyMileage.user_id == user_id
-    ).all()
-    month_map = {(row.year, row.month): row for row in month_rows}
-    for key in sorted(set(month_map) | set(month_totals)):
-        row = month_map.get(key)
-        logged = _round(month_totals[key])
-        if row is None:
-            db.add(models.MonthlyMileage(
-                user_id=user_id,
-                year=key[0],
-                month=key[1],
-                km=logged,
-                adjustment_km=0,
-            ))
-            created_months += 1
-            continue
-        adjustment = _round(max(0, row.adjustment_km))
-        total = _round(adjustment + logged)
-        if abs(row.km - total) >= 0.005 or abs(row.adjustment_km - adjustment) >= 0.005:
-            row.adjustment_km = adjustment
-            row.km = total
-            row.version += 1
-            repaired_months += 1
-    db.flush()
-    return {
-        "repaired_shoes": repaired_shoes,
-        "repaired_months": repaired_months,
-        "created_months": created_months,
     }

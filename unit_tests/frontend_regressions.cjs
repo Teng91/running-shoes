@@ -73,7 +73,7 @@ test('shoe analytics ignores stale responses after a second open or close', () =
 
 test('shoe analytics uses the requested six-card order without cost or reconciliation copy', () => {
   const analytics = extract('renderShoeAnalytics');
-  const cards = analytics.slice(analytics.indexOf('const cards'), analytics.indexOf('const difference'));
+  const cards = analytics.slice(analytics.indexOf('const cards'), analytics.indexOf('const recentRows'));
   const labels = [...cards.matchAll(/label: '([^']+)'/g)].map(match => match[1]);
   assert.deepEqual(labels, ['總里程', '穿著次數', '近 30／90 天', '最後使用', '壽命進度', '預估退役']);
   assert.doesNotMatch(analytics, /每公里成本|每次穿著|日誌 .*歷史調整/);
@@ -361,17 +361,14 @@ test('dashboard analytics cache expires by local date and goals invalidate it', 
   assert.match(saveGoal, /dashboardAnalyticsCache\.clear\(\)/);
 });
 
-test('selected-month YTD, forecasts, rotation, heatmap, health and undo are wired', () => {
+test('selected-month YTD and forecast remain without removed dashboard features', () => {
   const goalProgress = extract('renderGoalProgress');
   const insights = extract('renderDashboardInsights');
   assert.match(goalProgress, /item\.month <= selectedGoalMonth/);
   assert.match(goalProgress, /截至 \$\{selectedGoalMonth\} 月年度進度/);
   assert.match(insights, /較上月同期|comparison\.label/);
-  assert.match(insights, /月底預測與跑步規律/);
-  assert.match(insights, /鞋款輪替建議/);
-  assert.match(insights, /renderYearHeatmap/);
-  assert.match(source, /apiGet\('\/operations'\)/);
-  assert.match(source, /apiGet\('\/analytics\/reconciliation'\)/);
-  assert.match(source, /apiPost\(`\/operations\/\$\{operationId\}\/undo`/);
-  assert.match(source, /apiPost\('\/analytics\/reconciliation\/repair'/);
+  assert.match(insights, /月底預測/);
+  assert.doesNotMatch(source, /鞋款輪替建議|年活動熱圖|最近操作與復原|里程資料健康/);
+  assert.doesNotMatch(source, /function renderYearHeatmap|function renderOperations|function undoOperation|function repairMileageData/);
+  assert.doesNotMatch(source, /apiGet\('\/operations'\)|apiGet\('\/analytics\/reconciliation'\)/);
 });
