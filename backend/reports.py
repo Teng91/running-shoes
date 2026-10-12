@@ -11,6 +11,7 @@ from collections.abc import Generator
 from datetime import UTC, datetime
 
 from sqlalchemy import func
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
 from backend import goals, llm, models
@@ -203,25 +204,29 @@ def build_report_messages(stats: dict) -> list[dict]:
 def _persist_report(
     db: Session, user_id: int, year: int, month: int, content: str, model: str, stats: dict
 ) -> datetime:
-    existing = (
-        db.query(models.MonthlyReport)
-        .filter(
-            models.MonthlyReport.user_id == user_id,
-            models.MonthlyReport.year == year,
-            models.MonthlyReport.month == month,
-        )
-        .first()
+    now = datetime.now(UTC)
+    statement = sqlite_insert(models.MonthlyReport).values(
+        user_id=user_id,
+        year=year,
+        month=month,
+        content_md=content,
+        model=model,
+        stats_json=stats,
+        created_at=now,
+        updated_at=now,
     )
-    if existing is None:
-        existing = models.MonthlyReport(user_id=user_id, year=year, month=month)
-        db.add(existing)
-    # JSON 欄位必須整個重新指派，就地改動不會被 SQLAlchemy 偵測。
-    existing.content_md = content
-    existing.model = model
-    existing.stats_json = stats
+    statement = statement.on_conflict_do_update(
+        index_elements=["user_id", "year", "month"],
+        set_={
+            "content_md": content,
+            "model": model,
+            "stats_json": stats,
+            "updated_at": now,
+        },
+    )
+    db.execute(statement)
     db.commit()
-    db.refresh(existing)
-    return existing.updated_at.replace(tzinfo=UTC) if existing.updated_at else datetime.now(UTC)
+    return now
 
 
 def generate_report_stream(

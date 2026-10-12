@@ -156,6 +156,7 @@ def test_lifespan_adds_aggregate_versions_to_existing_database(monkeypatch):
     with engine.begin() as conn:
         conn.execute(text("ALTER TABLE runs DROP COLUMN version"))
         conn.execute(text("ALTER TABLE monthly_mileages DROP COLUMN version"))
+        conn.execute(text("ALTER TABLE running_goals DROP COLUMN version"))
 
     sessions = sessionmaker(bind=engine)
     monkeypatch.setattr("backend.main.engine", engine)
@@ -170,6 +171,10 @@ def test_lifespan_adds_aggregate_versions_to_existing_database(monkeypatch):
             column["name"] for column in inspect(engine).get_columns("monthly_mileages")
         }
         assert "version" in month_columns
+        goal_columns = {
+            column["name"] for column in inspect(engine).get_columns("running_goals")
+        }
+        assert "version" in goal_columns
     finally:
         asyncio.run(context.__aexit__(None, None, None))
 

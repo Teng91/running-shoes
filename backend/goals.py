@@ -20,6 +20,7 @@ def goal_values(db: Session, user_id: int) -> dict:
         .first()
     )
     return {
+        "version": row.version if row else 0,
         "start_year": row.start_year if row else DEFAULT_GOAL_START_YEAR,
         "monthly_km": float(row.monthly_km if row else DEFAULT_MONTHLY_GOAL_KM),
         # The annual target is intentionally derived so monthly and annual

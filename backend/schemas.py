@@ -288,12 +288,26 @@ class MonthlyMileageOut(MonthlyMileageBase):
 
 
 class RunningGoalUpdate(BaseModel):
+    expected_version: int | None = Field(default=None, ge=0)
     start_year: ReasonableYear
     monthly_km: Annotated[float, Field(gt=0, le=100_000, allow_inf_nan=False)]
 
 
 class RunningGoalOut(RunningGoalUpdate):
+    expected_version: int | None = Field(default=None, exclude=True)
+    version: int = 0
     yearly_km: float
+
+
+class OperationHistoryOut(BaseModel):
+    id: int
+    action_type: str
+    target_type: str
+    target_id: int | None
+    summary: str
+    created_at: datetime
+    undone_at: datetime | None
+    can_undo: bool
 
 
 # ── Run Log Schemas ────────────────────────────────────
