@@ -55,6 +55,7 @@ MAX_STRAVA_CSV_BYTES = 10 * 1024 * 1024
 MAX_STRAVA_REQUEST_BYTES = MAX_STRAVA_CSV_BYTES + 1024 * 1024
 MAX_STRAVA_CSV_ROWS = 50_000
 MAX_STRAVA_IMPORT_HISTORY_PER_USER = 50
+UNDO_WINDOW_MINUTES = max(1, int(os.environ.get("UNDO_WINDOW_MINUTES", "30")))
 MODEL_REFRESH_COOLDOWN_SECONDS = max(
     1, int(os.environ.get("MODEL_REFRESH_COOLDOWN_SECONDS", "60"))
 )
@@ -175,6 +176,76 @@ def _client_key(request: Request) -> str:
 
 def _local_today() -> date:
     return datetime.now(TAIPEI_TIMEZONE).date()
+
+
+def _utc_now() -> datetime:
+    return datetime.now(UTC)
+
+
+def _aware_utc(value: datetime) -> datetime:
+    return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
+
+
+def _record_operation(
+    db: Session,
+    *,
+    user_id: int,
+    action_type: str,
+    target_type: str,
+    target_id: int | None,
+    payload: dict,
+) -> models.OperationHistory:
+    operation = models.OperationHistory(
+        user_id=user_id,
+        action_type=action_type,
+        target_type=target_type,
+        target_id=target_id,
+        payload_json=payload,
+    )
+    db.add(operation)
+    return operation
+
+
+def _operation_summary(operation: models.OperationHistory) -> str:
+    payload = operation.payload_json or {}
+    if operation.action_type == "run_delete":
+        return f"刪除 {payload.get('date', '')} 的 {float(payload.get('km', 0)):.2f} km 跑步"
+    if operation.action_type == "shoe_retirement":
+        state = "退役" if payload.get("after", {}).get("is_retired") else "重新啟用"
+        return f"將 {payload.get('name', '鞋款')} 設為{state}"
+    if operation.action_type == "shoe_mileage_edit":
+        return f"修改 {payload.get('name', '鞋款')} 的總里程"
+    if operation.action_type == "monthly_mileage_edit":
+        before = payload.get("before", {})
+        return f"修改 {before.get('year', '')} 年 {before.get('month', '')} 月跑量"
+    if operation.action_type == "reconciliation_repair":
+        return "修復里程對帳資料"
+    return "資料操作"
+
+
+def _operation_out(operation: models.OperationHistory) -> dict:
+    created_at = _aware_utc(operation.created_at)
+    reversible = operation.action_type in {
+        "run_delete",
+        "shoe_retirement",
+        "shoe_mileage_edit",
+        "monthly_mileage_edit",
+    }
+    can_undo = (
+        reversible
+        and operation.undone_at is None
+        and _utc_now() - created_at <= timedelta(minutes=UNDO_WINDOW_MINUTES)
+    )
+    return {
+        "id": operation.id,
+        "action_type": operation.action_type,
+        "target_type": operation.target_type,
+        "target_id": operation.target_id,
+        "summary": _operation_summary(operation),
+        "created_at": created_at,
+        "undone_at": _aware_utc(operation.undone_at) if operation.undone_at else None,
+        "can_undo": can_undo,
+    }
 
 
 def _enforce_window_limit(
@@ -449,6 +520,7 @@ async def lifespan(app: FastAPI):
         ("shoes", "is_deleted"),
         ("runs", "version"),
         ("monthly_mileages", "version"),
+        ("running_goals", "version"),
     ):
         columns = {item["name"] for item in inspect(engine).get_columns(table)}
         if column not in columns:
@@ -720,21 +792,62 @@ def update_shoe(
     if not shoe:
         raise HTTPException(status_code=404, detail="Shoe not found")
     update_data = payload.model_dump(exclude_unset=True)
-    expected_version = update_data.pop("expected_version", None)
+    supplied_version = update_data.pop("expected_version", None)
+    current_version = int(getattr(shoe, "version", 0))
+    if supplied_version is not None and supplied_version != current_version:
+        raise HTTPException(status_code=409, detail="鞋款已被更新，請重新載入後再編輯")
+    expected_version = current_version
     if "mileage" in update_data:
         logged_mileage = db.query(func.sum(models.Run.km)).filter(
             models.Run.user_id == current_user.id,
             models.Run.shoe_id == shoe_id,
         ).scalar()
+        logged_total = round(float(logged_mileage or 0), 2)
+        if float(update_data["mileage"]) + 0.005 < logged_total:
+            raise HTTPException(
+                status_code=400,
+                detail=f"總里程不可低於逐筆跑步日誌合計 {logged_total:.2f} km",
+            )
         update_data["baseline_mileage"] = round(
-            float(update_data["mileage"]) - float(logged_mileage or 0), 2
+            float(update_data["mileage"]) - logged_total, 2
+        )
+    changed_audited_keys: set[str] = set()
+    if "mileage" in update_data:
+        changed_audited_keys.update({"mileage", "baseline_mileage"})
+    retirement_changed = (
+        "is_retired" in update_data
+        and bool(getattr(shoe, "is_retired", False)) != bool(update_data["is_retired"])
+    )
+    if retirement_changed:
+        changed_audited_keys.add("is_retired")
+        if "monthly_km" in update_data:
+            changed_audited_keys.add("monthly_km")
+    if changed_audited_keys:
+        before = {key: getattr(shoe, key, 0) for key in changed_audited_keys}
+        after = {key: update_data[key] for key in changed_audited_keys}
+        action_type = (
+            "shoe_retirement"
+            if retirement_changed
+            else "shoe_mileage_edit"
+        )
+        _record_operation(
+            db,
+            user_id=current_user.id,
+            action_type=action_type,
+            target_type="shoe",
+            target_id=shoe.id,
+            payload={
+                "name": f"{getattr(shoe, 'brand', '鞋款')} {getattr(shoe, 'model', '')}".strip(),
+                "before": before,
+                "after": after,
+                "version_after": expected_version + 1,
+            },
         )
     query = db.query(models.Shoe).filter(
         models.Shoe.id == shoe_id, models.Shoe.user_id == current_user.id,
         models.Shoe.is_deleted.is_(False),
     )
-    if expected_version is not None:
-        query = query.filter(models.Shoe.version == expected_version)
+    query = query.filter(models.Shoe.version == expected_version)
     try:
         update_data["version"] = models.Shoe.version + 1
         changed = query.update(
@@ -1314,6 +1427,19 @@ def delete_run(
     run_values = (run.shoe_id, run.date, run.km)
     version = getattr(run, "version", 0) if expected_version is None else expected_version
     try:
+        _record_operation(
+            db,
+            user_id=current_user.id,
+            action_type="run_delete",
+            target_type="run",
+            target_id=run.id,
+            payload={
+                "date": run.date,
+                "km": run.km,
+                "shoe_id": run.shoe_id,
+                "strava_id": getattr(run, "strava_id", None),
+            },
+        )
         changed = db.query(models.Run).filter(
             models.Run.id == run_id,
             models.Run.user_id == current_user.id,
@@ -1347,16 +1473,37 @@ def update_running_goal(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    row = db.query(models.RunningGoal).filter(
-        models.RunningGoal.user_id == current_user.id
-    ).first()
-    if row is None:
-        row = models.RunningGoal(user_id=current_user.id)
-        db.add(row)
-    for key, value in payload.model_dump().items():
-        setattr(row, key, value)
-    row.yearly_km = payload.monthly_km * 12
+    payload_data = payload.model_dump()
+    expected_version = payload_data.pop("expected_version", None)
+    if expected_version is None:
+        current_version = db.query(models.RunningGoal.version).filter(
+            models.RunningGoal.user_id == current_user.id
+        ).scalar()
+        expected_version = int(current_version or 0)
+    insert_statement = sqlite_insert(models.RunningGoal).values(
+        user_id=current_user.id,
+        version=1,
+        start_year=payload.start_year,
+        monthly_km=payload.monthly_km,
+        yearly_km=payload.monthly_km * 12,
+    )
+    statement = insert_statement.on_conflict_do_update(
+        index_elements=["user_id"],
+        set_={
+            "start_year": payload.start_year,
+            "monthly_km": payload.monthly_km,
+            "yearly_km": payload.monthly_km * 12,
+            "version": models.RunningGoal.version + 1,
+        },
+        where=models.RunningGoal.version == expected_version,
+    ).returning(models.RunningGoal.id)
     try:
+        changed_id = db.execute(statement).scalar_one_or_none()
+        if changed_id is None:
+            raise HTTPException(
+                status_code=409,
+                detail="跑量目標已被更新，請重新載入後再編輯",
+            )
         db.commit()
     except Exception:
         db.rollback()
@@ -1393,9 +1540,15 @@ def create_monthly_mileage(
         models.Run.user_id == current_user.id,
         models.Run.date.like(f"{payload.year:04d}-{payload.month:02d}-%"),
     ).scalar()
+    logged_total = round(float(logged_km or 0), 2)
+    if payload.km + 0.005 < logged_total:
+        raise HTTPException(
+            status_code=400,
+            detail=f"月跑量不可低於逐筆跑步日誌合計 {logged_total:.2f} km",
+        )
     entry = models.MonthlyMileage(
         **payload.model_dump(),
-        adjustment_km=round(payload.km - float(logged_km or 0), 2),
+        adjustment_km=round(payload.km - logged_total, 2),
         user_id=current_user.id,
     )
     db.add(entry)
@@ -1436,6 +1589,15 @@ def update_monthly_mileage(
     if ("year" in update_data or "month" in update_data) and (
         new_year != entry.year or new_month != entry.month
     ):
+        source_logged_km = db.query(func.sum(models.Run.km)).filter(
+            models.Run.user_id == current_user.id,
+            models.Run.date.like(f"{entry.year:04d}-{entry.month:02d}-%"),
+        ).scalar()
+        if float(source_logged_km or 0) > 0.005:
+            raise HTTPException(
+                status_code=400,
+                detail="此月份已有逐筆跑步日誌，請先修改跑步日期，不能直接移動月份",
+            )
         clash = db.query(models.MonthlyMileage).filter(
             models.MonthlyMileage.user_id == current_user.id,
             models.MonthlyMileage.year == new_year,
@@ -1452,8 +1614,39 @@ def update_monthly_mileage(
         models.Run.user_id == current_user.id,
         models.Run.date.like(f"{new_year:04d}-{new_month:02d}-%"),
     ).scalar()
-    update_data["adjustment_km"] = round(desired_total - float(logged_km or 0), 2)
+    logged_total = round(float(logged_km or 0), 2)
+    if desired_total + 0.005 < logged_total:
+        raise HTTPException(
+            status_code=400,
+            detail=f"月跑量不可低於逐筆跑步日誌合計 {logged_total:.2f} km",
+        )
+    update_data["adjustment_km"] = round(desired_total - logged_total, 2)
+    before = {
+        "year": entry.year,
+        "month": entry.month,
+        "km": entry.km,
+        "adjustment_km": getattr(entry, "adjustment_km", 0),
+    }
+    after = {
+        "year": int(update_data.get("year", entry.year)),
+        "month": int(update_data.get("month", entry.month)),
+        "km": float(update_data.get("km", entry.km)),
+        "adjustment_km": float(update_data["adjustment_km"]),
+    }
     try:
+        if before != after:
+            _record_operation(
+                db,
+                user_id=current_user.id,
+                action_type="monthly_mileage_edit",
+                target_type="monthly_mileage",
+                target_id=entry.id,
+                payload={
+                    "before": before,
+                    "after": after,
+                    "version_after": expected_version + 1,
+                },
+            )
         changed = db.query(models.MonthlyMileage).filter(
             models.MonthlyMileage.id == entry_id,
             models.MonthlyMileage.user_id == current_user.id,
@@ -1565,6 +1758,160 @@ def get_mileage_reconciliation(
     db: Session = Depends(get_db),
 ):
     return analytics.mileage_reconciliation(db, current_user.id)
+
+
+@app.post("/api/analytics/reconciliation/repair")
+def repair_mileage_reconciliation(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        repaired = analytics.repair_mileage_reconciliation(db, current_user.id)
+        _record_operation(
+            db,
+            user_id=current_user.id,
+            action_type="reconciliation_repair",
+            target_type="account",
+            target_id=current_user.id,
+            payload=repaired,
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return {**repaired, "reconciliation": analytics.mileage_reconciliation(db, current_user.id)}
+
+
+@app.get("/api/operations", response_model=list[schemas.OperationHistoryOut])
+def list_operation_history(
+    limit: int = Query(default=20, ge=1, le=100),
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    rows = db.query(models.OperationHistory).filter(
+        models.OperationHistory.user_id == current_user.id,
+    ).order_by(
+        models.OperationHistory.created_at.desc(),
+        models.OperationHistory.id.desc(),
+    ).limit(limit).all()
+    return [_operation_out(row) for row in rows]
+
+
+@app.post("/api/operations/{operation_id}/undo")
+def undo_operation(
+    operation_id: int,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    operation = db.query(models.OperationHistory).filter(
+        models.OperationHistory.id == operation_id,
+        models.OperationHistory.user_id == current_user.id,
+    ).first()
+    if operation is None:
+        raise HTTPException(status_code=404, detail="找不到操作紀錄")
+    if operation.undone_at is not None:
+        raise HTTPException(status_code=409, detail="這筆操作已經復原")
+    if not _operation_out(operation)["can_undo"]:
+        raise HTTPException(
+            status_code=409,
+            detail=f"操作已超過 {UNDO_WINDOW_MINUTES} 分鐘復原期限",
+        )
+
+    payload = operation.payload_json or {}
+    try:
+        if operation.action_type == "run_delete":
+            run_count = db.query(models.Run).filter(
+                models.Run.user_id == current_user.id
+            ).count()
+            if run_count >= MAX_RUNS_PER_USER:
+                raise HTTPException(status_code=409, detail="跑步紀錄已達上限")
+            shoe = db.query(models.Shoe).filter(
+                models.Shoe.id == int(payload["shoe_id"]),
+                models.Shoe.user_id == current_user.id,
+            ).first()
+            if shoe is None:
+                raise HTTPException(status_code=409, detail="原本的鞋款已不存在，無法復原")
+            restored_run = models.Run(
+                user_id=current_user.id,
+                shoe_id=shoe.id,
+                date=str(payload["date"]),
+                km=float(payload["km"]),
+                strava_id=payload.get("strava_id"),
+            )
+            db.add(restored_run)
+            db.flush()
+            _apply_run_mileage_deltas(
+                db,
+                current_user.id,
+                [(shoe.id, restored_run.date, restored_run.km)],
+                1,
+            )
+        elif operation.action_type in {"shoe_retirement", "shoe_mileage_edit"}:
+            before = payload.get("before", {})
+            version_after = int(payload["version_after"])
+            updates = {
+                getattr(models.Shoe, key): value
+                for key, value in before.items()
+                if key in {"mileage", "baseline_mileage", "is_retired", "monthly_km"}
+            }
+            updates[models.Shoe.version] = models.Shoe.version + 1
+            changed = db.query(models.Shoe).filter(
+                models.Shoe.id == operation.target_id,
+                models.Shoe.user_id == current_user.id,
+                models.Shoe.version == version_after,
+            ).update(updates, synchronize_session=False)
+            if not changed:
+                raise HTTPException(
+                    status_code=409,
+                    detail="鞋款在此操作後又被修改，無法安全復原",
+                )
+        elif operation.action_type == "monthly_mileage_edit":
+            before = payload.get("before", {})
+            version_after = int(payload["version_after"])
+            changed = db.query(models.MonthlyMileage).filter(
+                models.MonthlyMileage.id == operation.target_id,
+                models.MonthlyMileage.user_id == current_user.id,
+                models.MonthlyMileage.version == version_after,
+            ).update(
+                {
+                    models.MonthlyMileage.year: int(before["year"]),
+                    models.MonthlyMileage.month: int(before["month"]),
+                    models.MonthlyMileage.km: float(before["km"]),
+                    models.MonthlyMileage.adjustment_km: float(before["adjustment_km"]),
+                    models.MonthlyMileage.version: models.MonthlyMileage.version + 1,
+                },
+                synchronize_session=False,
+            )
+            if not changed:
+                raise HTTPException(
+                    status_code=409,
+                    detail="月跑量在此操作後又被修改，無法安全復原",
+                )
+        else:
+            raise HTTPException(status_code=409, detail="這筆操作不支援復原")
+
+        undone_at = _utc_now()
+        claimed = db.query(models.OperationHistory).filter(
+            models.OperationHistory.id == operation.id,
+            models.OperationHistory.user_id == current_user.id,
+            models.OperationHistory.undone_at.is_(None),
+        ).update(
+            {models.OperationHistory.undone_at: undone_at},
+            synchronize_session=False,
+        )
+        if not claimed:
+            raise HTTPException(status_code=409, detail="這筆操作已經復原")
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="目前資料與原操作衝突，無法復原",
+        ) from exc
+    except Exception:
+        db.rollback()
+        raise
+    return {"ok": True, "operation_id": operation_id}
 
 
 @app.get("/api/export/account")

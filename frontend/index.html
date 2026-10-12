@@ -144,6 +144,22 @@ h1 { font-size: 28px; font-weight: 700; margin-bottom: 4px; }
 .insight-alert { border-left:3px solid var(--accent); background:var(--item-bg); border-radius:7px; padding:9px 11px; font-size:12px; }
 .insight-alert.warning { border-left-color:var(--orange); }
 .insight-alert.urgent { border-left-color:var(--red); }
+.analytics-block { margin-top:16px; }
+.analytics-block h3 { font-size:15px; margin-bottom:10px; }
+.rotation-table { display:grid; gap:6px; }
+.rotation-row { display:grid; grid-template-columns:minmax(140px,1fr) repeat(2,minmax(95px,.55fr)); gap:10px; padding:8px 10px; border-radius:8px; background:var(--item-bg); font-size:12px; align-items:center; }
+.rotation-row span:not(:first-child) { text-align:right; color:var(--text-dim); }
+.heatmap-scroll { overflow-x:auto; padding-bottom:4px; }
+.heatmap { display:grid; gap:4px; min-width:590px; }
+.heatmap-row { display:grid; grid-template-columns:40px repeat(31,14px); gap:4px; align-items:center; }
+.heatmap-month { color:var(--text-dim); font-size:10px; }
+.heatmap-cell { width:14px; height:14px; border-radius:3px; background:var(--btn-bg); }
+.operation-panel { margin-bottom:28px; display:grid; grid-template-columns:minmax(0,1fr) minmax(220px,.4fr); gap:16px; }
+.operation-box { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:16px; }
+.operation-box h3 { font-size:14px; margin-bottom:10px; }
+.operation-list { display:grid; gap:7px; }
+.operation-item { display:flex; justify-content:space-between; gap:10px; align-items:center; padding:8px 10px; border-radius:8px; background:var(--item-bg); font-size:12px; }
+.operation-item small { color:var(--text-dim); display:block; margin-top:2px; }
 .shoe-analysis-modal { width:min(860px,calc(100vw - 32px)); }
 .shoe-analysis-header { display:flex; justify-content:space-between; gap:12px; align-items:flex-start; }
 .shoe-analysis-sub { color:var(--text-dim); font-size:12px; margin-top:4px; }
@@ -195,6 +211,8 @@ h1 { font-size: 28px; font-weight: 700; margin-bottom: 4px; }
   .run-stats { grid-template-columns: 1fr; }
   .calendar-day { min-height:62px; padding:4px; }
   .calendar-run { display:none; }
+  .operation-panel { grid-template-columns:1fr; }
+  .rotation-row { grid-template-columns:minmax(110px,1fr) 80px 80px; }
 }
 
 /* Table */
@@ -717,6 +735,10 @@ input::-webkit-date-and-time-value { text-align: left; min-width: 0; }
       <div class="chart-box"><h3>跑步月曆</h3><div id="run-calendar" class="run-calendar"></div></div>
       <div class="chart-box run-shoe-chart-box"><h3>鞋款里程分布</h3><div class="run-shoe-canvas"><canvas id="chart-run-shoes"></canvas></div><div id="run-shoe-legend" class="run-shoe-legend"></div></div>
     </div>
+    <div class="operation-panel">
+      <div class="operation-box"><h3>最近操作與復原</h3><div id="operation-history" class="operation-list"></div></div>
+      <div class="operation-box"><h3>里程資料健康</h3><div id="data-health-panel"></div></div>
+    </div>
     <div class="table-section">
       <div class="table-header"><h2 id="run-table-title">跑步紀錄</h2><div><span id="strava-last" class="strava-last"></span><button class="btn btn-sm btn-edit" onclick="openStravaModal()">↗ 匯入 Strava</button></div></div>
       <p class="table-scroll-hint">欄位較多時，可左右滑動表格查看。</p>
@@ -1059,7 +1081,9 @@ function setAuth(token, username) {
 function clearAuth() {
   shoes = []; retiredShoes = []; monthlyMileages = [];
   monthlySpending = []; runs = []; stravaImports = [];
-  runningGoal = { start_year: 2026, monthly_km: 125, yearly_km: 1500 };
+  runningGoal = { version: 0, start_year: 2026, monthly_km: 125, yearly_km: 1500 };
+  operationHistory = [];
+  mileageHealth = { ok: true, shoes: [], months: [] };
   dataLoadGeneration += 1;
   authToken = null;
   currentUser = null;
@@ -1396,7 +1420,9 @@ let monthlyMileages = [];
 let monthlySpending = [];
 let runs = [];
 let stravaImports = [];
-let runningGoal = { start_year: 2026, monthly_km: 125, yearly_km: 1500 };
+let runningGoal = { version: 0, start_year: 2026, monthly_km: 125, yearly_km: 1500 };
+let operationHistory = [];
+let mileageHealth = { ok: true, shoes: [], months: [] };
 let stravaPreview = null;
 let stravaPreviewKey = '';
 let stravaPreviewRequestId = 0;
@@ -1441,7 +1467,7 @@ async function loadData() {
   const token = authToken;
   const error = document.getElementById('data-load-error');
   try {
-    const [active, retired, monthly, spending, runData, importHistory, goal] = await Promise.all([
+    const [active, retired, monthly, spending, runData, importHistory, goal, operations, health] = await Promise.all([
       apiGet('/shoes/active'),
       apiGet('/shoes/retired'),
       apiGet('/monthly-mileage'),
@@ -1452,6 +1478,8 @@ async function loadData() {
         return [];
       }),
       apiGet('/running-goal'),
+      apiGet('/operations'),
+      apiGet('/analytics/reconciliation'),
     ]);
     if (generation !== dataLoadGeneration || token !== authToken) return;
     error.hidden = true;
@@ -1462,6 +1490,8 @@ async function loadData() {
     runs = runData;
     stravaImports = importHistory;
     runningGoal = goal;
+    operationHistory = operations;
+    mileageHealth = health;
     if (typeof dashboardAnalyticsCache !== 'undefined') dashboardAnalyticsCache.clear();
   } catch (e) {
     console.error('載入資料失敗:', e);
@@ -1535,6 +1565,7 @@ function render() {
   renderMonthlyTable();
   populateRunShoeSelects();
   renderRunLog();
+  renderOperations();
   if (typeof Chart !== 'undefined') {
     renderCharts();
     renderMonthlyCharts();
@@ -2312,8 +2343,12 @@ function renderRunLog() {
 async function loadDashboardAnalytics(month) {
   const target = document.getElementById('dashboard-insights');
   if (!target || !authToken) return;
-  if (dashboardAnalyticsCache.has(month)) {
-    renderDashboardInsights(dashboardAnalyticsCache.get(month));
+  const cacheKey = `${localDateISO()}|${month}`;
+  for (const key of dashboardAnalyticsCache.keys()) {
+    if (!key.startsWith(`${localDateISO()}|`)) dashboardAnalyticsCache.delete(key);
+  }
+  if (dashboardAnalyticsCache.has(cacheKey)) {
+    renderDashboardInsights(dashboardAnalyticsCache.get(cacheKey));
     return;
   }
   const requestId = ++dashboardAnalyticsRequest;
@@ -2322,7 +2357,7 @@ async function loadDashboardAnalytics(month) {
     const [year, monthNumber] = month.split('-').map(Number);
     const data = await apiGet(`/analytics/dashboard?year=${year}&month=${monthNumber}`);
     if (requestId !== dashboardAnalyticsRequest || selectedRunMonth() !== month) return;
-    dashboardAnalyticsCache.set(month, data);
+    dashboardAnalyticsCache.set(cacheKey, data);
     renderDashboardInsights(data);
   } catch (error) {
     if (requestId !== dashboardAnalyticsRequest) return;
@@ -2333,15 +2368,61 @@ async function loadDashboardAnalytics(month) {
 function renderDashboardInsights(data) {
   const target = document.getElementById('dashboard-insights');
   const goal = data.goal || {};
-  const delta = Number(data.month_delta_km || 0);
+  const comparison = data.comparison || {};
+  const delta = Number(comparison.delta_km ?? data.month_delta_km ?? 0);
   const recent = data.recent_7_days || {};
   const cards = [
-    { label: '與上月比較', value: `${delta >= 0 ? '+' : ''}${delta.toFixed(2)} km`, sub: `上月 ${Number(data.previous_month.km || 0).toFixed(2)} km` },
-    { label: '近 7 天趨勢', value: `${Number(recent.km || 0).toFixed(2)} km`, sub: `較前 7 天 ${Number(recent.delta_km || 0) >= 0 ? '+' : ''}${Number(recent.delta_km || 0).toFixed(2)} km` },
+    { label: comparison.label || '與上月比較', value: comparison.label === '尚未開始' ? '—' : `${delta >= 0 ? '+' : ''}${delta.toFixed(2)} km`, sub: comparison.label === '尚未開始' ? '所選月份尚未開始' : `上月${comparison.through_day ? `前 ${comparison.through_day} 天` : ''} ${Number(comparison.previous_km ?? data.previous_month?.km ?? 0).toFixed(2)} km` },
+    { label: '近 7 天趨勢', value: recent.state === 'future' ? '—' : `${Number(recent.km || 0).toFixed(2)} km`, sub: recent.state === 'future' ? '所選月份尚未開始' : `較前 7 天 ${Number(recent.delta_km || 0) >= 0 ? '+' : ''}${Number(recent.delta_km || 0).toFixed(2)} km` },
     { label: '月目標', value: goal.active ? `${Number(goal.month_achievement_percent || 0).toFixed(1)}%` : '尚未啟用', sub: dashboardGoalSummary(goal) },
   ];
   const alerts = (data.alerts || []).map(alert => `<div class="insight-alert ${esc(alert.severity || '')}">${esc(alert.message)}</div>`).join('');
-  target.innerHTML = `<div class="insight-grid">${cards.map(card => `<div class="insight-card"><div class="insight-card-label">${card.label}</div><div class="insight-card-value">${card.value}</div><div class="insight-card-sub">${card.sub}</div></div>`).join('')}</div>${alerts ? `<div class="insight-alerts">${alerts}</div>` : ''}`;
+  const forecast = data.forecast || {};
+  const consistency = data.consistency || {};
+  const rhythm = consistency.run_streak_days
+    ? `連跑 ${consistency.run_streak_days} 天`
+    : consistency.rest_streak_days === null || consistency.rest_streak_days === undefined
+      ? '尚無跑步紀錄'
+      : `休息 ${consistency.rest_streak_days} 天`;
+  const loadText = consistency.load_status === 'increase' ? '近期跑量明顯增加' : consistency.load_status === 'decrease' ? '近期跑量明顯下降' : '近期變化平穩';
+  const regularityCards = [
+    { label: '月底預測', value: forecast.state === 'future' ? '尚未開始' : `${Number(forecast.projected_month_km || 0).toFixed(2)} km`, sub: forecast.required_weekly_km == null ? (forecast.state === 'past' ? '該月實際跑量' : '已達當月目標') : `達標每週還需 ${Number(forecast.required_weekly_km).toFixed(2)} km` },
+    { label: '近 4 週跑量', value: `${Number(consistency.rolling_4_week_km || 0).toFixed(2)} km`, sub: `平均每週 ${Number(consistency.average_weekly_km || 0).toFixed(2)} km` },
+    { label: '每週跑步天數', value: `${Number(consistency.average_running_days || 0).toFixed(1)} 天`, sub: '近 4 週平均' },
+    { label: '跑步節奏', value: rhythm, sub: loadText },
+  ];
+  const rotation = data.rotation || {};
+  const rotationRows = (rotation.shoes || []).map(shoe => `<div class="rotation-row"><strong>${esc(shoe.name)}</strong><span>30 天 ${Number(shoe.km_30 || 0).toFixed(1)} km／${Number(shoe.count_30 || 0)} 次</span><span>90 天 ${Number(shoe.share_90_percent || 0).toFixed(1)}%／${Number(shoe.count_90 || 0)} 次</span></div>`).join('');
+  const rotationNotes = [];
+  if (rotation.concentrated) rotationNotes.push('近 90 天里程過度集中在單一鞋款。');
+  if ((rotation.simultaneous_retirement || []).length >= 2) rotationNotes.push(`${rotation.simultaneous_retirement.length} 雙鞋已同時接近預期壽命。`);
+  if (rotation.next_category) rotationNotes.push(`下一雙可優先補 ${rotation.next_category} 用途。`);
+  if (!rotationNotes.length) rotationNotes.push('目前輪替與用途覆蓋沒有明顯缺口。');
+  target.innerHTML = `
+    <div class="insight-grid">${cards.map(card => `<div class="insight-card"><div class="insight-card-label">${card.label}</div><div class="insight-card-value">${card.value}</div><div class="insight-card-sub">${card.sub}</div></div>`).join('')}</div>
+    ${alerts ? `<div class="insight-alerts">${alerts}</div>` : ''}
+    <div class="analytics-block"><h3>月底預測與跑步規律</h3><div class="insight-grid">${regularityCards.map(card => `<div class="insight-card"><div class="insight-card-label">${card.label}</div><div class="insight-card-value">${card.value}</div><div class="insight-card-sub">${card.sub}</div></div>`).join('')}</div></div>
+    <div class="analytics-block"><h3>鞋款輪替建議</h3><div class="rotation-table">${rotationRows || '<div class="empty-state">近 90 天沒有可分析的現役鞋紀錄。</div>'}</div><div class="insight-alerts">${rotationNotes.map(note => `<div class="insight-alert">${esc(note)}</div>`).join('')}</div></div>
+    <div class="analytics-block"><h3>${Number(data.period?.year || 0)} 年活動熱圖</h3>${renderYearHeatmap(data.year_activity || [], Number(data.period?.year || 0))}</div>`;
+}
+
+function renderYearHeatmap(entries, year) {
+  const byDate = new Map(entries.map(item => [item.date, item]));
+  const maxKm = Math.max(1, ...entries.map(item => Number(item.km || 0)));
+  const rows = Array.from({ length: 12 }, (_, monthIndex) => {
+    const days = new Date(year, monthIndex + 1, 0).getDate();
+    const cells = Array.from({ length: 31 }, (_, dayIndex) => {
+      if (dayIndex + 1 > days) return '<span></span>';
+      const key = `${year}-${String(monthIndex + 1).padStart(2, '0')}-${String(dayIndex + 1).padStart(2, '0')}`;
+      const item = byDate.get(key);
+      const km = Number(item?.km || 0);
+      const alpha = km ? Math.min(.95, .22 + km / maxKm * .73) : 0;
+      const style = km ? `background:rgba(34,197,94,${alpha.toFixed(2)})` : '';
+      return `<span class="heatmap-cell" style="${style}" title="${esc(key)}：${km.toFixed(2)} km／${Number(item?.count || 0)} 次"></span>`;
+    }).join('');
+    return `<div class="heatmap-row"><span class="heatmap-month">${monthIndex + 1} 月</span>${cells}</div>`;
+  }).join('');
+  return `<div class="heatmap-scroll"><div class="heatmap">${rows}</div></div>`;
 }
 
 function dashboardGoalSummary(goal) {
@@ -2364,6 +2445,43 @@ function dashboardGoalSummary(goal) {
     parts.push(`每天需 ${Number(goal.required_daily_km).toFixed(2)} km`);
   }
   return parts.join(' · ');
+}
+
+function renderOperations() {
+  const historyTarget = document.getElementById('operation-history');
+  const healthTarget = document.getElementById('data-health-panel');
+  if (!historyTarget || !healthTarget) return;
+  historyTarget.innerHTML = operationHistory.length
+    ? operationHistory.map(item => {
+        const when = new Date(item.created_at).toLocaleString('zh-TW', { month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit' });
+        const state = item.undone_at ? '已復原' : item.can_undo ? '' : '已超過復原期限';
+        return `<div class="operation-item"><div>${esc(item.summary)}<small>${when}${state ? ` · ${state}` : ''}</small></div>${item.can_undo ? `<button class="btn btn-sm btn-edit" onclick="undoOperation(${item.id})">復原</button>` : ''}</div>`;
+      }).join('')
+    : '<div class="empty-state">目前沒有可顯示的操作。</div>';
+  const problemCount = (mileageHealth.shoes || []).filter(item => Math.abs(Number(item.difference_km || 0)) >= .01).length
+    + (mileageHealth.months || []).filter(item => item.missing_aggregate || Math.abs(Number(item.difference_km || 0)) >= .01 || Number(item.historical_adjustment_km || 0) < 0).length;
+  healthTarget.innerHTML = mileageHealth.ok
+    ? '<div class="insight-alert">鞋款與月跑量皆已正確對帳。</div>'
+    : `<div class="insight-alert warning">偵測到 ${problemCount} 筆里程不一致。</div><button class="btn btn-sm btn-primary" style="margin-top:10px" onclick="repairMileageData()">自動修復</button>`;
+}
+
+async function undoOperation(operationId) {
+  try {
+    await apiPost(`/operations/${operationId}/undo`, {});
+    await loadData();
+  } catch (error) {
+    alert(error.message || '復原失敗');
+  }
+}
+
+async function repairMileageData() {
+  if (!confirm('要依逐筆跑步日誌重新對帳鞋款與月跑量嗎？負數歷史調整會歸零。')) return;
+  try {
+    await apiPost('/analytics/reconciliation/repair', {});
+    await loadData();
+  } catch (error) {
+    alert(error.message || '修復失敗');
+  }
 }
 
 function renderStravaStatus() {
@@ -2835,7 +2953,7 @@ function renderGoalProgress() {
   const selectedRow = rows.find(item => item.month === selectedGoalMonth);
   const monthKm = selectedRow ? selectedRow.km : 0;
   const monthPct = monthKm / runningGoal.monthly_km * 100;
-  const yearKm = rows.reduce((sum, item) => sum + item.km, 0);
+  const yearKm = rows.filter(item => item.month <= selectedGoalMonth).reduce((sum, item) => sum + item.km, 0);
   const yearPct = yearKm / runningGoal.yearly_km * 100;
   const daysInMonth = new Date(year, selectedGoalMonth, 0).getDate();
   const selectedKey = year * 100 + selectedGoalMonth;
@@ -2865,7 +2983,7 @@ function renderGoalProgress() {
       <div class="goal-progress"><span style="width:${Math.min(100, monthPct)}%"></span></div>
     </div>
     <div class="card">
-      <div class="card-label">${year} 年度目標</div>
+      <div class="card-label">${year} 年截至 ${selectedGoalMonth} 月年度進度</div>
       <div class="card-value">${yearKm.toFixed(2)} / ${Number(runningGoal.yearly_km).toFixed(0)} km</div>
       <div class="card-sub">達成 ${yearPct.toFixed(1)}% · 尚差 ${Math.max(0, runningGoal.yearly_km - yearKm).toFixed(2)} km</div>
       <div class="goal-progress"><span style="width:${Math.min(100, yearPct)}%"></span></div>
@@ -2880,6 +2998,7 @@ function onGoalMonthChange() {
 async function saveRunningGoal() {
   const status = document.getElementById('goal-settings-status');
   const payload = {
+    expected_version: Number(runningGoal.version || 0),
     start_year: Number(document.getElementById('goal-start-year').value),
     monthly_km: Number(document.getElementById('goal-monthly-km').value),
   };
@@ -2889,6 +3008,7 @@ async function saveRunningGoal() {
   }
   try {
     runningGoal = await apiPut('/running-goal', payload);
+    dashboardAnalyticsCache.clear();
     status.textContent = '目標已儲存。';
     populateYearSelect();
     renderGoalProgress();

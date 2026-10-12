@@ -118,6 +118,46 @@ def test_dashboard_hides_soft_deleted_shoe_names_but_keeps_run_totals(
     }]
 
 
+def test_dashboard_uses_same_period_comparison_and_future_month_is_empty(
+    db, user_with_token
+):
+    user, _token = user_with_token
+    shoe = Shoe(user_id=user.id, brand="A", model="One", date="2026-01-01")
+    db.add(shoe)
+    db.flush()
+    db.add_all([
+        Run(user_id=user.id, shoe_id=shoe.id, date="2026-09-01", km=5),
+        Run(user_id=user.id, shoe_id=shoe.id, date="2026-09-12", km=7),
+        Run(user_id=user.id, shoe_id=shoe.id, date="2026-09-20", km=50),
+        Run(user_id=user.id, shoe_id=shoe.id, date="2026-10-01", km=10),
+        Run(user_id=user.id, shoe_id=shoe.id, date="2026-10-12", km=10),
+        MonthlyMileage(user_id=user.id, year=2026, month=10, km=20),
+    ])
+    db.commit()
+
+    current = analytics.dashboard_analytics(
+        db, user.id, 2026, 10, today=date(2026, 10, 12)
+    )
+    future = analytics.dashboard_analytics(
+        db, user.id, 2026, 11, today=date(2026, 10, 12)
+    )
+
+    assert current["comparison"] == {
+        "label": "較上月同期",
+        "through_day": 12,
+        "current_km": 20.0,
+        "previous_km": 12.0,
+        "delta_km": 8.0,
+    }
+    assert current["forecast"]["projected_month_km"] == 51.67
+    assert current["consistency"]["rolling_4_week_km"] == 70.0
+    assert len(current["year_activity"]) == 5
+    assert future["comparison"]["label"] == "尚未開始"
+    assert future["recent_7_days"]["state"] == "future"
+    assert future["recent_7_days"]["km"] == 0
+    assert future["forecast"]["state"] == "future"
+
+
 def test_manual_totals_become_explicit_adjustments_and_backup_is_private(
     client, db, user_with_token
 ):
