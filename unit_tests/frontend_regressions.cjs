@@ -329,3 +329,25 @@ test('running goals are loaded, editable, and rendered as monthly and yearly pro
   assert.match(renderGoalProgress, /超前/);
   assert.match(renderGoalProgress, /落後/);
 });
+
+test('dashboard monthly goal shows whether current progress is ahead or behind', () => {
+  const context = vm.createContext({});
+  vm.runInContext(extract('dashboardGoalSummary'), context);
+  assert.equal(
+    context.dashboardGoalSummary({ active: true, month_state: 'current',
+      pace_delta_km: 3, remaining_days: 19, required_daily_km: 3.87 }),
+    '超前 3.00 km · 剩 19 天 · 每天需 3.87 km',
+  );
+  assert.equal(
+    context.dashboardGoalSummary({ active: true, month_state: 'current',
+      pace_delta_km: -8.25, remaining_days: 12, required_daily_km: 5.5 }),
+    '落後 8.25 km · 剩 12 天 · 每天需 5.50 km',
+  );
+  assert.equal(
+    context.dashboardGoalSummary({ active: true, month_state: 'past',
+      month_remaining_km: 10 }),
+    '月底結算，未達目標 10.00 km',
+  );
+  const insights = extract('renderDashboardInsights');
+  assert.match(insights, /dashboardGoalSummary\(goal\)/);
+});

@@ -2338,10 +2338,32 @@ function renderDashboardInsights(data) {
   const cards = [
     { label: '與上月比較', value: `${delta >= 0 ? '+' : ''}${delta.toFixed(2)} km`, sub: `上月 ${Number(data.previous_month.km || 0).toFixed(2)} km` },
     { label: '近 7 天趨勢', value: `${Number(recent.km || 0).toFixed(2)} km`, sub: `較前 7 天 ${Number(recent.delta_km || 0) >= 0 ? '+' : ''}${Number(recent.delta_km || 0).toFixed(2)} km` },
-    { label: '月目標', value: goal.active ? `${Number(goal.month_achievement_percent || 0).toFixed(1)}%` : '尚未啟用', sub: goal.active ? `還差 ${Number(goal.month_remaining_km || 0).toFixed(2)} km` : `從 ${goal.start_year || '—'} 年開始` },
+    { label: '月目標', value: goal.active ? `${Number(goal.month_achievement_percent || 0).toFixed(1)}%` : '尚未啟用', sub: dashboardGoalSummary(goal) },
   ];
   const alerts = (data.alerts || []).map(alert => `<div class="insight-alert ${esc(alert.severity || '')}">${esc(alert.message)}</div>`).join('');
   target.innerHTML = `<div class="insight-grid">${cards.map(card => `<div class="insight-card"><div class="insight-card-label">${card.label}</div><div class="insight-card-value">${card.value}</div><div class="insight-card-sub">${card.sub}</div></div>`).join('')}</div>${alerts ? `<div class="insight-alerts">${alerts}</div>` : ''}`;
+}
+
+function dashboardGoalSummary(goal) {
+  if (!goal.active) return `從 ${goal.start_year || '—'} 年開始`;
+  if (goal.month_state === 'future') return '尚未開始';
+  if (goal.month_state === 'past') {
+    const remainingKm = Number(goal.month_remaining_km || 0);
+    if (remainingKm > 0) return `月底結算，未達目標 ${remainingKm.toFixed(2)} km`;
+    const overKm = Math.max(0, Number(goal.month_km || 0) - Number(goal.monthly_km || 0));
+    return `已達成目標，超過 ${overKm.toFixed(2)} km`;
+  }
+  if (goal.month_state === 'before_goal') return `從 ${goal.start_year || '—'} 年開始`;
+
+  const paceDelta = Number(goal.pace_delta_km || 0);
+  const parts = [
+    `${paceDelta >= 0 ? '超前' : '落後'} ${Math.abs(paceDelta).toFixed(2)} km`,
+    `剩 ${Number(goal.remaining_days || 0)} 天`,
+  ];
+  if (goal.required_daily_km !== null && goal.required_daily_km !== undefined) {
+    parts.push(`每天需 ${Number(goal.required_daily_km).toFixed(2)} km`);
+  }
+  return parts.join(' · ');
 }
 
 function renderStravaStatus() {
