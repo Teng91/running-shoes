@@ -299,17 +299,6 @@ class RunningGoalOut(RunningGoalUpdate):
     yearly_km: float
 
 
-class OperationHistoryOut(BaseModel):
-    id: int
-    action_type: str
-    target_type: str
-    target_id: int | None
-    summary: str
-    created_at: datetime
-    undone_at: datetime | None
-    can_undo: bool
-
-
 # ── Run Log Schemas ────────────────────────────────────
 
 class RunBase(BaseModel):

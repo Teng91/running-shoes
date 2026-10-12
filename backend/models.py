@@ -34,9 +34,6 @@ class User(Base):
     running_goal: Mapped["RunningGoal | None"] = relationship(back_populates="owner")
     runs: Mapped[list["Run"]] = relationship(back_populates="owner")
     strava_imports: Mapped[list["StravaImport"]] = relationship(back_populates="owner")
-    operation_history: Mapped[list["OperationHistory"]] = relationship(
-        back_populates="owner"
-    )
 
 
 class RateLimitBucket(Base):
@@ -181,27 +178,3 @@ class StravaImport(Base):
     invalid_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
     owner: Mapped["User"] = relationship(back_populates="strava_imports")
-
-
-class OperationHistory(Base):
-    """A short-lived, user-scoped audit trail for reversible destructive edits."""
-
-    __tablename__ = "operation_history"
-    __table_args__ = (
-        Index("idx_operation_history_user_time", "user_id", "created_at"),
-    )
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    user_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("users.id"), nullable=False
-    )
-    action_type: Mapped[str] = mapped_column(String(40), nullable=False)
-    target_type: Mapped[str] = mapped_column(String(40), nullable=False)
-    target_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    payload_json: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(UTC), nullable=False
-    )
-    undone_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-
-    owner: Mapped["User"] = relationship(back_populates="operation_history")
