@@ -54,7 +54,6 @@ def test_shoe_analytics_combines_history_runs_training_and_cost(db, user_with_to
     assert result is not None
     assert result["lifecycle"]["logged_mileage_km"] == 30
     assert result["lifecycle"]["historical_adjustment_km"] == 100
-    assert result["lifecycle"]["reconciliation_difference_km"] == 0
     assert result["usage"]["count"] == 2
     assert "average_run_km" not in result["usage"]
     assert "average_pace_seconds_per_km" not in result["usage"]
@@ -62,14 +61,13 @@ def test_shoe_analytics_combines_history_runs_training_and_cost(db, user_with_to
     assert result["usage"]["cost_per_wear"] == 300
 
 
-def test_dashboard_flags_rotation_and_reports_goal_progress(db, user_with_token):
+def test_dashboard_reports_lifecycle_alert_and_goal_progress(db, user_with_token):
     user, _token = user_with_token
     primary = Shoe(
         user_id=user.id, brand="A", model="Primary", date="2026-01-01",
         mileage=90, baseline_mileage=60, expected_mileage=100,
     )
-    backup = Shoe(user_id=user.id, brand="B", model="Backup", date="2026-01-01")
-    db.add_all([primary, backup])
+    db.add(primary)
     db.flush()
     db.add_all([
         Run(user_id=user.id, shoe_id=primary.id, date="2026-10-01", km=10),
@@ -88,7 +86,8 @@ def test_dashboard_flags_rotation_and_reports_goal_progress(db, user_with_token)
     assert result["month"]["km"] == 30
     assert result["shoe_usage"][0]["share_percent"] == 100
     assert result["goal"]["month_achievement_percent"] == 24
-    assert {alert["type"] for alert in result["alerts"]} == {"lifecycle", "rotation"}
+    assert {alert["type"] for alert in result["alerts"]} == {"lifecycle"}
+    assert "rotation" not in result
 
 
 def test_dashboard_hides_soft_deleted_shoe_names_but_keeps_run_totals(
@@ -150,8 +149,9 @@ def test_dashboard_uses_same_period_comparison_and_future_month_is_empty(
         "delta_km": 8.0,
     }
     assert current["forecast"]["projected_month_km"] == 51.67
-    assert current["consistency"]["rolling_4_week_km"] == 70.0
-    assert len(current["year_activity"]) == 5
+    assert "consistency" not in current
+    assert "year_activity" not in current
+    assert "rotation" not in current
     assert future["comparison"]["label"] == "尚未開始"
     assert future["recent_7_days"]["state"] == "future"
     assert future["recent_7_days"]["km"] == 0
