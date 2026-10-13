@@ -69,8 +69,10 @@ running-shoes/
 ├── AGENTS.md             # Coding Agent 專案規則與完成條件
 ├── CLAUDE.md             # 讓 Claude Code 匯入共用的 AGENTS.md
 ├── pyproject.toml        # pytest、Ruff 與 mypy 設定
-├── requirements.txt      # Python 依賴
-├── requirements-dev.txt  # 測試、coverage、lint 與型別檢查依賴
+├── requirements.in       # 正式環境直接依賴與核准版本
+├── requirements.txt      # 含雜湊的完整正式環境鎖定檔
+├── requirements-dev.in   # 測試、lint、型別與安全掃描直接依賴
+├── requirements-dev.txt  # 含雜湊的完整開發／CI 鎖定檔
 ├── Dockerfile            # Docker 部署用
 ├── fly.toml              # Fly.io 部署設定
 └── .gitignore
@@ -87,7 +89,7 @@ cd running-shoes
 python3 -m venv venv
 
 # 3. 使用虛擬環境安裝開發依賴（包含正式執行、測試與程式碼檢查套件）
-venv/bin/python -m pip install -r requirements-dev.txt
+venv/bin/python -m pip install --require-hashes -r requirements-dev.txt
 
 # 4. 使用虛擬環境啟動伺服器
 venv/bin/python -m backend.run
@@ -99,19 +101,19 @@ open http://localhost:8000
 建議直接使用 `venv/bin/python`，因為指令本身就明確指定虛擬環境，不會因為換了
 Terminal、忘記 activate，或 IDE 使用另一個 shell 而誤用系統 Python。
 
-專案保留兩份依賴清單是刻意的：
+專案將直接依賴與可安裝鎖定檔分開：
 
-- `requirements.txt`：正式執行需要的套件，Docker／Fly.io 部署使用這份。
-- `requirements-dev.txt`：先引用 `requirements.txt`，再加入 pytest、coverage、Ruff、mypy 與型別 stub，供本機開發及 CI 使用。
+- `requirements.in`／`requirements-dev.in`：人工維護的直接依賴與核准版本。
+- `requirements.txt`／`requirements-dev.txt`：完整鎖定所有間接依賴並附下載雜湊；Docker、Fly.io 與 CI 都使用 `--require-hashes` 安裝，避免不同時間解析出不同套件。
 
 如果只想執行服務、不需要跑測試或程式碼檢查，也可以只安裝
-`requirements.txt`。
+`requirements.txt`。更新 `.in` 後，使用 `pip-tools` 重新編譯兩份鎖定檔，不要直接手改鎖定內容。
 
 若偏好先啟用虛擬環境，也可以使用以下等效方式：
 
 ```bash
 source venv/bin/activate
-python -m pip install -r requirements-dev.txt
+python -m pip install --require-hashes -r requirements-dev.txt
 python -m backend.run
 
 # 使用完畢可離開虛擬環境
@@ -167,15 +169,15 @@ LLM_MAX_OUTPUT_TOKENS=4096
 - **智慧試算**：自動計算每 km／每次穿著成本、折數、生命進度，並依近 90 天實際使用預估退役日期
 - **圖表視覺化**：生命進度條、每 km 成本比較、退役時間軸、月跑量佔比（圓餅圖直接標示公里數與百分比，Chart.js）
 - **亮色 / 暗色主題切換**：右上角一鍵切換，全域 UI 元素與所有 Chart.js 圖表（網格線、刻度文字、數據標籤）皆自動對應色調，偏好透過 `localStorage` 自動記憶
-- **安全的里程統計**：跑鞋與月跑量都明確區分「逐筆跑步日誌」與「歷史／手動調整」，手動總數不能低於日誌合計
-- **跑步日誌**：預設首頁，可記錄日期、公里數與鞋款，並同步里程
+- **安全的里程統計**：跑鞋與月跑量都明確區分「逐筆跑步日誌」與「歷史／手動調整」，手動總數不能低於日誌合計；所有新輸入的里程與金額統一保存至小數點後兩位
+- **跑步日誌**：預設首頁，可記錄日期、公里數與鞋款並同步里程；完成日期不得晚於今天
 - **跑步洞察首頁**：當月會以相同天數比較上月同期，並顯示近 7 天趨勢、月目標、月底里程預測及鞋款壽命提醒
 - **單鞋分析**：可檢視穿著次數、30／90 天里程、最後使用日期、壽命進度、預估退役、近 12 月趨勢與最近跑步
 - **Strava 歷史匯入**：從 Strava 匯出的 `activities.csv` 預覽並批次匯入跑步活動，依活動 ID 去重，支援匯入前逐鞋款配對
 - **資料匯出與備份**：跑鞋可匯出 **XLSX / CSV**，並可下載不含密碼或 token 的完整 JSON 帳號備份（跑鞋、日誌、月跑量、目標、月報與 Strava 匯入摘要）
 - **AI 跑鞋推薦助手**：依你的實際資料給換鞋與選鞋建議（需設定 OpenRouter API Key），可從本日熱門、免費且支援工具呼叫的模型中選擇
 - **AI 月度跑步報告**：可自行選擇本日免費模型，一鍵產生指定月份的跑步報告（跑量趨勢、鞋款狀態、退役提醒與下月建議），報告自動保存、可隨時回看，不需重打 LLM
-- **個人跑量目標**：預設自 2026 年起每月 125 km，年度目標自動以月目標 × 12 計算；可切換月份查看達成率與「截至所選月份」年度進度，當月會依已過／剩餘天數顯示進度超前或落後，AI 月報會同步解讀目標進度
+- **個人跑量目標**：預設自 2026 年起每月 125 km，年度目標自動以月目標 × 12 計算；目標、首頁與 AI 月報統一以逐筆跑步日誌計算，可切換月份查看達成率與「截至所選月份」年度進度
 - **多使用者隔離**：每人資料完全獨立，支援註冊/登入/改密碼
 
 ## 跑步日誌
@@ -194,7 +196,7 @@ LLM_MAX_OUTPUT_TOKENS=4096
 - 每筆紀錄的來源標籤（手動或 Strava）
 - 當月截至今天與上月同期、前 7 天的趨勢比較，以及月目標與鞋款壽命提醒；已結束月份維持整月比較，未來月份不會混入前一月資料
 - 依目前節奏預測月底總里程，並顯示達標所需的每日里程
-- 每雙鞋的日誌里程、歷史／手動調整及可驗證的里程合計
+- 每雙鞋在所選月份的里程、穿著次數及占比
 
 跑步紀錄儲存在 SQLite `runs` 資料表，每筆資料都會綁定帳號與該帳號擁有的鞋款。後端會驗證鞋款擁有權，並啟用 SQLite 外鍵約束，避免無效或跨帳號的鞋款關聯。編輯時會檢查紀錄版本；同一筆紀錄若已在其他分頁被修改，較舊的畫面會收到衝突提示，避免重複套用里程差額。刪除已有跑步紀錄的鞋款時，鞋款會從鞋櫃與未來選項中移除，但歷史跑步紀錄與月跑量仍會保留。每個帳號預設最多儲存 5,000 筆跑步紀錄，可用 `MAX_RUNS_PER_USER` 調整。
 
@@ -257,7 +259,7 @@ Strava 匯入後會自動同步跑鞋總里程與對應月份的月跑量，只�
 
 登入後，前端下拉選單會先依當日 token 使用量排列所有模型、取前 50 名，再顯示其中免費且
 支援工具呼叫的模型；點擊 🔄 可強制刷新。清單不會補入前 50 名以外的免費模型，也不使用固定
-過期名單；未設定 API Key 或當日清單暫時無法取得時不會假裝提供舊模型。所有模型都必須支援
+過期名單；更新失敗時最多短暫沿用一小時內曾驗證過的免費清單，超過後會停止 AI 呼叫，避免舊模型轉為付費仍被使用。所有模型都必須支援
 OpenRouter 的 `tools` 參數。
 
 後端會再次驗證請求模型必須位於目前的免費工具模型清單，前端傳入任意模型 ID
@@ -267,10 +269,10 @@ history 筆數與整段對話總字數，並套用每帳號、每 IP 與全站�
 
 ## AI 月度跑步報告
 
-「月報」分頁可為指定月份一鍵產生 AI 訓練報告，固定包含一句話摘要、關鍵指標表格，以及「本月總覽、趨勢解讀、鞋款輪替與退役提醒、下月建議」四個章節。產生期間會逐步套用 Markdown 文件排版，不必等串流結束才看到格式化結果。
+「月報」分頁可為指定月份一鍵產生 AI 訓練報告，固定包含一句話摘要、關鍵指標表格，以及「本月總覽、趨勢解讀、鞋款壽命與退役提醒、下月建議」四個章節。產生期間會逐步套用 Markdown 文件排版，不必等串流結束才看到格式化結果。
 
-- 統計數字全部由後端計算：當月里程、跑步次數與跑步天數、逐鞋里程與主力鞋、上月差額、年度累計、整體月跑量趨勢、接近壽命的鞋款及用途覆蓋缺口
-- 自目標開始年份起，月報會加入當月與年度目標達成率、剩餘里程；目標進度以月跑量紀錄為準
+- 統計數字全部由後端計算：當月里程、跑步次數與跑步天數、逐鞋里程與主力鞋、上月差額、年度累計、整體月跑量趨勢及接近壽命的鞋款；不產生輪替或購鞋建議
+- 本月報告比較上月同期，已結束月份比較完整月份；目標達成率與首頁統一以逐筆跑步日誌為準
 - 產生過程以 SSE 串流顯示；模型只負責把後端算好的數字寫成文字，不得自行計算或杜撰
 - 報告成功產生後存入資料庫（一人一月一版），同月重新產生會覆蓋舊版；之後從「歷史報告」或月份選擇器讀取，不會重打 LLM
 - 月報提供獨立的「本日免費模型」選單，選項與 AI 助手共用同一份後端核准清單，但不會偷偷沿用 AI 助手分頁目前選取的模型
@@ -292,7 +294,7 @@ Unix `venv/bin/python` 或系統 Python。從 PowerShell／`pwsh` 執行：
 # 安裝開發依賴
 ./scripts/task.ps1 setup
 
-# 完整檢查：Ruff、mypy、pytest、前端 Node 回歸測試
+# 完整檢查：Ruff、mypy、依賴漏洞掃描、pytest、前端 Node 回歸測試
 ./scripts/task.ps1 verify
 
 # 一次跑完 verify 與 frontend-layout（缺 Playwright 時會警告並跳過版面檢查）
@@ -301,6 +303,9 @@ Unix `venv/bin/python` 或系統 Python。從 PowerShell／`pwsh` 執行：
 # 日常後端檢查，或只執行 Agent 行為 eval
 ./scripts/task.ps1 test-fast
 ./scripts/task.ps1 eval-agent
+
+# 只掃描鎖定的正式環境依賴是否有已知漏洞
+./scripts/task.ps1 audit-deps
 
 # 核對 README 與實際測試數、工具數、版面矩陣及 harness 路徑
 ./scripts/task.ps1 docs-check
@@ -339,14 +344,14 @@ Playwright／Chromium／WebKit 齊全時，也會執行版面測試。
 
 驗證失敗會把指令輸出送回 Claude 繼續修正。同一個 session 的同一份 diff 會重用本機快取，
 避免每次停止都重跑。Hook 不會呼叫其他模型、外部 API，或傳送提示、diff、原始碼與測試輸出。
-GitHub Actions 仍會在 push／pull request 執行 `verify`，作為不依賴任何特定 Coding Agent 的共同關卡。
+GitHub Actions 仍會在 push／pull request 執行 `verify`，並在獨立工作中安裝 Chromium／WebKit、跑完完整版面矩陣；Dependabot 每週檢查 Python 與 GitHub Actions 更新。
 
-本次驗證基線為 Python **322 passed**、前端回歸測試 **31 passed**；測試數量會隨功能與修正持續增加，實際結果以 `./scripts/task.ps1 verify` 與 CI 當次輸出為準。
+本次驗證基線為 Python **329 passed**、前端回歸測試 **32 passed**；測試數量會隨功能與修正持續增加，實際結果以 `./scripts/task.ps1 verify` 與 CI 當次輸出為準。
 版面檢查涵蓋 WebKit／Chromium、亮／暗模式與 7 組直橫向尺寸，共 28 組設定，檢查五個分頁、表單、圖表、彈窗及空資料狀態。
 
 `docs-check` 會從 pytest collection、前端測試檔、Agent tool registry、Playwright 測試矩陣與實際檔案系統核對上述數字及 harness 路徑。新增測試、工具或版面設定卻忘記同步 README 時，`verify` 和 GitHub Actions 會直接失敗。
 
-鞋款、跑步日誌、月跑量與跑量目標的更新都會使用版本檢查，舊畫面遇到衝突時請重新載入後再操作。跑步日誌造成的鞋款與月跑量增減會在同一交易中處理；同月份彙總、首次建立目標及月報保存皆使用 SQLite 原子 upsert，避免同時寫入發生 500 或遺失更新。已有逐筆日誌的月份不能直接改年月，必須先調整日誌日期；純手動月份仍可移動。改密碼後既有登入會失效，需重新登入。
+鞋款、跑步日誌、月跑量與跑量目標的更新都會使用版本檢查，舊畫面遇到衝突時請重新載入後再操作。跑步日誌造成的鞋款與月跑量增減會在同一交易中處理；同月份彙總、首次建立目標及月報保存皆使用 SQLite 原子 upsert，避免同時寫入發生 500 或遺失更新。SQLite 連線啟用 foreign keys、30 秒 busy timeout 與 WAL，降低讀取分析和一般寫入互相鎖住的機率。已有逐筆日誌的月份不能直接改年月，必須先調整日誌日期；純手動月份仍可移動。改密碼後既有登入會失效，需重新登入。
 啟動時會自動為既有資料庫補上鞋款、跑步日誌、月跑量、跑量目標與登入版本欄位，並依當前顯示總里程建立歷史調整基準；升級前後的顯示總里程不會改變。
 
 現役與退役鞋皆只使用 Daily、Speed、Tempo、Race 四種用途分類。啟動時會移除既有資料中的 Trail、Walk 與舊 Other 標記，保留其他類別、里程及退役狀態；清理後沒有用途的鞋會顯示「未分類」，不會自動改成 Daily。清理會更新受影響鞋款的版本，重複啟動不會再次修改已清理資料。
@@ -429,8 +434,8 @@ git push (local) ──→ GitHub ──→ fly deploy ──→ Fly.io Builder
                                                     │
                                          ┌──────────┴──────────┐
                                          │                     │
-                              requirements.txt            COPY backend/
-                              pip install                 COPY frontend/
+                         requirements.txt（鎖版+雜湊）     COPY backend/
+                         pip --require-hashes             COPY frontend/
                                          │                     │
                                          └──────────┬──────────┘
                                                     │

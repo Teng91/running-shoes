@@ -144,6 +144,27 @@ def test_build_report_stats_handles_month_without_runs(db):
     assert stats["ytd_run_km"] == 0.0
 
 
+def test_current_month_report_compares_the_same_period(db):
+    user = User(username="sameperiod", hashed_password=get_password_hash("pass1234"))
+    db.add(user)
+    db.commit()
+    shoe = _add_shoe(db, user.id)
+    _add_run(db, user.id, shoe.id, "2026-09-05", 40)
+    _add_run(db, user.id, shoe.id, "2026-09-20", 60)
+    _add_run(db, user.id, shoe.id, "2026-10-05", 50)
+    _add_run(db, user.id, shoe.id, "2026-10-20", 100)
+
+    stats = reports.build_report_stats(
+        db, user.id, 2026, 10, today=date(2026, 10, 13)
+    )
+
+    assert stats["month_run_stats"]["month_km"] == 50
+    assert stats["prev_month_run_km"] == 40
+    assert stats["prev_month_delta_km"] == 10
+    assert stats["comparison_label"] == "較上月同期"
+    assert stats["comparison_through_day"] == 13
+
+
 def test_build_report_messages_only_provides_backend_numbers(db):
     user = User(username="msguser", hashed_password=get_password_hash("pass1234"))
     db.add(user)
@@ -161,6 +182,8 @@ def test_build_report_messages_only_provides_backend_numbers(db):
     assert "本月一句話摘要" in messages[0]["content"]
     assert "markdown 表格" in messages[0]["content"]
     assert "二級標題（##）" in messages[0]["content"]
+    assert "鞋款輪替" not in messages[0]["content"]
+    assert "鞋款壽命與退役提醒" in messages[0]["content"]
     serialized = json.dumps(stats, ensure_ascii=False)
     assert '"month_km"' in serialized and "10.0" in serialized
 
