@@ -1061,6 +1061,18 @@ function clearAuth() {
   monthlySpending = []; runs = []; stravaImports = [];
   runningGoal = { version: 0, start_year: 2026, monthly_km: 125, yearly_km: 1500 };
   dataLoadGeneration += 1;
+  reportLoadRequestId += 1;
+  reportLoadController?.abort();
+  reportLoadController = null;
+  reportGenerationRequestId += 1;
+  reportGenerationController?.abort();
+  reportGenerationController = null;
+  setReportControlsDisabled(false);
+  const reportButton = document.getElementById('generate-report-btn');
+  if (reportButton) {
+    reportButton.disabled = false;
+    reportButton.textContent = '產生報告';
+  }
   authToken = null;
   currentUser = null;
   localStorage.removeItem('token');
@@ -1406,6 +1418,10 @@ let selectedGoalMonth = null;
 let selectedSpendingYear = null;
 let dashboardAnalyticsCache = new Map();
 let dashboardAnalyticsRequest = 0;
+let reportLoadRequestId = 0;
+let reportLoadController = null;
+let reportGenerationRequestId = 0;
+let reportGenerationController = null;
 let currentTheme = localStorage.getItem('theme') || 'dark';
 
 function applyTheme(theme) {
@@ -2054,6 +2070,10 @@ async function addRun() {
     error.textContent = '請填寫日期、正確里程與鞋款。';
     return;
   }
+  if (date > localDateISO()) {
+    error.textContent = '跑步日期不可晚於今天。';
+    return;
+  }
   try {
     runSaving = true;
     document.getElementById('add-run-btn').disabled = true;
@@ -2104,6 +2124,11 @@ async function saveRun() {
   };
   if (!payload.date || !Number.isFinite(payload.km) || payload.km <= 0 || !payload.shoe_id) {
     error.textContent = '請完整填寫紀錄。';
+    error.style.display = 'block';
+    return;
+  }
+  if (payload.date > localDateISO()) {
+    error.textContent = '跑步日期不可晚於今天。';
     error.style.display = 'block';
     return;
   }
@@ -4042,12 +4067,21 @@ function onReportHistoryChange() {
 async function loadSavedReport() {
   const parts = reportMonthParts();
   if (!parts) return;
+  const requestedMonth = selectedReportMonth();
+  const requestId = ++reportLoadRequestId;
+  reportLoadController?.abort();
+  const controller = new AbortController();
+  reportLoadController = controller;
   setReportStatus('');
   const content = document.getElementById('report-content');
-  document.getElementById('report-title').textContent = '報告內容 — ' + reportMonthLabel(selectedReportMonth());
+  document.getElementById('report-title').textContent = '報告內容 — ' + reportMonthLabel(requestedMonth);
   content.textContent = '載入中…';
   try {
-    const res = await fetch(API_BASE + '/reports/' + parts[0] + '/' + parts[1], { headers: authHeaders() });
+    const res = await fetch(API_BASE + '/reports/' + parts[0] + '/' + parts[1], {
+      headers: authHeaders(),
+      signal: controller.signal,
+    });
+    if (requestId !== reportLoadRequestId || selectedReportMonth() !== requestedMonth) return;
     if (res.status === 404) {
       content.textContent = '此月份尚無報告，按「產生報告」由 AI 生成。';
       return;
@@ -4062,12 +4096,24 @@ async function loadSavedReport() {
       setReportStatus('讀取報告失敗（HTTP ' + res.status + '）');
       return;
     }
-    renderReport(await res.json());
+    const report = await res.json();
+    if (requestId !== reportLoadRequestId || selectedReportMonth() !== requestedMonth) return;
+    renderReport(report);
   } catch (e) {
+    if (e.name === 'AbortError' || requestId !== reportLoadRequestId) return;
     console.error('讀取報告失敗:', e);
     content.textContent = '尚未選擇報告。';
     setReportStatus('連線失敗，請確認後端服務已啟動。');
+  } finally {
+    if (requestId === reportLoadRequestId) reportLoadController = null;
   }
+}
+
+function setReportControlsDisabled(disabled) {
+  ['report-month', 'report-history', 'report-model'].forEach(id => {
+    const element = document.getElementById(id);
+    if (element) element.disabled = disabled;
+  });
 }
 
 async function generateReport() {
@@ -4083,10 +4129,18 @@ async function generateReport() {
   }
   const btn = document.getElementById('generate-report-btn');
   const content = document.getElementById('report-content');
+  const requestedMonth = selectedReportMonth();
+  const requestId = ++reportGenerationRequestId;
+  reportLoadRequestId += 1;
+  reportLoadController?.abort();
+  reportLoadController = null;
+  const controller = new AbortController();
+  reportGenerationController = controller;
   btn.disabled = true;
   btn.textContent = '產生中...';
+  setReportControlsDisabled(true);
   setReportStatus('');
-  document.getElementById('report-title').textContent = '報告內容 — ' + reportMonthLabel(selectedReportMonth());
+  document.getElementById('report-title').textContent = '報告內容 — ' + reportMonthLabel(requestedMonth);
   let fullText = '';
   let receivedDone = false;
   let receivedError = false;
@@ -4113,7 +4167,9 @@ async function generateReport() {
         month: parts[1],
         model: reportModel,
       }),
+      signal: controller.signal,
     });
+    if (requestId !== reportGenerationRequestId) return;
     if (res.status === 401) {
       clearAuth();
       showLoginView();
@@ -4141,6 +4197,7 @@ async function generateReport() {
     let buffer = '';
 
     const handleSseLine = (line) => {
+      if (requestId !== reportGenerationRequestId) return;
       if (!line.startsWith('data: ')) return;
       const data = line.slice(6).trim();
       if (!data) return;
@@ -4188,22 +4245,31 @@ async function generateReport() {
     }
     await loadReportHistory();
   } catch (e) {
+    if (e.name === 'AbortError' || requestId !== reportGenerationRequestId) return;
     const message = e instanceof TypeError
       ? '連線失敗，請確認後端服務已啟動。'
       : (e.message || '報告請求失敗，請稍後再試。');
     content.textContent = '⚠️ ' + message;
     console.error('報告請求失敗:', e);
   } finally {
+    if (requestId !== reportGenerationRequestId) return;
+    reportGenerationController = null;
     content.classList.remove('is-streaming');
     btn.disabled = false;
     btn.textContent = '產生報告';
+    setReportControlsDisabled(false);
   }
 }
 
 // Check stored token on load
 async function init() {
   populateAddSelects();
-  document.getElementById('run-date').value = localDateISO();
+  const today = localDateISO();
+  document.getElementById('run-date').value = today;
+  document.getElementById('run-date').max = today;
+  document.getElementById('edit-run-date').max = today;
+  document.getElementById('strava-start-date').max = today;
+  document.getElementById('strava-end-date').max = today;
   document.getElementById('run-month').value = localDateISO().slice(0, 7);
   document.getElementById('report-month').value = previousMonthValue();
   if (authToken) {

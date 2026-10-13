@@ -75,7 +75,7 @@ def test_dashboard_reports_lifecycle_alert_and_goal_progress(db, user_with_token
         Run(user_id=user.id, shoe_id=primary.id, date="2026-10-03", km=10),
     ])
     db.add(MonthlyMileage(
-        user_id=user.id, year=2026, month=10, km=30, adjustment_km=0,
+        user_id=user.id, year=2026, month=10, km=130, adjustment_km=100,
     ))
     db.commit()
 
@@ -86,6 +86,7 @@ def test_dashboard_reports_lifecycle_alert_and_goal_progress(db, user_with_token
     assert result["month"]["km"] == 30
     assert result["shoe_usage"][0]["share_percent"] == 100
     assert result["goal"]["month_achievement_percent"] == 24
+    assert result["goal"]["month_km"] == result["month"]["km"] == 30
     assert {alert["type"] for alert in result["alerts"]} == {"lifecycle"}
     assert "rotation" not in result
 
@@ -195,3 +196,23 @@ def test_manual_totals_become_explicit_adjustments_and_backup_is_private(
     assert backup.status_code == 200
     assert "hashed_password" not in backup.text
     assert "access_token" not in backup.text
+
+
+def test_shoe_analytics_survives_legacy_extreme_forecast_values(db, user_with_token):
+    user, _token = user_with_token
+    shoe = Shoe(
+        user_id=user.id,
+        brand="Legacy",
+        model="Extreme",
+        date="2026-01-01",
+        mileage=0,
+        expected_mileage=1e12,
+        monthly_km=0.01,
+    )
+    db.add(shoe)
+    db.commit()
+
+    result = analytics.shoe_analytics(db, user.id, shoe.id, today=date(2026, 10, 13))
+
+    assert result is not None
+    assert result["lifecycle"]["forecast_retirement_date"] is None

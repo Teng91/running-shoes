@@ -1,4 +1,5 @@
 from contextlib import contextmanager
+from datetime import timedelta
 
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import sessionmaker
@@ -89,3 +90,49 @@ def test_pure_manual_month_can_move(db, user_with_token):
     assert (updated.year, updated.month, updated.km, updated.adjustment_km) == (
         2026, 9, 15, 15
     )
+
+
+def test_numeric_inputs_are_two_decimal_and_future_runs_are_rejected(
+    db, user_with_token
+):
+    _user, token = user_with_token
+    today = main_module._local_today()
+    with _client(db) as client:
+        shoe_response = client.post("/api/shoes", headers=_headers(token), json={
+            "brand": "Round",
+            "model": "Values",
+            "date": today.isoformat(),
+            "price": 123.456,
+            "mileage": 10.005,
+            "expected_mileage": 800.004,
+        })
+        assert shoe_response.status_code == 200
+        shoe = shoe_response.json()
+        assert shoe["price"] == 123.46
+        assert shoe["mileage"] == 10.01
+        assert shoe["expected_mileage"] == 800.0
+
+        run = client.post("/api/runs", headers=_headers(token), json={
+            "date": today.isoformat(), "km": 1.235, "shoe_id": shoe["id"],
+        })
+        assert run.status_code == 200
+        assert run.json()["km"] == 1.24
+
+        subcent = client.post("/api/runs", headers=_headers(token), json={
+            "date": today.isoformat(), "km": 0.004, "shoe_id": shoe["id"],
+        })
+        future = client.post("/api/runs", headers=_headers(token), json={
+            "date": (today + timedelta(days=1)).isoformat(),
+            "km": 1,
+            "shoe_id": shoe["id"],
+        })
+        extreme = client.post("/api/shoes", headers=_headers(token), json={
+            "brand": "Too",
+            "model": "Large",
+            "date": today.isoformat(),
+            "expected_mileage": 1_000_000.01,
+        })
+
+    assert subcent.status_code == 422
+    assert future.status_code == 422
+    assert extreme.status_code == 422

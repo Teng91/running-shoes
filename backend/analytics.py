@@ -54,7 +54,12 @@ def shoe_analytics(db: Session, user_id: int, shoe_id: int, *, today: date | Non
     forecast_date = None
     if remaining > 0 and forecast_rate > 0:
         forecast_days = round(remaining / forecast_rate * 30.4375)
-        forecast_date = (as_of + timedelta(days=forecast_days)).isoformat()
+        try:
+            forecast_date = (as_of + timedelta(days=forecast_days)).isoformat()
+        except (OverflowError, ValueError):
+            # Existing databases may contain values created before practical
+            # API bounds were introduced.  Analytics must still be readable.
+            forecast_date = None
 
     monthly: dict[tuple[int, int], dict[str, float | int]] = defaultdict(
         lambda: {"km": 0.0, "count": 0}
@@ -137,6 +142,10 @@ def dashboard_analytics(
         models.Run.user_id == user_id,
         models.Run.date.like(prefix + "%"),
     ).all()
+    if selected == current:
+        month_runs = [run for run in month_runs if run.date <= as_of.isoformat()]
+    elif selected > current:
+        month_runs = []
     prev_runs = db.query(models.Run).filter(
         models.Run.user_id == user_id,
         models.Run.date.like(prev_prefix + "%"),

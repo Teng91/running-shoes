@@ -7,8 +7,9 @@
 """
 
 import json
+from calendar import monthrange
 from collections.abc import Generator
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta, timezone
 
 from sqlalchemy import func
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
@@ -17,7 +18,7 @@ from sqlalchemy.orm import Session
 from backend import goals, llm, models
 from backend.tools import db_tools
 
-REPORT_SECTIONS = ["本月總覽", "趨勢解讀", "鞋款輪替與退役提醒", "下月建議"]
+REPORT_SECTIONS = ["本月總覽", "趨勢解讀", "鞋款壽命與退役提醒", "下月建議"]
 
 
 def _sse(event: dict) -> str:
@@ -32,14 +33,23 @@ def _round(value: float | None, digits: int = 2) -> float:
     return round(float(value or 0), digits)
 
 
-def _month_run_stats(db: Session, user_id: int, year: int, month: int) -> dict:
+def _month_run_stats(
+    db: Session,
+    user_id: int,
+    year: int,
+    month: int,
+    *,
+    through_date: str | None = None,
+) -> dict:
     """以跑步日誌（runs）為準計算單月統計；0 跑量月份也要回傳合法結構。"""
     prefix = f"{year:04d}-{month:02d}-%"
-    runs = (
+    query = (
         db.query(models.Run)
         .filter(models.Run.user_id == user_id, models.Run.date.like(prefix))
-        .all()
     )
+    if through_date is not None:
+        query = query.filter(models.Run.date <= through_date)
+    runs = query.all()
     total_km = _round(sum(r.km for r in runs))
     run_days = len({r.date for r in runs})
     per_shoe: dict[int, float] = {}
@@ -82,12 +92,20 @@ def _month_run_stats(db: Session, user_id: int, year: int, month: int) -> dict:
     }
 
 
-def _sum_runs_prefix(db: Session, user_id: int, prefix: str) -> float:
-    row = (
+def _sum_runs_prefix(
+    db: Session,
+    user_id: int,
+    prefix: str,
+    *,
+    through_date: str | None = None,
+) -> float:
+    query = (
         db.query(func.sum(models.Run.km))
         .filter(models.Run.user_id == user_id, models.Run.date.like(prefix))
-        .first()
     )
+    if through_date is not None:
+        query = query.filter(models.Run.date <= through_date)
+    row = query.first()
     return _round(row[0] if row and row[0] is not None else 0)
 
 
@@ -114,13 +132,46 @@ def _end_of_life_context(shoe: dict) -> dict:
     }
 
 
-def build_report_stats(db: Session, user_id: int, year: int, month: int) -> dict:
+def build_report_stats(
+    db: Session,
+    user_id: int,
+    year: int,
+    month: int,
+    *,
+    today: date | None = None,
+) -> dict:
     """組出餵給 LLM 與存入 stats_json 的精簡統計快照。"""
-    month_stats = _month_run_stats(db, user_id, year, month)
+    as_of = today or datetime.now(timezone(timedelta(hours=8))).date()
+    selected = (year, month)
+    current = (as_of.year, as_of.month)
     prev_year, prev_month = _prev_month(year, month)
-    prev_km = _sum_runs_prefix(db, user_id, f"{prev_year:04d}-{prev_month:02d}-%")
+    if selected == current:
+        month_through = as_of.isoformat()
+        previous_day = min(as_of.day, monthrange(prev_year, prev_month)[1])
+        previous_through = f"{prev_year:04d}-{prev_month:02d}-{previous_day:02d}"
+        comparison_label = "較上月同期"
+        comparison_through_day = as_of.day
+    else:
+        month_through = None
+        previous_through = None
+        comparison_label = "與上月比較"
+        comparison_through_day = monthrange(year, month)[1]
+    month_stats = _month_run_stats(
+        db, user_id, year, month, through_date=month_through
+    )
+    prev_km = _sum_runs_prefix(
+        db,
+        user_id,
+        f"{prev_year:04d}-{prev_month:02d}-%",
+        through_date=previous_through,
+    )
     ytd_km = _round(sum(
-        _sum_runs_prefix(db, user_id, f"{year:04d}-{item:02d}-%")
+        _sum_runs_prefix(
+            db,
+            user_id,
+            f"{year:04d}-{item:02d}-%",
+            through_date=month_through if item == month else None,
+        )
         for item in range(1, month + 1)
     ))
 
@@ -148,29 +199,18 @@ def build_report_stats(db: Session, user_id: int, year: int, month: int) -> dict
         _end_of_life_context(shoe) for shoe in end_of_life_payload.get("shoes", [])
     ]
 
-    category_payload = json.loads(db_tools.shoe_category_status(db, user_id))
-    category_keys = (
-        "category",
-        "active_shoe_count",
-        "has_active_coverage",
-        "purchase_recommendation",
-    )
-    categories = [
-        {key: entry.get(key) for key in category_keys}
-        for entry in category_payload.get("categories", [])
-    ]
-
     return {
         "report_month": {"year": year, "month": month},
         "month_run_stats": month_stats,
         "prev_month_run_km": prev_km,
         "prev_month_delta_km": _round(month_stats["month_km"] - prev_km),
+        "comparison_label": comparison_label,
+        "comparison_through_day": comparison_through_day,
         "ytd_run_km": ytd_km,
-        "running_goal": goals.goal_progress(db, user_id, year, month),
+        "running_goal": goals.goal_progress(db, user_id, year, month, as_of=as_of),
         "overall_monthly_stats": overall,
         "shoes": shoes_context,
         "nearing_end_of_life": end_of_life,
-        "category_coverage": categories,
     }
 
 
@@ -183,7 +223,7 @@ def build_report_messages(stats: dict) -> list[dict]:
         "1. 所有數字只能使用使用者訊息中提供的 JSON 數據，不得自行計算、估算或杜撰。\n"
         "2. JSON 中沒有的資訊（如天氣、心率或其他未記錄的訓練欄位）一律不提。\n"
         "3. 里程與壽命數據逐字採用 JSON 欄位值，單位為公里（km）。\n"
-        "4. 鞋款輪替與退役提醒請參考 nearing_end_of_life 與 category_coverage 判斷。\n"
+        "4. 鞋款壽命與退役提醒只參考 nearing_end_of_life，不提供輪替或購鞋建議。\n"
         "5. 下月建議必須具體可行，若當月沒有任何跑步紀錄請如實說明並鼓勵使用者。\n"
         "6. running_goal.active 為 true 時，必須說明當月與年度目標達成率及差距。"
         "當 month_state 為 current 時，也要依 pace_delta_km 說明進度超前或落後，"
@@ -235,10 +275,16 @@ def generate_report_stream(
     year: int,
     month: int,
     model: str,
+    *,
+    today: date | None = None,
 ) -> Generator[str, None, None]:
     """產生月度報告的 SSE 串流；成功才寫入 monthly_reports，失敗不留任何資料。"""
-    stats = build_report_stats(db, user_id, year, month)
+    stats = build_report_stats(db, user_id, year, month, today=today)
     messages = build_report_messages(stats)
+    # Release the read snapshot before waiting on a potentially long external
+    # LLM stream.  WAL already permits readers and writers to coexist, and this
+    # keeps the report request from retaining an unnecessary transaction.
+    db.rollback()
 
     chunks: list[str] = []
     try:
