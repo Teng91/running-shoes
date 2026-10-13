@@ -40,31 +40,40 @@ def goal_progress(
     """Return goal progress through the requested report month."""
     goal = goal_values(db, user_id)
     active = year >= goal["start_year"]
-    month_row = (
-        db.query(models.MonthlyMileage.km)
+    today = as_of or datetime.now(timezone(timedelta(hours=8))).date()
+    selected = (year, month)
+    current = (today.year, today.month)
+    month_prefix = f"{year:04d}-{month:02d}-"
+    month_query = (
+        db.query(func.sum(models.Run.km))
         .filter(
-            models.MonthlyMileage.user_id == user_id,
-            models.MonthlyMileage.year == year,
-            models.MonthlyMileage.month == month,
+            models.Run.user_id == user_id,
+            models.Run.date.like(month_prefix + "%"),
         )
-        .first()
     )
-    month_km = round(float(month_row[0] if month_row else 0), 2)
+    if selected == current:
+        month_query = month_query.filter(models.Run.date <= today.isoformat())
+    elif selected > current:
+        month_query = month_query.filter(models.Run.id < 0)
+    month_km = round(float(month_query.scalar() or 0), 2)
+
+    ytd_end = (
+        today.isoformat()
+        if selected >= current
+        else f"{year:04d}-{month:02d}-{monthrange(year, month)[1]:02d}"
+    )
     ytd_value = (
-        db.query(func.sum(models.MonthlyMileage.km))
+        db.query(func.sum(models.Run.km))
         .filter(
-            models.MonthlyMileage.user_id == user_id,
-            models.MonthlyMileage.year == year,
-            models.MonthlyMileage.month <= month,
+            models.Run.user_id == user_id,
+            models.Run.date >= f"{year:04d}-01-01",
+            models.Run.date <= ytd_end,
         )
         .scalar()
     )
     ytd_km = round(float(ytd_value or 0), 2)
     monthly_goal = goal["monthly_km"]
     yearly_goal = goal["yearly_km"]
-    today = as_of or datetime.now(timezone(timedelta(hours=8))).date()
-    selected = (year, month)
-    current = (today.year, today.month)
     days_in_month = monthrange(year, month)[1]
     if not active:
         month_state = "before_goal"

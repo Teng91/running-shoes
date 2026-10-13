@@ -1,6 +1,7 @@
 import math
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta, timezone
 from datetime import date as calendar_date
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Annotated, Literal
 
 from pydantic import (
@@ -14,6 +15,11 @@ from pydantic import (
 
 # All valid shoe purpose/function categories.
 SHOE_CATEGORIES = ["Daily", "Speed", "Tempo", "Race"]
+TWO_DECIMALS = Decimal("0.01")
+MAX_SHOE_PRICE = 100_000_000.0
+MAX_SHOE_MILEAGE_KM = 1_000_000.0
+MAX_SHOE_MONTHLY_KM = 100_000.0
+MAX_MONTHLY_MILEAGE_KM = 1_000_000.0
 ReasonableYear = Annotated[int, Field(ge=1900, le=2100)]
 CalendarMonth = Annotated[int, Field(ge=1, le=12)]
 NonNegativeFiniteKm = Annotated[float, Field(ge=0, allow_inf_nan=False)]
@@ -47,6 +53,22 @@ def _validate_iso_date(value: str) -> str:
     if parsed.isoformat() != value:
         raise ValueError("date must use YYYY-MM-DD format")
     return value
+
+
+def _validate_completed_run_date(value: str) -> str:
+    value = _validate_iso_date(value)
+    taipei_today = datetime.now(timezone(timedelta(hours=8))).date()
+    if calendar_date.fromisoformat(value) > taipei_today:
+        raise ValueError("run date must not be in the future")
+    return value
+
+
+def _round_two_decimals(value: float) -> float:
+    """Store user-entered money and distance with one canonical precision."""
+    try:
+        return float(Decimal(str(value)).quantize(TWO_DECIMALS, rounding=ROUND_HALF_UP))
+    except (InvalidOperation, TypeError, ValueError):
+        raise ValueError("must be a finite number") from None
 
 
 # ── Auth Schemas ──────────────────────────────────────────────
@@ -178,7 +200,7 @@ class ShoeBase(BaseModel):
             raise ValueError("must be a finite number")
         if v < 0:
             raise ValueError("must be non-negative")
-        return v
+        return _round_two_decimals(v)
 
 
 class ShoeCreate(ShoeBase):
@@ -187,6 +209,27 @@ class ShoeCreate(ShoeBase):
     @classmethod
     def validate_date(cls, value: str) -> str:
         return _validate_iso_date(value)
+
+    @field_validator("price", "orig_price")
+    @classmethod
+    def validate_price_limit(cls, value: float) -> float:
+        if value > MAX_SHOE_PRICE:
+            raise ValueError(f"must be at most {MAX_SHOE_PRICE:g}")
+        return value
+
+    @field_validator("mileage", "expected_mileage")
+    @classmethod
+    def validate_mileage_limit(cls, value: float) -> float:
+        if value > MAX_SHOE_MILEAGE_KM:
+            raise ValueError(f"must be at most {MAX_SHOE_MILEAGE_KM:g}")
+        return value
+
+    @field_validator("monthly_km")
+    @classmethod
+    def validate_monthly_limit(cls, value: float) -> float:
+        if value > MAX_SHOE_MONTHLY_KM:
+            raise ValueError(f"must be at most {MAX_SHOE_MONTHLY_KM:g}")
+        return value
 
 
 class ShoeUpdate(BaseModel):
@@ -242,7 +285,29 @@ class ShoeUpdate(BaseModel):
             raise ValueError("must be a finite number")
         if v < 0:
             raise ValueError("must be non-negative")
-        return v
+        rounded = _round_two_decimals(v)
+        return rounded
+
+    @field_validator("price", "orig_price")
+    @classmethod
+    def validate_price_limit(cls, value: float | None) -> float | None:
+        if value is not None and value > MAX_SHOE_PRICE:
+            raise ValueError(f"must be at most {MAX_SHOE_PRICE:g}")
+        return value
+
+    @field_validator("mileage", "expected_mileage")
+    @classmethod
+    def validate_mileage_limit(cls, value: float | None) -> float | None:
+        if value is not None and value > MAX_SHOE_MILEAGE_KM:
+            raise ValueError(f"must be at most {MAX_SHOE_MILEAGE_KM:g}")
+        return value
+
+    @field_validator("monthly_km")
+    @classmethod
+    def validate_monthly_limit(cls, value: float | None) -> float | None:
+        if value is not None and value > MAX_SHOE_MONTHLY_KM:
+            raise ValueError(f"must be at most {MAX_SHOE_MONTHLY_KM:g}")
+        return value
 
 
 class ShoeOut(ShoeBase):
@@ -260,9 +325,19 @@ class MonthlyMileageBase(BaseModel):
     month: CalendarMonth
     km: NonNegativeFiniteKm = 0
 
+    @field_validator("km")
+    @classmethod
+    def normalize_km(cls, value: float) -> float:
+        return _round_two_decimals(value)
+
 
 class MonthlyMileageCreate(MonthlyMileageBase):
-    pass  # user_id is set by the backend, never by the client
+    @field_validator("km")
+    @classmethod
+    def validate_km_limit(cls, value: float) -> float:
+        if value > MAX_MONTHLY_MILEAGE_KM:
+            raise ValueError(f"must be at most {MAX_MONTHLY_MILEAGE_KM:g}")
+        return value
 
 
 class MonthlyMileageUpdate(BaseModel):
@@ -278,6 +353,16 @@ class MonthlyMileageUpdate(BaseModel):
             raise ValueError("monthly mileage fields may be omitted but must not be null")
         return value
 
+    @field_validator("km")
+    @classmethod
+    def normalize_km(cls, value: float | None) -> float | None:
+        if value is None:
+            return value
+        value = _round_two_decimals(value)
+        if value > MAX_MONTHLY_MILEAGE_KM:
+            raise ValueError(f"must be at most {MAX_MONTHLY_MILEAGE_KM:g}")
+        return value
+
 
 class MonthlyMileageOut(MonthlyMileageBase):
     model_config = ConfigDict(from_attributes=True)
@@ -291,6 +376,14 @@ class RunningGoalUpdate(BaseModel):
     expected_version: int | None = Field(default=None, ge=0)
     start_year: ReasonableYear
     monthly_km: Annotated[float, Field(gt=0, le=100_000, allow_inf_nan=False)]
+
+    @field_validator("monthly_km")
+    @classmethod
+    def normalize_monthly_km(cls, value: float) -> float:
+        value = _round_two_decimals(value)
+        if value < 0.01:
+            raise ValueError("monthly_km must be at least 0.01")
+        return value
 
 
 class RunningGoalOut(RunningGoalUpdate):
@@ -311,9 +404,20 @@ class RunBase(BaseModel):
     def validate_date(cls, value: str) -> str:
         return _validate_iso_date(value)
 
+    @field_validator("km")
+    @classmethod
+    def normalize_km(cls, value: float) -> float:
+        value = _round_two_decimals(value)
+        if value < 0.01:
+            raise ValueError("km must be at least 0.01")
+        return value
+
 
 class RunCreate(RunBase):
-    pass
+    @field_validator("date")
+    @classmethod
+    def validate_completed_date(cls, value: str) -> str:
+        return _validate_completed_run_date(value)
 
 
 class RunUpdate(BaseModel):
@@ -327,13 +431,16 @@ class RunUpdate(BaseModel):
     def validate_date(cls, value: str | None) -> str:
         if value is None:
             raise ValueError("date must not be null")
-        return _validate_iso_date(value)
+        return _validate_completed_run_date(value)
 
     @field_validator("km")
     @classmethod
     def validate_km(cls, value: float | None) -> float:
         if value is None:
             raise ValueError("km must not be null")
+        value = _round_two_decimals(value)
+        if value < 0.01:
+            raise ValueError("km must be at least 0.01")
         return value
 
     @field_validator("shoe_id")

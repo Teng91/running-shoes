@@ -312,6 +312,36 @@ def test_get_models_uses_valid_cache(monkeypatch):
     fetch.assert_not_called()
 
 
+def test_get_models_fails_closed_after_stale_cache_grace(monkeypatch):
+    now = 10_000.0
+    cached = [{"id": "formerly/free", "display": "Formerly Free"}]
+    llm._MODELS_CACHE["openrouter"] = cached
+    llm._MODELS_CACHE_META["openrouter"] = now - llm._MODELS_CACHE_MAX_STALE - 1
+    monkeypatch.setattr(llm.time, "time", MagicMock(return_value=now))
+    monkeypatch.setattr(
+        llm,
+        "_fetch_free_models",
+        MagicMock(side_effect=llm.LLMError("offline")),
+    )
+
+    assert llm._get_models(llm.LLMProvider.openrouter, force=True) == []
+
+
+def test_get_models_allows_brief_stale_cache_grace(monkeypatch):
+    now = 10_000.0
+    cached = [{"id": "verified/free", "display": "Verified Free"}]
+    llm._MODELS_CACHE["openrouter"] = cached
+    llm._MODELS_CACHE_META["openrouter"] = now - llm._MODELS_CACHE_TTL - 1
+    monkeypatch.setattr(llm.time, "time", MagicMock(return_value=now))
+    monkeypatch.setattr(
+        llm,
+        "_fetch_free_models",
+        MagicMock(side_effect=llm.LLMError("offline")),
+    )
+
+    assert llm._get_models(llm.LLMProvider.openrouter, force=True) is cached
+
+
 def test_get_models_falls_back_to_empty_catalog_without_live_data(monkeypatch):
     llm._MODELS_CACHE.clear()
     llm._MODELS_CACHE_META.clear()

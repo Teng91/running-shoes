@@ -966,7 +966,7 @@ def _parse_strava_csv(raw: bytes) -> tuple[list[dict[str, object]], int, list[st
             try:
                 activity_id = (row.get(fields["id"] or "") or "").strip()
                 date_value = _parse_strava_date(row.get(fields["date"] or "") or "")
-                schemas._validate_iso_date(date_value)
+                schemas._validate_completed_run_date(date_value)
                 distance_m = float((row.get(fields["distance"] or "") or "").replace(",", "").strip())
                 km = round(distance_m / 1000, 2)
                 if (
@@ -1940,7 +1940,14 @@ def generate_monthly_report(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     return StreamingResponse(
-        reports.generate_report_stream(db, current_user.id, payload.year, payload.month, model),
+        reports.generate_report_stream(
+            db,
+            current_user.id,
+            payload.year,
+            payload.month,
+            model,
+            today=today,
+        ),
         media_type="text/event-stream",
     )
 

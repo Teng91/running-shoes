@@ -93,7 +93,10 @@ def test_run_log_frontend_keeps_calendar_actions_and_select_state_safe():
     assert "apiGet('/runs/import/strava/history').catch" in source
     assert "id === 'edit-run-shoe' && selectedId !== null" in source
     assert "原鞋款已刪除，請重新選擇" in source
-    assert "document.getElementById('run-date').value = localDateISO()" in source
+    assert "document.getElementById('run-date').value = today" in source
+    assert "document.getElementById('run-date').max = today" in source
+    assert "document.getElementById('edit-run-date').max = today" in source
+    assert "跑步日期不可晚於今天" in source
     assert "document.getElementById('run-month').value = localDateISO().slice(0, 7)" in source
 
 

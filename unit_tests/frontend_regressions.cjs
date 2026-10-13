@@ -143,6 +143,7 @@ test('double submit writes one run and unlocks after completion or failure', asy
   const context = vm.createContext({
     document: { getElementById: id => elements[id] },
     apiPost: () => { calls++; return new Promise(r => { resolve = r; }); },
+    localDateISO: () => '2026-10-13',
     loadData: async () => {},
   });
   vm.runInContext('let runSaving = false;\n' + extract('addRun'), context);
@@ -290,6 +291,19 @@ test('monthly reports have their own selector backed by the daily model list', (
   assert.match(loadModels, /'#' \+ \(index \+ 1\) \+ ' ' \+ model\.display/);
   assert.match(generateReport, /getElementById\('report-model'\)\.value/);
   assert.doesNotMatch(generateReport, /getElementById\('agent-model'\)/);
+});
+
+test('monthly report requests abort stale loads and lock selectors while streaming', () => {
+  const load = extract('loadSavedReport');
+  const generate = extract('generateReport');
+  assert.match(source, /let reportLoadRequestId = 0/);
+  assert.match(source, /let reportLoadController = null/);
+  assert.match(load, /const requestId = \+\+reportLoadRequestId/);
+  assert.match(load, /reportLoadController\?\.abort\(\)/);
+  assert.match(load, /selectedReportMonth\(\) !== requestedMonth/);
+  assert.match(generate, /setReportControlsDisabled\(true\)/);
+  assert.match(generate, /signal: controller\.signal/);
+  assert.match(generate, /setReportControlsDisabled\(false\)/);
 });
 
 test('the report month defaults to the last complete month', () => {

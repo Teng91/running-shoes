@@ -22,8 +22,23 @@ jobs:
         with:
           node-version: "22"
       - name: Install dependencies
-        run: python -m pip install -r requirements-dev.txt
+        run: python -m pip install --require-hashes -r requirements-dev.txt
       - name: Run repository harness
         shell: pwsh
         run: ./scripts/task.ps1 verify
 
+  frontend-layout:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install Playwright
+        run: npm install --no-save --package-lock=false playwright
+      - name: Install browser dependencies
+        run: npx playwright install --with-deps chromium webkit
+      - name: Run layout matrix
+        run: node unit_tests/frontend_layout.cjs

@@ -1,6 +1,6 @@
 param(
     [Parameter(Position = 0)]
-    [ValidateSet("setup", "test-fast", "frontend-test", "frontend-layout", "eval-agent", "docs-check", "verify", "verify-all")]
+    [ValidateSet("setup", "test-fast", "frontend-test", "frontend-layout", "eval-agent", "audit-deps", "docs-check", "verify", "verify-all")]
     [string]$Task = "verify"
 )
 
@@ -66,6 +66,13 @@ function Invoke-DocsCheck {
     Invoke-Checked "README consistency" { & $python scripts/check_docs.py }
 }
 
+function Invoke-DependencyAudit {
+    $python = Get-ProjectPython
+    Invoke-Checked "Dependency vulnerability audit" {
+        & $python -m pip_audit --require-hashes -r requirements.txt
+    }
+}
+
 function Test-LayoutDependencies {
     if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
         return $false
@@ -88,6 +95,7 @@ function Invoke-Verify {
     $python = Get-ProjectPython
     Invoke-Checked "Ruff" { & $python -m ruff check backend scripts unit_tests }
     Invoke-Checked "mypy" { & $python -m mypy backend }
+    Invoke-DependencyAudit
     Invoke-DocsCheck
     Invoke-BackendTests
     Invoke-FrontendTests
@@ -100,7 +108,7 @@ switch ($Task) {
             Invoke-Checked "Create virtual environment" { & $bootstrapPython -m venv venv }
         }
         $python = Get-ProjectPython
-        Invoke-Checked "Install development dependencies" { & $python -m pip install -r requirements-dev.txt }
+        Invoke-Checked "Install development dependencies" { & $python -m pip install --require-hashes -r requirements-dev.txt }
     }
     "test-fast" {
         $python = Get-ProjectPython
@@ -115,6 +123,7 @@ switch ($Task) {
         Invoke-Checked "Frontend layout tests" { & node unit_tests/frontend_layout.cjs }
     }
     "eval-agent" { Invoke-AgentEvals }
+    "audit-deps" { Invoke-DependencyAudit }
     "docs-check" { Invoke-DocsCheck }
     "verify" { Invoke-Verify }
     "verify-all" {

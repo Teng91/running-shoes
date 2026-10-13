@@ -54,6 +54,10 @@ _MODELS_CACHE: dict[str, list[dict[str, str]]] = {}
 _MODELS_CACHE_META: dict[str, float] = {}  # provider -> cached_at
 _MODELS_CACHE_LOCK = Lock()
 _MODELS_CACHE_TTL = 900  # 15 分鐘；讓「今日免費」清單保持新鮮
+# A failed refresh may briefly reuse the last verified free catalog so a
+# transient OpenRouter outage does not immediately disable the UI.  After this
+# grace period we fail closed: an old model may no longer be free.
+_MODELS_CACHE_MAX_STALE = 3600
 
 _DEFAULT_MODEL: str | None = None
 _REMOVED_MODELS = {"openrouter/free"}
@@ -210,7 +214,10 @@ def _get_models(provider: LLMProvider, force: bool = False) -> list[dict[str, st
             return models
         except LLMError:
             cached = _MODELS_CACHE.get(provider.value)
-            return cached if cached is not None else MODELS.get(provider.value, [])
+            cached_at = _MODELS_CACHE_META.get(provider.value, 0)
+            if cached is not None and (time.time() - cached_at) <= _MODELS_CACHE_MAX_STALE:
+                return cached
+            return MODELS.get(provider.value, [])
 
 
 def resolve_allowed_model(provider: LLMProvider, requested_model: str | None) -> str:

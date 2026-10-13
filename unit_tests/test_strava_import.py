@@ -1,12 +1,13 @@
 import asyncio
 import io
+from datetime import timedelta
 
 import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from backend.database import get_db
-from backend.main import StravaUploadLimitMiddleware, _parse_strava_csv, app
+from backend.main import StravaUploadLimitMiddleware, _local_today, _parse_strava_csv, app
 from backend.models import MonthlyMileage, Run, Shoe, StravaImport
 from unit_tests.test_api import _auth_header
 
@@ -43,6 +44,20 @@ def upload(
     return client.post(path, headers=_auth_header(token), files={
         "file": ("activities.csv", io.BytesIO(csv_content.encode("utf-8-sig")), "text/csv")
     }, data=data)
+
+
+def test_strava_parser_rejects_future_activities():
+    future = (_local_today() + timedelta(days=1)).isoformat()
+    raw = (
+        "活動 ID,活動日期,活動類型,活動裝備,距離\n"
+        f"future-1,{future},跑步,Test Shoe,5000\n"
+    ).encode()
+
+    rows, invalid, warnings = _parse_strava_csv(raw)
+
+    assert rows == []
+    assert invalid == 1
+    assert warnings == ["已略過 1 筆格式不完整的跑步活動"]
 
 
 def test_strava_preview_filters_runs_and_suggests_shoe(client, db, user_with_token):

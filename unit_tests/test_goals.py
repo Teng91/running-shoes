@@ -8,7 +8,7 @@ from backend import goals
 from backend.auth import create_access_token, get_password_hash
 from backend.database import get_db
 from backend.main import app
-from backend.models import MonthlyMileage, RunningGoal, User
+from backend.models import Run, RunningGoal, Shoe, User
 
 
 def _headers(username: str) -> dict[str, str]:
@@ -94,10 +94,13 @@ def test_goal_update_rejects_stale_version(db, user_with_token):
 
 def test_goal_progress_stops_ytd_at_requested_month(db, user_with_token):
     user, _token = user_with_token
+    shoe = Shoe(user_id=user.id, brand="A", model="Goal", date="2026-01-01")
+    db.add(shoe)
+    db.flush()
     db.add_all([
-        MonthlyMileage(user_id=user.id, year=2026, month=1, km=100),
-        MonthlyMileage(user_id=user.id, year=2026, month=2, km=125),
-        MonthlyMileage(user_id=user.id, year=2026, month=3, km=500),
+        Run(user_id=user.id, shoe_id=shoe.id, date="2026-01-15", km=100),
+        Run(user_id=user.id, shoe_id=shoe.id, date="2026-02-05", km=125),
+        Run(user_id=user.id, shoe_id=shoe.id, date="2026-03-01", km=500),
     ])
     db.commit()
 
