@@ -1,7 +1,10 @@
 """Tests for the OpenRouter LLM integration and model selection."""
 
+import json
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -469,6 +472,89 @@ def test_call_llm_stream_yields_content(monkeypatch):
     assert create.call_args.kwargs["model"] == "openrouter/free"
     assert create.call_args.kwargs["stream"] is True
     assert create.call_args.kwargs["max_tokens"] == llm._LLM_MAX_OUTPUT_TOKENS
+
+
+def test_call_llm_stream_works_with_real_sdk_client(monkeypatch):
+    requests = []
+
+    class StreamingHandler(BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.1"
+
+        def do_POST(self):
+            length = int(self.headers.get("content-length", "0"))
+            requests.append((self.path, json.loads(self.rfile.read(length))))
+            events = [
+                {
+                    "id": "chatcmpl-test",
+                    "object": "chat.completion.chunk",
+                    "created": 1,
+                    "model": "test-model",
+                    "choices": [{
+                        "index": 0,
+                        "delta": {"role": "assistant", "content": "跑鞋"},
+                        "finish_reason": None,
+                    }],
+                },
+                {
+                    "id": "chatcmpl-test",
+                    "object": "chat.completion.chunk",
+                    "created": 1,
+                    "model": "test-model",
+                    "choices": [{
+                        "index": 0,
+                        "delta": {"content": "建議"},
+                        "finish_reason": None,
+                    }],
+                },
+                {
+                    "id": "chatcmpl-test",
+                    "object": "chat.completion.chunk",
+                    "created": 1,
+                    "model": "test-model",
+                    "choices": [{
+                        "index": 0,
+                        "delta": {},
+                        "finish_reason": "stop",
+                    }],
+                },
+            ]
+            payload = "".join(
+                f"data: {json.dumps(event)}\n\n" for event in events
+            ) + "data: [DONE]\n\n"
+            encoded = payload.encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Content-Length", str(len(encoded)))
+            self.end_headers()
+            self.wfile.write(encoded)
+
+        def log_message(self, *_args):
+            pass
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), StreamingHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setitem(
+        llm._PROVIDER_CONFIG[llm.LLMProvider.openrouter],
+        "base_url",
+        f"http://127.0.0.1:{server.server_port}/v1",
+    )
+
+    try:
+        chunks = list(llm.call_llm_stream(
+            llm.LLMProvider.openrouter,
+            "test-model",
+            [{"role": "user", "content": "推薦跑鞋"}],
+        ))
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join()
+
+    assert chunks == ["跑鞋", "建議"]
+    assert requests[0][0] == "/v1/chat/completions"
+    assert requests[0][1]["stream"] is True
 
 
 def test_call_llm_stream_closes_provider_stream_when_consumer_stops_early(monkeypatch):
