@@ -673,6 +673,41 @@ def test_run_log_orders_newest_first_and_can_change_owned_shoe(client, db, user_
     assert monthly.km == 13
 
 
+def test_run_log_supports_month_filters_and_pagination(client, db, user_with_token):
+    user, token = user_with_token
+    shoe = Shoe(user_id=user.id, brand="Mizuno", model="Rider", date="2026-01-01")
+    db.add(shoe)
+    db.commit()
+    headers = _auth_header(token)
+    for run_date, km in (
+        ("2025-12-31", 3),
+        ("2026-08-01", 5),
+        ("2026-08-15", 8),
+        ("2026-09-01", 10),
+    ):
+        assert client.post("/api/runs", headers=headers, json={
+            "date": run_date, "km": km, "shoe_id": shoe.id,
+        }).status_code == 200
+
+    august = client.get(
+        "/api/runs?year=2026&month=8&limit=1&offset=0", headers=headers
+    )
+    august_second_page = client.get(
+        "/api/runs?year=2026&month=8&limit=1&offset=1", headers=headers
+    )
+    year = client.get("/api/runs?year=2026", headers=headers)
+    invalid = client.get("/api/runs?month=8", headers=headers)
+
+    assert august.status_code == 200
+    assert [row["date"] for row in august.json()] == ["2026-08-15"]
+    assert [row["date"] for row in august_second_page.json()] == ["2026-08-01"]
+    assert [row["date"] for row in year.json()] == [
+        "2026-09-01", "2026-08-15", "2026-08-01",
+    ]
+    assert invalid.status_code == 422
+    assert invalid.json()["detail"] == "month requires year"
+
+
 def test_run_log_limit(client, db, user_with_token, monkeypatch):
     from backend import main as main_module
 

@@ -24,6 +24,20 @@ def db():
         db.close()
 
 
+@pytest.fixture(autouse=True)
+def isolate_app_database(db, monkeypatch):
+    """Keep application lifespan work on the current test's in-memory database."""
+    from backend import main as main_module
+
+    test_engine = db.get_bind()
+    monkeypatch.setattr(main_module, "engine", test_engine)
+    monkeypatch.setattr(
+        main_module,
+        "SessionLocal",
+        sessionmaker(autocommit=False, autoflush=False, bind=test_engine),
+    )
+
+
 @pytest.fixture
 def user_with_token(db):
     user = User(username="testuser", hashed_password=get_password_hash("pass1234"))

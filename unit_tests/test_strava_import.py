@@ -118,6 +118,23 @@ def test_strava_import_is_idempotent_and_syncs_totals(client, db, user_with_toke
     assert history.json()[1]["imported_count"] == 1
     assert history.json()[1]["imported_km"] == 5.25
 
+    preview_again = upload(client, "/api/runs/import/strava/preview", token)
+    assert preview_again.status_code == 200
+    assert preview_again.json()["run_count"] == 2
+    assert preview_again.json()["duplicate_count"] == 1
+    assert preview_again.json()["importable_count"] == 1
+    assert preview_again.json()["importable_km"] == 6.1
+    assert preview_again.json()["gear_groups"] == [
+        {
+            "gear": "",
+            "count": 1,
+            "km": 6.1,
+            "suggested_shoe_id": None,
+            "shoe_name": None,
+            "ambiguous_match": False,
+        }
+    ]
+
 
 def test_strava_import_rejects_foreign_shoe_mapping(client, db, user_with_token):
     _user, token = user_with_token

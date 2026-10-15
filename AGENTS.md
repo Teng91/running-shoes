@@ -5,7 +5,9 @@
 - `backend/main.py`: FastAPI routes, application lifecycle, imports, and exports.
 - `backend/agent.py`: LLM orchestration, deterministic query planning, and SSE events.
 - `backend/tools/`: trusted database and web-search tools used by the agent.
-- `frontend/index.html`: dependency-light single-page dashboard.
+- `frontend/index.html`: dependency-light single-page dashboard markup.
+- `frontend/app.js`: dashboard state, API, charts, and interaction logic.
+- `frontend/styles.css`: dashboard themes and responsive layout.
 - `unit_tests/`: backend, frontend, security, migration, and agent regression tests.
 
 ## Working rules
