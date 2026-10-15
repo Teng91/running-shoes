@@ -44,13 +44,17 @@ running-shoes/
 │   ├── reports.py        # AI 月度跑步報告（後端算統計 + one-shot LLM 串流 + 報告留存）
 │   ├── goals.py          # 個人月／年跑量目標與達成率計算
 │   ├── analytics.py      # 首頁洞察與單鞋使用分析
+│   ├── strava_import.py  # Strava CSV 解析、篩選、去重與預覽統計
+│   ├── exporting.py      # CSV／XLSX 安全匯出列與檔名
 │   ├── llm.py            # LLM 抽象層（OpenRouter）
 │   ├── tools/            # AI 助手工具
 │   │   ├── db_tools.py   # 讀取使用者跑鞋 / 跑量資料
 │   │   └── search_tool.py# 上網搜尋市售鞋款（DuckDuckGo）
 │   └── run.py            # 本機開發啟動入口
 ├── frontend/
-│   ├── index.html        # Dashboard 前端（Chart.js）
+│   ├── index.html        # Dashboard HTML 結構
+│   ├── app.js            # Dashboard 狀態、API、圖表與互動邏輯
+│   ├── styles.css        # Dashboard 亮／暗色與響應式版面
 │   ├── manifest.webmanifest # PWA 名稱、顏色與圖示設定
 │   ├── service-worker.js # App shell 快取與離線 fallback
 │   ├── offline.html      # 無快取頁面可用時的離線提示
@@ -198,11 +202,11 @@ LLM_MAX_OUTPUT_TOKENS=4096
 - 依目前節奏預測月底總里程，並顯示達標所需的每日里程
 - 每雙鞋在所選月份的里程、穿著次數及占比
 
-跑步紀錄儲存在 SQLite `runs` 資料表，每筆資料都會綁定帳號與該帳號擁有的鞋款。後端會驗證鞋款擁有權，並啟用 SQLite 外鍵約束，避免無效或跨帳號的鞋款關聯。編輯時會檢查紀錄版本；同一筆紀錄若已在其他分頁被修改，較舊的畫面會收到衝突提示，避免重複套用里程差額。刪除已有跑步紀錄的鞋款時，鞋款會從鞋櫃與未來選項中移除，但歷史跑步紀錄與月跑量仍會保留。每個帳號預設最多儲存 5,000 筆跑步紀錄，可用 `MAX_RUNS_PER_USER` 調整。
+跑步紀錄儲存在 SQLite `runs` 資料表，每筆資料都會綁定帳號與該帳號擁有的鞋款。後端會驗證鞋款擁有權，並啟用 SQLite 外鍵約束，避免無效或跨帳號的鞋款關聯。編輯時會檢查紀錄版本；同一筆紀錄若已在其他分頁被修改，較舊的畫面會收到衝突提示，避免重複套用里程差額。刪除已有跑步紀錄的鞋款時，鞋款會從鞋櫃與未來選項中移除，但歷史跑步紀錄與月跑量仍會保留。每個帳號預設最多儲存 5,000 筆跑步紀錄，可用 `MAX_RUNS_PER_USER` 調整。前端只分頁載入目前查看月份；鞋款年度堆疊圖切換年份時才按需載入該年紀錄，避免每次操作都下載完整歷史。
 
 | API | 用途 |
 | --- | --- |
-| `GET /api/runs` | 取得目前帳號的跑步紀錄，依日期由新到舊排序 |
+| `GET /api/runs` | 取得目前帳號的跑步紀錄；可用 `year`、`month`、`limit`（最多 500）與 `offset` 篩選／分頁，不帶參數時維持完整列表相容性 |
 | `POST /api/runs` | 新增日期、公里數與鞋款 |
 | `PUT /api/runs/{run_id}` | 編輯指定跑步紀錄 |
 | `DELETE /api/runs/{run_id}` | 刪除指定跑步紀錄 |
@@ -215,7 +219,7 @@ LLM_MAX_OUTPUT_TOKENS=4096
 
 ### Strava 歷史資料匯入
 
-在「跑步日誌」右上角按「匯入 Strava」，選擇 Strava 匯出資料夾中的 `activities.csv`（Strava 官方匯出方式請參考[說明](https://support.strava.com/hc/en-us/articles/216918437-Exporting-your-Data-and-Bulk-Export)）。系統支援繁體中文與英文 Strava 匯出欄位及日期格式，只會保留活動類型為跑步且落在所選起訖日期內的資料（包含開始與結束當天），將 Strava 的公尺距離轉換為公里，並先顯示各鞋款的筆數和里程。日期預設為前 13 個完整月份、不包含本月，調整後會依登入帳號保存在目前瀏覽器。
+在「跑步日誌」右上角按「匯入 Strava」，選擇 Strava 匯出資料夾中的 `activities.csv`（Strava 官方匯出方式請參考[說明](https://support.strava.com/hc/en-us/articles/216918437-Exporting-your-Data-and-Bulk-Export)）。系統支援繁體中文與英文 Strava 匯出欄位及日期格式，只會保留活動類型為跑步且落在所選起訖日期內的資料（包含開始與結束當天），將 Strava 的公尺距離轉換為公里，並先顯示真正待匯入的鞋款筆數與里程；已存在或同檔重複的活動會另外計數，不會混入鞋款配對合計。日期預設為前 13 個完整月份、不包含本月，調整後會依登入帳號保存在目前瀏覽器。
 
 匯入前可逐組選擇現有鞋款；名稱只有一個相符候選時會自動配對，也可以把多個 Strava 裝備配到同一雙 Dashboard 跑鞋。如果同品牌型號有多雙，系統不會猜測，請依購買日期手動選擇。沒有鞋款或無法辨識的裝備可以選擇略過。
 
@@ -346,7 +350,7 @@ Playwright／Chromium／WebKit 齊全時，也會執行版面測試。
 避免每次停止都重跑。Hook 不會呼叫其他模型、外部 API，或傳送提示、diff、原始碼與測試輸出。
 GitHub Actions 仍會在 push／pull request 執行 `verify`，並在獨立工作中安裝 Chromium／WebKit、跑完完整版面矩陣；Dependabot 每週檢查 Python 與 GitHub Actions 更新。
 
-本次驗證基線為 Python **329 passed**、前端回歸測試 **32 passed**；測試數量會隨功能與修正持續增加，實際結果以 `./scripts/task.ps1 verify` 與 CI 當次輸出為準。
+本次驗證基線為 Python **332 passed**、前端回歸測試 **34 passed**；測試數量會隨功能與修正持續增加，實際結果以 `./scripts/task.ps1 verify` 與 CI 當次輸出為準。
 版面檢查涵蓋 WebKit／Chromium、亮／暗模式與 7 組直橫向尺寸，共 28 組設定，檢查五個分頁、表單、圖表、彈窗及空資料狀態。
 
 `docs-check` 會從 pytest collection、前端測試檔、Agent tool registry、Playwright 測試矩陣與實際檔案系統核對上述數字及 harness 路徑。新增測試、工具或版面設定卻忘記同步 README 時，`verify` 和 GitHub Actions 會直接失敗。

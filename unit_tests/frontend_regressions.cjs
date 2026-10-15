@@ -3,7 +3,10 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const source = fs.readFileSync('frontend/index.html', 'utf8');
+const htmlSource = fs.readFileSync('frontend/index.html', 'utf8');
+const scriptSource = fs.readFileSync('frontend/app.js', 'utf8');
+const styleSource = fs.readFileSync('frontend/styles.css', 'utf8');
+const source = `${htmlSource}\n${styleSource}\n${scriptSource}`;
 
 test('PWA metadata, local dependencies and service worker registration are present', () => {
   assert.match(source, /rel="manifest" href="\/manifest\.webmanifest"/);
@@ -15,6 +18,10 @@ test('PWA metadata, local dependencies and service worker registration are prese
   const serviceWorker = fs.readFileSync('frontend/service-worker.js', 'utf8');
   assert.match(serviceWorker, /'\/vendor\/chart\.umd\.min\.js'/);
   assert.match(serviceWorker, /'\/vendor\/marked\.min\.js'/);
+  assert.match(serviceWorker, /'\/app\.js'/);
+  assert.match(serviceWorker, /'\/styles\.css'/);
+  assert.match(htmlSource, /src="\/app\.js"/);
+  assert.match(htmlSource, /href="\/styles\.css"/);
 });
 
 test('mobile page gutters preserve standalone safe-area insets', () => {
@@ -166,6 +173,8 @@ test('failed reload retains previous data and exposes a retry; recovery hides er
   const context = vm.createContext({
     document: { getElementById: () => error }, console: { error() {}, warn() {} },
     apiGet: async () => { throw new Error('offline'); }, render() {},
+    selectedRunMonth: () => '2026-10', fetchRunPages: async () => { throw new Error('offline'); },
+    yearlyRunsCache: new Map(),
   });
   vm.runInContext(`let dataLoadGeneration = 0, authToken = 'test', selectedYear;
     let shoes = [{id: 1}], retiredShoes = [], monthlyMileages = [],
@@ -175,6 +184,7 @@ test('failed reload retains previous data and exposes a retry; recovery hides er
   assert.equal(vm.runInContext('shoes[0].id', context), 1);
   assert.equal(error.hidden, false);
   context.apiGet = async () => [];
+  context.fetchRunPages = async () => [];
   await context.loadData();
   assert.equal(vm.runInContext('shoes.length', context), 0);
   assert.equal(error.hidden, true);
@@ -244,9 +254,34 @@ test('shoe default uses the local calendar date', () => {
   assert.match(source, /getElementById\('f-date'\)\.value = localDateISO\(\)/);
 });
 
-test('the entire inline application script parses', () => {
-  const script = source.slice(source.indexOf('<script>') + 8, source.lastIndexOf('</script>'));
-  assert.doesNotThrow(() => new vm.Script(script));
+test('the external application script parses', () => {
+  assert.doesNotThrow(() => new vm.Script(scriptSource));
+});
+
+test('run history is fetched by month and paginated', async () => {
+  const calls = [];
+  const pages = [Array.from({ length: 200 }, (_, id) => ({ id })), [{ id: 201 }]];
+  const context = vm.createContext({
+    URLSearchParams,
+    apiGet: async url => { calls.push(url); return pages.shift(); },
+  });
+  vm.runInContext('const RUN_PAGE_SIZE = 200;\n' + extract('fetchRunPages'), context);
+  const rows = await context.fetchRunPages({ year: 2026, month: 8 });
+  assert.equal(rows.length, 201);
+  assert.match(calls[0], /year=2026/);
+  assert.match(calls[0], /month=8/);
+  assert.match(calls[0], /limit=200/);
+  assert.match(calls[1], /offset=200/);
+  assert.doesNotMatch(calls[0], /offset=200/);
+});
+
+test('report completion timestamps are localized by the browser', () => {
+  const context = vm.createContext({ Date });
+  vm.runInContext(extract('formatLocalTimestamp'), context);
+  const formatted = context.formatLocalTimestamp('2026-10-15T01:30:00+00:00');
+  assert.ok(formatted.length > 0);
+  assert.doesNotMatch(extract('generateReport'), /replace\('T', ' '\)\.slice/);
+  assert.match(extract('generateReport'), /formatLocalTimestamp\(event\.updated_at\)/);
 });
 
 test('inline edits send only the changed field and guard duplicate commits', async () => {

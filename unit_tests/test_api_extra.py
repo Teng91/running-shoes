@@ -108,6 +108,30 @@ def test_export_csv_all_contains_calculated_fields(client, db, user_with_token):
     assert rows[1]["狀態"] == "已退役"
 
 
+def test_exports_preserve_decimal_prices(client, db, user_with_token):
+    user, token = user_with_token
+    db.add(Shoe(
+        user_id=user.id,
+        brand="Decimal",
+        model="Price",
+        date="2026-02-03",
+        price=123.46,
+        orig_price=200.99,
+    ))
+    db.commit()
+
+    csv_response = client.get("/api/export?format=csv", headers=_auth(token))
+    csv_row = next(csv.DictReader(io.StringIO(csv_response.content.decode("utf-8-sig"))))
+    assert csv_row["買價"] == "123.46"
+    assert csv_row["原價"] == "200.99"
+
+    xlsx_response = client.get("/api/export?format=xlsx", headers=_auth(token))
+    sheet = openpyxl.load_workbook(io.BytesIO(xlsx_response.content))["跑鞋資料"]
+    headers = [cell.value for cell in sheet[1]]
+    assert sheet.cell(2, headers.index("買價") + 1).value == 123.46
+    assert sheet.cell(2, headers.index("原價") + 1).value == 200.99
+
+
 def test_export_csv_retired_omits_status_column(client, db, user_with_token):
     user, token = user_with_token
     _add_export_shoes(db, user.id)
@@ -668,7 +692,15 @@ def test_static_asset_and_non404_http_errors(client):
 
     service_worker = client.get("/service-worker.js")
     assert service_worker.status_code == 200
-    assert "running-shoes-shell-v4" in service_worker.text
+    assert "running-shoes-shell-v5" in service_worker.text
+
+    app_script = client.get("/app.js")
+    assert app_script.status_code == 200
+    assert "fetchRunPages" in app_script.text
+
+    stylesheet = client.get("/styles.css")
+    assert stylesheet.status_code == 200
+    assert "--bg" in stylesheet.text
 
     method_error = client.post("/api/agent/providers")
     assert method_error.status_code == 405
