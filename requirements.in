@@ -7,7 +7,7 @@ pydantic==2.13.4
 pyjwt[crypto]==2.15.1
 bcrypt==5.0.0
 openpyxl==3.1.5
-openai==2.46.0
+openai==3.29.0
 ddgs==9.16.0
 python-dotenv==1.2.2
 httpx==0.28.1
