@@ -53,7 +53,9 @@ running-shoes/
 │   └── run.py            # 本機開發啟動入口
 ├── frontend/
 │   ├── index.html        # Dashboard HTML 結構
-│   ├── app.js            # Dashboard 狀態、API、圖表與互動邏輯
+│   ├── app.js            # Dashboard 核心狀態、API、跑步與跑鞋互動邏輯
+│   ├── app-agent.js      # AI 助手對話、模型清單與安全 Markdown 顯示
+│   ├── app-reports.js    # 月報讀取、產生與串流顯示
 │   ├── styles.css        # Dashboard 亮／暗色與響應式版面
 │   ├── manifest.webmanifest # PWA 名稱、顏色與圖示設定
 │   ├── service-worker.js # App shell 快取與離線 fallback

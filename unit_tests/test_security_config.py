@@ -15,7 +15,13 @@ from backend.database import configure_sqlite_connection
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 FRONTEND_SOURCE = "\n".join(
     (PROJECT_ROOT / "frontend" / name).read_text(encoding="utf-8")
-    for name in ("index.html", "styles.css", "app.js")
+    for name in (
+        "index.html",
+        "styles.css",
+        "app-agent.js",
+        "app-reports.js",
+        "app.js",
+    )
 )
 
 
