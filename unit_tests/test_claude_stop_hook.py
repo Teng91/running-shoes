@@ -6,6 +6,8 @@ from scripts import claude_stop_hook
 
 def test_layout_checks_only_run_for_layout_files():
     assert claude_stop_hook.needs_layout_check({"frontend/index.html"}) is True
+    assert claude_stop_hook.needs_layout_check({"frontend/app.js"}) is True
+    assert claude_stop_hook.needs_layout_check({"frontend/styles.css"}) is True
     assert claude_stop_hook.needs_layout_check({"backend/main.py"}) is False
 
 

@@ -67,7 +67,7 @@ async function run(engine, name) {
       if (asset !== frontendRoot && !asset.startsWith(frontendRoot + path.sep)) {
         return route.abort();
       }
-      const contentTypes = { '.html': 'text/html', '.js': 'application/javascript',
+      const contentTypes = { '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css',
         '.json': 'application/json', '.webmanifest': 'application/manifest+json',
         '.svg': 'image/svg+xml', '.png': 'image/png' };
       return route.fulfill({ contentType: contentTypes[path.extname(asset)] || 'application/octet-stream',
@@ -86,6 +86,7 @@ async function run(engine, name) {
         expected_mileage: 800, monthly_km: 80, category: 'Daily', size: 'US 9' }));
       retiredShoes = [{ ...shoes[0], id: 20, is_retired: true }];
       runs = shoes.map((shoe, i) => ({ id: i + 1, shoe_id: shoe.id, date: `2026-09-${String(i + 1).padStart(2, '0')}`, km: 18.67, source: 'manual' }));
+      yearlyRunsCache.set(2026, runs);
       monthlyMileages = Array.from({ length: 12 }, (_, i) => ({ id: i + 1, year: 2026, month: i + 1, km: 120 + i }));
       monthlySpending = Array.from({ length: 12 }, (_, i) => ({ year: 2026, month: i + 1, total_paid: 4000, total_orig: 5000 }));
       document.querySelector('#run-month').value = '2026-09';

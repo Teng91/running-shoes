@@ -23,7 +23,9 @@ TEST_SECRET_KEY = "test-only-harness-secret-key-not-for-production"
 MAX_REASON_CHARS = 8_000
 
 LAYOUT_FILES = {
+    "frontend/app.js",
     "frontend/index.html",
+    "frontend/styles.css",
     "unit_tests/frontend_layout.cjs",
 }
 

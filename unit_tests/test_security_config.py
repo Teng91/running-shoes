@@ -4,12 +4,19 @@ import tomllib
 from pathlib import Path
 from types import SimpleNamespace
 
-from sqlalchemy import text
+from fastapi import FastAPI, HTTPException
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine, event, text
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from backend import main as main_module
-from backend.database import engine
+from backend.database import configure_sqlite_connection
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+FRONTEND_SOURCE = "\n".join(
+    (PROJECT_ROOT / "frontend" / name).read_text(encoding="utf-8")
+    for name in ("index.html", "styles.css", "app.js")
+)
 
 
 def test_fly_deployment_enables_production_secret_checks():
@@ -39,12 +46,38 @@ def test_docker_enables_production_secret_checks():
 
 
 def test_sqlite_foreign_keys_are_enabled():
-    with engine.connect() as connection:
+    test_engine = create_engine("sqlite://")
+    event.listen(
+        test_engine,
+        "connect",
+        lambda dbapi_connection, _record: configure_sqlite_connection(dbapi_connection),
+    )
+    with test_engine.connect() as connection:
         assert connection.execute(text("PRAGMA foreign_keys")).scalar_one() == 1
 
 
+def test_http_exception_handler_preserves_protocol_headers():
+    test_app = FastAPI()
+    test_app.add_exception_handler(
+        StarletteHTTPException,
+        main_module.http_exception_handler,
+    )
+
+    @test_app.get("/limited")
+    def limited():
+        raise HTTPException(
+            status_code=429,
+            detail="slow down",
+            headers={"Retry-After": "42"},
+        )
+
+    response = TestClient(test_app).get("/limited")
+    assert response.status_code == 429
+    assert response.headers["retry-after"] == "42"
+
+
 def test_agent_frontend_handles_http_auth_and_non_sse_errors_before_streaming():
-    source = (PROJECT_ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
+    source = FRONTEND_SOURCE
 
     fetch_start = source.index("const res = await fetch(API_BASE + '/agent/chat/stream'")
     reader_start = source.index("const reader = res.body.getReader()", fetch_start)
@@ -57,7 +90,7 @@ def test_agent_frontend_handles_http_auth_and_non_sse_errors_before_streaming():
 
 
 def test_agent_frontend_distinguishes_failed_tools_from_completed_tools():
-    source = (PROJECT_ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
+    source = FRONTEND_SOURCE
 
     assert "event.ok === false" in source
     assert "tool-item.failed" in source
@@ -65,7 +98,7 @@ def test_agent_frontend_distinguishes_failed_tools_from_completed_tools():
 
 
 def test_agent_frontend_always_discloses_web_search_usage():
-    source = (PROJECT_ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
+    source = FRONTEND_SOURCE
 
     assert "webSearchAttempted" in source
     assert "webSearchSucceeded" in source
@@ -79,7 +112,7 @@ def test_agent_frontend_always_discloses_web_search_usage():
 
 
 def test_run_log_frontend_keeps_calendar_actions_and_select_state_safe():
-    source = (PROJECT_ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
+    source = FRONTEND_SOURCE
 
     assert 'id="run-calendar"' in source
     assert "Array.from({length:daysInMonth}" in source
@@ -101,7 +134,7 @@ def test_run_log_frontend_keeps_calendar_actions_and_select_state_safe():
 
 
 def test_strava_upload_lets_browser_set_multipart_content_type():
-    source = (PROJECT_ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
+    source = FRONTEND_SOURCE
     upload_source = source.split("async function apiUpload", 1)[1].split(
         "// ====== Auth Handlers ======", 1
     )[0]
@@ -112,7 +145,7 @@ def test_strava_upload_lets_browser_set_multipart_content_type():
 
 
 def test_strava_frontend_uses_account_range_and_automatic_mileage_sync():
-    source = (PROJECT_ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
+    source = FRONTEND_SOURCE
 
     assert "strava-import-range:${currentUser" in source
     assert 'id="strava-start-date" type="date" value=' not in source
@@ -123,7 +156,7 @@ def test_strava_frontend_uses_account_range_and_automatic_mileage_sync():
 
 
 def test_run_log_is_the_first_and_default_tab():
-    source = (PROJECT_ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
+    source = FRONTEND_SOURCE
     tabs = source.split('<div class="tabs">', 1)[1].split("</div>", 1)[0]
 
     assert tabs.index('data-tab="runs"') < tabs.index('data-tab="shoes"')
@@ -132,7 +165,7 @@ def test_run_log_is_the_first_and_default_tab():
 
 
 def test_strava_frontend_discards_stale_preview_responses():
-    source = (PROJECT_ROOT / "frontend" / "index.html").read_text(encoding="utf-8")
+    source = FRONTEND_SOURCE
 
     assert "new AbortController()" in source
     assert "requestId !== stravaPreviewRequestId" in source
