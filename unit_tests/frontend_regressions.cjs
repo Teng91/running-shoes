@@ -4,7 +4,12 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const htmlSource = fs.readFileSync('frontend/index.html', 'utf8');
-const scriptSource = fs.readFileSync('frontend/app.js', 'utf8');
+const scriptPaths = [
+  'frontend/app-agent.js',
+  'frontend/app-reports.js',
+  'frontend/app.js',
+];
+const scriptSource = scriptPaths.map(path => fs.readFileSync(path, 'utf8')).join('\n');
 const styleSource = fs.readFileSync('frontend/styles.css', 'utf8');
 const source = `${htmlSource}\n${styleSource}\n${scriptSource}`;
 
@@ -18,9 +23,11 @@ test('PWA metadata, local dependencies and service worker registration are prese
   const serviceWorker = fs.readFileSync('frontend/service-worker.js', 'utf8');
   assert.match(serviceWorker, /'\/vendor\/chart\.umd\.min\.js'/);
   assert.match(serviceWorker, /'\/vendor\/marked\.min\.js'/);
+  assert.match(serviceWorker, /'\/app-agent\.js'/);
+  assert.match(serviceWorker, /'\/app-reports\.js'/);
   assert.match(serviceWorker, /'\/app\.js'/);
   assert.match(serviceWorker, /'\/styles\.css'/);
-  assert.match(htmlSource, /src="\/app\.js"/);
+  assert.match(htmlSource, /src="\/app-agent\.js"[\s\S]*src="\/app-reports\.js"[\s\S]*src="\/app\.js"/);
   assert.match(htmlSource, /href="\/styles\.css"/);
 });
 
@@ -255,7 +262,9 @@ test('shoe default uses the local calendar date', () => {
 });
 
 test('the external application script parses', () => {
-  assert.doesNotThrow(() => new vm.Script(scriptSource));
+  scriptPaths.forEach(path => {
+    assert.doesNotThrow(() => new vm.Script(fs.readFileSync(path, 'utf8')));
+  });
 });
 
 test('run history is fetched by month and paginated', async () => {
