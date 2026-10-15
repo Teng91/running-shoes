@@ -2,7 +2,10 @@
 
 ## Project map
 
-- `backend/main.py`: FastAPI routes, application lifecycle, imports, and exports.
+- `backend/main.py`: FastAPI composition root, application lifecycle, and routes not yet extracted.
+- `backend/routers/`: feature-oriented HTTP routes; routers must never import `backend.main`.
+- `docs/architecture.md`: current SDD, module boundaries, diagrams, and evolution sequence.
+- `docs/testing-strategy.md`: test design, traceability matrix, and definition of done.
 - `backend/agent.py`: LLM orchestration, deterministic query planning, and SSE events.
 - `backend/tools/`: trusted database and web-search tools used by the agent.
 - `frontend/index.html`: dependency-light single-page dashboard markup.
@@ -23,6 +26,7 @@
 - Keep calculated mileage, lifecycle, and spending values in backend code rather than asking the LLM to calculate them.
 - Add a regression test when fixing a bug or changing externally observable behavior.
 - Update `README.md` when setup, configuration, commands, or user-facing behavior changes.
+- Update the SDD/ADR when module boundaries or dependency direction changes.
 
 ## Verification
 
@@ -33,6 +37,7 @@ Use the repository task runner from PowerShell or `pwsh`:
 - Frontend logic change: `./scripts/task.ps1 frontend-test`
 - Layout change: `./scripts/task.ps1 frontend-layout`
 - README, harness command, test-count, tool-count, or layout-matrix change: `./scripts/task.ps1 docs-check`
+- Router or module-boundary change: `./scripts/task.ps1 architecture-check`
 - Release-sensitive or cross-cutting change: `./scripts/task.ps1 verify`
 - Everything at once before handing off a large change: `./scripts/task.ps1 verify-all`
 
