@@ -6,7 +6,9 @@
 - `backend/agent.py`: LLM orchestration, deterministic query planning, and SSE events.
 - `backend/tools/`: trusted database and web-search tools used by the agent.
 - `frontend/index.html`: dependency-light single-page dashboard markup.
-- `frontend/app.js`: dashboard state, API, charts, and interaction logic.
+- `frontend/app.js`: core dashboard state, API, run/shoe charts, and interactions.
+- `frontend/app-agent.js`: AI assistant models, chat streaming, and safe Markdown rendering.
+- `frontend/app-reports.js`: monthly report loading, generation, and streaming UI.
 - `frontend/styles.css`: dashboard themes and responsive layout.
 - `unit_tests/`: backend, frontend, security, migration, and agent regression tests.
 

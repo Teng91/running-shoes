@@ -1,6 +1,8 @@
-const CACHE_NAME = 'running-shoes-shell-v5';
+const CACHE_NAME = 'running-shoes-shell-v6';
 const APP_SHELL = [
   '/',
+  '/app-agent.js',
+  '/app-reports.js',
   '/app.js',
   '/styles.css',
   '/offline.html',

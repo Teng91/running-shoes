@@ -91,6 +91,8 @@ def main() -> None:
         "backend/strava_import.py",
         "backend/tools",
         "frontend/app.js",
+        "frontend/app-agent.js",
+        "frontend/app-reports.js",
         "frontend/index.html",
         "frontend/styles.css",
         "pyproject.toml",
