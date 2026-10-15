@@ -35,7 +35,9 @@ running-shoes/
 ├── .claude/
 │   └── settings.json     # Claude Code 完成回覆前執行確定性驗證的 Stop hook
 ├── backend/              # FastAPI 後端
-│   ├── main.py           # API 路由 + 靜態檔案服務
+│   ├── main.py           # App 組裝、lifecycle、靜態檔案與尚待拆分的 routes
+│   ├── routers/
+│   │   └── insights.py   # 分析、匯出與支出統計 HTTP routes
 │   ├── auth.py           # JWT 認證 + 密碼雜湊
 │   ├── database.py       # SQLite 資料庫連線
 │   ├── models.py         # 資料表定義
@@ -63,9 +65,14 @@ running-shoes/
 │   ├── icons/            # PWA、iOS 主畫面圖示與高解析度來源檔
 │   ├── vendor/           # 固定版本的 Chart.js 與 marked.js 離線資源
 │   └── favicon.svg
+├── docs/
+│   ├── architecture.md   # SDD：現況架構圖、模組邊界與演進順序
+│   ├── testing-strategy.md # TDD：測試層級、追蹤矩陣與完成條件
+│   └── adr/              # 重要架構決策與取捨紀錄
 ├── scripts/
 │   ├── claude_stop_hook.py # Claude Code 本機驗證與失敗回饋
 │   ├── claude_stop_hook_launcher.cjs # 跨 Windows／Unix 尋找專案 Python
+│   ├── check_architecture.py # 阻止反向依賴與重複 API route
 │   ├── check_docs.py     # 核對 README 測試數、工具數、版面矩陣與 harness 路徑
 │   └── task.ps1          # setup、測試、eval 與完整驗證的統一入口
 ├── unit_tests/           # Pytest、Agent eval、前端邏輯與版面回歸測試
@@ -300,7 +307,7 @@ Unix `venv/bin/python` 或系統 Python。從 PowerShell／`pwsh` 執行：
 # 安裝開發依賴
 ./scripts/task.ps1 setup
 
-# 完整檢查：Ruff、mypy、依賴漏洞掃描、pytest、前端 Node 回歸測試
+# 完整檢查：Ruff、mypy、架構邊界、依賴漏洞、pytest、前端 Node 回歸測試
 ./scripts/task.ps1 verify
 
 # 一次跑完 verify 與 frontend-layout（缺 Playwright 時會警告並跳過版面檢查）
@@ -312,6 +319,9 @@ Unix `venv/bin/python` 或系統 Python。從 PowerShell／`pwsh` 執行：
 
 # 只掃描鎖定的正式環境依賴是否有已知漏洞
 ./scripts/task.ps1 audit-deps
+
+# 檢查 router 依賴方向與重複 API route
+./scripts/task.ps1 architecture-check
 
 # 核對 README 與實際測試數、工具數、版面矩陣及 harness 路徑
 ./scripts/task.ps1 docs-check
@@ -356,6 +366,12 @@ GitHub Actions 仍會在 push／pull request 執行 `verify`，並在獨立工�
 版面檢查涵蓋 WebKit／Chromium、亮／暗模式與 7 組直橫向尺寸，共 28 組設定，檢查五個分頁、表單、圖表、彈窗及空資料狀態。
 
 `docs-check` 會從 pytest collection、前端測試檔、Agent tool registry、Playwright 測試矩陣與實際檔案系統核對上述數字及 harness 路徑。新增測試、工具或版面設定卻忘記同步 README 時，`verify` 和 GitHub Actions 會直接失敗。
+
+專案的規格不是只存在對話裡：[`docs/architecture.md`](docs/architecture.md) 是目前的
+Software Design Description（含 Mermaid 架構圖與拆分順序），
+[`docs/testing-strategy.md`](docs/testing-strategy.md) 是 Test Design Document（含需求追蹤矩陣），
+重大取捨則記錄在 [`docs/adr/`](docs/adr/)。`architecture-check` 會把其中最重要的依賴規則
+變成 CI 可執行的限制，避免文件和程式逐漸分歧。
 
 鞋款、跑步日誌、月跑量與跑量目標的更新都會使用版本檢查，舊畫面遇到衝突時請重新載入後再操作。跑步日誌造成的鞋款與月跑量增減會在同一交易中處理；同月份彙總、首次建立目標及月報保存皆使用 SQLite 原子 upsert，避免同時寫入發生 500 或遺失更新。SQLite 連線啟用 foreign keys、30 秒 busy timeout 與 WAL，降低讀取分析和一般寫入互相鎖住的機率。已有逐筆日誌的月份不能直接改年月，必須先調整日誌日期；純手動月份仍可移動。改密碼後既有登入會失效，需重新登入。
 啟動時會自動為既有資料庫補上鞋款、跑步日誌、月跑量、跑量目標與登入版本欄位，並依當前顯示總里程建立歷史調整基準；升級前後的顯示總里程不會改變。

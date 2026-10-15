@@ -1,6 +1,6 @@
 param(
     [Parameter(Position = 0)]
-    [ValidateSet("setup", "test-fast", "frontend-test", "frontend-layout", "eval-agent", "audit-deps", "docs-check", "verify", "verify-all")]
+    [ValidateSet("setup", "test-fast", "frontend-test", "frontend-layout", "eval-agent", "audit-deps", "architecture-check", "docs-check", "verify", "verify-all")]
     [string]$Task = "verify"
 )
 
@@ -66,6 +66,14 @@ function Invoke-DocsCheck {
     Invoke-Checked "README consistency" { & $python scripts/check_docs.py }
 }
 
+function Invoke-ArchitectureCheck {
+    $python = Get-ProjectPython
+    if (-not $env:SECRET_KEY) {
+        $env:SECRET_KEY = "test-only-harness-secret-key-not-for-production"
+    }
+    Invoke-Checked "Architecture constraints" { & $python scripts/check_architecture.py }
+}
+
 function Invoke-DependencyAudit {
     $python = Get-ProjectPython
     Invoke-Checked "Dependency vulnerability audit" {
@@ -95,6 +103,7 @@ function Invoke-Verify {
     $python = Get-ProjectPython
     Invoke-Checked "Ruff" { & $python -m ruff check backend scripts unit_tests }
     Invoke-Checked "mypy" { & $python -m mypy backend }
+    Invoke-ArchitectureCheck
     Invoke-DependencyAudit
     Invoke-DocsCheck
     Invoke-BackendTests
@@ -124,6 +133,7 @@ switch ($Task) {
     }
     "eval-agent" { Invoke-AgentEvals }
     "audit-deps" { Invoke-DependencyAudit }
+    "architecture-check" { Invoke-ArchitectureCheck }
     "docs-check" { Invoke-DocsCheck }
     "verify" { Invoke-Verify }
     "verify-all" {
