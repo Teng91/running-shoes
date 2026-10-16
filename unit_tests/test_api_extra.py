@@ -364,7 +364,7 @@ def test_auth_global_limit_rejects_before_creating_new_ip_bucket(
 
 def test_shoe_record_quota_is_enforced(client, db, user_with_token, monkeypatch):
     user, token = user_with_token
-    monkeypatch.setattr(main_module, "MAX_SHOES_PER_USER", 1)
+    monkeypatch.setattr("backend.routers.shoes.MAX_SHOES_PER_USER", 1)
     db.add(Shoe(user_id=user.id, brand="A", model="One", date="2026-01-01"))
     db.commit()
     response = client.post("/api/shoes", headers=_auth(token), json={
@@ -692,7 +692,7 @@ def test_static_asset_and_non404_http_errors(client):
 
     service_worker = client.get("/service-worker.js")
     assert service_worker.status_code == 200
-    assert "running-shoes-shell-v6" in service_worker.text
+    assert "running-shoes-shell-v7" in service_worker.text
 
     agent_script = client.get("/app-agent.js")
     assert agent_script.status_code == 200
@@ -702,9 +702,17 @@ def test_static_asset_and_non404_http_errors(client):
     assert report_script.status_code == 200
     assert "generateReport" in report_script.text
 
+    runs_script = client.get("/app-runs.js")
+    assert runs_script.status_code == 200
+    assert "fetchRunPages" in runs_script.text
+
+    shoes_script = client.get("/app-shoes.js")
+    assert shoes_script.status_code == 200
+    assert "class ShoeModal" in shoes_script.text
+
     app_script = client.get("/app.js")
     assert app_script.status_code == 200
-    assert "fetchRunPages" in app_script.text
+    assert "async function loadData" in app_script.text
 
     stylesheet = client.get("/styles.css")
     assert stylesheet.status_code == 200

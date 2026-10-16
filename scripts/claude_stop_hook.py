@@ -24,6 +24,8 @@ MAX_REASON_CHARS = 8_000
 
 LAYOUT_FILES = {
     "frontend/app.js",
+    "frontend/app-runs.js",
+    "frontend/app-shoes.js",
     "frontend/index.html",
     "frontend/styles.css",
     "unit_tests/frontend_layout.cjs",
@@ -95,8 +97,22 @@ def verification_checks() -> list[Check]:
     return [
         Check("Ruff", (python, "-m", "ruff", "check", "backend", "scripts", "unit_tests")),
         Check("mypy", (python, "-m", "mypy", "backend")),
+        Check("Architecture constraints", (python, "scripts/check_architecture.py")),
+        Check("Secret scan", (python, "scripts/check_secrets.py")),
         Check("README consistency", (python, "scripts/check_docs.py")),
-        Check("Python tests", (python, "-m", "pytest", "-q")),
+        Check(
+            "Python tests",
+            (
+                python,
+                "-m",
+                "pytest",
+                "-q",
+                "--cov=backend",
+                "--cov-branch",
+                "--cov-fail-under=92",
+                "--cov-report=term-missing:skip-covered",
+            ),
+        ),
         Check("Frontend regression tests", ("node", "--test", "unit_tests/frontend_regressions.cjs")),
     ]
 
