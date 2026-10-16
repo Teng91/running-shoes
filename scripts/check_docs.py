@@ -91,6 +91,7 @@ def main() -> None:
         "docs/architecture.md",
         "docs/specs/template.md",
         "docs/specs/001-engineering-maturity.md",
+        "docs/specs/002-cross-platform-task-runner.md",
         "docs/testing-strategy.md",
         "backend/agent.py",
         "backend/exporting.py",
@@ -123,7 +124,8 @@ def main() -> None:
         "scripts/check_secrets.py",
         "scripts/database_backup.py",
         "scripts/smoke_test.py",
-        "scripts/task.ps1",
+        "scripts/task.py",
+        "unit_tests/test_task_runner.py",
         "unit_tests/agent_eval_cases.json",
         "unit_tests/api_contract.json",
         "unit_tests/frontend_layout.cjs",
@@ -147,9 +149,24 @@ def main() -> None:
         "verify-all",
     )
     for task in required_tasks:
-        command = f"./scripts/task.ps1 {task}"
+        command = f"python3 scripts/task.py {task}"
         if command not in README:
             fail(f"README does not mention public harness command: {command}")
+
+    legacy_terms = ("task.ps1", "pwsh", "PowerShell")
+    checked_text = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in (
+            ROOT / "README.md",
+            ROOT / "AGENTS.md",
+            ROOT / "docs" / "testing-strategy.md",
+            ROOT / ".github" / "pull_request_template.md",
+            ROOT / ".github" / "workflows" / "verify.yml",
+        )
+    )
+    for term in legacy_terms:
+        if term in checked_text:
+            fail(f"deprecated platform-specific runner reference remains: {term}")
 
     documented_python, documented_frontend = documented_counts()
     actual_python = collected_pytest_count()

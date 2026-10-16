@@ -14,8 +14,7 @@
 
 ## Verification
 
-- [ ] `./scripts/task.ps1 architecture-check`
-- [ ] `./scripts/task.ps1 verify`
-- [ ] 若修改版面：`./scripts/task.ps1 frontend-layout`
+- [ ] `python3 scripts/task.py architecture-check`
+- [ ] `python3 scripts/task.py verify`
+- [ ] 若修改版面：`python3 scripts/task.py frontend-layout`
 - [ ] 若準備部署：已建立備份並執行 post-deploy smoke test
-
