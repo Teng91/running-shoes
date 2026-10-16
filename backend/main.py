@@ -1,41 +1,41 @@
-import json
 import os
 import time
-from calendar import monthrange
 from collections import deque
-from collections.abc import Sequence
 from contextlib import asynccontextmanager
 from datetime import date, datetime, timedelta, timezone
 from ipaddress import ip_address
 from pathlib import Path
 from threading import Lock
-from typing import Annotated, ClassVar, cast
+from typing import Annotated, ClassVar
 
-from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
-from sqlalchemy import Table, func, inspect, text
+from sqlalchemy import func, text
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from backend import agent, goals, llm, models, reports, schemas, strava_import
+from backend import agent, goals, llm, migrations, models, reports, schemas
 from backend.auth import (
     create_access_token,
     get_current_user,
     get_password_hash,
     verify_password,
 )
-from backend.database import Base, SessionLocal, engine, get_db
+from backend.database import SessionLocal, engine, get_db
 from backend.exporting import (
     export_filename as _get_export_filename,
 )
 from backend.exporting import (
     generate_shoe_rows as _generate_shoe_rows,
 )
-from backend.routers import insights
+from backend.observability import RequestContextMiddleware
+from backend.routers import health, insights
+from backend.routers import runs as run_routes
+from backend.routers import shoes as shoe_routes
 
 AGENT_RATE_LIMIT_PER_MINUTE = max(
     1, int(os.environ.get("AGENT_RATE_LIMIT_PER_MINUTE", "20"))
@@ -398,149 +398,7 @@ def seed_default_data():
 # ── Lifespan: create tables & migrate ─────────────────────────
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # One-time migration: if old schema exists (shoes table without user_id), migrate
-    inspector = inspect(engine)
-    existing_tables = inspector.get_table_names()
-    existing_shoe_columns = (
-        {column["name"] for column in inspector.get_columns("shoes")}
-        if "shoes" in existing_tables
-        else set()
-    )
-
-    if "shoes" in existing_tables and "user_id" not in existing_shoe_columns:
-        migration_password = os.environ.get("MIGRATION_PASSWORD")
-        if not migration_password:
-            raise RuntimeError(
-                "MIGRATION_PASSWORD is required to migrate the legacy shoes database; "
-                "refusing to start with an unusable schema."
-            )
-
-        # Old schema: create users table, add user_id to shoes, assign to "Joy"
-        user_table = cast(Table, models.User.__table__)
-        Base.metadata.create_all(bind=engine, tables=[user_table])
-        with engine.begin() as conn:
-            if "token_version" not in {c["name"] for c in inspect(conn).get_columns("users")}:
-                conn.execute(text("ALTER TABLE users ADD COLUMN token_version INTEGER NOT NULL DEFAULT 0"))
-        db = SessionLocal()
-        try:
-            joy_user = db.query(models.User).filter(models.User.username == "Joy").first()
-            if joy_user is None:
-                joy_user = models.User(
-                    username="Joy",
-                    hashed_password=get_password_hash(migration_password),
-                )
-                db.add(joy_user)
-                db.commit()
-                db.refresh(joy_user)
-
-            # Add user_id column (SQLite allows ALTER TABLE ADD COLUMN without FK)
-            with engine.connect() as conn:
-                conn.execute(text("ALTER TABLE shoes ADD COLUMN user_id INTEGER"))
-                conn.execute(
-                    text("UPDATE shoes SET user_id = :uid"),
-                    {"uid": joy_user.id},
-                )
-                conn.commit()
-        finally:
-            db.close()
-
-    Base.metadata.create_all(bind=engine)
-
-    # Add concurrency/session versions to existing databases without changing data.
-    for table, column in (
-        ("users", "token_version"),
-        ("shoes", "version"),
-        ("shoes", "is_deleted"),
-        ("runs", "version"),
-        ("monthly_mileages", "version"),
-        ("running_goals", "version"),
-    ):
-        columns = {item["name"] for item in inspect(engine).get_columns(table)}
-        if column not in columns:
-            with engine.begin() as conn:
-                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} INTEGER NOT NULL DEFAULT 0"))
-
-    # Make historical/manual mileage explicit while preserving the exact totals
-    # shown before this migration.  These baselines remain unchanged as runs are
-    # added, edited, or deleted.
-    shoe_columns = {column["name"] for column in inspect(engine).get_columns("shoes")}
-    if "baseline_mileage" not in shoe_columns:
-        with engine.begin() as conn:
-            conn.execute(text(
-                "ALTER TABLE shoes ADD COLUMN baseline_mileage FLOAT NOT NULL DEFAULT 0"
-            ))
-            # Extremely old test/legacy tables may not yet have a mileage
-            # column; their new baseline safely remains zero.
-            if "mileage" in shoe_columns:
-                conn.execute(text(
-                    "UPDATE shoes SET baseline_mileage = mileage - COALESCE(("
-                    "SELECT SUM(runs.km) FROM runs WHERE runs.shoe_id = shoes.id "
-                    "AND runs.user_id = shoes.user_id), 0)"
-                ))
-
-    monthly_columns = {
-        column["name"] for column in inspect(engine).get_columns("monthly_mileages")
-    }
-    if "adjustment_km" not in monthly_columns:
-        with engine.begin() as conn:
-            conn.execute(text(
-                "ALTER TABLE monthly_mileages "
-                "ADD COLUMN adjustment_km FLOAT NOT NULL DEFAULT 0"
-            ))
-            conn.execute(text(
-                "UPDATE monthly_mileages SET adjustment_km = km - COALESCE(("
-                "SELECT SUM(runs.km) FROM runs WHERE runs.user_id = monthly_mileages.user_id "
-                "AND CAST(substr(runs.date, 1, 4) AS INTEGER) = monthly_mileages.year "
-                "AND CAST(substr(runs.date, 6, 2) AS INTEGER) = monthly_mileages.month), 0)"
-            ))
-
-    # Incremental migration for Strava provenance on run records.
-    run_columns = {column["name"] for column in inspect(engine).get_columns("runs")}
-    with engine.begin() as conn:
-        if "strava_id" not in run_columns:
-            conn.execute(text("ALTER TABLE runs ADD COLUMN strava_id VARCHAR"))
-        conn.execute(text(
-            "CREATE UNIQUE INDEX IF NOT EXISTS idx_runs_user_strava_id "
-            "ON runs (user_id, strava_id) WHERE strava_id IS NOT NULL"
-        ))
-
-    # create_all() does not add indexes to tables that already exist.
-    # Keep the run-log query path fast for upgraded databases as history grows.
-    with engine.begin() as conn:
-        conn.execute(text(
-            "CREATE INDEX IF NOT EXISTS idx_runs_user_date "
-            "ON runs (user_id, date)"
-        ))
-        conn.execute(text("PRAGMA optimize"))
-
-    # Incremental migration for SQLite databases created before shoe categories
-    # were changed from a single string to a JSON array of multiple purposes.
-    # create_all() does not alter existing tables, so we need ALTER TABLE here.
-    shoe_columns = {column["name"] for column in inspect(engine).get_columns("shoes")}
-    with engine.begin() as conn:
-        if "categories" not in shoe_columns:
-            if "category" in shoe_columns:
-                # Legacy DB: migrate single-string category → JSON array, then drop old column
-                conn.execute(text("ALTER TABLE shoes ADD COLUMN categories TEXT NOT NULL DEFAULT '[]'"))
-                conn.execute(text("UPDATE shoes SET categories = json_array(category) WHERE category IS NOT NULL AND category != ''"))
-                conn.execute(text("ALTER TABLE shoes DROP COLUMN category"))
-            else:
-                # Table exists but has no category column at all — add the new one
-                conn.execute(text("ALTER TABLE shoes ADD COLUMN categories TEXT NOT NULL DEFAULT '[]'"))
-        # Remove discontinued categories in one pass, including repeated values.
-        # Preserve the remaining labels and leave shoes with no remaining purpose unclassified.
-        conn.execute(text("""
-            UPDATE shoes
-            SET categories = (
-                SELECT json_group_array(value) FROM json_each(shoes.categories)
-                WHERE value NOT IN ('Other', 'Walk', 'Trail')
-            ), version = version + 1
-            WHERE EXISTS (
-                SELECT 1 FROM json_each(shoes.categories)
-                WHERE value IN ('Other', 'Walk', 'Trail')
-            )
-        """))
-
+    migrations.run_startup_migrations(engine, SessionLocal)
     seed_default_data()
     yield
 
@@ -555,7 +413,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(RequestContextMiddleware)
 app.include_router(insights.router)
+app.include_router(shoe_routes.router)
+app.include_router(run_routes.router)
+app.include_router(health.router)
 
 # ── Serve static frontend ─────────────────────────────────────
 frontend_dir = Path(__file__).resolve().parent.parent / "frontend"
@@ -665,563 +527,23 @@ def change_password(
     return {"ok": True}
 
 
-# ── Shoe Routes ───────────────────────────────────────────────
-
-
-@app.get("/api/shoes/active", response_model=list[schemas.ShoeOut])
-def list_active(
-    current_user: models.User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    return db.query(models.Shoe).filter(
-        models.Shoe.is_retired.is_(False),
-        models.Shoe.is_deleted.is_(False),
-        models.Shoe.user_id == current_user.id,
-    ).all()
-
-
-@app.get("/api/shoes/retired", response_model=list[schemas.ShoeOut])
-def list_retired(
-    current_user: models.User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    return db.query(models.Shoe).filter(
-        models.Shoe.is_retired.is_(True),
-        models.Shoe.is_deleted.is_(False),
-        models.Shoe.user_id == current_user.id,
-    ).all()
-
-
-@app.post("/api/shoes", response_model=schemas.ShoeOut)
-def create_shoe(
-    payload: schemas.ShoeCreate,
-    current_user: models.User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    shoe_count = db.query(models.Shoe).filter(
-        models.Shoe.user_id == current_user.id,
-        models.Shoe.is_deleted.is_(False),
-    ).count()
-    if isinstance(shoe_count, int) and shoe_count >= MAX_SHOES_PER_USER:
-        raise HTTPException(status_code=409, detail="跑鞋資料已達上限")
-    shoe = models.Shoe(
-        **payload.model_dump(),
-        baseline_mileage=payload.mileage,
-        user_id=current_user.id,
-    )
-    db.add(shoe)
-    try:
-        db.commit()
-    except Exception:
-        db.rollback()
-        raise
-    db.refresh(shoe)
-    return shoe
-
-
-@app.put("/api/shoes/{shoe_id}", response_model=schemas.ShoeOut)
-def update_shoe(
-    shoe_id: int,
-    payload: schemas.ShoeUpdate,
-    current_user: models.User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    shoe = db.query(models.Shoe).filter(
-        models.Shoe.id == shoe_id,
-        models.Shoe.user_id == current_user.id,
-        models.Shoe.is_deleted.is_(False),
-    ).first()
-    if not shoe:
-        raise HTTPException(status_code=404, detail="Shoe not found")
-    update_data = payload.model_dump(exclude_unset=True)
-    supplied_version = update_data.pop("expected_version", None)
-    current_version = int(getattr(shoe, "version", 0))
-    if supplied_version is not None and supplied_version != current_version:
-        raise HTTPException(status_code=409, detail="鞋款已被更新，請重新載入後再編輯")
-    expected_version = current_version
-    if "mileage" in update_data:
-        logged_mileage = db.query(func.sum(models.Run.km)).filter(
-            models.Run.user_id == current_user.id,
-            models.Run.shoe_id == shoe_id,
-        ).scalar()
-        logged_total = round(float(logged_mileage or 0), 2)
-        if float(update_data["mileage"]) + 0.005 < logged_total:
-            raise HTTPException(
-                status_code=400,
-                detail=f"總里程不可低於逐筆跑步日誌合計 {logged_total:.2f} km",
-            )
-        update_data["baseline_mileage"] = round(
-            float(update_data["mileage"]) - logged_total, 2
-        )
-    query = db.query(models.Shoe).filter(
-        models.Shoe.id == shoe_id, models.Shoe.user_id == current_user.id,
-        models.Shoe.is_deleted.is_(False),
-    )
-    query = query.filter(models.Shoe.version == expected_version)
-    try:
-        update_data["version"] = models.Shoe.version + 1
-        changed = query.update(
-            {getattr(models.Shoe, key): value for key, value in update_data.items()},
-            synchronize_session=False,
-        )
-        if not changed:
-            raise HTTPException(status_code=409, detail="鞋款已被更新，請重新載入後再編輯")
-        db.commit()
-    except Exception:
-        db.rollback()
-        raise
-    db.refresh(shoe)
-    return shoe
-
-
-@app.delete("/api/shoes/{shoe_id}")
-def delete_shoe(
-    shoe_id: int,
-    expected_version: Annotated[int | None, Query(ge=0)] = None,
-    current_user: models.User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    shoe = db.query(models.Shoe).filter(
-        models.Shoe.id == shoe_id,
-        models.Shoe.user_id == current_user.id,
-        models.Shoe.is_deleted.is_(False),
-    ).first()
-    if not shoe:
-        raise HTTPException(status_code=404, detail="Shoe not found")
-    version = getattr(shoe, "version", 0) if expected_version is None else expected_version
-    try:
-        changed = db.query(models.Shoe).filter(
-            models.Shoe.id == shoe_id,
-            models.Shoe.user_id == current_user.id,
-            models.Shoe.is_deleted.is_(False),
-            models.Shoe.version == version,
-        ).update(
-            {
-                models.Shoe.is_deleted: True,
-                models.Shoe.version: models.Shoe.version + 1,
-            },
-            synchronize_session=False,
-        )
-        if not changed:
-            raise HTTPException(
-                status_code=409,
-                detail="鞋款已被更新，請重新載入後再刪除",
-            )
-        db.commit()
-    except Exception:
-        db.rollback()
-        raise
-    return {"ok": True}
-
-
-# ── Run Log Routes ──
-def _user_shoe_or_404(db: Session, user_id: int, shoe_id: int) -> models.Shoe:
-    shoe = db.query(models.Shoe).filter(
-        models.Shoe.id == shoe_id,
-        models.Shoe.user_id == user_id,
-        models.Shoe.is_deleted.is_(False),
-    ).first()
-    if not shoe:
-        raise HTTPException(status_code=404, detail="Shoe not found")
-    return shoe
-
-
-def _apply_run_mileage_deltas(
-    db: Session,
-    user_id: int,
-    run_values: Sequence[tuple[int, str, float]],
-    multiplier: int,
-) -> float:
-    """Apply run deltas to shoe totals and monthly mileage in one transaction."""
-    shoe_deltas: dict[int, float] = {}
-    month_deltas: dict[tuple[int, int], float] = {}
-    total_delta = 0.0
-    for shoe_id, run_date, km in run_values:
-        delta = round(km * multiplier, 2)
-        shoe_deltas[shoe_id] = shoe_deltas.get(shoe_id, 0.0) + delta
-        year, month = int(run_date[:4]), int(run_date[5:7])
-        month_deltas[(year, month)] = month_deltas.get((year, month), 0.0) + delta
-        total_delta += delta
-
-    for shoe_id, delta in shoe_deltas.items():
-        if abs(delta) < 0.005:
-            continue
-        db.query(models.Shoe).filter(
-            models.Shoe.id == shoe_id,
-            models.Shoe.user_id == user_id,
-        ).update(
-            {
-                models.Shoe.version: models.Shoe.version + 1,
-                models.Shoe.mileage: func.max(
-                    0,
-                    func.coalesce(models.Shoe.mileage, 0) + round(delta, 2),
-                )
-            },
-            synchronize_session=False,
-        )
-
-    for (year, month), delta in month_deltas.items():
-        if abs(delta) < 0.005:
-            continue
-        rounded_delta = round(delta, 2)
-        if rounded_delta > 0:
-            # A single SQLite upsert avoids a query-then-insert race when two
-            # runs create the first aggregate row for the same month.
-            statement = sqlite_insert(models.MonthlyMileage).values(
-                user_id=user_id,
-                year=year,
-                month=month,
-                km=rounded_delta,
-                adjustment_km=0,
-                version=0,
-            )
-            statement = statement.on_conflict_do_update(
-                index_elements=["user_id", "year", "month"],
-                set_={
-                    "km": func.max(
-                        0,
-                        func.coalesce(models.MonthlyMileage.km, 0)
-                        + rounded_delta,
-                    ),
-                    "version": models.MonthlyMileage.version + 1,
-                },
-            )
-            db.execute(statement)
-        else:
-            db.query(models.MonthlyMileage).filter(
-                models.MonthlyMileage.user_id == user_id,
-                models.MonthlyMileage.year == year,
-                models.MonthlyMileage.month == month,
-            ).update(
-                {
-                    models.MonthlyMileage.version: models.MonthlyMileage.version + 1,
-                    models.MonthlyMileage.km: func.max(
-                        0,
-                        func.coalesce(models.MonthlyMileage.km, 0)
-                        + rounded_delta,
-                    )
-                },
-                synchronize_session=False,
-            )
-    return round(total_delta, 2)
-
-
-def _parse_strava_csv(raw: bytes) -> tuple[list[dict[str, object]], int, list[str]]:
-    return strava_import.parse_csv(raw, max_rows=MAX_STRAVA_CSV_ROWS)
-
-
-def _filter_strava_rows(
-    rows: list[dict[str, object]], start_date: str, end_date: str
-) -> tuple[list[dict[str, object]], int]:
-    return strava_import.filter_rows(rows, start_date, end_date)
-
-
-async def _read_strava_upload(file: UploadFile) -> bytes:
-    raw = await file.read(MAX_STRAVA_CSV_BYTES + 1)
-    if len(raw) > MAX_STRAVA_CSV_BYTES:
-        raise HTTPException(status_code=413, detail="CSV 檔案不可超過 10 MB")
-    return raw
-
-
-def _strava_preview(
-    db: Session,
-    user_id: int,
-    rows: list[dict[str, object]],
-    invalid: int,
-    warnings: list[str],
-) -> dict[str, object]:
-    return strava_import.build_preview(db, user_id, rows, invalid, warnings)
-
-
-@app.post("/api/runs/import/strava/preview")
-async def preview_strava_import(
-    file: UploadFile = File(...),
-    start_date: str = Form(""),
-    end_date: str = Form(""),
-    current_user: models.User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    raw = await _read_strava_upload(file)
-    rows, invalid, warnings = _parse_strava_csv(raw)
-    rows, filtered_out = _filter_strava_rows(rows, start_date, end_date)
-    preview = _strava_preview(db, current_user.id, rows, invalid, warnings)
-    preview["filtered_out"] = filtered_out
-    return preview
-
-
-@app.post("/api/runs/import/strava")
-async def import_strava_runs(
-    file: UploadFile = File(...),
-    mapping: str = Form("{}"),
-    start_date: str = Form(""),
-    end_date: str = Form(""),
-    current_user: models.User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    try:
-        parsed_mapping = json.loads(mapping)
-        if not isinstance(parsed_mapping, dict):
-            raise ValueError
-    except (TypeError, ValueError, json.JSONDecodeError) as exc:
-        raise HTTPException(status_code=400, detail="鞋款配對格式錯誤") from exc
-    raw = await _read_strava_upload(file)
-    rows, invalid, _ = _parse_strava_csv(raw)
-    rows, filtered_out = _filter_strava_rows(rows, start_date, end_date)
-    shoes = {shoe.id: shoe for shoe in db.query(models.Shoe).filter(
-        models.Shoe.user_id == current_user.id,
-        models.Shoe.is_deleted.is_(False),
-    ).all()}
-    normalized_mapping: dict[str, int | None] = {}
-    for gear, shoe_id in parsed_mapping.items():
-        if shoe_id in (None, "", 0, "0"):
-            normalized_mapping[str(gear)] = None
-            continue
-        try:
-            shoe_id_int = int(cast(str | int, shoe_id))
-        except (TypeError, ValueError) as exc:
-            raise HTTPException(status_code=400, detail="鞋款配對格式錯誤") from exc
-        if shoe_id_int not in shoes:
-            raise HTTPException(status_code=404, detail="鞋款不存在或不屬於目前帳號")
-        normalized_mapping[str(gear)] = shoe_id_int
-    existing_ids = {
-        value[0] for value in db.query(models.Run.strava_id).filter(
-            models.Run.user_id == current_user.id, models.Run.strava_id.isnot(None)
-        ).all()
-    }
-    seen: set[str] = set()
-    runs_to_add: list[models.Run] = []
-    skipped_duplicate = 0
-    skipped_unmapped = 0
-    for row in rows:
-        strava_id = str(row["strava_id"])
-        if strava_id in existing_ids or strava_id in seen:
-            skipped_duplicate += 1
-            continue
-        seen.add(strava_id)
-        shoe_id = normalized_mapping.get(str(row["gear"]))
-        if shoe_id is None:
-            skipped_unmapped += 1
-            continue
-        runs_to_add.append(models.Run(
-            user_id=current_user.id,
-            shoe_id=shoe_id,
-            date=str(row["date"]),
-            km=float(cast(float, row["km"])),
-            strava_id=strava_id,
-        ))
-    current_count = db.query(models.Run).filter(models.Run.user_id == current_user.id).count()
-    if current_count + len(runs_to_add) > MAX_RUNS_PER_USER:
-        raise HTTPException(status_code=409, detail="匯入後跑步紀錄將超過上限")
-    synced_mileage = _apply_run_mileage_deltas(
-        db,
-        current_user.id,
-        [(run.shoe_id, run.date, run.km) for run in runs_to_add],
-        1,
-    )
-    db.add_all(runs_to_add)
-    import_record = models.StravaImport(
-        user_id=current_user.id,
-        start_date=start_date,
-        end_date=end_date,
-        imported_count=len(runs_to_add),
-        imported_km=synced_mileage,
-        duplicate_count=skipped_duplicate,
-        unmapped_count=skipped_unmapped,
-        invalid_count=invalid,
-    )
-    db.add(import_record)
-    try:
-        db.flush()
-        stale_import_ids = [
-            value[0] for value in db.query(models.StravaImport.id).filter(
-                models.StravaImport.user_id == current_user.id,
-            ).order_by(
-                models.StravaImport.imported_at.desc(),
-                models.StravaImport.id.desc(),
-            ).offset(MAX_STRAVA_IMPORT_HISTORY_PER_USER).all()
-        ]
-        if stale_import_ids:
-            db.query(models.StravaImport).filter(
-                models.StravaImport.user_id == current_user.id,
-                models.StravaImport.id.in_(stale_import_ids),
-            ).delete(synchronize_session=False)
-        db.commit()
-    except IntegrityError as exc:
-        db.rollback()
-        raise HTTPException(status_code=409, detail="部分 Strava 活動已存在，請重新預覽") from exc
-    except Exception:
-        db.rollback()
-        raise
-    return {
-        "imported": len(runs_to_add),
-        "skipped_duplicate": skipped_duplicate,
-        "skipped_unmapped": skipped_unmapped,
-        "skipped_invalid": invalid,
-        "filtered_out": filtered_out,
-        "synced_mileage": round(synced_mileage, 2),
-        "total_run_rows": len(rows),
-    }
-
-
-@app.get("/api/runs/import/strava/history", response_model=list[schemas.StravaImportOut])
-def list_strava_imports(
-    current_user: models.User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    return db.query(models.StravaImport).filter(
-        models.StravaImport.user_id == current_user.id,
-    ).order_by(models.StravaImport.imported_at.desc(), models.StravaImport.id.desc()).limit(10).all()
-
-
-@app.get("/api/runs", response_model=list[schemas.RunOut])
-def list_runs(
-    year: int | None = Query(default=None, ge=1900, le=2100),
-    month: int | None = Query(default=None, ge=1, le=12),
-    limit: int | None = Query(default=None, ge=1, le=500),
-    offset: int = Query(default=0, ge=0),
-    current_user: models.User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    if month is not None and year is None:
-        raise HTTPException(status_code=422, detail="month requires year")
-    query = db.query(models.Run).filter(models.Run.user_id == current_user.id)
-    if year is not None:
-        if month is None:
-            start_date = f"{year:04d}-01-01"
-            end_date = f"{year:04d}-12-31"
-        else:
-            last_day = monthrange(year, month)[1]
-            start_date = f"{year:04d}-{month:02d}-01"
-            end_date = f"{year:04d}-{month:02d}-{last_day:02d}"
-        query = query.filter(
-            models.Run.date >= start_date,
-            models.Run.date <= end_date,
-        )
-    query = query.order_by(models.Run.date.desc(), models.Run.id.desc()).offset(offset)
-    if limit is not None:
-        query = query.limit(limit)
-    return query.all()
-
-
-@app.post("/api/runs", response_model=schemas.RunOut)
-def create_run(
-    payload: schemas.RunCreate,
-    current_user: models.User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    _user_shoe_or_404(db, current_user.id, payload.shoe_id)
-    run_count = db.query(models.Run).filter(models.Run.user_id == current_user.id).count()
-    if isinstance(run_count, int) and run_count >= MAX_RUNS_PER_USER:
-        raise HTTPException(status_code=409, detail="跑步紀錄已達上限")
-    run = models.Run(**payload.model_dump(), user_id=current_user.id)
-    db.add(run)
-    try:
-        _apply_run_mileage_deltas(
-            db,
-            current_user.id,
-            [(payload.shoe_id, payload.date, payload.km)],
-            1,
-        )
-        db.commit()
-    except Exception:
-        db.rollback()
-        raise
-    db.refresh(run)
-    return run
-
-
-@app.put("/api/runs/{run_id}", response_model=schemas.RunOut)
-def update_run(
-    run_id: int,
-    payload: schemas.RunUpdate,
-    current_user: models.User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    run = db.query(models.Run).filter(
-        models.Run.id == run_id,
-        models.Run.user_id == current_user.id,
-    ).first()
-    if not run:
-        raise HTTPException(status_code=404, detail="Run not found")
-    update_data = payload.model_dump(exclude_unset=True)
-    expected_version = update_data.pop("expected_version", getattr(run, "version", 0))
-    if "shoe_id" in update_data:
-        _user_shoe_or_404(db, current_user.id, update_data["shoe_id"])
-    old_values = (run.shoe_id, run.date, run.km)
-    new_values = (
-        int(update_data.get("shoe_id", run.shoe_id)),
-        str(update_data.get("date", run.date)),
-        float(update_data.get("km", run.km)),
-    )
-    try:
-        changed = db.query(models.Run).filter(
-            models.Run.id == run_id,
-            models.Run.user_id == current_user.id,
-            models.Run.version == expected_version,
-        ).update(
-            {
-                **{
-                    getattr(models.Run, key): value
-                    for key, value in update_data.items()
-                },
-                models.Run.version: models.Run.version + 1,
-            },
-            synchronize_session=False,
-        )
-        if not changed:
-            raise HTTPException(
-                status_code=409,
-                detail="跑步紀錄已被更新，請重新載入後再編輯",
-            )
-        _apply_run_mileage_deltas(
-            db,
-            current_user.id,
-            [
-                (old_values[0], old_values[1], -old_values[2]),
-                new_values,
-            ],
-            1,
-        )
-        db.commit()
-    except Exception:
-        db.rollback()
-        raise
-    db.refresh(run)
-    return run
-
-
-@app.delete("/api/runs/{run_id}")
-def delete_run(
-    run_id: int,
-    expected_version: Annotated[int | None, Query(ge=0)] = None,
-    current_user: models.User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    run = db.query(models.Run).filter(
-        models.Run.id == run_id,
-        models.Run.user_id == current_user.id,
-    ).first()
-    if not run:
-        raise HTTPException(status_code=404, detail="Run not found")
-    run_values = (run.shoe_id, run.date, run.km)
-    version = getattr(run, "version", 0) if expected_version is None else expected_version
-    try:
-        changed = db.query(models.Run).filter(
-            models.Run.id == run_id,
-            models.Run.user_id == current_user.id,
-            models.Run.version == version,
-        ).delete(synchronize_session=False)
-        if not changed:
-            raise HTTPException(
-                status_code=409,
-                detail="跑步紀錄已被更新，請重新載入後再刪除",
-            )
-        _apply_run_mileage_deltas(db, current_user.id, [run_values], -1)
-        db.commit()
-    except Exception:
-        db.rollback()
-        raise
-    return {"ok": True}
+# Compatibility aliases for callers that imported route functions from backend.main.
+list_active = shoe_routes.list_active
+list_retired = shoe_routes.list_retired
+create_shoe = shoe_routes.create_shoe
+update_shoe = shoe_routes.update_shoe
+delete_shoe = shoe_routes.delete_shoe
+_parse_strava_csv = run_routes._parse_strava_csv
+_filter_strava_rows = run_routes._filter_strava_rows
+_read_strava_upload = run_routes._read_strava_upload
+_strava_preview = run_routes._strava_preview
+preview_strava_import = run_routes.preview_strava_import
+import_strava_runs = run_routes.import_strava_runs
+list_strava_imports = run_routes.list_strava_imports
+list_runs = run_routes.list_runs
+create_run = run_routes.create_run
+update_run = run_routes.update_run
+delete_run = run_routes.delete_run
 
 
 # ── Monthly Mileage Routes ──
