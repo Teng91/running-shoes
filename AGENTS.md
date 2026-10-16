@@ -4,6 +4,8 @@
 
 - `backend/main.py`: FastAPI composition root, application lifecycle, and routes not yet extracted.
 - `backend/routers/`: feature-oriented HTTP routes; routers must never import `backend.main`.
+- `backend/services/`: framework-independent application services; services must not import FastAPI or routers.
+- `backend/migrations.py`: ordered SQLite schema upgrades and the current schema version.
 - `docs/architecture.md`: current SDD, module boundaries, diagrams, and evolution sequence.
 - `docs/testing-strategy.md`: test design, traceability matrix, and definition of done.
 - `backend/agent.py`: LLM orchestration, deterministic query planning, and SSE events.
@@ -12,6 +14,8 @@
 - `frontend/app.js`: core dashboard state, API, run/shoe charts, and interactions.
 - `frontend/app-agent.js`: AI assistant models, chat streaming, and safe Markdown rendering.
 - `frontend/app-reports.js`: monthly report loading, generation, and streaming UI.
+- `frontend/app-runs.js`: run log, Strava import, dashboard insight, and shoe analytics UI.
+- `frontend/app-shoes.js`: shoe editing and modal interactions.
 - `frontend/styles.css`: dashboard themes and responsive layout.
 - `unit_tests/`: backend, frontend, security, migration, and agent regression tests.
 
@@ -27,6 +31,8 @@
 - Add a regression test when fixing a bug or changing externally observable behavior.
 - Update `README.md` when setup, configuration, commands, or user-facing behavior changes.
 - Update the SDD/ADR when module boundaries or dependency direction changes.
+- Start user-visible, data-model, deployment, or architecture work from `docs/specs/template.md`.
+- Before a production migration, create and verify a database backup and document rollback.
 
 ## Verification
 
@@ -38,6 +44,7 @@ Use the repository task runner from PowerShell or `pwsh`:
 - Layout change: `./scripts/task.ps1 frontend-layout`
 - README, harness command, test-count, tool-count, or layout-matrix change: `./scripts/task.ps1 docs-check`
 - Router or module-boundary change: `./scripts/task.ps1 architecture-check`
+- Security-sensitive change: `./scripts/task.ps1 security-check`
 - Release-sensitive or cross-cutting change: `./scripts/task.ps1 verify`
 - Everything at once before handing off a large change: `./scripts/task.ps1 verify-all`
 

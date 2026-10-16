@@ -39,6 +39,10 @@ flowchart BT
 | 前端互動與 XSS 防護 | Node regression tests | state、escaping、分頁或錯誤處理回歸 |
 | 響應式版面 | Playwright matrix | 特定引擎、尺寸、主題出現重疊／溢出 |
 | 模組依賴方向 | `architecture-check` | circular dependency 或重複 API route |
+| API contract | method/path snapshot | endpoint 被意外新增、刪除或改名 |
+| 備份可恢復性 | backup/restore tests | checksum、integrity、retention 或安全快照失效 |
+| Coverage floor | branch coverage ≥ 92% | 測試保護範圍明顯退化 |
+| Secret hygiene | `security-check` | tracked files 包含明確 credential 特徵 |
 | 文件與實作一致 | `docs-check` | 測試數、命令、檔案或工具數過期 |
 
 ## 4. 開發流程
@@ -65,6 +69,7 @@ flowchart LR
 | 前端邏輯 | `frontend-test` |
 | 版面 | `frontend-layout` |
 | 架構邊界 | `architecture-check` |
+| Secret／credential 風險 | `security-check` |
 | 文件／harness | `docs-check` |
 | 跨模組或 release | `verify`；大改動使用 `verify-all` |
 
@@ -73,7 +78,6 @@ flowchart LR
 - Acceptance criteria 與不變條件已寫清楚。
 - 新行為或 bug 有 regression test；純重構由既有 contract tests 覆蓋。
 - 測試不讀寫正式 `shoes.db`，也不呼叫真實 LLM／搜尋服務。
-- Ruff、mypy、architecture-check 與相關測試通過。
+- Ruff、mypy、architecture-check、security-check、92% branch coverage 與相關測試通過。
 - setup、command、API 行為或架構邊界變更時同步 README／SDD／TDD。
 - diff 不包含 secret、資料庫備份或與需求無關的使用者變更。
-

@@ -7,6 +7,8 @@ const htmlSource = fs.readFileSync('frontend/index.html', 'utf8');
 const scriptPaths = [
   'frontend/app-agent.js',
   'frontend/app-reports.js',
+  'frontend/app-runs.js',
+  'frontend/app-shoes.js',
   'frontend/app.js',
 ];
 const scriptSource = scriptPaths.map(path => fs.readFileSync(path, 'utf8')).join('\n');
@@ -25,9 +27,11 @@ test('PWA metadata, local dependencies and service worker registration are prese
   assert.match(serviceWorker, /'\/vendor\/marked\.min\.js'/);
   assert.match(serviceWorker, /'\/app-agent\.js'/);
   assert.match(serviceWorker, /'\/app-reports\.js'/);
+  assert.match(serviceWorker, /'\/app-runs\.js'/);
+  assert.match(serviceWorker, /'\/app-shoes\.js'/);
   assert.match(serviceWorker, /'\/app\.js'/);
   assert.match(serviceWorker, /'\/styles\.css'/);
-  assert.match(htmlSource, /src="\/app-agent\.js"[\s\S]*src="\/app-reports\.js"[\s\S]*src="\/app\.js"/);
+  assert.match(htmlSource, /src="\/app-agent\.js"[\s\S]*src="\/app-reports\.js"[\s\S]*src="\/app-runs\.js"[\s\S]*src="\/app-shoes\.js"[\s\S]*src="\/app\.js"/);
   assert.match(htmlSource, /href="\/styles\.css"/);
 });
 

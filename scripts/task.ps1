@@ -1,6 +1,6 @@
 param(
     [Parameter(Position = 0)]
-    [ValidateSet("setup", "test-fast", "frontend-test", "frontend-layout", "eval-agent", "audit-deps", "architecture-check", "docs-check", "verify", "verify-all")]
+    [ValidateSet("setup", "test-fast", "frontend-test", "frontend-layout", "eval-agent", "audit-deps", "architecture-check", "security-check", "docs-check", "verify", "verify-all")]
     [string]$Task = "verify"
 )
 
@@ -40,7 +40,9 @@ function Invoke-BackendTests {
     if (-not $env:SECRET_KEY) {
         $env:SECRET_KEY = "test-only-harness-secret-key-not-for-production"
     }
-    Invoke-Checked "Python tests" { & $python -m pytest -q }
+    Invoke-Checked "Python tests with branch coverage" {
+        & $python -m pytest -q --cov=backend --cov-branch --cov-fail-under=92 --cov-report="term-missing:skip-covered"
+    }
 }
 
 function Invoke-AgentEvals {
@@ -74,6 +76,11 @@ function Invoke-ArchitectureCheck {
     Invoke-Checked "Architecture constraints" { & $python scripts/check_architecture.py }
 }
 
+function Invoke-SecurityCheck {
+    $python = Get-ProjectPython
+    Invoke-Checked "Tracked-file secret scan" { & $python scripts/check_secrets.py }
+}
+
 function Invoke-DependencyAudit {
     $python = Get-ProjectPython
     Invoke-Checked "Dependency vulnerability audit" {
@@ -104,6 +111,7 @@ function Invoke-Verify {
     Invoke-Checked "Ruff" { & $python -m ruff check backend scripts unit_tests }
     Invoke-Checked "mypy" { & $python -m mypy backend }
     Invoke-ArchitectureCheck
+    Invoke-SecurityCheck
     Invoke-DependencyAudit
     Invoke-DocsCheck
     Invoke-BackendTests
@@ -134,6 +142,7 @@ switch ($Task) {
     "eval-agent" { Invoke-AgentEvals }
     "audit-deps" { Invoke-DependencyAudit }
     "architecture-check" { Invoke-ArchitectureCheck }
+    "security-check" { Invoke-SecurityCheck }
     "docs-check" { Invoke-DocsCheck }
     "verify" { Invoke-Verify }
     "verify-all" {

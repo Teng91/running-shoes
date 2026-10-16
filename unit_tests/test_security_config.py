@@ -20,6 +20,8 @@ FRONTEND_SOURCE = "\n".join(
         "styles.css",
         "app-agent.js",
         "app-reports.js",
+        "app-runs.js",
+        "app-shoes.js",
         "app.js",
     )
 )

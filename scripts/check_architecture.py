@@ -1,12 +1,17 @@
 """Executable architecture constraints for the modular backend."""
 
 import ast
+import json
+import re
 import sys
 from collections import Counter
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 ROUTERS = ROOT / "backend" / "routers"
+SERVICES = ROOT / "backend" / "services"
+API_CONTRACT = ROOT / "unit_tests" / "api_contract.json"
+MAIN_ROUTE_BUDGET = 16
 sys.path.insert(0, str(ROOT))
 
 
@@ -29,6 +34,17 @@ def imports_backend_main(path: Path) -> bool:
     return False
 
 
+def imported_modules(path: Path) -> set[str]:
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    modules: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            modules.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            modules.add(node.module)
+    return modules
+
+
 def iter_routes(routes):
     """Flatten FastAPI's deferred included-router entries."""
     for route in routes:
@@ -46,6 +62,26 @@ def main() -> None:
     for path in router_files:
         if imports_backend_main(path):
             fail(f"{path.relative_to(ROOT)} must not import backend.main")
+    for path in sorted(SERVICES.glob("*.py")):
+        forbidden = {
+            module
+            for module in imported_modules(path)
+            if module in {"fastapi", "backend.main"}
+            or module.startswith(("fastapi.", "backend.routers"))
+        }
+        if forbidden:
+            fail(
+                f"{path.relative_to(ROOT)} crosses service boundaries: "
+                f"{', '.join(sorted(forbidden))}"
+            )
+
+    main_source = (ROOT / "backend" / "main.py").read_text(encoding="utf-8")
+    main_routes = len(re.findall(r"(?m)^@app\.(?:get|post|put|delete|patch)\(", main_source))
+    if main_routes > MAIN_ROUTE_BUDGET:
+        fail(
+            f"backend/main.py has {main_routes} routes; the ratcheted budget is "
+            f"{MAIN_ROUTE_BUDGET}. Add new endpoints through a router."
+        )
 
     from backend.main import app
 
@@ -60,6 +96,13 @@ def main() -> None:
     if duplicates:
         rendered = ", ".join(f"{method} {path}" for method, path in duplicates)
         fail(f"duplicate API routes found: {rendered}")
+
+    actual_contract = sorted(f"{method} {path}" for method, path in route_keys)
+    expected_contract = json.loads(API_CONTRACT.read_text(encoding="utf-8"))
+    if actual_contract != expected_contract:
+        added = sorted(set(actual_contract) - set(expected_contract))
+        removed = sorted(set(expected_contract) - set(actual_contract))
+        fail(f"API contract changed; added={added}, removed={removed}")
 
     api_paths = {
         route.path
@@ -78,7 +121,8 @@ def main() -> None:
 
     print(
         "Architecture constraints passed: "
-        f"{len(router_files) - 1} router module, {len(route_keys)} API method/path pairs."
+        f"{len(router_files) - 1} router modules, {len(route_keys)} API method/path pairs, "
+        f"{main_routes}/{MAIN_ROUTE_BUDGET} routes remaining in main."
     )
 
 

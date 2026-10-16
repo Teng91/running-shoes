@@ -29,8 +29,12 @@ flowchart LR
 flowchart TB
     Browser[frontend modules] --> Main[backend/main.py<br/>composition root + lifecycle]
 
-    Main --> Core[尚待拆分的 core routes<br/>auth / shoes / runs / goals]
+    Main --> Core[尚待拆分的 core routes<br/>auth / goals / agent / reports]
     Main --> Insights[routers/insights.py<br/>analytics / exports / spending]
+    Main --> Shoes[routers/shoes.py]
+    Main --> Runs[routers/runs.py]
+    Main --> Health[routers/health.py]
+    Runs --> Mileage[services/mileage.py]
     Main --> AI[agent + report routes]
 
     Insights --> Auth[auth.py]
@@ -49,26 +53,34 @@ flowchart TB
     Strava --> Models
     Reports --> Models
     Tools --> Models
+    Mileage --> Models
     Models --> Database[database.py / SQLite]
+    Main --> Migrations[migrations.py<br/>schema version]
+    Health --> Database
+    Migrations --> Database
 ```
 
 `backend/main.py` 是 composition root：建立 FastAPI、掛載 middleware／router，並暫時保留
-尚未拆出的 routes 與啟動 migration。`backend/routers/insights.py` 是第一個完成的後端垂直切片；
-它不能反向 import `backend.main`，因此可以獨立測試，也不會形成 circular import。
+尚未拆出的 routes。insights、shoes、runs 與 health 已是獨立垂直切片；runs 把跨資料表的里程
+同步委派給 framework-independent service。啟動 migration 位於 `backend/migrations.py` 並寫入
+schema version。router 不能反向 import `backend.main`，service 也不能 import FastAPI 或 router。
 
 ## 4. 模組責任與依賴方向
 
 | 模組 | 責任 | 可以依賴 | 不應依賴 |
 | --- | --- | --- | --- |
-| `backend/main.py` | app 組裝、middleware、lifecycle、舊路由相容層 | routers、domain、database | frontend 實作細節 |
+| `backend/main.py` | app 組裝、middleware、lifecycle、尚待抽出的 routes | routers、domain、database | frontend 實作細節 |
 | `backend/routers/` | HTTP 參數、認證 dependency、response | auth、domain/service、models | `backend.main` |
+| `backend/services/` | 跨 route 的交易與 application use case | models、persistence | FastAPI、routers、`backend.main` |
+| `backend/migrations.py` | ordered/idempotent schema upgrade 與版本 | models、database | routers、frontend |
 | `backend/analytics.py`、`goals.py`、`reports.py` | 可重用的業務計算與 use case | models、LLM adapter（僅 AI use case） | FastAPI app、frontend |
 | `backend/exporting.py`、`strava_import.py` | 輸入／輸出轉換 | models 或純資料 | FastAPI app |
 | `backend/tools/` | Agent 可使用的受信任工具 | database、models | route 與 UI state |
 | `backend/database.py`、`models.py` | persistence 與 schema | SQLAlchemy | router、frontend |
 
 依賴方向由入口往內：`main → router → domain/service → persistence/adapters`。CI 的
-`architecture-check` 會阻止 router 反向 import `backend.main`，並檢查 API method/path 是否重複。
+`architecture-check` 會阻止 router 反向 import `backend.main`、service 穿透 HTTP layer，並檢查
+API method/path 重複、OpenAPI path contract 與 `main.py` route 數只能持平或下降。
 
 ## 5. 關鍵流程：跑鞋匯出
 
@@ -101,11 +113,10 @@ sequenceDiagram
 
 ## 7. 演進順序
 
-1. **已完成**：前端依 dashboard、AI assistant、月報拆分；後端建立 insights router。
-2. **下一階段**：抽出 shoes 與 runs routers，並把共用里程交易整理成 service。
-3. **再下一階段**：抽出 auth／rate-limit 與 agent／reports routers。
-4. **最後**：將 startup migration 移到獨立 migration 模組；`main.py` 只保留 app factory 與組裝。
+1. **已完成**：前端拆出 AI、月報、跑步與跑鞋互動；後端建立 insights／shoes／runs／health routers。
+2. **已完成**：共用里程交易整理成 service，startup migration 移到有版本的 migration 模組。
+3. **下一階段**：抽出 auth／rate-limit 與 agent／reports／goals routers。
+4. **最後**：導入 app factory 與 settings object，移除 `backend.main` 的 route 相容 alias。
 
 每一階段都先以既有 API regression tests 鎖住行為，再移動程式碼；不在同一個 commit 同時
 改變 endpoint contract 與模組邊界。
-

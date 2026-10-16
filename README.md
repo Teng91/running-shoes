@@ -37,7 +37,14 @@ running-shoes/
 ├── backend/              # FastAPI 後端
 │   ├── main.py           # App 組裝、lifecycle、靜態檔案與尚待拆分的 routes
 │   ├── routers/
-│   │   └── insights.py   # 分析、匯出與支出統計 HTTP routes
+│   │   ├── health.py     # Liveness／readiness probes
+│   │   ├── insights.py   # 分析、匯出與支出統計 HTTP routes
+│   │   ├── runs.py       # 跑步日誌與 Strava HTTP routes
+│   │   └── shoes.py      # 跑鞋 CRUD HTTP routes
+│   ├── services/
+│   │   └── mileage.py    # 跑步、鞋款、月份彙總的交易式里程同步
+│   ├── migrations.py     # 有版本的 SQLite schema upgrade
+│   ├── observability.py  # Request ID 與不含敏感內容的結構化 HTTP log
 │   ├── auth.py           # JWT 認證 + 密碼雜湊
 │   ├── database.py       # SQLite 資料庫連線
 │   ├── models.py         # 資料表定義
@@ -55,9 +62,11 @@ running-shoes/
 │   └── run.py            # 本機開發啟動入口
 ├── frontend/
 │   ├── index.html        # Dashboard HTML 結構
-│   ├── app.js            # Dashboard 核心狀態、API、跑步與跑鞋互動邏輯
+│   ├── app.js            # Dashboard 核心狀態、API、圖表與初始化
 │   ├── app-agent.js      # AI 助手對話、模型清單與安全 Markdown 顯示
 │   ├── app-reports.js    # 月報讀取、產生與串流顯示
+│   ├── app-runs.js       # 跑步、Strava、洞察與單鞋分析互動
+│   ├── app-shoes.js      # 跑鞋編輯與 modal 互動
 │   ├── styles.css        # Dashboard 亮／暗色與響應式版面
 │   ├── manifest.webmanifest # PWA 名稱、顏色與圖示設定
 │   ├── service-worker.js # App shell 快取與離線 fallback
@@ -68,12 +77,16 @@ running-shoes/
 ├── docs/
 │   ├── architecture.md   # SDD：現況架構圖、模組邊界與演進順序
 │   ├── testing-strategy.md # TDD：測試層級、追蹤矩陣與完成條件
+│   ├── specs/            # Feature spec 範本與 acceptance criteria
 │   └── adr/              # 重要架構決策與取捨紀錄
 ├── scripts/
 │   ├── claude_stop_hook.py # Claude Code 本機驗證與失敗回饋
 │   ├── claude_stop_hook_launcher.cjs # 跨 Windows／Unix 尋找專案 Python
 │   ├── check_architecture.py # 阻止反向依賴與重複 API route
+│   ├── check_secrets.py  # 掃描 tracked files 的明確 credential 特徵
 │   ├── check_docs.py     # 核對 README 測試數、工具數、版面矩陣與 harness 路徑
+│   ├── database_backup.py # SQLite backup／checksum／retention／restore
+│   ├── smoke_test.py     # 部署後 health 與 OpenAPI smoke check
 │   └── task.ps1          # setup、測試、eval 與完整驗證的統一入口
 ├── unit_tests/           # Pytest、Agent eval、前端邏輯與版面回歸測試
 │   ├── agent_eval_cases.json # Agent 工具選擇與安全行為案例
@@ -323,13 +336,16 @@ Unix `venv/bin/python` 或系統 Python。從 PowerShell／`pwsh` 執行：
 # 檢查 router 依賴方向與重複 API route
 ./scripts/task.ps1 architecture-check
 
+# 掃描 tracked files 是否出現 private key 或常見平台 token
+./scripts/task.ps1 security-check
+
 # 核對 README 與實際測試數、工具數、版面矩陣及 harness 路徑
 ./scripts/task.ps1 docs-check
 ```
 
 Agent eval 案例位於 `unit_tests/agent_eval_cases.json`，用來固定私人資料、即時搜尋、
 工具選擇和一般對話等行為。後端測試涵蓋 API、帳號隔離、資料庫升級與邊界案例。
-若要查看行與分支覆蓋率，可另外執行：
+`test-fast` 與 `verify` 會量測 branch coverage，低於 92% 直接失敗。若只想單獨查看：
 
 ```powershell
 ./venv/Scripts/python.exe -m pytest -q --cov=backend --cov-branch --cov-report=term-missing
@@ -355,14 +371,14 @@ npx playwright install chromium webkit
 
 `AGENTS.md` 是 Codex 等 Coding Agent 共用的專案規範；`CLAUDE.md` 會把同一份規範匯入
 Claude Code，避免兩份規則日後分歧。Claude Code 的專案 Stop hook 只要發現工作樹有變更，
-就會在完成回覆前執行 Ruff、mypy、文件一致性、Python 測試與前端回歸測試；版面檔案有變更且
+就會在完成回覆前執行 Ruff、mypy、架構／secret／文件一致性、Python coverage 與前端回歸測試；版面檔案有變更且
 Playwright／Chromium／WebKit 齊全時，也會執行版面測試。
 
 驗證失敗會把指令輸出送回 Claude 繼續修正。同一個 session 的同一份 diff 會重用本機快取，
 避免每次停止都重跑。Hook 不會呼叫其他模型、外部 API，或傳送提示、diff、原始碼與測試輸出。
 GitHub Actions 仍會在 push／pull request 執行 `verify`，並在獨立工作中安裝 Chromium／WebKit、跑完完整版面矩陣；Dependabot 每週檢查 Python 與 GitHub Actions 更新。
 
-本次驗證基線為 Python **333 passed**、前端回歸測試 **34 passed**；測試數量會隨功能與修正持續增加，實際結果以 `./scripts/task.ps1 verify` 與 CI 當次輸出為準。
+本次驗證基線為 Python **340 passed**、前端回歸測試 **34 passed**；測試數量會隨功能與修正持續增加，實際結果以 `./scripts/task.ps1 verify` 與 CI 當次輸出為準。
 版面檢查涵蓋 WebKit／Chromium、亮／暗模式與 7 組直橫向尺寸，共 28 組設定，檢查五個分頁、表單、圖表、彈窗及空資料狀態。
 
 `docs-check` 會從 pytest collection、前端測試檔、Agent tool registry、Playwright 測試矩陣與實際檔案系統核對上述數字及 harness 路徑。新增測試、工具或版面設定卻忘記同步 README 時，`verify` 和 GitHub Actions 會直接失敗。
@@ -372,6 +388,10 @@ Software Design Description（含 Mermaid 架構圖與拆分順序），
 [`docs/testing-strategy.md`](docs/testing-strategy.md) 是 Test Design Document（含需求追蹤矩陣），
 重大取捨則記錄在 [`docs/adr/`](docs/adr/)。`architecture-check` 會把其中最重要的依賴規則
 變成 CI 可執行的限制，避免文件和程式逐漸分歧。
+
+新功能、資料模型、部署流程或架構變更先從 [`docs/specs/template.md`](docs/specs/template.md)
+建立 feature spec，寫清楚 goals、non-goals、帳號隔離、migration、rollback、acceptance criteria
+與測試追蹤；PR template 會要求連結 spec／ADR 與實際驗證結果。
 
 鞋款、跑步日誌、月跑量與跑量目標的更新都會使用版本檢查，舊畫面遇到衝突時請重新載入後再操作。跑步日誌造成的鞋款與月跑量增減會在同一交易中處理；同月份彙總、首次建立目標及月報保存皆使用 SQLite 原子 upsert，避免同時寫入發生 500 或遺失更新。SQLite 連線啟用 foreign keys、30 秒 busy timeout 與 WAL，降低讀取分析和一般寫入互相鎖住的機率。已有逐筆日誌的月份不能直接改年月，必須先調整日誌日期；純手動月份仍可移動。改密碼後既有登入會失效，需重新登入。
 啟動時會自動為既有資料庫補上鞋款、跑步日誌、月跑量、跑量目標與登入版本欄位，並依當前顯示總里程建立歷史調整基準；升級前後的顯示總里程不會改變。
@@ -444,8 +464,19 @@ unset MIGRATION_PASSWORD_VALUE
 之後每次部署只要：
 
 ```bash
+# 先對正式資料建立並驗證快照；指令會保留最近 14 份
+fly ssh console -a running-shoes -C \
+  "python scripts/database_backup.py create --source /data/shoes.db --output-dir /data/backups --keep 14"
+
 fly deploy
+
+# 部署完成後確認 process、資料庫 schema 與公開 API contract
+venv/bin/python scripts/smoke_test.py https://running-shoes.fly.dev
 ```
+
+Fly 與 Docker 會呼叫 `/health/ready`；只有 SQLite 可讀且 schema version 正確才會回 200。
+所有 HTTP response 也會附上 `X-Request-ID`，server log 只記錄 method、path、status、耗時與
+request ID，不會記錄 Authorization、request body 或使用者資料。
 
 部署架構：
 
@@ -474,6 +505,34 @@ git push (local) ──→ GitHub ──→ fly deploy ──→ Fly.io Builder
                                               使用者瀏覽器
                                          https://你的app.fly.dev
 ```
+
+### 資料庫備份、驗證與還原
+
+本機或已下載的 SQLite 都使用同一個工具；它透過 SQLite backup API 取得交易一致快照、
+建立 SHA-256 checksum、執行 `PRAGMA quick_check`，並確認必要資料表存在：
+
+```bash
+# 建立備份並只保留最近 14 份 managed snapshots
+venv/bin/python scripts/database_backup.py create \
+  --source shoes.db --output-dir backups --keep 14
+
+# 下載或移動後再次驗證 checksum 與 SQLite integrity
+venv/bin/python scripts/database_backup.py verify \
+  --backup backups/shoes-YYYYMMDDTHHMMSSffffffZ.db
+```
+
+還原會覆蓋目標資料庫，因此必須先停止所有會寫入該資料庫的 server／worker。工具要求明確輸入
+`RESTORE`，而且在覆蓋前會自動建立 `pre-restore` 安全快照：
+
+```bash
+venv/bin/python scripts/database_backup.py restore \
+  --backup backups/shoes-YYYYMMDDTHHMMSSffffffZ.db \
+  --destination shoes.db --confirm RESTORE
+```
+
+Fly volume 裡的 `/data/backups` 仍和正式資料位於同一個基礎設施，不能當成唯一備份；重要版本
+應使用 `fly ssh sftp get` 下載到另一個裝置或受控儲存空間，下載後再執行 `verify`。未經停寫與
+還原演練，不要直接替換運行中的 `/data/shoes.db`。
 
 ### 同步雲端資料到本地
 
