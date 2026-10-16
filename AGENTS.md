@@ -36,17 +36,19 @@
 
 ## Verification
 
-Use the repository task runner from PowerShell or `pwsh`:
+Use the cross-platform Python repository task runner. It is the single command source for local
+development, coding-agent verification, and CI. Commands below use the Unix `python3` launcher;
+on Windows use `py -3` with the same script and task arguments:
 
-- Backend change: `./scripts/task.ps1 test-fast`
-- Agent or tool change: `./scripts/task.ps1 eval-agent`, then `./scripts/task.ps1 test-fast`
-- Frontend logic change: `./scripts/task.ps1 frontend-test`
-- Layout change: `./scripts/task.ps1 frontend-layout`
-- README, harness command, test-count, tool-count, or layout-matrix change: `./scripts/task.ps1 docs-check`
-- Router or module-boundary change: `./scripts/task.ps1 architecture-check`
-- Security-sensitive change: `./scripts/task.ps1 security-check`
-- Release-sensitive or cross-cutting change: `./scripts/task.ps1 verify`
-- Everything at once before handing off a large change: `./scripts/task.ps1 verify-all`
+- Backend change: `python3 scripts/task.py test-fast`
+- Agent or tool change: `python3 scripts/task.py eval-agent`, then `python3 scripts/task.py test-fast`
+- Frontend logic change: `python3 scripts/task.py frontend-test`
+- Layout change: `python3 scripts/task.py frontend-layout`
+- README, harness command, test-count, tool-count, or layout-matrix change: `python3 scripts/task.py docs-check`
+- Router or module-boundary change: `python3 scripts/task.py architecture-check`
+- Security-sensitive change: `python3 scripts/task.py security-check`
+- Release-sensitive or cross-cutting change: `python3 scripts/task.py verify`
+- Everything at once before handing off a large change: `python3 scripts/task.py verify-all`
 
 `frontend-layout` is intentionally separate from `verify` because it requires Playwright browser binaries.
 `verify-all` includes it, but warns and skips instead of failing when those binaries are unavailable.
