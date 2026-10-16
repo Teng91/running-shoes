@@ -87,7 +87,7 @@ running-shoes/
 │   ├── check_docs.py     # 核對 README 測試數、工具數、版面矩陣與 harness 路徑
 │   ├── database_backup.py # SQLite backup／checksum／retention／restore
 │   ├── smoke_test.py     # 部署後 health 與 OpenAPI smoke check
-│   └── task.ps1          # setup、測試、eval 與完整驗證的統一入口
+│   └── task.py           # 跨平台 setup、測試、eval 與完整驗證入口
 ├── unit_tests/           # Pytest、Agent eval、前端邏輯與版面回歸測試
 │   ├── agent_eval_cases.json # Agent 工具選擇與安全行為案例
 │   ├── frontend_regressions.cjs # Node.js 前端邏輯回歸測試
@@ -313,56 +313,58 @@ history 筆數與整段對話總字數，並套用每帳號、每 IP 與全站�
 
 ## 測試
 
-專案提供統一的工程 harness，會自動選用 Windows `venv/Scripts/python.exe`、
-Unix `venv/bin/python` 或系統 Python。從 PowerShell／`pwsh` 執行：
+專案提供跨平台工程 harness，會自動選用 Windows `venv/Scripts/python.exe`、
+Unix `venv/bin/python` 或目前的 Python。Windows、macOS、Linux、Coding Agent 與 CI
+都使用相同的 `scripts/task.py`，不依賴特定 shell。以下使用 Unix 的 `python3`；Windows
+把 launcher 換成 `py -3` 即可，後面的 script 與 task 名稱完全相同：
 
-```powershell
+```bash
 # 安裝開發依賴
-./scripts/task.ps1 setup
+python3 scripts/task.py setup
 
 # 完整檢查：Ruff、mypy、架構邊界、依賴漏洞、pytest、前端 Node 回歸測試
-./scripts/task.ps1 verify
+python3 scripts/task.py verify
 
 # 一次跑完 verify 與 frontend-layout（缺 Playwright 時會警告並跳過版面檢查）
-./scripts/task.ps1 verify-all
+python3 scripts/task.py verify-all
 
 # 日常後端檢查，或只執行 Agent 行為 eval
-./scripts/task.ps1 test-fast
-./scripts/task.ps1 eval-agent
+python3 scripts/task.py test-fast
+python3 scripts/task.py eval-agent
 
 # 只掃描鎖定的正式環境依賴是否有已知漏洞
-./scripts/task.ps1 audit-deps
+python3 scripts/task.py audit-deps
 
 # 檢查 router 依賴方向與重複 API route
-./scripts/task.ps1 architecture-check
+python3 scripts/task.py architecture-check
 
 # 掃描 tracked files 是否出現 private key 或常見平台 token
-./scripts/task.ps1 security-check
+python3 scripts/task.py security-check
 
 # 核對 README 與實際測試數、工具數、版面矩陣及 harness 路徑
-./scripts/task.ps1 docs-check
+python3 scripts/task.py docs-check
 ```
 
 Agent eval 案例位於 `unit_tests/agent_eval_cases.json`，用來固定私人資料、即時搜尋、
 工具選擇和一般對話等行為。後端測試涵蓋 API、帳號隔離、資料庫升級與邊界案例。
 `test-fast` 與 `verify` 會量測 branch coverage，低於 92% 直接失敗。若只想單獨查看：
 
-```powershell
-./venv/Scripts/python.exe -m pytest -q --cov=backend --cov-branch --cov-report=term-missing
+```bash
+python3 -m pytest -q --cov=backend --cov-branch --cov-report=term-missing
 ```
 
 前端流程回歸測試使用 Node.js 內建測試工具，不需要安裝 npm 套件：
 
-```powershell
-./scripts/task.ps1 frontend-test
+```bash
+python3 scripts/task.py frontend-test
 ```
 
 手機版面回歸檢查另外使用 Playwright（WebKit 與 Chromium），包含亮暗模式、長鞋名、多筆資料、空資料、表單欄位重疊、分頁完整顯示、圖表繪圖區及彈出視窗：
 
-```powershell
+```bash
 npm install --no-save --package-lock=false playwright
 npx playwright install chromium webkit
-./scripts/task.ps1 frontend-layout
+python3 scripts/task.py frontend-layout
 ```
 
 可設定 `LAYOUT_SCREENSHOT_DIR` 保存手機版截圖供人工檢查；Windows 若使用已安裝的 Edge，可設定 `PLAYWRIGHT_CHROMIUM_CHANNEL=msedge`。WebKit 模擬檢查不等同於 iPhone 實機驗證。
@@ -378,7 +380,7 @@ Playwright／Chromium／WebKit 齊全時，也會執行版面測試。
 避免每次停止都重跑。Hook 不會呼叫其他模型、外部 API，或傳送提示、diff、原始碼與測試輸出。
 GitHub Actions 仍會在 push／pull request 執行 `verify`，並在獨立工作中安裝 Chromium／WebKit、跑完完整版面矩陣；Dependabot 每週檢查 Python 與 GitHub Actions 更新。
 
-本次驗證基線為 Python **340 passed**、前端回歸測試 **34 passed**；測試數量會隨功能與修正持續增加，實際結果以 `./scripts/task.ps1 verify` 與 CI 當次輸出為準。
+本次驗證基線為 Python **345 passed**、前端回歸測試 **34 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
 版面檢查涵蓋 WebKit／Chromium、亮／暗模式與 7 組直橫向尺寸，共 28 組設定，檢查五個分頁、表單、圖表、彈窗及空資料狀態。
 
 `docs-check` 會從 pytest collection、前端測試檔、Agent tool registry、Playwright 測試矩陣與實際檔案系統核對上述數字及 harness 路徑。新增測試、工具或版面設定卻忘記同步 README 時，`verify` 和 GitHub Actions 會直接失敗。
@@ -413,8 +415,8 @@ Software Design Description（含 Mermaid 架構圖與拆分順序），
 - 保留既有行為、使用者資料隔離與安全限制
 - 補上必要的回歸測試
 - 不修改正式 shoes.db
-- 執行 ./scripts/task.ps1 verify
-- 如果有修改畫面版面，再執行 ./scripts/task.ps1 frontend-layout
+- 執行 python3 scripts/task.py verify
+- 如果有修改畫面版面，再執行 python3 scripts/task.py frontend-layout
 - 最後列出修改內容、測試結果與仍存在的限制
 ```
 

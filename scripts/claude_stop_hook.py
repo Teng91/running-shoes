@@ -95,25 +95,7 @@ def project_python() -> str:
 def verification_checks() -> list[Check]:
     python = project_python()
     return [
-        Check("Ruff", (python, "-m", "ruff", "check", "backend", "scripts", "unit_tests")),
-        Check("mypy", (python, "-m", "mypy", "backend")),
-        Check("Architecture constraints", (python, "scripts/check_architecture.py")),
-        Check("Secret scan", (python, "scripts/check_secrets.py")),
-        Check("README consistency", (python, "scripts/check_docs.py")),
-        Check(
-            "Python tests",
-            (
-                python,
-                "-m",
-                "pytest",
-                "-q",
-                "--cov=backend",
-                "--cov-branch",
-                "--cov-fail-under=92",
-                "--cov-report=term-missing:skip-covered",
-            ),
-        ),
-        Check("Frontend regression tests", ("node", "--test", "unit_tests/frontend_regressions.cjs")),
+        Check("Repository harness", (python, "scripts/task.py", "verify")),
     ]
 
 

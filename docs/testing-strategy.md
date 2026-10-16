@@ -62,16 +62,20 @@ flowchart LR
 
 ## 5. Harness 指令
 
+所有平台都使用同一份 `scripts/task.py`。Unix 以 `python3 scripts/task.py <task>` 呼叫，
+Windows 可用 `py -3 scripts/task.py <task>`；本機、Coding Agent 與 CI 不依賴特定 shell，
+runner 會自行尋找 Windows 或 Unix 的專案虛擬環境。
+
 | 變更類型 | 最少執行 |
 | --- | --- |
-| 後端／router | `./scripts/task.ps1 test-fast` |
-| Agent／tools | `eval-agent`，再 `test-fast` |
-| 前端邏輯 | `frontend-test` |
-| 版面 | `frontend-layout` |
-| 架構邊界 | `architecture-check` |
-| Secret／credential 風險 | `security-check` |
-| 文件／harness | `docs-check` |
-| 跨模組或 release | `verify`；大改動使用 `verify-all` |
+| 後端／router | `python3 scripts/task.py test-fast` |
+| Agent／tools | `python3 scripts/task.py eval-agent`，再執行 `test-fast` |
+| 前端邏輯 | `python3 scripts/task.py frontend-test` |
+| 版面 | `python3 scripts/task.py frontend-layout` |
+| 架構邊界 | `python3 scripts/task.py architecture-check` |
+| Secret／credential 風險 | `python3 scripts/task.py security-check` |
+| 文件／harness | `python3 scripts/task.py docs-check` |
+| 跨模組或 release | `python3 scripts/task.py verify`；大改動使用 `verify-all` |
 
 ## 6. Definition of Done
 
