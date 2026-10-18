@@ -126,6 +126,8 @@ async function run() {
 
     await page.getByRole('button', { name: '登出' }).click();
     await page.locator('#login-form').waitFor({ state: 'visible' });
+    assert.equal(await page.locator('#login-username').inputValue(), '', 'logout clears the previous username');
+    assert.equal(await page.locator('#login-password').inputValue(), '', 'logout clears the previous password');
     await page.locator('#login-username').fill(username);
     await page.locator('#login-password').fill(password);
     await page.locator('#login-form').getByRole('button', { name: '登入' }).click();

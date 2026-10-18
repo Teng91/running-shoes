@@ -41,6 +41,8 @@ test('PWA metadata, local dependencies and service worker registration are prese
   assert.match(serviceWorker, /'\/app-spending\.js'/);
   assert.match(serviceWorker, /'\/app\.js'/);
   assert.match(serviceWorker, /'\/styles\.css'/);
+  assert.match(serviceWorker, /event\.waitUntil\(networkResponse/);
+  assert.match(serviceWorker, /caches\.match\('\/'\)\.then\(cached => cached \|\| networkResponse\)/);
   assert.match(htmlSource, /src="\/app-core\.js"[\s\S]*src="\/app-agent\.js"[\s\S]*src="\/app-reports\.js"[\s\S]*src="\/app-runs\.js"[\s\S]*src="\/app-shoes\.js"[\s\S]*src="\/app-dashboard\.js"[\s\S]*src="\/app-monthly\.js"[\s\S]*src="\/app-charts\.js"[\s\S]*src="\/app-spending\.js"[\s\S]*src="\/app\.js"/);
   assert.match(htmlSource, /href="\/styles\.css"/);
 });
@@ -51,7 +53,9 @@ test('startup and login show progress until the application is ready', () => {
   assert.match(htmlSource, /id="app-boot-retry"[^>]+hidden>重新載入/);
   assert.ok(htmlSource.indexOf('id="app-boot"') < htmlSource.indexOf('src="/vendor/chart.umd.min.js"'));
   assert.match(htmlSource, /__appBootLegacyPoll/);
-  assert.match(htmlSource, /older cached stylesheet made body[\s\S]+body \{ opacity: 1 !important; \}/);
+  assert.match(htmlSource, /Critical startup UI must not depend[\s\S]+body \{ margin: 0; opacity: 1 !important; \}/);
+  assert.match(htmlSource, /id="app-styles" rel="preload" href="\/styles\.css" as="style"/);
+  assert.match(htmlSource, /dataset\.ready='true';window\.dispatchEvent\(new Event\('appstylesready'\)\)/);
   assert.match(source, /\.app-boot\.is-hidden \{ opacity: 0; visibility: hidden/);
   assert.match(source, /@media \(prefers-reduced-motion: reduce\)/);
   assert.doesNotMatch(source, /body \{[^}]*opacity:\s*0/);
@@ -62,6 +66,23 @@ test('startup and login show progress until the application is ready', () => {
   assert.match(loginSource, /showAppBoot\('正在登入並載入資料…'\)[\s\S]+await loadData\(\);[\s\S]+hideAppBoot\(\)/);
   assert.match(source, /showAppBootError\('載入時間比預期久/);
   assert.match(source, /init\(\)\.catch\(error =>/);
+});
+
+test('successful login and logout clear every authentication field', () => {
+  const ids = [
+    'login-username', 'login-password',
+    'reg-username', 'reg-password', 'reg-password2',
+    'change-username', 'change-old-password', 'change-new-password', 'change-new-password2',
+  ];
+  const elements = Object.fromEntries(ids.map(id => [id, { value: 'previous-user-secret' }]));
+  const context = vm.createContext({ document: { getElementById: id => elements[id] } });
+  vm.runInContext(`const AUTH_INPUT_IDS = ${JSON.stringify(ids)};\n${extract('resetAuthInputs')}`, context);
+  context.resetAuthInputs();
+  assert.deepEqual(ids.map(id => elements[id].value), ids.map(() => ''));
+  assert.match(extract('clearAuth'), /resetAuthInputs\(\)/);
+  assert.match(extract('handleLogin'), /setAuth\(data\.access_token, username\);[\s\S]+resetAuthInputs\(\)/);
+  assert.match(htmlSource, /id="login-form" autocomplete="off"/);
+  assert.match(htmlSource, /id="login-password" type="password" autocomplete="off"/);
 });
 
 test('mobile page gutters preserve standalone safe-area insets', () => {

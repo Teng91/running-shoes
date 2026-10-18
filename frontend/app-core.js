@@ -17,6 +17,12 @@ const API_BASE = window.location.origin + '/api';
 // current bundle owns the loading screen from this point onward.
 window.clearInterval(window.__appBootLegacyPoll);
 let appBootHideTimer = null;
+let appBootWaitingForStyles = false;
+
+function onAppStylesReady() {
+  appBootWaitingForStyles = false;
+  hideAppBoot();
+}
 
 function armAppBootWatchdog() {
   window.clearTimeout(window.__appBootWatchdog);
@@ -27,6 +33,8 @@ function armAppBootWatchdog() {
 
 function showAppBoot(message = '正在準備應用程式…') {
   const boot = document.getElementById('app-boot');
+  window.removeEventListener('appstylesready', onAppStylesReady);
+  appBootWaitingForStyles = false;
   window.clearTimeout(appBootHideTimer);
   boot.hidden = false;
   boot.classList.remove('is-hidden');
@@ -38,6 +46,14 @@ function showAppBoot(message = '正在準備應用程式…') {
 
 function hideAppBoot() {
   const boot = document.getElementById('app-boot');
+  const styles = document.getElementById('app-styles');
+  if (styles?.dataset.ready !== 'true') {
+    if (!appBootWaitingForStyles) {
+      appBootWaitingForStyles = true;
+      window.addEventListener('appstylesready', onAppStylesReady, { once: true });
+    }
+    return;
+  }
   window.clearTimeout(window.__appBootWatchdog);
   window.clearTimeout(appBootHideTimer);
   boot.setAttribute('aria-busy', 'false');
@@ -47,6 +63,8 @@ function hideAppBoot() {
 
 function showAppBootError(message = '應用程式載入失敗，請重新載入。') {
   const boot = document.getElementById('app-boot');
+  window.removeEventListener('appstylesready', onAppStylesReady);
+  appBootWaitingForStyles = false;
   window.clearTimeout(window.__appBootWatchdog);
   window.clearTimeout(appBootHideTimer);
   boot.hidden = false;
@@ -59,6 +77,19 @@ function showAppBootError(message = '應用程式載入失敗，請重新載入�
 // ====== Auth State ======
 let authToken = localStorage.getItem('token');
 let currentUser = localStorage.getItem('username');
+
+const AUTH_INPUT_IDS = [
+  'login-username', 'login-password',
+  'reg-username', 'reg-password', 'reg-password2',
+  'change-username', 'change-old-password', 'change-new-password', 'change-new-password2',
+];
+
+function resetAuthInputs() {
+  AUTH_INPUT_IDS.forEach(id => {
+    const input = document.getElementById(id);
+    if (input) input.value = '';
+  });
+}
 
 function setAuth(token, username) {
   authToken = token;
@@ -91,6 +122,7 @@ function clearAuth() {
   currentUser = null;
   localStorage.removeItem('token');
   localStorage.removeItem('username');
+  resetAuthInputs();
 }
 
 function authHeaders() {
@@ -329,6 +361,7 @@ async function handleLogin() {
     }
     const data = await res.json();
     setAuth(data.access_token, username);
+    resetAuthInputs();
     resetAgentChat();  // 保險：確保進入時對話是乾淨的，不殘留上一位使用者
     resetAppLayout();  // 清掉上一位使用者切到 AI 助手留下的 inline 樣式，並回到跑步日誌
     showAppView({ keepBoot: true });
@@ -336,6 +369,7 @@ async function handleLogin() {
     await loadData();
     hideAppBoot();
   } catch (e) {
+    document.getElementById('login-password').value = '';
     hideAppBoot();
     showAuthError(e.message);
   }
@@ -376,6 +410,7 @@ async function handleRegister() {
     }
     const data = await loginRes.json();
     setAuth(data.access_token, username);
+    resetAuthInputs();
     resetAppLayout();  // 清掉殘留 inline 樣式並回到跑步日誌
     showAppView({ keepBoot: true });
     loadAgentModels();
