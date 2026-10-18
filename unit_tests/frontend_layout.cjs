@@ -59,7 +59,7 @@ async function run(engine, name) {
     const page = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, locale: 'zh-TW' });
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
-    await page.route('http://layout.test/**', route => {
+    await page.route('http://layout.test/**', async route => {
       const url = new URL(route.request().url());
       const relative = url.pathname === '/' ? 'index.html' : url.pathname.slice(1);
       const asset = path.resolve(__dirname, '../frontend', relative);
@@ -70,10 +70,14 @@ async function run(engine, name) {
       const contentTypes = { '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css',
         '.json': 'application/json', '.webmanifest': 'application/manifest+json',
         '.svg': 'image/svg+xml', '.png': 'image/png' };
+      if (relative === 'app-core.js') await new Promise(resolve => setTimeout(resolve, 250));
       return route.fulfill({ contentType: contentTypes[path.extname(asset)] || 'application/octet-stream',
         body: fs.readFileSync(asset) });
     });
-    await page.goto('http://layout.test');
+    const navigation = page.goto('http://layout.test');
+    await page.locator('#app-boot').waitFor({ state: 'visible' });
+    assert.match(await page.locator('#app-boot-message').textContent(), /正在準備應用程式/);
+    await navigation;
     await page.waitForFunction(() => typeof Chart !== 'undefined');
     await page.evaluate(() => {
       Chart.defaults.animation = false;

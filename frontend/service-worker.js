@@ -1,4 +1,4 @@
-const CACHE_NAME = 'running-shoes-shell-v9';
+const CACHE_NAME = 'running-shoes-shell-v10';
 const APP_SHELL = [
   '/',
   '/app-core.js',
@@ -43,16 +43,19 @@ self.addEventListener('fetch', event => {
   if (url.origin !== self.location.origin || url.pathname.startsWith('/api/')) return;
 
   if (request.mode === 'navigate') {
+    const networkResponse = fetch(request).then(async response => {
+      if (response.ok) {
+        const cache = await caches.open(CACHE_NAME);
+        await cache.put('/', response.clone());
+      }
+      return response;
+    });
+    // A cached app shell renders the startup UI immediately while a Fly
+    // Machine wakes. Refresh that shell in the background for the next open.
+    event.waitUntil(networkResponse.then(() => undefined, () => undefined));
     event.respondWith(
-      fetch(request)
-        .then(response => {
-          if (response.ok) {
-            const copy = response.clone();
-            caches.open(CACHE_NAME).then(cache => cache.put('/', copy));
-          }
-          return response;
-        })
-        .catch(async () => (await caches.match('/')) || caches.match('/offline.html'))
+      caches.match('/').then(cached => cached || networkResponse)
+        .catch(() => caches.match('/offline.html'))
     );
     return;
   }
