@@ -26,6 +26,7 @@ PUBLIC_TASKS = (
     "test-fast",
     "frontend-test",
     "frontend-layout",
+    "frontend-e2e",
     "eval-agent",
     "audit-deps",
     "architecture-check",
@@ -45,6 +46,7 @@ class Command:
     label: str
     arguments: tuple[str, ...]
     needs_test_secret: bool = False
+    environment: tuple[tuple[str, str], ...] = ()
 
 
 def project_python() -> str:
@@ -63,6 +65,7 @@ def command_environment(command: Command) -> dict[str, str]:
     environment = os.environ.copy()
     if command.needs_test_secret:
         environment.setdefault("SECRET_KEY", TEST_SECRET_KEY)
+    environment.update(command.environment)
     return environment
 
 
@@ -178,6 +181,24 @@ def run_frontend_layout(*, optional: bool = False) -> None:
     run_checked(Command("Frontend layout tests", ("node", "unit_tests/frontend_layout.cjs")))
 
 
+def run_frontend_e2e(*, optional: bool = False) -> None:
+    if not layout_dependencies_available():
+        message = (
+            "Playwright browser binaries are unavailable. Install them with "
+            "'npm install --no-save --package-lock=false playwright' and "
+            "'npx playwright install chromium webkit'."
+        )
+        if optional:
+            print(f"\n==> Frontend browser E2E\nWARNING: {message}\nWARNING: Skipped.")
+            return
+        raise TaskError(message)
+    run_checked(Command(
+        "Frontend browser E2E",
+        ("node", "unit_tests/frontend_e2e.cjs"),
+        environment=(("PROJECT_PYTHON", project_python()),),
+    ))
+
+
 def run_task(task: str) -> None:
     python = project_python()
     if task == "setup":
@@ -189,6 +210,8 @@ def run_task(task: str) -> None:
         run_checked(Command("Frontend regression tests", ("node", "--test", "unit_tests/frontend_regressions.cjs")))
     elif task == "frontend-layout":
         run_frontend_layout()
+    elif task == "frontend-e2e":
+        run_frontend_e2e()
     elif task == "eval-agent":
         run_checked(
             Command(
@@ -227,6 +250,7 @@ def run_task(task: str) -> None:
     elif task == "verify-all":
         run_verify()
         run_frontend_layout(optional=True)
+        run_frontend_e2e(optional=True)
     else:
         raise TaskError(f"Unknown task: {task}")
 

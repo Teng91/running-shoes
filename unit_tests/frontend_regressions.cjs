@@ -5,10 +5,15 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const htmlSource = fs.readFileSync('frontend/index.html', 'utf8');
 const scriptPaths = [
+  'frontend/app-core.js',
   'frontend/app-agent.js',
   'frontend/app-reports.js',
   'frontend/app-runs.js',
   'frontend/app-shoes.js',
+  'frontend/app-dashboard.js',
+  'frontend/app-monthly.js',
+  'frontend/app-charts.js',
+  'frontend/app-spending.js',
   'frontend/app.js',
 ];
 const scriptSource = scriptPaths.map(path => fs.readFileSync(path, 'utf8')).join('\n');
@@ -26,12 +31,17 @@ test('PWA metadata, local dependencies and service worker registration are prese
   assert.match(serviceWorker, /'\/vendor\/chart\.umd\.min\.js'/);
   assert.match(serviceWorker, /'\/vendor\/marked\.min\.js'/);
   assert.match(serviceWorker, /'\/app-agent\.js'/);
+  assert.match(serviceWorker, /'\/app-core\.js'/);
   assert.match(serviceWorker, /'\/app-reports\.js'/);
   assert.match(serviceWorker, /'\/app-runs\.js'/);
   assert.match(serviceWorker, /'\/app-shoes\.js'/);
+  assert.match(serviceWorker, /'\/app-dashboard\.js'/);
+  assert.match(serviceWorker, /'\/app-monthly\.js'/);
+  assert.match(serviceWorker, /'\/app-charts\.js'/);
+  assert.match(serviceWorker, /'\/app-spending\.js'/);
   assert.match(serviceWorker, /'\/app\.js'/);
   assert.match(serviceWorker, /'\/styles\.css'/);
-  assert.match(htmlSource, /src="\/app-agent\.js"[\s\S]*src="\/app-reports\.js"[\s\S]*src="\/app-runs\.js"[\s\S]*src="\/app-shoes\.js"[\s\S]*src="\/app\.js"/);
+  assert.match(htmlSource, /src="\/app-core\.js"[\s\S]*src="\/app-agent\.js"[\s\S]*src="\/app-reports\.js"[\s\S]*src="\/app-runs\.js"[\s\S]*src="\/app-shoes\.js"[\s\S]*src="\/app-dashboard\.js"[\s\S]*src="\/app-monthly\.js"[\s\S]*src="\/app-charts\.js"[\s\S]*src="\/app-spending\.js"[\s\S]*src="\/app\.js"/);
   assert.match(htmlSource, /href="\/styles\.css"/);
 });
 

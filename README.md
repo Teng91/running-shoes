@@ -45,6 +45,7 @@ running-shoes/
 │   │   └── mileage.py    # 跑步、鞋款、月份彙總的交易式里程同步
 │   ├── migrations.py     # 有版本的 SQLite schema upgrade
 │   ├── observability.py  # Request ID 與不含敏感內容的結構化 HTTP log
+│   ├── rate_limits.py    # Auth／AI process 與 SQLite shared rate limits
 │   ├── auth.py           # JWT 認證 + 密碼雜湊
 │   ├── database.py       # SQLite 資料庫連線
 │   ├── models.py         # 資料表定義
@@ -62,7 +63,12 @@ running-shoes/
 │   └── run.py            # 本機開發啟動入口
 ├── frontend/
 │   ├── index.html        # Dashboard HTML 結構
-│   ├── app.js            # Dashboard 核心狀態、API、圖表與初始化
+│   ├── app.js            # Dashboard 初始化與全域 dialog wiring
+│   ├── app-core.js       # 共用狀態、認證、API 與資料載入
+│   ├── app-dashboard.js  # 首頁卡片、提醒與跑鞋表格
+│   ├── app-monthly.js    # 月跑量、目標與匯出互動
+│   ├── app-charts.js     # 跑鞋、月份與年度圖表
+│   ├── app-spending.js   # 支出摘要、圖表與表格
 │   ├── app-agent.js      # AI 助手對話、模型清單與安全 Markdown 顯示
 │   ├── app-reports.js    # 月報讀取、產生與串流顯示
 │   ├── app-runs.js       # 跑步、Strava、洞察與單鞋分析互動
@@ -91,7 +97,8 @@ running-shoes/
 ├── unit_tests/           # Pytest、Agent eval、前端邏輯與版面回歸測試
 │   ├── agent_eval_cases.json # Agent 工具選擇與安全行為案例
 │   ├── frontend_regressions.cjs # Node.js 前端邏輯回歸測試
-│   └── frontend_layout.cjs # Playwright 跨瀏覽器版面測試
+│   ├── frontend_layout.cjs # Playwright 跨瀏覽器版面測試
+│   └── frontend_e2e.cjs  # 真實 FastAPI + 暫存 SQLite 的瀏覽器 CRUD
 ├── AGENTS.md             # Coding Agent 專案規則與完成條件
 ├── CLAUDE.md             # 讓 Claude Code 匯入共用的 AGENTS.md
 ├── pyproject.toml        # pytest、Ruff 與 mypy 設定
@@ -325,7 +332,7 @@ python3 scripts/task.py setup
 # 完整檢查：Ruff、mypy、架構邊界、依賴漏洞、pytest、前端 Node 回歸測試
 python3 scripts/task.py verify
 
-# 一次跑完 verify 與 frontend-layout（缺 Playwright 時會警告並跳過版面檢查）
+# 一次跑完 verify、frontend-layout 與 frontend-e2e（缺 Playwright 時警告並跳過瀏覽器檢查）
 python3 scripts/task.py verify-all
 
 # 日常後端檢查，或只執行 Agent 行為 eval
@@ -365,6 +372,9 @@ python3 scripts/task.py frontend-test
 npm install --no-save --package-lock=false playwright
 npx playwright install chromium webkit
 python3 scripts/task.py frontend-layout
+
+# 以 Chromium 操作真實 FastAPI；資料庫只建立在系統暫存目錄
+python3 scripts/task.py frontend-e2e
 ```
 
 可設定 `LAYOUT_SCREENSHOT_DIR` 保存手機版截圖供人工檢查；Windows 若使用已安裝的 Edge，可設定 `PLAYWRIGHT_CHROMIUM_CHANNEL=msedge`。WebKit 模擬檢查不等同於 iPhone 實機驗證。
@@ -378,7 +388,7 @@ Playwright／Chromium／WebKit 齊全時，也會執行版面測試。
 
 驗證失敗會把指令輸出送回 Claude 繼續修正。同一個 session 的同一份 diff 會重用本機快取，
 避免每次停止都重跑。Hook 不會呼叫其他模型、外部 API，或傳送提示、diff、原始碼與測試輸出。
-GitHub Actions 仍會在 push／pull request 執行 `verify`，並在獨立工作中安裝 Chromium／WebKit、跑完完整版面矩陣；Dependabot 每週檢查 Python 與 GitHub Actions 更新。
+GitHub Actions 仍會在 push／pull request 執行 `verify`，並在獨立工作中安裝 Chromium／WebKit、跑完完整版面矩陣與真實 CRUD E2E；Dependabot 每週檢查 Python 與 GitHub Actions 更新。
 
 本次驗證基線為 Python **345 passed**、前端回歸測試 **34 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
 版面檢查涵蓋 WebKit／Chromium、亮／暗模式與 7 組直橫向尺寸，共 28 組設定，檢查五個分頁、表單、圖表、彈窗及空資料狀態。
