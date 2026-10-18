@@ -2,7 +2,11 @@
 
 ## Project map
 
-- `backend/main.py`: FastAPI composition root, application lifecycle, middleware, and static frontend fallback.
+- `backend/main.py`: minimal ASGI entry point; it must only import `backend.app_factory`.
+- `backend/app_factory.py`: FastAPI composition, injectable lifecycle dependencies, routers, and SPA fallback.
+- `backend/settings.py`: immutable typed runtime configuration.
+- `backend/seeding.py`: optional default data using an injected session factory.
+- `backend/middleware.py`: request-level transport guards.
 - `backend/routers/`: feature-oriented HTTP routes; routers must never import `backend.main`.
 - `backend/services/`: framework-independent application services; services must not import FastAPI or routers.
 - `backend/migrations.py`: ordered SQLite schema upgrades and the current schema version.

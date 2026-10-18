@@ -1,6 +1,5 @@
 """Ordered, idempotent SQLite schema migrations."""
 
-import os
 from collections.abc import Callable
 from typing import cast
 
@@ -33,6 +32,8 @@ def schema_version(engine: Engine) -> int:
 def run_startup_migrations(
     engine: Engine,
     session_factory: Callable[[], Session],
+    *,
+    migration_password: str | None = None,
 ) -> None:
     applied_version = schema_version(engine)
     if applied_version > CURRENT_SCHEMA_VERSION:
@@ -51,7 +52,6 @@ def run_startup_migrations(
     )
 
     if "shoes" in existing_tables and "user_id" not in existing_shoe_columns:
-        migration_password = os.environ.get("MIGRATION_PASSWORD")
         if not migration_password:
             raise RuntimeError(
                 "MIGRATION_PASSWORD is required to migrate the legacy shoes database; "

@@ -14,26 +14,21 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from backend import llm, rate_limits, schemas
-from backend import main as main_module
-from backend.auth import create_access_token
+from backend import llm, models, rate_limits, schemas
+from backend.auth import create_access_token, get_password_hash
 from backend.database import get_db
-from backend.main import (
-    app,
-    create_monthly_mileage,
-    create_run,
-    create_shoe,
-    delete_monthly_mileage,
-    delete_run,
-    delete_shoe,
-    export_shoes,
-    update_monthly_mileage,
-    update_run,
-    update_shoe,
-)
+from backend.main import app
 from backend.models import MonthlyMileage, Shoe
 from backend.rate_limits import _enforce_agent_rate_limit
 from backend.routers import auth as auth_routes
+from backend.routers.insights import export_shoes
+from backend.routers.monthly import (
+    create_monthly_mileage,
+    delete_monthly_mileage,
+    update_monthly_mileage,
+)
+from backend.routers.runs import create_run, delete_run, update_run
+from backend.routers.shoes import create_shoe, delete_shoe, update_shoe
 
 
 @pytest.fixture
@@ -264,7 +259,7 @@ def test_model_refresh_has_per_user_cooldown(
     second = client.post("/api/agent/models/refresh", headers=_auth(token))
     assert first.status_code == 200
     assert second.status_code == 429
-    bucket = db.query(main_module.models.RateLimitBucket).filter_by(
+    bucket = db.query(models.RateLimitBucket).filter_by(
         scope="model-refresh-global", bucket_key="global"
     ).one()
     assert bucket.event_count == 1
@@ -275,9 +270,9 @@ def test_model_refresh_has_global_limit_across_users(
     client, db, user_with_token, monkeypatch
 ):
     first_user, first_token = user_with_token
-    second_user = main_module.models.User(
+    second_user = models.User(
         username="second-refresh-user",
-        hashed_password=main_module.get_password_hash("pass1234"),
+        hashed_password=get_password_hash("pass1234"),
     )
     db.add(second_user)
     db.commit()
@@ -302,9 +297,9 @@ def test_model_refresh_has_global_limit_across_users(
 
 def test_registration_capacity_is_enforced(client, db, monkeypatch):
     monkeypatch.setattr(auth_routes, "MAX_REGISTERED_USERS", 1)
-    db.add(main_module.models.User(
+    db.add(models.User(
         username="existing",
-        hashed_password=main_module.get_password_hash("pass1234"),
+        hashed_password=get_password_hash("pass1234"),
     ))
     db.commit()
     response = client.post(
@@ -727,14 +722,18 @@ def test_static_asset_and_non404_http_errors(client):
 
 
 def test_404_handler_falls_back_when_path_resolution_fails(monkeypatch):
-    request = SimpleNamespace(url=SimpleNamespace(path="/broken"))
+    request = SimpleNamespace(
+        url=SimpleNamespace(path="/broken"),
+        app=SimpleNamespace(state=SimpleNamespace(frontend_dir=None)),
+    )
     bad_frontend = MagicMock()
     bad_frontend.__truediv__.return_value.resolve.side_effect = OSError("bad path")
+    request.app.state.frontend_dir = bad_frontend
     fallback = MagicMock(name="fallback-response")
-    monkeypatch.setattr("backend.main.frontend_dir", bad_frontend)
-    monkeypatch.setattr("backend.main._index_response", MagicMock(return_value=fallback))
+    monkeypatch.setattr(app.state, "frontend_dir", bad_frontend)
+    monkeypatch.setattr("backend.app_factory._index_response", MagicMock(return_value=fallback))
 
-    from backend.main import http_exception_handler
+    from backend.app_factory import http_exception_handler
 
     response = asyncio.run(
         http_exception_handler(request, StarletteHTTPException(status_code=404, detail="missing"))
@@ -763,7 +762,7 @@ def test_export_defensive_empty_rows_and_unknown_direct_format(
 ):
     user, _ = user_with_token
     _add_export_shoes(db, user.id)
-    monkeypatch.setattr("backend.main._generate_shoe_rows", lambda *args, **kwargs: iter([]))
+    monkeypatch.setattr("backend.routers.insights.generate_shoe_rows", lambda *args, **kwargs: iter([]))
 
     csv_response = export_shoes(format="csv", mode="all", current_user=user, db=db)
     xlsx_response = export_shoes(format="xlsx", mode="all", current_user=user, db=db)

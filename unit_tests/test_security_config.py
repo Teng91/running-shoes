@@ -9,8 +9,8 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event, text
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from backend import main as main_module
 from backend import rate_limits
+from backend.app_factory import http_exception_handler
 from backend.database import configure_sqlite_connection
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -74,7 +74,7 @@ def test_http_exception_handler_preserves_protocol_headers():
     test_app = FastAPI()
     test_app.add_exception_handler(
         StarletteHTTPException,
-        main_module.http_exception_handler,
+        http_exception_handler,
     )
 
     @test_app.get("/limited")

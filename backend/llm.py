@@ -17,6 +17,8 @@ import httpx
 from dotenv import load_dotenv
 from openai import OpenAI
 
+from backend.settings import settings
+
 load_dotenv()
 
 
@@ -65,9 +67,8 @@ _REMOVED_MODELS = {"openrouter/free"}
 _MODELS_URL = "https://openrouter.ai/api/v1/models?supported_parameters=tools"
 _RANKINGS_URL = "https://openrouter.ai/api/v1/datasets/rankings-daily"
 _DAILY_USAGE_POOL_LIMIT = 50
-_LLM_MAX_OUTPUT_TOKENS = max(
-    256, int(os.environ.get("LLM_MAX_OUTPUT_TOKENS", "4096"))
-)
+
+_LLM_MAX_OUTPUT_TOKENS = settings.llm_max_output_tokens
 # OpenAI SDK 2.47+ uses httpx2 internally while older supported releases use
 # httpx. A plain number is accepted by both clients and keeps the application
 # independent of either transport's private Timeout type.
@@ -180,7 +181,7 @@ def _fetch_free_models() -> list[dict[str, str]]:
 
 # Optional local preference; it is honored only when the model is present in
 # today's live free catalog, so it can never opt into a paid or stale model.
-_OR_DEFAULT = os.environ.get("OR_MODEL")
+_OR_DEFAULT = settings.openrouter_default_model
 
 
 def _get_models(provider: LLMProvider, force: bool = False) -> list[dict[str, str]]:
