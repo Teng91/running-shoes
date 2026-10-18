@@ -1,4 +1,5 @@
 import asyncio
+from dataclasses import replace
 
 import pytest
 from fastapi import FastAPI
@@ -6,16 +7,18 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from backend.app_factory import lifespan
 from backend.auth import get_password_hash, verify_password
 from backend.database import Base
 from backend.migrations import run_startup_migrations
 from backend.models import MonthlyMileage, Shoe, User
+from backend.seeding import seed_default_data
+from backend.settings import settings
 
 # ── Seed Function Tests ─────────────────────────────────────
 #
-# These tests exercise seed_default_data() directly. They bypass the lifespan /
-# app startup by patching backend.main.SessionLocal to point at a fresh in-memory
-# test engine. This isolates seed logic from the rest of the app.
+# These tests exercise seed_default_data() directly with an injected in-memory
+# session factory. This isolates seed logic from the rest of the app.
 
 def _make_test_engine():
     """Create a fresh in-memory SQLite engine with all tables created."""
@@ -28,16 +31,21 @@ def _make_test_engine():
     return engine
 
 
-def test_seed_disabled_when_env_not_set(monkeypatch):
-    """When SEED_DATA is not set to 'true', seed_default_data is a no-op."""
-    monkeypatch.delenv("SEED_DATA", raising=False)
+def _lifespan_context(engine, sessions, migration_password=None):
+    app = FastAPI()
+    app.state.db_engine = engine
+    app.state.session_factory = sessions
+    app.state.settings = replace(
+        settings, seed_data=False, migration_password=migration_password
+    )
+    return lifespan(app)
 
+
+def test_seed_disabled_when_env_not_set():
+    """When SEED_DATA is not set to 'true', seed_default_data is a no-op."""
     engine = _make_test_engine()
     TestSession = sessionmaker(bind=engine)
-    monkeypatch.setattr("backend.main.SessionLocal", TestSession)
-
-    from backend.main import seed_default_data
-    seed_default_data()
+    seed_default_data(TestSession, replace(settings, seed_data=False))
 
     verify = TestSession()
     try:
@@ -48,17 +56,14 @@ def test_seed_disabled_when_env_not_set(monkeypatch):
         verify.close()
 
 
-def test_seed_creates_joy_and_default_data(monkeypatch):
+def test_seed_creates_joy_and_default_data():
     """When SEED_DATA=true and DB is empty, seed creates Joy + 8 shoes + 42 mileages."""
-    monkeypatch.setenv("SEED_DATA", "true")
-    monkeypatch.setenv("MIGRATION_PASSWORD", "seedpass")
-
     engine = _make_test_engine()
     TestSession = sessionmaker(bind=engine)
-    monkeypatch.setattr("backend.main.SessionLocal", TestSession)
-
-    from backend.main import seed_default_data
-    seed_default_data()
+    seed_default_data(
+        TestSession,
+        replace(settings, seed_data=True, migration_password="seedpass"),
+    )
 
     verify = TestSession()
     try:
@@ -79,14 +84,10 @@ def test_seed_creates_joy_and_default_data(monkeypatch):
         verify.close()
 
 
-def test_seed_does_not_overwrite_existing_data(monkeypatch):
+def test_seed_does_not_overwrite_existing_data():
     """When Joy already exists with her data, seed must not modify any of it."""
-    monkeypatch.setenv("SEED_DATA", "true")
-    monkeypatch.setenv("MIGRATION_PASSWORD", "newpass")
-
     engine = _make_test_engine()
     TestSession = sessionmaker(bind=engine)
-    monkeypatch.setattr("backend.main.SessionLocal", TestSession)
 
     # Pre-populate Joy with one custom shoe and one custom mileage so the
     # seed's "table empty" checks both fail.
@@ -113,8 +114,10 @@ def test_seed_does_not_overwrite_existing_data(monkeypatch):
     finally:
         pre.close()
 
-    from backend.main import seed_default_data
-    seed_default_data()
+    seed_default_data(
+        TestSession,
+        replace(settings, seed_data=True, migration_password="newpass"),
+    )
 
     verify = TestSession()
     try:
@@ -137,18 +140,15 @@ def test_seed_does_not_overwrite_existing_data(monkeypatch):
         verify.close()
 
 
-def test_seed_raises_when_migration_password_missing(monkeypatch):
+def test_seed_raises_when_migration_password_missing():
     """If Joy doesn't exist and MIGRATION_PASSWORD isn't set, seed must raise."""
-    monkeypatch.setenv("SEED_DATA", "true")
-    monkeypatch.delenv("MIGRATION_PASSWORD", raising=False)
-
     engine = _make_test_engine()
     TestSession = sessionmaker(bind=engine)
-    monkeypatch.setattr("backend.main.SessionLocal", TestSession)
-
-    from backend.main import seed_default_data
     with pytest.raises(RuntimeError, match="MIGRATION_PASSWORD"):
-        seed_default_data()
+        seed_default_data(
+            TestSession,
+            replace(settings, seed_data=True, migration_password=None),
+        )
 
 
 # ── Lifespan Migration Tests ────────────────────────────────
@@ -157,11 +157,8 @@ def test_seed_raises_when_migration_password_missing(monkeypatch):
 # engine with a pre-populated old schema (shoes exists, users doesn't, no
 # user_id column). They verify that lifespan migrates the schema correctly.
 
-def test_lifespan_migrates_old_schema(monkeypatch):
+def test_lifespan_migrates_old_schema():
     """When DB has old schema (shoes without user_id), lifespan migrates it."""
-    monkeypatch.setenv("MIGRATION_PASSWORD", "migratepass")
-    monkeypatch.delenv("SEED_DATA", raising=False)
-
     # Build an engine with the OLD schema only
     engine = create_engine(
         "sqlite://",
@@ -187,12 +184,9 @@ def test_lifespan_migrates_old_schema(monkeypatch):
         conn.execute(text("INSERT INTO shoes (brand, model, date) VALUES ('OldBrand', 'OldModel', '2024-01-01')"))
         conn.commit()
 
-    monkeypatch.setattr("backend.main.engine", engine)
-    monkeypatch.setattr("backend.main.SessionLocal", sessionmaker(bind=engine))
-
-    from backend.main import lifespan
-    app = FastAPI()
-    async_gen = lifespan(app)
+    async_gen = _lifespan_context(
+        engine, sessionmaker(bind=engine), migration_password="migratepass"
+    )
     asyncio.run(async_gen.__aenter__())
 
     try:
@@ -215,22 +209,15 @@ def test_lifespan_migrates_old_schema(monkeypatch):
         asyncio.run(async_gen.__aexit__(None, None, None))
 
 
-def test_lifespan_skips_migration_when_new_schema(monkeypatch):
+def test_lifespan_skips_migration_when_new_schema():
     """When DB is empty or has users table, lifespan should not run migration logic."""
-    monkeypatch.delenv("SEED_DATA", raising=False)
-
     engine = create_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
     # Empty DB — no tables yet
-    monkeypatch.setattr("backend.main.engine", engine)
-    monkeypatch.setattr("backend.main.SessionLocal", sessionmaker(bind=engine))
-
-    from backend.main import lifespan
-    app = FastAPI()
-    async_gen = lifespan(app)
+    async_gen = _lifespan_context(engine, sessionmaker(bind=engine))
     asyncio.run(async_gen.__aenter__())
 
     try:

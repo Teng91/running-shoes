@@ -7,9 +7,11 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from backend.database import get_db
-from backend.main import StravaUploadLimitMiddleware, _parse_strava_csv, app
+from backend.main import app
+from backend.middleware import StravaUploadLimitMiddleware
 from backend.models import MonthlyMileage, Run, Shoe, StravaImport
 from backend.routers.reports import _local_today
+from backend.routers.runs import _parse_strava_csv
 from unit_tests.test_api import _auth_header
 
 CSV = "活動 ID,活動日期,活動類型,活動裝備,距離\n" \
@@ -335,7 +337,7 @@ def test_strava_parser_rejects_excess_rows_without_materializing_all(monkeypatch
 def test_strava_request_limit_rejects_before_endpoint_parsing(
     client, user_with_token, monkeypatch
 ):
-    from backend import main as main_module
+    from backend import middleware
 
     _user, token = user_with_token
     endpoint_called = False
@@ -345,7 +347,7 @@ def test_strava_request_limit_rejects_before_endpoint_parsing(
         endpoint_called = True
         raise AssertionError("endpoint should not parse an oversized multipart body")
 
-    monkeypatch.setattr(main_module, "MAX_STRAVA_REQUEST_BYTES", 10)
+    monkeypatch.setattr(middleware, "MAX_STRAVA_REQUEST_BYTES", 10)
     monkeypatch.setattr("backend.routers.runs._read_strava_upload", fail_if_endpoint_reads)
     response = upload(client, "/api/runs/import/strava/preview", token)
     assert response.status_code == 413
@@ -354,9 +356,9 @@ def test_strava_request_limit_rejects_before_endpoint_parsing(
 
 
 def test_strava_request_limit_counts_chunked_body_without_content_length(monkeypatch):
-    from backend import main as main_module
+    from backend import middleware
 
-    monkeypatch.setattr(main_module, "MAX_STRAVA_REQUEST_BYTES", 10)
+    monkeypatch.setattr(middleware, "MAX_STRAVA_REQUEST_BYTES", 10)
     messages = iter([
         {"type": "http.request", "body": b"123456", "more_body": True},
         {"type": "http.request", "body": b"789012", "more_body": False},

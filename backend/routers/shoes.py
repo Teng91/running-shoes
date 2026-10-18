@@ -1,6 +1,5 @@
 """Shoe collection HTTP routes."""
 
-import os
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -10,9 +9,10 @@ from sqlalchemy.orm import Session
 from backend import models, schemas
 from backend.auth import get_current_user
 from backend.database import get_db
+from backend.settings import settings
 
 router = APIRouter(tags=["shoes"])
-MAX_SHOES_PER_USER = max(1, int(os.environ.get("MAX_SHOES_PER_USER", "500")))
+MAX_SHOES_PER_USER = settings.max_shoes_per_user
 
 
 
@@ -161,4 +161,3 @@ def delete_shoe(
         db.rollback()
         raise
     return {"ok": True}
-

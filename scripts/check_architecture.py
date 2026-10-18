@@ -76,6 +76,28 @@ def main() -> None:
             )
 
     main_source = (ROOT / "backend" / "main.py").read_text(encoding="utf-8")
+    main_imports = imported_modules(ROOT / "backend" / "main.py")
+    if main_imports != {"backend.app_factory"}:
+        fail(
+            "backend/main.py must remain a minimal ASGI entry point that only "
+            f"imports backend.app_factory; found {sorted(main_imports)}"
+        )
+    forbidden_compatibility_names = {
+        "register", "create_shoe", "create_run", "seed_default_data", "lifespan",
+    }
+    main_tree = ast.parse(main_source)
+    assigned_names = {
+        target.id
+        for node in ast.walk(main_tree)
+        if isinstance(node, (ast.Assign, ast.AnnAssign))
+        for target in (
+            node.targets if isinstance(node, ast.Assign) else [node.target]
+        )
+        if isinstance(target, ast.Name)
+    }
+    leaked_aliases = sorted(assigned_names & forbidden_compatibility_names)
+    if leaked_aliases:
+        fail(f"backend/main.py restored compatibility aliases: {leaked_aliases}")
     main_routes = len(re.findall(r"(?m)^@app\.(?:get|post|put|delete|patch)\(", main_source))
     if main_routes > MAIN_ROUTE_BUDGET:
         fail(

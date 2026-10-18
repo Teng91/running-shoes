@@ -1,7 +1,6 @@
 """Run log and Strava import HTTP routes."""
 
 import json
-import os
 from calendar import monthrange
 from typing import Annotated, cast
 
@@ -13,12 +12,13 @@ from backend import models, schemas, strava_import
 from backend.auth import get_current_user
 from backend.database import get_db
 from backend.services.mileage import apply_run_mileage_deltas
+from backend.settings import settings
 
 router = APIRouter(tags=["runs"])
-MAX_RUNS_PER_USER = max(1, int(os.environ.get("MAX_RUNS_PER_USER", "5000")))
-MAX_STRAVA_CSV_BYTES = 10 * 1024 * 1024
-MAX_STRAVA_CSV_ROWS = 50_000
-MAX_STRAVA_IMPORT_HISTORY_PER_USER = 50
+MAX_RUNS_PER_USER = settings.max_runs_per_user
+MAX_STRAVA_CSV_BYTES = settings.max_strava_csv_bytes
+MAX_STRAVA_CSV_ROWS = settings.max_strava_csv_rows
+MAX_STRAVA_IMPORT_HISTORY_PER_USER = settings.max_strava_import_history_per_user
 
 
 def _user_shoe_or_404(db: Session, user_id: int, shoe_id: int) -> models.Shoe:
@@ -348,4 +348,3 @@ def delete_run(
         db.rollback()
         raise
     return {"ok": True}
-

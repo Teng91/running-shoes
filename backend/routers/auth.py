@@ -1,6 +1,5 @@
 """Authentication and account HTTP endpoints."""
 
-import os
 from threading import Lock
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -10,9 +9,10 @@ from backend import models, schemas
 from backend.auth import create_access_token, get_current_user, get_password_hash, verify_password
 from backend.database import get_db
 from backend.rate_limits import enforce_auth_rate_limit
+from backend.settings import settings
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
-MAX_REGISTERED_USERS = max(1, int(os.environ.get("MAX_REGISTERED_USERS", "100")))
+MAX_REGISTERED_USERS = settings.max_registered_users
 _registration_lock = Lock()
 
 
@@ -48,7 +48,10 @@ def login(request: Request, payload: schemas.UserLogin, db: Session = Depends(ge
     user = db.query(models.User).filter(models.User.username == payload.username).first()
     if not user or not verify_password(payload.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Incorrect username or password")
-    token = create_access_token(data={"sub": user.username, "token_version": user.token_version})
+    token = create_access_token(
+        data={"sub": user.username, "token_version": user.token_version},
+        secret_key=request.app.state.settings.secret_key,
+    )
     return {"access_token": token, "token_type": "bearer"}
 
 
