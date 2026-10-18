@@ -10,6 +10,7 @@ from sqlalchemy import create_engine, event, text
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from backend import main as main_module
+from backend import rate_limits
 from backend.database import configure_sqlite_connection
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -18,10 +19,15 @@ FRONTEND_SOURCE = "\n".join(
     for name in (
         "index.html",
         "styles.css",
+        "app-core.js",
         "app-agent.js",
         "app-reports.js",
         "app-runs.js",
         "app-shoes.js",
+        "app-dashboard.js",
+        "app-monthly.js",
+        "app-charts.js",
+        "app-spending.js",
         "app.js",
     )
 )
@@ -39,13 +45,13 @@ def test_client_ip_header_is_only_trusted_on_fly(monkeypatch):
         headers={"fly-client-ip": "198.51.100.9"},
         client=SimpleNamespace(host="203.0.113.7"),
     )
-    monkeypatch.setattr(main_module, "IS_FLY_RUNTIME", False)
-    assert main_module._client_key(request) == "203.0.113.7"
+    monkeypatch.setattr(rate_limits, "IS_FLY_RUNTIME", False)
+    assert rate_limits._client_key(request) == "203.0.113.7"
 
-    monkeypatch.setattr(main_module, "IS_FLY_RUNTIME", True)
-    assert main_module._client_key(request) == "198.51.100.9"
+    monkeypatch.setattr(rate_limits, "IS_FLY_RUNTIME", True)
+    assert rate_limits._client_key(request) == "198.51.100.9"
     request.headers["fly-client-ip"] = "not-an-ip"
-    assert main_module._client_key(request) == "203.0.113.7"
+    assert rate_limits._client_key(request) == "203.0.113.7"
 
 
 def test_docker_enables_production_secret_checks():

@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 ROUTERS = ROOT / "backend" / "routers"
 SERVICES = ROOT / "backend" / "services"
 API_CONTRACT = ROOT / "unit_tests" / "api_contract.json"
-MAIN_ROUTE_BUDGET = 16
+MAIN_ROUTE_BUDGET = 0
 sys.path.insert(0, str(ROOT))
 
 
@@ -110,6 +110,11 @@ def main() -> None:
         if getattr(route, "path", "").startswith("/api/")
     }
     required = {
+        "/api/auth/register",
+        "/api/running-goal",
+        "/api/monthly-mileage",
+        "/api/agent/chat/stream",
+        "/api/reports/generate",
         "/api/analytics/dashboard",
         "/api/shoes/{shoe_id}/analytics",
         "/api/export",

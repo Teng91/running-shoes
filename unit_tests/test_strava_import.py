@@ -7,8 +7,9 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from backend.database import get_db
-from backend.main import StravaUploadLimitMiddleware, _local_today, _parse_strava_csv, app
+from backend.main import StravaUploadLimitMiddleware, _parse_strava_csv, app
 from backend.models import MonthlyMileage, Run, Shoe, StravaImport
+from backend.routers.reports import _local_today
 from unit_tests.test_api import _auth_header
 
 CSV = "活動 ID,活動日期,活動類型,活動裝備,距離\n" \

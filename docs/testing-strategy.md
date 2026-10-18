@@ -18,11 +18,13 @@ flowchart BT
     API[FastAPI integration tests<br/>auth / isolation / transactions / contracts]
     Frontend[Node frontend regressions<br/>state / escaping / interaction]
     Layout[Playwright layout matrix<br/>Chromium + WebKit]
+    E2E[Playwright functional E2E<br/>real FastAPI + temp SQLite]
     Evals[Deterministic agent evals<br/>tool choice / safety]
 
     Unit --> API
     API --> Frontend
     Frontend --> Layout
+    Frontend --> E2E
     API --> Evals
 ```
 
@@ -38,6 +40,7 @@ flowchart BT
 | AI 工具安全與選擇 | agent evals + mocked stream tests | prompt/tool policy 或 fallback 回歸 |
 | 前端互動與 XSS 防護 | Node regression tests | state、escaping、分頁或錯誤處理回歸 |
 | 響應式版面 | Playwright matrix | 特定引擎、尺寸、主題出現重疊／溢出 |
+| 瀏覽器核心流程 | Playwright E2E + 暫存 SQLite | UI、HTTP 與 persistence 整合回歸 |
 | 模組依賴方向 | `architecture-check` | circular dependency 或重複 API route |
 | API contract | method/path snapshot | endpoint 被意外新增、刪除或改名 |
 | 備份可恢復性 | backup/restore tests | checksum、integrity、retention 或安全快照失效 |
@@ -72,6 +75,7 @@ runner 會自行尋找 Windows 或 Unix 的專案虛擬環境。
 | Agent／tools | `python3 scripts/task.py eval-agent`，再執行 `test-fast` |
 | 前端邏輯 | `python3 scripts/task.py frontend-test` |
 | 版面 | `python3 scripts/task.py frontend-layout` |
+| 真實瀏覽器 CRUD | `python3 scripts/task.py frontend-e2e` |
 | 架構邊界 | `python3 scripts/task.py architecture-check` |
 | Secret／credential 風險 | `python3 scripts/task.py security-check` |
 | 文件／harness | `python3 scripts/task.py docs-check` |

@@ -1,7 +1,7 @@
 # Software Design Description（SDD）
 
 本文件描述 Running Shoes 的目前架構、模組邊界與下一步拆分方向。它不是理想化的完成圖；
-圖中明確保留 `backend/main.py` 尚未拆出的核心路由，讓文件和程式碼維持一致。
+後端採模組化單體，`backend/main.py` 僅作為 composition root；HTTP endpoint 已全部位於 feature router。
 
 ## 1. 設計目標
 
@@ -29,22 +29,28 @@ flowchart LR
 flowchart TB
     Browser[frontend modules] --> Main[backend/main.py<br/>composition root + lifecycle]
 
-    Main --> Core[尚待拆分的 core routes<br/>auth / goals / agent / reports]
+    Main --> AuthRoutes[routers/auth.py]
+    Main --> GoalRoutes[routers/goals.py]
+    Main --> MonthlyRoutes[routers/monthly.py]
+    Main --> AgentRoutes[routers/agent.py]
+    Main --> ReportRoutes[routers/reports.py]
     Main --> Insights[routers/insights.py<br/>analytics / exports / spending]
     Main --> Shoes[routers/shoes.py]
     Main --> Runs[routers/runs.py]
     Main --> Health[routers/health.py]
     Runs --> Mileage[services/mileage.py]
-    Main --> AI[agent + report routes]
+    AuthRoutes --> Limits[rate_limits.py]
+    AgentRoutes --> Limits
+    ReportRoutes --> Limits
+    AgentRoutes --> AI[agent.py]
+    ReportRoutes --> Reports[reports.py]
 
     Insights --> Auth[auth.py]
     Insights --> Analytics[analytics.py]
     Insights --> Exporting[exporting.py]
-    Core --> Goals[goals.py]
-    Core --> Strava[strava_import.py]
-    AI --> Agent[agent.py]
-    AI --> Reports[reports.py]
-    Agent --> Tools[tools/]
+    GoalRoutes --> Goals[goals.py]
+    Runs --> Strava[strava_import.py]
+    AI --> Tools[tools/]
 
     Auth --> Models[models.py]
     Analytics --> Models
@@ -60,8 +66,8 @@ flowchart TB
     Migrations --> Database
 ```
 
-`backend/main.py` 是 composition root：建立 FastAPI、掛載 middleware／router，並暫時保留
-尚未拆出的 routes。insights、shoes、runs 與 health 已是獨立垂直切片；runs 把跨資料表的里程
+`backend/main.py` 是 composition root：建立 FastAPI、掛載 middleware／router，不直接宣告 API route。
+auth、goals、monthly、agent、reports、insights、shoes、runs 與 health 都是獨立垂直切片；runs 把跨資料表的里程
 同步委派給 framework-independent service。啟動 migration 位於 `backend/migrations.py` 並寫入
 schema version。router 不能反向 import `backend.main`，service 也不能 import FastAPI 或 router。
 
@@ -69,7 +75,8 @@ schema version。router 不能反向 import `backend.main`，service 也不能 i
 
 | 模組 | 責任 | 可以依賴 | 不應依賴 |
 | --- | --- | --- | --- |
-| `backend/main.py` | app 組裝、middleware、lifecycle、尚待抽出的 routes | routers、domain、database | frontend 實作細節 |
+| `backend/main.py` | app 組裝、middleware、lifecycle、靜態檔案 fallback | routers、domain、database | 業務 route、frontend 實作細節 |
+| `backend/rate_limits.py` | auth／AI 的 process 與 SQLite shared limits | models、database session | routers、`backend.main` |
 | `backend/routers/` | HTTP 參數、認證 dependency、response | auth、domain/service、models | `backend.main` |
 | `backend/services/` | 跨 route 的交易與 application use case | models、persistence | FastAPI、routers、`backend.main` |
 | `backend/migrations.py` | ordered/idempotent schema upgrade 與版本 | models、database | routers、frontend |
@@ -115,8 +122,9 @@ sequenceDiagram
 
 1. **已完成**：前端拆出 AI、月報、跑步與跑鞋互動；後端建立 insights／shoes／runs／health routers。
 2. **已完成**：共用里程交易整理成 service，startup migration 移到有版本的 migration 模組。
-3. **下一階段**：抽出 auth／rate-limit 與 agent／reports／goals routers。
-4. **最後**：導入 app factory 與 settings object，移除 `backend.main` 的 route 相容 alias。
+3. **已完成**：抽出 auth／rate-limit 與 agent／reports／goals／monthly routers，main route budget 降為 0。
+4. **已完成**：前端再依 core、dashboard、monthly、charts、spending、bootstrap 拆分，加入真實瀏覽器 CRUD E2E。
+5. **下一階段**：評估 app factory 與 settings object，並逐步移除 `backend.main` 的 route 相容 alias。
 
 每一階段都先以既有 API regression tests 鎖住行為，再移動程式碼；不在同一個 commit 同時
 改變 endpoint contract 與模組邊界。
