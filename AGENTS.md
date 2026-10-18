@@ -2,16 +2,22 @@
 
 ## Project map
 
-- `backend/main.py`: FastAPI composition root, application lifecycle, and routes not yet extracted.
+- `backend/main.py`: FastAPI composition root, application lifecycle, middleware, and static frontend fallback.
 - `backend/routers/`: feature-oriented HTTP routes; routers must never import `backend.main`.
 - `backend/services/`: framework-independent application services; services must not import FastAPI or routers.
 - `backend/migrations.py`: ordered SQLite schema upgrades and the current schema version.
+- `backend/rate_limits.py`: shared authentication and AI request throttling.
 - `docs/architecture.md`: current SDD, module boundaries, diagrams, and evolution sequence.
 - `docs/testing-strategy.md`: test design, traceability matrix, and definition of done.
 - `backend/agent.py`: LLM orchestration, deterministic query planning, and SSE events.
 - `backend/tools/`: trusted database and web-search tools used by the agent.
 - `frontend/index.html`: dependency-light single-page dashboard markup.
-- `frontend/app.js`: core dashboard state, API, run/shoe charts, and interactions.
+- `frontend/app-core.js`: shared dashboard state, authentication, API, and data loading.
+- `frontend/app-dashboard.js`: dashboard cards, alerts, and shoe tables.
+- `frontend/app-monthly.js`: monthly mileage, goals, and export interactions.
+- `frontend/app-charts.js`: shoe, mileage, and yearly charts.
+- `frontend/app-spending.js`: spending cards, charts, and table.
+- `frontend/app.js`: bootstrap and global dialog event wiring.
 - `frontend/app-agent.js`: AI assistant models, chat streaming, and safe Markdown rendering.
 - `frontend/app-reports.js`: monthly report loading, generation, and streaming UI.
 - `frontend/app-runs.js`: run log, Strava import, dashboard insight, and shoe analytics UI.
@@ -44,6 +50,7 @@ on Windows use `py -3` with the same script and task arguments:
 - Agent or tool change: `python3 scripts/task.py eval-agent`, then `python3 scripts/task.py test-fast`
 - Frontend logic change: `python3 scripts/task.py frontend-test`
 - Layout change: `python3 scripts/task.py frontend-layout`
+- Browser CRUD flow: `python3 scripts/task.py frontend-e2e`
 - README, harness command, test-count, tool-count, or layout-matrix change: `python3 scripts/task.py docs-check`
 - Router or module-boundary change: `python3 scripts/task.py architecture-check`
 - Security-sensitive change: `python3 scripts/task.py security-check`

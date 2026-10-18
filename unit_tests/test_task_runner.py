@@ -10,6 +10,7 @@ def test_public_tasks_cover_the_documented_harness():
         "test-fast",
         "frontend-test",
         "frontend-layout",
+        "frontend-e2e",
         "eval-agent",
         "audit-deps",
         "architecture-check",
@@ -43,14 +44,15 @@ def test_test_secret_is_local_and_does_not_override_an_explicit_value(monkeypatc
     assert os.environ["SECRET_KEY"] == "explicit-secret"
 
 
-def test_verify_all_reuses_verify_and_optionally_runs_layout(monkeypatch):
+def test_verify_all_reuses_verify_and_optionally_runs_browser_checks(monkeypatch):
     calls: list[object] = []
     monkeypatch.setattr(task, "run_verify", lambda: calls.append("verify"))
     monkeypatch.setattr(task, "run_frontend_layout", lambda *, optional=False: calls.append(optional))
+    monkeypatch.setattr(task, "run_frontend_e2e", lambda *, optional=False: calls.append(("e2e", optional)))
 
     task.run_task("verify-all")
 
-    assert calls == ["verify", True]
+    assert calls == ["verify", True, ("e2e", True)]
 
 
 def test_ci_and_docs_use_the_cross_platform_runner():
