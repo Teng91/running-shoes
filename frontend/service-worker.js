@@ -1,4 +1,4 @@
-const CACHE_NAME = 'running-shoes-shell-v8';
+const CACHE_NAME = 'running-shoes-shell-v9';
 const APP_SHELL = [
   '/',
   '/app-core.js',

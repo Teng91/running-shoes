@@ -29,30 +29,33 @@ async function init() {
       if (response.status === 401) {
         clearAuth();
         showLoginView();
-        document.body.style.opacity = '1';
         return;
       }
       if (!response.ok) throw new Error('驗證服務暫時無法使用');
-      showAppView();
+      showAppView({ keepBoot: true });
       loadAgentModels();
       // 還原 F5 之前的 tab（init 走 stored token，沒經過 resetAppLayout）。
       const savedTab = localStorage.getItem('activeTab');
       if (savedTab && savedTab !== 'runs') switchTab(savedTab);
-      loadData();
+      await loadData();
+      hideAppBoot();
     } catch (error) {
       // 離線或伺服器暫時無法連線時保留 token，避免 PWA 被迫重新登入。
       console.warn('無法驗證登入狀態，保留目前工作階段:', error);
-      showAppView();
+      showAppView({ keepBoot: true });
       loadAgentModels();
-      loadData();
+      await loadData();
+      hideAppBoot();
     }
   } else {
     showLoginView();
   }
-  document.body.style.opacity = '1';
 }
 
-init();
+init().catch(error => {
+  console.error('應用程式初始化失敗:', error);
+  showAppBootError();
+});
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
