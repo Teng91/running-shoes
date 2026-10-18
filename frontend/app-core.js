@@ -13,6 +13,49 @@ function esc(str) {
 // ====== API Base ======
 const API_BASE = window.location.origin + '/api';
 
+// The HTML includes a tiny legacy-bundle poll for PWA cache upgrades. The
+// current bundle owns the loading screen from this point onward.
+window.clearInterval(window.__appBootLegacyPoll);
+let appBootHideTimer = null;
+
+function armAppBootWatchdog() {
+  window.clearTimeout(window.__appBootWatchdog);
+  window.__appBootWatchdog = window.setTimeout(() => {
+    showAppBootError('載入時間比預期久，請檢查網路後重試。');
+  }, 12000);
+}
+
+function showAppBoot(message = '正在準備應用程式…') {
+  const boot = document.getElementById('app-boot');
+  window.clearTimeout(appBootHideTimer);
+  boot.hidden = false;
+  boot.classList.remove('is-hidden');
+  boot.setAttribute('aria-busy', 'true');
+  document.getElementById('app-boot-message').textContent = message;
+  document.getElementById('app-boot-retry').hidden = true;
+  armAppBootWatchdog();
+}
+
+function hideAppBoot() {
+  const boot = document.getElementById('app-boot');
+  window.clearTimeout(window.__appBootWatchdog);
+  window.clearTimeout(appBootHideTimer);
+  boot.setAttribute('aria-busy', 'false');
+  boot.classList.add('is-hidden');
+  appBootHideTimer = window.setTimeout(() => { boot.hidden = true; }, 180);
+}
+
+function showAppBootError(message = '應用程式載入失敗，請重新載入。') {
+  const boot = document.getElementById('app-boot');
+  window.clearTimeout(window.__appBootWatchdog);
+  window.clearTimeout(appBootHideTimer);
+  boot.hidden = false;
+  boot.classList.remove('is-hidden');
+  boot.setAttribute('aria-busy', 'false');
+  document.getElementById('app-boot-message').textContent = message;
+  document.getElementById('app-boot-retry').hidden = false;
+}
+
 // ====== Auth State ======
 let authToken = localStorage.getItem('token');
 let currentUser = localStorage.getItem('username');
@@ -60,15 +103,15 @@ function showLoginView() {
   document.getElementById('auth-view').style.display = '';
   document.getElementById('app-view').style.display = 'none';
   showLoginForm();
-  document.body.style.opacity = '1';
+  hideAppBoot();
 }
 
-function showAppView() {
+function showAppView({ keepBoot = false } = {}) {
   document.getElementById('auth-view').style.display = 'none';
   document.getElementById('app-view').style.display = '';
   document.getElementById('user-label').textContent = currentUser || '';
   render();
-  document.body.style.opacity = '1';
+  if (!keepBoot) hideAppBoot();
 }
 
 // 只在「從登入頁進入」時呼叫：清掉上一位使用者切到 AI 助手時留下的 inline 樣式，
@@ -271,6 +314,7 @@ async function handleLogin() {
   const username = document.getElementById('login-username').value.trim();
   const password = document.getElementById('login-password').value;
   if (!username || !password) { showAuthError('請輸入帳號和密碼'); return; }
+  showAppBoot('正在登入並載入資料…');
   try {
     const res = await fetch(API_BASE + '/auth/login', {
       method: 'POST',
@@ -287,10 +331,12 @@ async function handleLogin() {
     setAuth(data.access_token, username);
     resetAgentChat();  // 保險：確保進入時對話是乾淨的，不殘留上一位使用者
     resetAppLayout();  // 清掉上一位使用者切到 AI 助手留下的 inline 樣式，並回到跑步日誌
-    showAppView();
+    showAppView({ keepBoot: true });
     loadAgentModels();
-    loadData();
+    await loadData();
+    hideAppBoot();
   } catch (e) {
+    hideAppBoot();
     showAuthError(e.message);
   }
 }
@@ -303,6 +349,7 @@ async function handleRegister() {
   if (!username || !password) { showRegError('請輸入帳號和密碼'); return; }
   if (password.length < 4) { showRegError('密碼至少 4 個字元'); return; }
   if (password !== password2) { showRegError('兩次密碼不一致'); return; }
+  showAppBoot('正在建立帳號並載入資料…');
   try {
     const regRes = await fetch(API_BASE + '/auth/register', {
       method: 'POST',
@@ -322,6 +369,7 @@ async function handleRegister() {
       body: JSON.stringify({ username, password }),
     });
     if (!loginRes.ok) {
+      hideAppBoot();
       showLoginForm();
       showAuthError('註冊成功！請登入');
       return;
@@ -329,10 +377,12 @@ async function handleRegister() {
     const data = await loginRes.json();
     setAuth(data.access_token, username);
     resetAppLayout();  // 清掉殘留 inline 樣式並回到跑步日誌
-    showAppView();
+    showAppView({ keepBoot: true });
     loadAgentModels();
-    loadData();
+    await loadData();
+    hideAppBoot();
   } catch (e) {
+    hideAppBoot();
     showRegError(e.message);
   }
 }

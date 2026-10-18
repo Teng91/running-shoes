@@ -45,6 +45,25 @@ test('PWA metadata, local dependencies and service worker registration are prese
   assert.match(htmlSource, /href="\/styles\.css"/);
 });
 
+test('startup and login show progress until the application is ready', () => {
+  assert.match(htmlSource, /id="app-boot"[^>]+role="status"[^>]+aria-live="polite"/);
+  assert.match(htmlSource, /id="app-boot-message">正在準備應用程式/);
+  assert.match(htmlSource, /id="app-boot-retry"[^>]+hidden>重新載入/);
+  assert.ok(htmlSource.indexOf('id="app-boot"') < htmlSource.indexOf('src="/vendor/chart.umd.min.js"'));
+  assert.match(htmlSource, /__appBootLegacyPoll/);
+  assert.match(htmlSource, /older cached stylesheet made body[\s\S]+body \{ opacity: 1 !important; \}/);
+  assert.match(source, /\.app-boot\.is-hidden \{ opacity: 0; visibility: hidden/);
+  assert.match(source, /@media \(prefers-reduced-motion: reduce\)/);
+  assert.doesNotMatch(source, /body \{[^}]*opacity:\s*0/);
+
+  const initSource = extract('init');
+  const loginSource = extract('handleLogin');
+  assert.match(initSource, /showAppView\(\{ keepBoot: true \}\)[\s\S]+await loadData\(\);[\s\S]+hideAppBoot\(\)/);
+  assert.match(loginSource, /showAppBoot\('正在登入並載入資料…'\)[\s\S]+await loadData\(\);[\s\S]+hideAppBoot\(\)/);
+  assert.match(source, /showAppBootError\('載入時間比預期久/);
+  assert.match(source, /init\(\)\.catch\(error =>/);
+});
+
 test('mobile page gutters preserve standalone safe-area insets', () => {
   assert.match(source, /padding:\s*calc\(var\(--page-gutter\) \+ env\(safe-area-inset-top\)\)[\s\S]*max\(var\(--page-gutter\), env\(safe-area-inset-right\)\)[\s\S]*max\(var\(--page-gutter\), env\(safe-area-inset-bottom\)\)[\s\S]*max\(var\(--page-gutter\), env\(safe-area-inset-left\)\)/);
   assert.match(source, /@media \(max-width: 760px\)[\s\S]*?\.container \{ --page-gutter: 16px; \}/);
@@ -63,7 +82,7 @@ test('monthly reports progressively render markdown with document styling', () =
 test('temporary auth connectivity failures preserve the stored session', () => {
   const initSource = source.slice(source.indexOf('async function init()'), source.indexOf('\ninit();'));
   assert.match(initSource, /response\.status === 401/);
-  assert.match(initSource, /catch \(error\)[\s\S]+showAppView\(\);[\s\S]+loadData\(\);/);
+  assert.match(initSource, /catch \(error\)[\s\S]+showAppView\(\{ keepBoot: true \}\);[\s\S]+await loadData\(\);/);
   assert.doesNotMatch(initSource.match(/catch \(error\) \{[\s\S]+?\n    \}/)[0], /clearAuth\(\)/);
 });
 
