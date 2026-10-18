@@ -35,8 +35,17 @@ running-shoes/
 ├── .claude/
 │   └── settings.json     # Claude Code 完成回覆前執行確定性驗證的 Stop hook
 ├── backend/              # FastAPI 後端
-│   ├── main.py           # App 組裝、lifecycle、靜態檔案與尚待拆分的 routes
+│   ├── main.py           # 最小 ASGI 入口
+│   ├── app_factory.py    # 可注入的 FastAPI 組裝、lifecycle 與 SPA fallback
+│   ├── settings.py       # Immutable typed runtime configuration
+│   ├── seeding.py        # 使用注入 session factory 的可選預設資料
+│   ├── middleware.py     # Strava request body transport guard
 │   ├── routers/
+│   │   ├── auth.py       # 註冊、登入與密碼管理 routes
+│   │   ├── goals.py      # 跑量目標 routes
+│   │   ├── monthly.py    # 月跑量 routes
+│   │   ├── agent.py      # AI provider 與對話 routes
+│   │   ├── reports.py    # AI 月報 routes
 │   │   ├── health.py     # Liveness／readiness probes
 │   │   ├── insights.py   # 分析、匯出與支出統計 HTTP routes
 │   │   ├── runs.py       # 跑步日誌與 Strava HTTP routes
@@ -390,7 +399,7 @@ Playwright／Chromium／WebKit 齊全時，也會執行版面測試。
 避免每次停止都重跑。Hook 不會呼叫其他模型、外部 API，或傳送提示、diff、原始碼與測試輸出。
 GitHub Actions 仍會在 push／pull request 執行 `verify`，並在獨立工作中安裝 Chromium／WebKit、跑完完整版面矩陣與真實 CRUD E2E；Dependabot 每週檢查 Python 與 GitHub Actions 更新。
 
-本次驗證基線為 Python **345 passed**、前端回歸測試 **34 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
+本次驗證基線為 Python **349 passed**、前端回歸測試 **34 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
 版面檢查涵蓋 WebKit／Chromium、亮／暗模式與 7 組直橫向尺寸，共 28 組設定，檢查五個分頁、表單、圖表、彈窗及空資料狀態。
 
 `docs-check` 會從 pytest collection、前端測試檔、Agent tool registry、Playwright 測試矩陣與實際檔案系統核對上述數字及 harness 路徑。新增測試、工具或版面設定卻忘記同步 README 時，`verify` 和 GitHub Actions 會直接失敗。

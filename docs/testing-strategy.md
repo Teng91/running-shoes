@@ -42,6 +42,7 @@ flowchart BT
 | 響應式版面 | Playwright matrix | 特定引擎、尺寸、主題出現重疊／溢出 |
 | 瀏覽器核心流程 | Playwright E2E + 暫存 SQLite | UI、HTTP 與 persistence 整合回歸 |
 | 模組依賴方向 | `architecture-check` | circular dependency 或重複 API route |
+| App composition 隔離 | app factory tests | lifespan 誤用正式 database globals 或設定漂移 |
 | API contract | method/path snapshot | endpoint 被意外新增、刪除或改名 |
 | 備份可恢復性 | backup/restore tests | checksum、integrity、retention 或安全快照失效 |
 | Coverage floor | branch coverage ≥ 92% | 測試保護範圍明顯退化 |

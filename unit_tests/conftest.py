@@ -27,15 +27,13 @@ def db():
 @pytest.fixture(autouse=True)
 def isolate_app_database(db, monkeypatch):
     """Keep application lifespan work on the current test's in-memory database."""
-    from backend import main as main_module
+    from backend.main import app
 
     test_engine = db.get_bind()
-    monkeypatch.setattr(main_module, "engine", test_engine)
-    monkeypatch.setattr(
-        main_module,
-        "SessionLocal",
-        sessionmaker(autocommit=False, autoflush=False, bind=test_engine),
-    )
+    monkeypatch.setattr(app.state, "db_engine", test_engine)
+    monkeypatch.setattr(app.state, "session_factory", sessionmaker(
+        autocommit=False, autoflush=False, bind=test_engine
+    ))
 
 
 @pytest.fixture

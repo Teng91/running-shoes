@@ -1,7 +1,8 @@
 # Software Design Description（SDD）
 
 本文件描述 Running Shoes 的目前架構、模組邊界與下一步拆分方向。它不是理想化的完成圖；
-後端採模組化單體，`backend/main.py` 僅作為 composition root；HTTP endpoint 已全部位於 feature router。
+後端採模組化單體，`backend/main.py` 僅作為 ASGI 入口；composition 位於可注入的 app factory，
+HTTP endpoint 全部位於 feature router。
 
 ## 1. 設計目標
 
@@ -27,17 +28,20 @@ flowchart LR
 
 ```mermaid
 flowchart TB
-    Browser[frontend modules] --> Main[backend/main.py<br/>composition root + lifecycle]
-
-    Main --> AuthRoutes[routers/auth.py]
-    Main --> GoalRoutes[routers/goals.py]
-    Main --> MonthlyRoutes[routers/monthly.py]
-    Main --> AgentRoutes[routers/agent.py]
-    Main --> ReportRoutes[routers/reports.py]
-    Main --> Insights[routers/insights.py<br/>analytics / exports / spending]
-    Main --> Shoes[routers/shoes.py]
-    Main --> Runs[routers/runs.py]
-    Main --> Health[routers/health.py]
+    Browser[frontend modules] --> Main[backend/main.py<br/>ASGI entry point]
+    Main --> Factory[app_factory.py<br/>composition + lifecycle]
+    Settings[settings.py] --> Factory
+    Factory --> AuthRoutes[routers/auth.py]
+    Factory --> GoalRoutes[routers/goals.py]
+    Factory --> MonthlyRoutes[routers/monthly.py]
+    Factory --> AgentRoutes[routers/agent.py]
+    Factory --> ReportRoutes[routers/reports.py]
+    Factory --> Insights[routers/insights.py<br/>analytics / exports / spending]
+    Factory --> Shoes[routers/shoes.py]
+    Factory --> Runs[routers/runs.py]
+    Factory --> Health[routers/health.py]
+    Factory --> Middleware[middleware.py]
+    Factory --> Seed[seeding.py]
     Runs --> Mileage[services/mileage.py]
     AuthRoutes --> Limits[rate_limits.py]
     AgentRoutes --> Limits
@@ -61,12 +65,14 @@ flowchart TB
     Tools --> Models
     Mileage --> Models
     Models --> Database[database.py / SQLite]
-    Main --> Migrations[migrations.py<br/>schema version]
+    Factory --> Migrations[migrations.py<br/>schema version]
     Health --> Database
     Migrations --> Database
 ```
 
-`backend/main.py` 是 composition root：建立 FastAPI、掛載 middleware／router，不直接宣告 API route。
+`backend/main.py` 只輸出由 `create_app()` 建立的 ASGI app，不包含 route 或歷史相容 aliases。
+`backend/app_factory.py` 建立 FastAPI、掛載 middleware／router，並從 `app.state` 取得 settings、engine、
+session factory 與 frontend path，使測試可完整注入隔離環境。
 auth、goals、monthly、agent、reports、insights、shoes、runs 與 health 都是獨立垂直切片；runs 把跨資料表的里程
 同步委派給 framework-independent service。啟動 migration 位於 `backend/migrations.py` 並寫入
 schema version。router 不能反向 import `backend.main`，service 也不能 import FastAPI 或 router。
@@ -75,7 +81,10 @@ schema version。router 不能反向 import `backend.main`，service 也不能 i
 
 | 模組 | 責任 | 可以依賴 | 不應依賴 |
 | --- | --- | --- | --- |
-| `backend/main.py` | app 組裝、middleware、lifecycle、靜態檔案 fallback | routers、domain、database | 業務 route、frontend 實作細節 |
+| `backend/main.py` | 最小 ASGI entry point | `app_factory` | routers、database、業務邏輯 |
+| `backend/app_factory.py` | app 組裝、lifecycle、router/middleware 與 SPA fallback | settings、routers、database | domain 計算 |
+| `backend/settings.py` | typed environment configuration | Python stdlib | routers、database、FastAPI |
+| `backend/seeding.py`、`middleware.py` | 可選 seed 與 request body guard | settings、models／ASGI | `backend.main` |
 | `backend/rate_limits.py` | auth／AI 的 process 與 SQLite shared limits | models、database session | routers、`backend.main` |
 | `backend/routers/` | HTTP 參數、認證 dependency、response | auth、domain/service、models | `backend.main` |
 | `backend/services/` | 跨 route 的交易與 application use case | models、persistence | FastAPI、routers、`backend.main` |
@@ -85,9 +94,9 @@ schema version。router 不能反向 import `backend.main`，service 也不能 i
 | `backend/tools/` | Agent 可使用的受信任工具 | database、models | route 與 UI state |
 | `backend/database.py`、`models.py` | persistence 與 schema | SQLAlchemy | router、frontend |
 
-依賴方向由入口往內：`main → router → domain/service → persistence/adapters`。CI 的
+依賴方向由入口往內：`main → app factory → router → domain/service → persistence/adapters`。CI 的
 `architecture-check` 會阻止 router 反向 import `backend.main`、service 穿透 HTTP layer，並檢查
-API method/path 重複、OpenAPI path contract 與 `main.py` route 數只能持平或下降。
+API method/path 重複、OpenAPI path contract、`main.py` route 數與最小 entry-point imports。
 
 ## 5. 關鍵流程：跑鞋匯出
 
@@ -124,7 +133,7 @@ sequenceDiagram
 2. **已完成**：共用里程交易整理成 service，startup migration 移到有版本的 migration 模組。
 3. **已完成**：抽出 auth／rate-limit 與 agent／reports／goals／monthly routers，main route budget 降為 0。
 4. **已完成**：前端再依 core、dashboard、monthly、charts、spending、bootstrap 拆分，加入真實瀏覽器 CRUD E2E。
-5. **下一階段**：評估 app factory 與 settings object，並逐步移除 `backend.main` 的 route 相容 alias。
+5. **已完成**：導入 app factory 與 typed settings，注入 lifespan dependencies，移除 `backend.main` route aliases。
 
 每一階段都先以既有 API regression tests 鎖住行為，再移動程式碼；不在同一個 commit 同時
 改變 endpoint contract 與模組邊界。

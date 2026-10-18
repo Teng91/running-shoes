@@ -4,10 +4,10 @@ from datetime import timedelta
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import sessionmaker
 
-from backend import main as main_module
 from backend.database import get_db
 from backend.main import app
 from backend.models import MonthlyMileage, Run
+from backend.routers.reports import _local_today
 
 
 def _headers(token: str) -> dict[str, str]:
@@ -20,17 +20,17 @@ def _client(db):
         yield db
 
     app.dependency_overrides[get_db] = override_get_db
-    original_engine = main_module.engine
-    original_session = main_module.SessionLocal
-    main_module.engine = db.get_bind()
-    main_module.SessionLocal = sessionmaker(bind=db.get_bind())
+    original_engine = app.state.db_engine
+    original_session = app.state.session_factory
+    app.state.db_engine = db.get_bind()
+    app.state.session_factory = sessionmaker(bind=db.get_bind())
     try:
         with TestClient(app) as client:
             yield client
     finally:
         app.dependency_overrides.clear()
-        main_module.engine = original_engine
-        main_module.SessionLocal = original_session
+        app.state.db_engine = original_engine
+        app.state.session_factory = original_session
 
 
 def test_logged_month_cannot_move_and_totals_cannot_drop_below_logs(
@@ -96,7 +96,7 @@ def test_numeric_inputs_are_two_decimal_and_future_runs_are_rejected(
     db, user_with_token
 ):
     _user, token = user_with_token
-    today = main_module._local_today()
+    today = _local_today()
     with _client(db) as client:
         shoe_response = client.post("/api/shoes", headers=_headers(token), json={
             "brand": "Round",

@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+from dataclasses import replace
 from unittest.mock import MagicMock
 
 import pytest
@@ -12,7 +13,8 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from backend import database, models, schemas
-from backend.main import lifespan
+from backend.app_factory import lifespan
+from backend.settings import settings
 
 
 def _memory_engine():
@@ -23,13 +25,19 @@ def _memory_engine():
     )
 
 
-def _run_lifespan(app):
+def _run_lifespan(engine, sessions=None, migration_password=None):
+    app = FastAPI()
+    app.state.db_engine = engine
+    app.state.session_factory = sessions or sessionmaker(bind=engine)
+    app.state.settings = replace(
+        settings, seed_data=False, migration_password=migration_password
+    )
     context = lifespan(app)
     asyncio.run(context.__aenter__())
     return context
 
 
-def test_lifespan_refuses_legacy_owner_migration_without_password(monkeypatch):
+def test_lifespan_refuses_legacy_owner_migration_without_password():
     engine = _memory_engine()
     with engine.begin() as conn:
         conn.execute(
@@ -48,13 +56,8 @@ def test_lifespan_refuses_legacy_owner_migration_without_password(monkeypatch):
             text("INSERT INTO shoes VALUES (1, 'Legacy', 'Runner', '2024-01-01')")
         )
 
-    monkeypatch.setattr("backend.main.engine", engine)
-    monkeypatch.setattr("backend.main.SessionLocal", sessionmaker(bind=engine))
-    monkeypatch.delenv("MIGRATION_PASSWORD", raising=False)
-    monkeypatch.delenv("SEED_DATA", raising=False)
-
     with pytest.raises(RuntimeError, match="refusing to start"):
-        _run_lifespan(FastAPI())
+        _run_lifespan(engine)
 
     # Fail before making a partial migration that could hide the problem on
     # the next startup attempt.
@@ -64,7 +67,7 @@ def test_lifespan_refuses_legacy_owner_migration_without_password(monkeypatch):
     assert "categories" not in columns
 
 
-def test_lifespan_converts_legacy_category_and_removes_other(monkeypatch):
+def test_lifespan_converts_legacy_category_and_removes_other():
     engine = _memory_engine()
     with engine.begin() as conn:
         conn.execute(
@@ -102,11 +105,7 @@ def test_lifespan_converts_legacy_category_and_removes_other(monkeypatch):
             )
         )
 
-    monkeypatch.setattr("backend.main.engine", engine)
-    monkeypatch.setattr("backend.main.SessionLocal", sessionmaker(bind=engine))
-    monkeypatch.delenv("SEED_DATA", raising=False)
-
-    context = _run_lifespan(FastAPI())
+    context = _run_lifespan(engine)
     try:
         columns = {column["name"] for column in inspect(engine).get_columns("shoes")}
         assert "categories" in columns
@@ -118,7 +117,7 @@ def test_lifespan_converts_legacy_category_and_removes_other(monkeypatch):
         asyncio.run(context.__aexit__(None, None, None))
 
 
-def test_discontinued_category_cleanup_preserves_data_and_is_idempotent(monkeypatch):
+def test_discontinued_category_cleanup_preserves_data_and_is_idempotent():
     engine = _memory_engine()
     database.Base.metadata.create_all(engine)
     sessions = sessionmaker(bind=engine)
@@ -134,11 +133,8 @@ def test_discontinued_category_cleanup_preserves_data_and_is_idempotent(monkeypa
                 categories=categories, is_retired=index == 1, mileage=123.45, version=5,
             ))
         db.commit()
-    monkeypatch.setattr("backend.main.engine", engine)
-    monkeypatch.setattr("backend.main.SessionLocal", sessions)
-    monkeypatch.delenv("SEED_DATA", raising=False)
     for _ in range(2):
-        context = _run_lifespan(FastAPI())
+        context = _run_lifespan(engine, sessions)
         asyncio.run(context.__aexit__(None, None, None))
         with engine.connect() as conn:
             rows = conn.execute(text(
@@ -150,7 +146,7 @@ def test_discontinued_category_cleanup_preserves_data_and_is_idempotent(monkeypa
         assert rows[1][3] == 1
 
 
-def test_lifespan_adds_aggregate_versions_to_existing_database(monkeypatch):
+def test_lifespan_adds_aggregate_versions_to_existing_database():
     engine = _memory_engine()
     database.Base.metadata.create_all(engine)
     with engine.begin() as conn:
@@ -159,11 +155,7 @@ def test_lifespan_adds_aggregate_versions_to_existing_database(monkeypatch):
         conn.execute(text("ALTER TABLE running_goals DROP COLUMN version"))
 
     sessions = sessionmaker(bind=engine)
-    monkeypatch.setattr("backend.main.engine", engine)
-    monkeypatch.setattr("backend.main.SessionLocal", sessions)
-    monkeypatch.delenv("SEED_DATA", raising=False)
-
-    context = _run_lifespan(FastAPI())
+    context = _run_lifespan(engine, sessions)
     try:
         columns = {column["name"] for column in inspect(engine).get_columns("runs")}
         assert "version" in columns
@@ -179,7 +171,7 @@ def test_lifespan_adds_aggregate_versions_to_existing_database(monkeypatch):
         asyncio.run(context.__aexit__(None, None, None))
 
 
-def test_lifespan_repairs_partial_owner_migration_when_users_table_exists(monkeypatch):
+def test_lifespan_repairs_partial_owner_migration_when_users_table_exists():
     engine = _memory_engine()
     with engine.begin() as conn:
         conn.execute(text("""
@@ -205,12 +197,7 @@ def test_lifespan_repairs_partial_owner_migration_when_users_table_exists(monkey
             "VALUES (1, 'Legacy', 'Runner', '2024-01-01')"
         ))
 
-    monkeypatch.setattr("backend.main.engine", engine)
-    monkeypatch.setattr("backend.main.SessionLocal", sessionmaker(bind=engine))
-    monkeypatch.setenv("MIGRATION_PASSWORD", "migration-password")
-    monkeypatch.delenv("SEED_DATA", raising=False)
-
-    context = _run_lifespan(FastAPI())
+    context = _run_lifespan(engine, migration_password="migration-password")
     try:
         with engine.connect() as conn:
             assert conn.execute(text("SELECT COUNT(*) FROM users")).scalar_one() == 1

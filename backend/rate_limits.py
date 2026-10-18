@@ -1,6 +1,5 @@
 """Shared request throttling for authentication and LLM-backed endpoints."""
 
-import os
 import time
 from collections import deque
 from ipaddress import ip_address
@@ -11,15 +10,16 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from backend import models
+from backend.settings import settings
 
-AGENT_RATE_LIMIT_PER_MINUTE = max(1, int(os.environ.get("AGENT_RATE_LIMIT_PER_MINUTE", "20")))
-AGENT_IP_RATE_LIMIT_PER_MINUTE = max(1, int(os.environ.get("AGENT_IP_RATE_LIMIT_PER_MINUTE", "30")))
-AGENT_GLOBAL_RATE_LIMIT_PER_MINUTE = max(1, int(os.environ.get("AGENT_GLOBAL_RATE_LIMIT_PER_MINUTE", "120")))
-AUTH_RATE_LIMIT_PER_MINUTE = max(1, int(os.environ.get("AUTH_RATE_LIMIT_PER_MINUTE", "120")))
-AUTH_GLOBAL_RATE_LIMIT_PER_MINUTE = max(1, int(os.environ.get("AUTH_GLOBAL_RATE_LIMIT_PER_MINUTE", "300")))
-MODEL_REFRESH_COOLDOWN_SECONDS = max(1, int(os.environ.get("MODEL_REFRESH_COOLDOWN_SECONDS", "60")))
-MODEL_REFRESH_GLOBAL_PER_MINUTE = max(1, int(os.environ.get("MODEL_REFRESH_GLOBAL_PER_MINUTE", "10")))
-IS_FLY_RUNTIME = bool(os.environ.get("FLY_APP_NAME"))
+AGENT_RATE_LIMIT_PER_MINUTE = settings.agent_rate_limit_per_minute
+AGENT_IP_RATE_LIMIT_PER_MINUTE = settings.agent_ip_rate_limit_per_minute
+AGENT_GLOBAL_RATE_LIMIT_PER_MINUTE = settings.agent_global_rate_limit_per_minute
+AUTH_RATE_LIMIT_PER_MINUTE = settings.auth_rate_limit_per_minute
+AUTH_GLOBAL_RATE_LIMIT_PER_MINUTE = settings.auth_global_rate_limit_per_minute
+MODEL_REFRESH_COOLDOWN_SECONDS = settings.model_refresh_cooldown_seconds
+MODEL_REFRESH_GLOBAL_PER_MINUTE = settings.model_refresh_global_per_minute
+IS_FLY_RUNTIME = settings.is_fly_runtime
 
 _agent_rate_events: dict[int, deque[float]] = {}
 _agent_ip_rate_events: dict[str, deque[float]] = {}

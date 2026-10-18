@@ -8,6 +8,8 @@ from unittest.mock import MagicMock, patch
 
 from backend import auth, llm
 
+settings_module = importlib.import_module("backend.settings")
+
 
 def test_llm_does_not_inject_stale_or_model_env_defaults():
     original = os.environ.get("OR_MODEL")
@@ -44,6 +46,7 @@ def test_auth_requires_secret_key_in_production_at_import(monkeypatch):
         os.environ.pop("SECRET_KEY", None)
         monkeypatch.setattr(sys, "exit", exit_mock)
         with patch("warnings.warn"):
+            importlib.reload(settings_module)
             importlib.reload(auth)
         exit_mock.assert_called_once_with(1)
     finally:
@@ -56,6 +59,7 @@ def test_auth_requires_secret_key_in_production_at_import(monkeypatch):
         else:
             os.environ["SECRET_KEY"] = original_secret
         with patch("warnings.warn"):
+            importlib.reload(settings_module)
             importlib.reload(auth)
 
 
@@ -67,6 +71,7 @@ def test_auth_import_with_secret_key_skips_fallback(monkeypatch):
         os.environ["SECRET_KEY"] = "production-test-secret"
         exit_mock = MagicMock()
         monkeypatch.setattr(sys, "exit", exit_mock)
+        importlib.reload(settings_module)
         importlib.reload(auth)
         assert auth.SECRET_KEY == "production-test-secret"
         exit_mock.assert_not_called()
@@ -80,6 +85,7 @@ def test_auth_import_with_secret_key_skips_fallback(monkeypatch):
         else:
             os.environ["SECRET_KEY"] = original_secret
         with patch("warnings.warn"):
+            importlib.reload(settings_module)
             importlib.reload(auth)
 
 

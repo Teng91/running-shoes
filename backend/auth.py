@@ -1,24 +1,24 @@
-import os
 import sys
 import warnings
 from datetime import UTC, datetime, timedelta
 
 import bcrypt
 import jwt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jwt import InvalidTokenError
 from sqlalchemy.orm import Session
 
 from backend.database import get_db
 from backend.models import User
+from backend.settings import settings
 
-SECRET_KEY: str = os.environ.get("SECRET_KEY") or ""
+SECRET_KEY = settings.secret_key
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
 
 # Detect production-like environments (not local dev)
-IS_PRODUCTION = os.environ.get("ENVIRONMENT", "development").lower() != "development"
+IS_PRODUCTION = settings.is_production
 if not SECRET_KEY:
     if IS_PRODUCTION:
         print("ERROR: SECRET_KEY environment variable is required in production", file=sys.stderr)
@@ -50,16 +50,16 @@ def get_password_hash(password: str) -> str:
     return bcrypt.hashpw(encoded, bcrypt.gensalt()).decode("utf-8")
 
 
-def create_access_token(data: dict) -> str:
+def create_access_token(data: dict, *, secret_key: str | None = None) -> str:
     to_encode = data.copy()
     expire = datetime.now(UTC) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return jwt.encode(to_encode, secret_key or SECRET_KEY, algorithm=ALGORITHM)
 
 
-def decode_access_token(token: str) -> dict:
+def decode_access_token(token: str, *, secret_key: str | None = None) -> dict:
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(token, secret_key or SECRET_KEY, algorithms=[ALGORITHM])
         return payload
     except InvalidTokenError:
         raise HTTPException(
@@ -70,10 +70,14 @@ def decode_access_token(token: str) -> dict:
 
 
 def get_current_user(
+    request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_db),
 ) -> User:
-    payload = decode_access_token(credentials.credentials)
+    payload = decode_access_token(
+        credentials.credentials,
+        secret_key=request.app.state.settings.secret_key or SECRET_KEY,
+    )
     username: str | None = payload.get("sub")
     if username is None:
         raise HTTPException(status_code=401, detail="Could not validate credentials")
