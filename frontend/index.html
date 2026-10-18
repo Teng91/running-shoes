@@ -11,16 +11,30 @@
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" type="image/png" href="/icons/icon-192.png">
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
-<link rel="stylesheet" href="/styles.css">
+<script>
+try {
+  if (localStorage.getItem('theme') === 'light') document.documentElement.classList.add('boot-light');
+} catch {}
+</script>
 <style>
-/* Critical PWA upgrade fallback: an older cached stylesheet made body
-   transparent. Keep the startup status visible before the new cache wins. */
-body { opacity: 1 !important; }
-.app-boot { position: fixed; inset: 0; z-index: 2000; display: grid; place-items: center; min-height: 100vh; padding: 24px; background: var(--bg, #0f1117); color: var(--text, #e4e4e7); }
+/* Critical startup UI must not depend on the non-blocking app stylesheet. */
+:root { --boot-bg: #0f1117; --boot-card: #1a1d2e; --boot-border: #2a2d3e; --boot-text: #e4e4e7; --boot-dim: #8b8d9a; --boot-accent: #818cf8; }
+html.boot-light { --boot-bg: #f4f5f9; --boot-card: #fff; --boot-border: #e2e8f0; --boot-text: #1e293b; --boot-dim: #64748b; --boot-accent: #4f46e5; }
+body { margin: 0; opacity: 1 !important; }
+.app-boot { position: fixed; inset: 0; z-index: 2000; display: grid; place-items: center; min-height: 100vh; min-height: 100dvh; padding: 24px; box-sizing: border-box; background: var(--boot-bg); color: var(--boot-text); font-family: 'Segoe UI', system-ui, sans-serif; transition: opacity .18s ease, visibility .18s ease; }
 .app-boot-card { width: min(100%, 320px); text-align: center; }
+.app-boot-mark { margin-bottom: 16px; font-size: 44px; line-height: 1; }
+.app-boot-spinner { width: 34px; height: 34px; margin: 0 auto 20px; border: 3px solid var(--boot-border); border-top-color: var(--boot-accent); border-radius: 50%; animation: app-boot-critical-spin .8s linear infinite; }
+.app-boot h1 { margin: 0 0 8px; font-size: 24px; }
+.app-boot p { margin: 0; color: var(--boot-dim); font-size: 14px; line-height: 1.6; }
+.app-boot-retry { margin-top: 18px; padding: 9px 18px; border: 1px solid var(--boot-border); border-radius: 8px; background: var(--boot-accent); color: #fff; font: inherit; cursor: pointer; }
 .app-boot-retry[hidden] { display: none; }
 .app-boot.is-hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+@keyframes app-boot-critical-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .app-boot { transition: none; } .app-boot-spinner { animation: none; } }
 </style>
+<link id="app-styles" rel="preload" href="/styles.css" as="style" onload="this.onload=null;this.rel='stylesheet';this.dataset.ready='true';window.dispatchEvent(new Event('appstylesready'))">
+<noscript><link rel="stylesheet" href="/styles.css"></noscript>
 </head>
 <body>
 
@@ -47,7 +61,9 @@ window.__appBootWatchdog = window.setTimeout(function () {
 window.__appBootLegacyPoll = window.setInterval(function () {
   const auth = document.getElementById('auth-view');
   const app = document.getElementById('app-view');
-  if ((auth && auth.style.display !== 'none') || (app && app.style.display !== 'none')) {
+  const styles = document.getElementById('app-styles');
+  const viewReady = (auth && auth.style.display !== 'none') || (app && app.style.display !== 'none');
+  if (styles && styles.dataset.ready === 'true' && viewReady) {
     const boot = document.getElementById('app-boot');
     if (boot) boot.classList.add('is-hidden');
     window.clearInterval(window.__appBootLegacyPoll);
@@ -61,15 +77,15 @@ window.__appBootLegacyPoll = window.setInterval(function () {
 <div class="container" id="auth-view" style="display:none;">
 
   <!-- Login Form -->
-  <form class="auth-box" id="login-form" onsubmit="handleLogin(); return false;">
+  <form class="auth-box" id="login-form" autocomplete="off" onsubmit="handleLogin(); return false;">
     <h1>跑鞋追蹤</h1>
     <div class="form-group">
       <label>帳號</label>
-      <input id="login-username" placeholder="Username">
+      <input id="login-username" autocomplete="off" placeholder="Username">
     </div>
     <div class="form-group">
       <label>密碼</label>
-      <input id="login-password" type="password" placeholder="Password">
+      <input id="login-password" type="password" autocomplete="off" placeholder="Password">
     </div>
     <div class="auth-error" id="auth-error"></div>
     <button type="submit" class="btn btn-primary" style="width:100%;margin-top:8px;">登入</button>
