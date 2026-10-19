@@ -6,6 +6,22 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
+async function selectTab(page, name) {
+  const toggle = page.locator('.mobile-menu-toggle');
+  if (await toggle.isVisible()) {
+    if (await toggle.getAttribute('aria-expanded') !== 'true') await toggle.click();
+    assert.equal(await page.locator('.tab:visible').count(), 6, 'expanded menu exposes all destinations');
+    await assertLayout(page, 'expanded mobile menu');
+  }
+  await page.locator(`.tab[data-tab="${name}"]`).click();
+  if (await toggle.isVisible()) {
+    assert.equal(await toggle.getAttribute('aria-expanded'), 'false', 'selection closes mobile menu');
+    assert.equal(await page.locator('.tab:visible').count(), 0, 'closed mobile menu hides destinations');
+    const label = await page.locator(`.tab[data-tab="${name}"] > span:last-child`).textContent();
+    assert.equal(await page.locator('#mobile-page-label').textContent(), label);
+  }
+}
+
 async function assertLayout(page, label) {
   const issues = await page.evaluate(() => {
     const problems = [];
@@ -43,6 +59,8 @@ async function assertLayout(page, label) {
       const sidebarBox = sidebar.getBoundingClientRect(), workspaceBox = workspace.getBoundingClientRect();
       if (innerWidth > 800 && workspaceBox.left < sidebarBox.right - 1) problems.push('workspace does not follow sidebar');
       if (innerWidth <= 800 && workspaceBox.top < sidebarBox.bottom - 1) problems.push('mobile workspace overlaps navigation');
+      if (innerWidth <= 800 && !document.getElementById('sidebar-menu').classList.contains('menu-open') && sidebarBox.height > 88) problems.push('collapsed mobile header is too tall');
+      if (innerWidth <= 800 && (parseFloat(getComputedStyle(workspace).paddingLeft) < 12 || parseFloat(getComputedStyle(workspace).paddingRight) < 12)) problems.push('mobile content needs side gutters');
     }
     for (const modal of document.querySelectorAll('.modal-overlay.active .modal')) {
       const box = modal.getBoundingClientRect();
@@ -119,7 +137,7 @@ async function run(engine, name) {
       for (const [width, height] of [[320, 740], [375, 812], [390, 844], [430, 932], [844, 390], [768, 1024], [1440, 900]]) {
         await page.setViewportSize({ width, height });
         for (const tab of ['runs', 'shoes', 'monthly', 'spending', 'agent', 'report']) {
-          await page.locator(`.tab[data-tab="${tab}"]`).click();
+          await selectTab(page, tab);
           await page.waitForTimeout(100);
           await assertLayout(page, `${name} ${theme} ${width} ${tab}`);
           const expected = { runs: 1, shoes: 4, monthly: 3, spending: 2, agent: 0, report: 0 }[tab];
@@ -134,13 +152,16 @@ async function run(engine, name) {
           if (screenshots && width === 390 && tab === 'runs') {
             await page.evaluate(() => window.scrollTo(0, 0));
             await page.screenshot({ path: path.join(screenshots, `${name}-${theme}-runs-top.png`) });
+            await page.locator('.mobile-menu-toggle').click();
+            await page.screenshot({ path: path.join(screenshots, `${name}-${theme}-mobile-menu.png`) });
+            await page.locator('.mobile-menu-toggle').click();
           }
           if (screenshots && width === 1440 && tab === 'runs') {
             await page.evaluate(() => window.scrollTo(0, 0));
             await page.screenshot({ path: path.join(screenshots, `${name}-${theme}-runs-desktop.png`) });
           }
         }
-        await page.locator('.tab[data-tab="shoes"]').click();
+        await selectTab(page, 'shoes');
         assert.equal(await page.locator('#chart-value-legend').count(), 0, 'monthly share legend is removed');
         const pairedHeights = await page.locator('#chart-retire, #chart-value').evaluateAll(canvases =>
           canvases.map(canvas => canvas.closest('.chart-box').getBoundingClientRect().height));
@@ -156,7 +177,7 @@ async function run(engine, name) {
     }
     await page.evaluate(() => { shoes = []; retiredShoes = []; runs = []; monthlyMileages = []; monthlySpending = []; render(); });
     for (const tab of ['runs', 'shoes', 'monthly', 'spending', 'report']) {
-      await page.locator(`.tab[data-tab="${tab}"]`).click();
+      await selectTab(page, tab);
       await page.waitForTimeout(100);
       await assertLayout(page, `${name} empty ${tab}`);
     }
