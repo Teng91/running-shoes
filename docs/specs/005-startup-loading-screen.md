@@ -31,7 +31,7 @@
 
 - `index.html` 在登入頁與 Dashboard 之前提供 `#app-boot`，內嵌最小 critical style，並以非阻塞方式載入完整 CSS。
 - Service Worker 對頁面導覽採 cache-first、background refresh，Fly Machine 喚醒時先回傳既有 app shell。
-- `app-core.js` 提供啟動、完成、逾時與失敗狀態控制。
+- `app-boot.js` 提供啟動、完成、逾時與失敗狀態控制；`app-core.js` 負責資料準備完成後的 shell orchestration。
 - 初始化、登入與註冊後自動登入會等待核心資料載入完成，再淡出啟動畫面。
 - 12 秒仍未完成時顯示「載入時間較久」及重新載入按鈕；未捕捉的初始化錯誤顯示失敗狀態。
 - HTML 內保留極小的相容監看器，讓舊 Service Worker 快取到的 JavaScript 仍能關閉新版啟動畫面。

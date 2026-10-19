@@ -70,7 +70,7 @@ async function run(engine, name) {
       const contentTypes = { '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css',
         '.json': 'application/json', '.webmanifest': 'application/manifest+json',
         '.svg': 'image/svg+xml', '.png': 'image/png' };
-      if (relative === 'app-core.js') await new Promise(resolve => setTimeout(resolve, 250));
+      if (relative === 'app-boot.js') await new Promise(resolve => setTimeout(resolve, 250));
       return route.fulfill({ contentType: contentTypes[path.extname(asset)] || 'application/octet-stream',
         body: fs.readFileSync(asset) });
     });

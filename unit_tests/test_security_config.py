@@ -19,10 +19,16 @@ FRONTEND_SOURCE = "\n".join(
     for name in (
         "index.html",
         "styles.css",
+        "app-boot.js",
+        "app-state.js",
+        "app-api.js",
+        "app-auth.js",
         "app-core.js",
         "app-agent.js",
         "app-reports.js",
         "app-runs.js",
+        "app-strava.js",
+        "app-run-insights.js",
         "app-shoes.js",
         "app-dashboard.js",
         "app-monthly.js",
@@ -148,10 +154,9 @@ def test_run_log_frontend_keeps_calendar_actions_and_select_state_safe():
 
 
 def test_strava_upload_lets_browser_set_multipart_content_type():
-    source = FRONTEND_SOURCE
-    upload_source = source.split("async function apiUpload", 1)[1].split(
-        "// ====== Auth Handlers ======", 1
-    )[0]
+    upload_source = (PROJECT_ROOT / "frontend" / "app-api.js").read_text(
+        encoding="utf-8"
+    ).split("async function apiUpload", 1)[1]
 
     assert "new FormData()" in upload_source
     assert "headers: authHeaders()" not in upload_source

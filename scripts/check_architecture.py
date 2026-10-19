@@ -144,7 +144,7 @@ def main() -> None:
         "/api/spending/monthly",
     }
     if not required.issubset(api_paths):
-        fail("the insights router is not fully registered on the FastAPI app")
+        fail("the analytics/export/spending routers are not fully registered on the FastAPI app")
 
     print(
         "Architecture constraints passed: "
