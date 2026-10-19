@@ -152,7 +152,8 @@ async function run(engine, name) {
       shoes = Array.from({ length: 8 }, (_, i) => ({ id: i + 1, brand: 'Mizuno',
         model: i === 0 ? 'Wave Rider 29 非常長的鞋款名稱' : `非常長的鞋款名稱 Very long running shoe model ${i}`,
         date: '2026-01-01', price: 4000, orig_price: 5000, mileage: 120 + i * 10,
-        expected_mileage: 800, monthly_km: 80, category: 'Daily', size: 'US 9' }));
+        expected_mileage: 800, monthly_km: 80, category: 'Daily', size: 'US 9',
+        forecast_retirement_date: '2027-06-01', forecast_source: 'recent_90_days', forecast_monthly_km: 80 }));
       retiredShoes = [{ ...shoes[0], id: 20, is_retired: true }];
       runs = shoes.map((shoe, i) => ({ id: i + 1, shoe_id: shoe.id, date: `2026-09-${String(i + 1).padStart(2, '0')}`, km: 18.67, source: 'manual' }));
       yearlyRunsCache.set(2026, runs);

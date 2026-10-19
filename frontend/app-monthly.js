@@ -122,11 +122,13 @@ async function addMonthlyMileage() {
 }
 
 // ====== Monthly Mileage: edit modal ======
-let editingMonthlyIdx = -1;
+let editingMonthly = null;
 
 function editMonthlyMileage(idx) {
-  editingMonthlyIdx = idx;
   const m = monthlyMileages[idx];
+  if (!m) return;
+  editingMonthly = { ...m, session: captureAuthSession() };
+  document.getElementById('save-monthly-btn').disabled = false;
   populateMonthlyEditSelects(m.year, m.month);
   document.getElementById('monthly-modal-title').textContent = '編輯月份';
   document.getElementById('m-km').value = m.km;
@@ -167,7 +169,7 @@ function populateMonthlyEditSelects(year, month) {
 
 function closeMonthlyModal() {
   document.getElementById('monthly-modal').classList.remove('active');
-  editingMonthlyIdx = -1;
+  editingMonthly = null;
 }
 
 // ====== Export Modal Functions ======
@@ -264,7 +266,9 @@ async function exportAccountData() {
 }
 
 async function saveMonthlyMileage() {
-  if (monthlySaving) return;
+  if (!editingMonthly || editingMonthly.saving) return;
+  const snapshot = editingMonthly;
+  if (!isCurrentAuthSession(snapshot.session)) return;
   const year = parseInt(document.getElementById('m-year').value, 10);
   const month = parseInt(document.getElementById('m-month').value, 10);
   const rawKm = parseFloat(document.getElementById('m-km').value);
@@ -274,25 +278,22 @@ async function saveMonthlyMileage() {
 
   const button = document.getElementById('save-monthly-btn');
   try {
-    monthlySaving = true;
+    snapshot.saving = true;
     button.disabled = true;
-    if (editingMonthlyIdx >= 0) {
-      const entry = monthlyMileages[editingMonthlyIdx];
-      await apiPut('/monthly-mileage/' + entry.id, {
-        year, month, km, expected_version: entry.version || 0,
-      });
-    } else {
-      await apiPost('/monthly-mileage', { year, month, km });
-    }
+    await apiPut('/monthly-mileage/' + snapshot.id, {
+      year, month, km, expected_version: snapshot.version || 0,
+    });
   } catch (e) {
+    if (editingMonthly !== snapshot || !isCurrentAuthSession(snapshot.session) || e.name === 'AbortError') return;
     errEl.textContent = translateError(e.message) || '儲存失敗';
     errEl.style.display = 'block';
     return;
   } finally {
-    monthlySaving = false;
-    button.disabled = false;
+    snapshot.saving = false;
+    if (editingMonthly === snapshot) button.disabled = false;
   }
-  closeMonthlyModal();
+  if (!isCurrentAuthSession(snapshot.session)) return;
+  if (editingMonthly === snapshot) closeMonthlyModal();
   await loadData();
 }
 
@@ -417,8 +418,8 @@ async function saveRunningGoal() {
     runningGoal = await apiPut('/running-goal', payload);
     dashboardAnalyticsCache.clear();
     status.textContent = '目標已儲存。';
-    populateYearSelect();
-    renderGoalProgress();
+    invalidatePanels();
+    renderActivePanel();
   } catch (error) {
     status.textContent = error.message || '目標儲存失敗。';
   }

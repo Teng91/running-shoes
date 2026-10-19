@@ -5,6 +5,7 @@
 - `backend/main.py`: minimal ASGI entry point; it must only import `backend.app_factory`.
 - `backend/app_factory.py`: FastAPI composition, injectable lifecycle dependencies, routers, and SPA fallback.
 - `backend/settings.py`: immutable typed runtime configuration.
+- `backend/forecasting.py`: shared retirement policy and batched user-scoped forecasts.
 - `backend/seeding.py`: optional default data using an injected session factory.
 - `backend/middleware.py`: request-level transport guards.
 - `backend/routers/`: feature-oriented HTTP routes; routers must never import `backend.main`.
@@ -20,6 +21,7 @@
 - `frontend/app-state.js`: shared browser state and presentation constants.
 - `frontend/app-api.js`: authenticated JSON and upload transport helpers.
 - `frontend/app-auth.js`: authentication state, forms, and account transitions.
+- `frontend/app-streams.js`: shared authenticated SSE decoding, cancellation, and terminal state.
 - `frontend/app-core.js`: dashboard shell, theme, tabs, and aggregate data loading.
 - `frontend/app-dashboard.js`: dashboard cards, alerts, and shoe tables.
 - `frontend/app-monthly.js`: monthly mileage, goals, and export interactions.

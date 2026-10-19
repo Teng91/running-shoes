@@ -97,6 +97,7 @@ def main() -> None:
         "docs/specs/004-app-factory-and-settings.md",
         "docs/specs/005-startup-loading-screen.md",
         "docs/specs/006-runtime-boundary-refactor.md",
+        "docs/specs/012-edit-stream-and-render-safety.md",
         "docs/testing-strategy.md",
         "backend/agent.py",
         "backend/agent_planner.py",
@@ -111,6 +112,7 @@ def main() -> None:
         "backend/rate_limits.py",
         "backend/seeding.py",
         "backend/settings.py",
+        "backend/forecasting.py",
         "backend/routers/agent.py",
         "backend/routers/auth.py",
         "backend/routers/goals.py",
@@ -133,6 +135,7 @@ def main() -> None:
         "frontend/app-state.js",
         "frontend/app-api.js",
         "frontend/app-auth.js",
+        "frontend/app-streams.js",
         "frontend/app-core.js",
         "frontend/app-dashboard.js",
         "frontend/app-monthly.js",
@@ -166,6 +169,8 @@ def main() -> None:
         "unit_tests/frontend_layout.cjs",
         "unit_tests/frontend_e2e.cjs",
         "unit_tests/frontend_regressions.cjs",
+        "unit_tests/frontend_safety.cjs",
+        "unit_tests/test_forecasting.py",
     )
     for relative_path in required_paths:
         if not (ROOT / relative_path).exists():
