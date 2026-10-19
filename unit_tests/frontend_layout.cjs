@@ -23,6 +23,11 @@ async function selectTab(page, name) {
 }
 
 async function assertLayout(page, label) {
+  // Chart.js resizes via ResizeObserver after the viewport changes. Wait for
+  // the observable result instead of assuming a fixed 100 ms is enough on CI.
+  await page.waitForFunction(() => Object.values(chartInstances).every(chart =>
+    !chart.canvas.getClientRects().length || chart.width <= chart.canvas.parentElement.clientWidth + 1
+  ), null, { timeout: 5000 });
   const issues = await page.evaluate(() => {
     const problems = [];
     const visible = e => e.getClientRects().length && getComputedStyle(e).visibility !== 'hidden';
@@ -69,7 +74,7 @@ async function assertLayout(page, label) {
     }
     for (const chart of Object.values(chartInstances)) {
       if (!visible(chart.canvas)) continue;
-      if (chart.width > chart.canvas.parentElement.clientWidth + 1) problems.push('canvas overflow');
+      if (chart.width > chart.canvas.parentElement.clientWidth + 1) problems.push(`canvas overflow: ${chart.canvas.id}`);
       if (chart.chartArea.width < 100 || chart.chartArea.height < 100) problems.push(`squeezed plot: ${chart.canvas.id}`);
     }
     return problems;
