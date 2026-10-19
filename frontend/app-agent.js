@@ -1,12 +1,20 @@
 // ====== Agent / Chat ======
 let agentHistory = [];
+let agentRequestId = 0;
+let agentController = null;
 
 const AGENT_GREETING = '你好！我是跑鞋助手，可以幫你查詢跑鞋資料、分析跑量、推薦新鞋。有什麼想問的嗎？';
 
 // 清空對話（登出/切換帳號時呼叫）：重設上下文陣列 + 還原畫面為初始問候語，
 // 避免前一個使用者的對話殘留給下一位（隱私）。
 function resetAgentChat() {
+  agentRequestId += 1;
+  agentController?.abort();
+  agentController = null;
+  lastUserText = '';
   agentHistory = [];
+  document.getElementById('agent-input').value = '';
+  setAgentLoading(false);
   const container = document.getElementById('agent-messages');
   if (container) {
     container.innerHTML =
@@ -219,9 +227,15 @@ function agentHistoryForRequest() {
 }
 
 async function sendAgentMessage(retryText) {
+  if (agentController) return;
   const input = document.getElementById('agent-input');
   const text = retryText || input.value.trim();
   if (!text) return;
+  const session = captureAuthSession();
+  const requestId = ++agentRequestId;
+  const controller = new AbortController();
+  agentController = controller;
+  const isCurrentRequest = () => requestId === agentRequestId && isCurrentAuthSession(session) && !controller.signal.aborted;
   const isRetry = !!retryText;
 
   // Store for retry
@@ -274,7 +288,7 @@ async function sendAgentMessage(retryText) {
   const model = document.getElementById('agent-model').value;
 
   try {
-    const res = await fetch(API_BASE + '/agent/chat/stream', {
+    const res = await authenticatedFetch(API_BASE + '/agent/chat/stream', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -286,17 +300,13 @@ async function sendAgentMessage(retryText) {
         provider: provider,
         model: model,
       }),
+      signal: controller.signal,
     });
-
-    if (res.status === 401) {
-      clearAuth();
-      showLoginView();
-      throw new Error('登入已過期，請重新登入。');
-    }
+    if (!isCurrentRequest()) return;
     if (!res.ok) {
       let message = `Agent 請求失敗（HTTP ${res.status}）`;
       try {
-        const errorBody = await res.json();
+        const errorBody = await readAuthenticatedBody(res);
         if (typeof errorBody.detail === 'string') {
           message = errorBody.detail;
         } else if (Array.isArray(errorBody.detail)) {
@@ -317,6 +327,7 @@ async function sendAgentMessage(retryText) {
 
     while (true) {
       const { done, value } = await reader.read();
+      if (!isCurrentRequest()) return;
       if (done) break;
 
       buffer += decoder.decode(value, { stream: true });
@@ -401,6 +412,7 @@ async function sendAgentMessage(retryText) {
       }
     }
 
+    if (!isCurrentRequest()) return;
     botDiv.classList.remove('agent-typing');
     if (fullText) {
       botContent.innerHTML = renderMarkdown(fullText);
@@ -424,6 +436,7 @@ async function sendAgentMessage(retryText) {
     }
     addRetryButton(); // 不管成功失敗都顯示重試
   } catch (e) {
+    if (e.name === 'AbortError' || !isCurrentRequest()) return;
     const message = e instanceof TypeError
       ? '連線失敗，請確認後端服務已啟動。'
       : (e.message || 'Agent 請求失敗，請稍後再試。');
@@ -431,8 +444,11 @@ async function sendAgentMessage(retryText) {
     botDiv.classList.remove('agent-typing');
     console.error('Agent 請求失敗:', e);
     addRetryButton();
+  } finally {
+    if (isCurrentRequest()) {
+      agentController = null;
+      setAgentLoading(false);
+    }
   }
-
-  setAgentLoading(false);
 }
 

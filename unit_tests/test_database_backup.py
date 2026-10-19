@@ -1,4 +1,6 @@
 import sqlite3
+import subprocess
+import sys
 
 import pytest
 from sqlalchemy import create_engine
@@ -73,4 +75,60 @@ def test_verify_rejects_a_corrupt_database(tmp_path):
 
     with pytest.raises((ValueError, sqlite3.DatabaseError)):
         verify_backup(broken)
+
+
+def test_restore_recovers_crashed_wal_without_replaying_old_data(tmp_path):
+    source, destination = tmp_path / "source.db", tmp_path / "destination.db"
+    make_database(source, "BackupUser")
+    make_database(destination, "CurrentUser")
+    backup = create_backup(source, tmp_path / "backups")
+    subprocess.run(
+        [sys.executable, "-c", """
+import os, sqlite3, sys
+connection = sqlite3.connect(sys.argv[1])
+connection.execute('PRAGMA journal_mode=WAL')
+connection.execute("UPDATE users SET username='CommittedBeforeCrash'")
+connection.commit()
+os._exit(0)
+""", str(destination)],
+        check=True,
+    )
+    assert destination.with_name(destination.name + "-wal").exists()
+
+    safety = restore_backup(backup, destination, confirmation="RESTORE")
+
+    assert usernames(destination) == ["BackupUser"]
+    assert usernames(destination) == ["BackupUser"]  # Reopen must not replay old WAL.
+    assert safety is not None
+    assert usernames(safety) == ["CommittedBeforeCrash"]
+
+
+@pytest.mark.parametrize("journal_mode", ["WAL", "DELETE"])
+def test_restore_refuses_busy_database_and_preserves_data(tmp_path, journal_mode):
+    source, destination = tmp_path / "source.db", tmp_path / "destination.db"
+    make_database(source, "BackupUser")
+    make_database(destination, "CurrentUser")
+    backup = create_backup(source, tmp_path / "backups")
+    active = sqlite3.connect(destination)
+    try:
+        active.execute(f"PRAGMA journal_mode={journal_mode}")
+        active.execute("BEGIN IMMEDIATE")
+        active.execute("UPDATE users SET username='Uncommitted'")
+        with pytest.raises(ValueError, match=r"busy.*stop all"):
+            restore_backup(backup, destination, confirmation="RESTORE")
+        assert active.execute("SELECT username FROM users").fetchone()[0] == "Uncommitted"
+        active.rollback()
+    finally:
+        active.close()
+    assert usernames(destination) == ["CurrentUser"]
+
+
+def test_restore_new_destination_and_reject_same_source(tmp_path):
+    source, destination = tmp_path / "source.db", tmp_path / "new.db"
+    make_database(source, "BackupUser")
+    backup = create_backup(source, tmp_path / "backups")
+    assert restore_backup(backup, destination, confirmation="RESTORE") is None
+    assert usernames(destination) == ["BackupUser"]
+    with pytest.raises(ValueError, match="different files"):
+        restore_backup(backup, backup, confirmation="RESTORE")
 
