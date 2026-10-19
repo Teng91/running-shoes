@@ -119,6 +119,9 @@ h1 { font-size: 28px; font-weight: 700; margin-bottom: 4px; }
 }
 .app-brand h1 { margin: 0; font-size: 18px; line-height: 1.3; }
 .app-brand .subtitle { margin: 3px 0 0; font-size: 11px; }
+.mobile-page-label, .mobile-menu-toggle { display: none; }
+.sidebar-menu { display: contents; }
+.sidebar-menu > .sidebar-navigation { display: flex; flex: 1; flex-direction: column; }
 .app-nav-label { margin: 0 12px 10px; color: var(--text-dim); font-size: 11px; font-weight: 700; letter-spacing: .12em; }
 .app-workspace {
   min-width: 0;
@@ -289,17 +292,41 @@ h1 { font-size: 28px; font-weight: 700; margin-bottom: 4px; }
 @media (max-width: 800px) {
   .app-shell { display: block; }
   .app-sidebar {
-    position: relative;
+    position: sticky;
     display: block;
     height: auto;
-    padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 14px max(16px, env(safe-area-inset-left));
-    overflow: visible;
+    max-height: 100dvh;
+    padding: calc(12px + env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) 12px max(16px, env(safe-area-inset-left));
+    overflow-y: auto;
     border-right: 0;
     border-bottom: 1px solid var(--border);
   }
-  .app-brand { margin: 0 0 14px; }
+  .app-brand { min-height: 44px; margin: 0; padding-right: 96px; gap: 10px; }
   .app-brand-mark { flex-basis: 36px; width: 36px; height: 36px; border-radius: 11px; font-size: 18px; }
   .app-brand h1 { font-size: 17px; }
+  .app-brand .subtitle { display: none; }
+  .mobile-page-label { display: block; margin-top: 2px; font-size: 12px; color: var(--text-dim); }
+  .sidebar-menu { display: block; }
+  .mobile-menu-toggle {
+    position: absolute;
+    top: calc(12px + env(safe-area-inset-top));
+    right: max(16px, env(safe-area-inset-right));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: 44px;
+    padding: 0 12px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--btn-bg);
+    color: var(--text);
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .mobile-menu-toggle:focus-visible { outline: 2px solid var(--accent-light); outline-offset: 2px; }
+  .sidebar-menu:not(.menu-open) > .sidebar-navigation { display: none; }
+  .sidebar-menu.menu-open > .sidebar-navigation { display: flex; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
   .app-nav-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
   .tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; margin: 0; }
   .tab { justify-content: center; gap: 5px; min-width: 0; padding: 8px 5px; text-align: center; }
@@ -309,7 +336,11 @@ h1 { font-size: 28px; font-weight: 700; margin-bottom: 4px; }
   .user-name::before { display: none; }
   .sidebar-actions { display: flex; gap: 6px; }
   .app-workspace { padding: 18px max(16px, env(safe-area-inset-right)) max(28px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
-  .app-workspace.agent-mode { height: max(680px, calc(100dvh - 240px)); }
+  .app-workspace.agent-mode { height: calc(100dvh - 68px - env(safe-area-inset-top)); min-height: 400px; }
+  .run-intro { padding: 16px; }
+  .run-intro h2 { font-size: 19px; }
+  .run-intro p { font-size: 13px; line-height: 1.55; }
+  .run-filter { margin-top: 12px; }
   .run-hero { grid-template-columns: 1fr; }
   .run-stats { grid-template-columns: 1fr; }
   .calendar-day { min-height:62px; padding:4px; }
@@ -634,7 +665,6 @@ input::-webkit-date-and-time-value { text-align: left; min-width: 0; }
   .container { --page-gutter: 12px; }
   .app-sidebar { padding-right: max(12px, env(safe-area-inset-right)); padding-left: max(12px, env(safe-area-inset-left)); }
   .app-workspace { padding-right: max(12px, env(safe-area-inset-right)); padding-left: max(12px, env(safe-area-inset-left)); }
-  .app-brand { margin-bottom: 12px; }
   .app-brand .subtitle { display: none; }
   .tab { flex-direction: column; gap: 2px; min-height: 52px; font-size: 12px; }
   .user-info { align-items: flex-start; }

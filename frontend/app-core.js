@@ -1,4 +1,9 @@
 // Dashboard shell, theme, tab navigation, and aggregate data loading.
+function setMobileMenu(open) {
+  document.getElementById('sidebar-menu').classList.toggle('menu-open', open);
+  document.querySelector('.mobile-menu-toggle').setAttribute('aria-expanded', String(open));
+}
+
 function switchTab(name) {
   document.querySelectorAll('.tab').forEach(tab => {
     const active = tab.dataset.tab === name;
@@ -7,6 +12,13 @@ function switchTab(name) {
   });
   document.querySelectorAll('.tab-panel').forEach(panel => panel.classList.toggle('active', panel.dataset.panel === name));
   document.getElementById('app-workspace').classList.toggle('agent-mode', name === 'agent');
+  document.getElementById('mobile-page-label').textContent = document.querySelector('.tab.active > span:last-child').textContent;
+  const menuWasOpen = document.getElementById('sidebar-menu').classList.contains('menu-open');
+  setMobileMenu(false);
+  if (menuWasOpen && window.matchMedia('(max-width: 800px)').matches) {
+    document.querySelector('.mobile-menu-toggle').focus({ preventScroll: true });
+    window.scrollTo(0, 0);
+  }
   localStorage.setItem('activeTab', name);
   if (name === 'monthly') requestAnimationFrame(() => renderMonthlyCharts());
   if (name === 'spending') requestAnimationFrame(() => renderSpendingCharts());

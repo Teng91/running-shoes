@@ -4,6 +4,8 @@
 - Owner：Running Shoes
 - 關聯 issue／ADR：`docs/architecture.md` 前端 shell
 
+手機導覽後續調整見 [SPEC-008](008-mobile-navigation.md)；以下保留 v3.0.0 初版設計與驗收紀錄。
+
 ## Problem
 
 登入後的六個功能以頁面頂端橫向分頁呈現。寬螢幕沒有充分利用水平空間，使用者在內容較長時也會失去主要導覽；AI 助手另以 JavaScript 直接覆寫整個 app 容器的 display 與高度，讓導覽與功能內容彼此耦合。
