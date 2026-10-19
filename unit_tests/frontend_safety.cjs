@@ -110,7 +110,68 @@ module.exports = async function checkFrontendSafety(browser, baseUrl) {
       check(document.getElementById('report-status').textContent.includes('報告已儲存'), 'report completion semantics retained');
       check(!document.getElementById('generate-report-btn').disabled, 'report controls unlock');
     });
+    await page.evaluate(async () => {
+      const check = (condition, label) => { if (!condition) throw new Error(label); };
+      const json = body => new Response(JSON.stringify(body), { headers: { 'Content-Type': 'application/json' } });
+      const tick = () => new Promise(resolve => setTimeout(resolve, 0));
+      // Exercise actual lifecycle functions with a transport that ignores cancellation.
+      loadData = async () => {};
+      loadAgentModels = async () => {};
+      handleLogout();
+      document.getElementById('login-username').value = 'A';
+      document.getElementById('login-password').value = 'mock-pass';
+      let finishBody, calls = 0;
+      window.fetch = async () => {
+        calls++;
+        const response = json({});
+        response.json = () => new Promise(resolve => { finishBody = resolve; });
+        return response;
+      };
+      const oldLogin = handleLogin(); await tick(); await handleLogin();
+      check(calls === 1 && document.querySelector('#login-form button[type="submit"]').disabled, 'duplicate login is locked');
+      handleLogout();
+      document.getElementById('login-username').value = 'B';
+      document.getElementById('login-password').value = 'mock-pass';
+      window.fetch = async () => json({ access_token: 'mock-B' });
+      await handleLogin();
+      finishBody({ access_token: 'mock-A' }); await oldLogin;
+      check(currentUser === 'B' && authToken === 'mock-B', 'late login body cannot replace B');
+      check(!document.querySelector('#login-form button[type="submit"]').disabled, 'login controls recover');
+
+      const first = { id: 1, version: 3, brand: 'Test', model: 'A', date: '2026-01-01',
+        mileage: 10, expected_mileage: 800, monthly_km: 60, categories: ['Daily'] };
+      for (const action of ['submit', 'delete', 'move']) {
+        for (const fails of [false, true]) {
+          let finish, writes = 0, alerts = 0;
+          window.confirm = () => true;
+          window.alert = () => alerts++;
+          window.fetch = (_, options) => {
+            writes++;
+            if (options.body) check(JSON.parse(options.body).expected_version === 3, 'original shoe version retained');
+            return new Promise(resolve => { finish = resolve; });
+          };
+          shoeModal.openForEdit(first, false);
+          const pending = shoeModal[action](); await shoeModal[action]();
+          check(writes === 1 && document.getElementById('btn-delete').disabled, 'shoe mutation uses one snapshot lock');
+          shoeModal.close();
+          shoeModal.openForEdit({ ...first, id: 2, model: 'B' }, false);
+          document.getElementById('f-model').value = 'B unsaved draft';
+          const replacement = shoeModal.context;
+          finish(fails ? new Response('{"detail":"old error"}', { status: 409 }) : json({}));
+          await pending;
+          check(shoeModal.context === replacement && document.getElementById('modal').classList.contains('active'), 'old shoe response cannot close B');
+          check(document.getElementById('f-model').value === 'B unsaved draft' && alerts === 0, 'B draft and error state preserved');
+          check(!document.querySelector('#modal .btn-primary').disabled, 'B controls remain unlocked');
+        }
+      }
+      const timestamp = '2026-10-20T00:30:00+00:00';
+      renderReport({ year: 2026, month: 9, model: 'mock', content_md: 'mock', updated_at: timestamp });
+      check(document.getElementById('report-status').textContent.endsWith(formatLocalTimestamp(timestamp)), 'saved report uses local timestamp');
+      handleLogout();
+      check(shoeModal.context === null, 'logout resets shoe snapshot');
+    });
     assert.deepEqual(errors, [], 'safety browser JavaScript errors');
     console.log(`PASS ${browser.browserType().name()} SPEC-012: lazy charts, stale reads, modal identity, AI/report stream completion/retry/errors`);
+    console.log(`PASS ${browser.browserType().name()} SPEC-013: login races, shoe mutations, report timestamps and split modules`);
   } finally { await context.close(); }
 };

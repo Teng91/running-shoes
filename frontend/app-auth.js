@@ -2,6 +2,36 @@
 let authToken = localStorage.getItem('token');
 let currentUser = localStorage.getItem('username');
 let authGeneration = 0;
+let authOperation = null;
+
+function setAuthControlsDisabled(disabled) {
+  document.querySelectorAll('#auth-view button[type="submit"]').forEach(button => { button.disabled = disabled; });
+}
+
+function cancelAuthOperation() {
+  const previous = authOperation;
+  authOperation = null;
+  previous?.controller.abort();
+  setAuthControlsDisabled(false);
+}
+
+function beginAuthOperation() {
+  if (authOperation) return null;
+  const operation = { controller: new AbortController(), generation: authGeneration };
+  authOperation = operation;
+  setAuthControlsDisabled(true);
+  return operation;
+}
+
+function isCurrentAuthOperation(operation) {
+  return authOperation === operation && operation.generation === authGeneration && !operation.controller.signal.aborted;
+}
+
+function finishAuthOperation(operation) {
+  if (authOperation !== operation) return;
+  authOperation = null;
+  setAuthControlsDisabled(false);
+}
 
 function captureAuthSession() {
   return { generation: authGeneration, token: authToken };
@@ -36,6 +66,7 @@ function setAuth(token, username) {
 }
 
 function clearAuth() {
+  cancelAuthOperation();
   authGeneration += 1;
   dashboardAnalyticsCache.clear();
   dashboardAnalyticsRequest += 1;
@@ -43,6 +74,7 @@ function clearAuth() {
   resetAgentChat();
   closeRunModal();
   closeMonthlyModal();
+  if (typeof shoeModal !== 'undefined') shoeModal.close();
   resetPanelRendering();
   stravaPreviewController?.abort();
   stravaPreviewController = null;
@@ -109,18 +141,24 @@ function resetAppLayout() {
 }
 
 function showLoginForm() {
+  cancelAuthOperation();
+  hideAppBoot();
   document.getElementById('login-form').style.display = '';
   document.getElementById('register-form').style.display = 'none';
   document.getElementById('change-form').style.display = 'none';
   hideAuthError();
 }
 function showRegisterForm() {
+  cancelAuthOperation();
+  hideAppBoot();
   document.getElementById('login-form').style.display = 'none';
   document.getElementById('register-form').style.display = '';
   document.getElementById('change-form').style.display = 'none';
   hideRegError();
 }
 function showChangeForm() {
+  cancelAuthOperation();
+  hideAppBoot();
   document.getElementById('login-form').style.display = 'none';
   document.getElementById('register-form').style.display = 'none';
   document.getElementById('change-form').style.display = '';
@@ -143,39 +181,51 @@ const ERROR_ZH = {
 function translateError(detail) { return ERROR_ZH[detail] || detail; }
 
 async function handleLogin() {
+  if (authOperation) return;
   hideAuthError();
   const username = document.getElementById('login-username').value.trim();
   const password = document.getElementById('login-password').value;
   if (!username || !password) { showAuthError('請輸入帳號和密碼'); return; }
+  const operation = beginAuthOperation();
+  let authenticatedSession = null;
   showAppBoot('正在登入並載入資料…');
   try {
     const res = await fetch(API_BASE + '/auth/login', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password }),
+      signal: operation.controller.signal,
     });
+    if (!isCurrentAuthOperation(operation)) return;
     if (!res.ok) {
       let msg = '登入失敗';
       try { const err = await res.json(); msg = translateError(err.detail) || msg; } catch {}
+      if (!isCurrentAuthOperation(operation)) return;
       if (res.status === 500) msg = '伺服器錯誤，請稍後再試';
       throw new Error(msg);
     }
     const data = await res.json();
+    if (!isCurrentAuthOperation(operation)) return;
     setAuth(data.access_token, username);
+    authenticatedSession = captureAuthSession();
     resetAuthInputs();
     resetAgentChat();
     resetAppLayout();
     showAppView({ keepBoot: true });
     loadAgentModels();
     await loadData();
+    if (!isCurrentAuthSession(authenticatedSession)) return;
     hideAppBoot();
   } catch (e) {
+    if (e.name === 'AbortError' || (authenticatedSession
+      ? !isCurrentAuthSession(authenticatedSession) : !isCurrentAuthOperation(operation))) return;
     document.getElementById('login-password').value = '';
     hideAppBoot();
     showAuthError(e.message);
-  }
+  } finally { finishAuthOperation(operation); }
 }
 
 async function handleRegister() {
+  if (authOperation) return;
   hideRegError();
   const username = document.getElementById('reg-username').value.trim();
   const password = document.getElementById('reg-password').value;
@@ -183,42 +233,55 @@ async function handleRegister() {
   if (!username || !password) { showRegError('請輸入帳號和密碼'); return; }
   if (password.length < 4) { showRegError('密碼至少 4 個字元'); return; }
   if (password !== password2) { showRegError('兩次密碼不一致'); return; }
+  const operation = beginAuthOperation();
+  let authenticatedSession = null;
   showAppBoot('正在建立帳號並載入資料…');
   try {
     const regRes = await fetch(API_BASE + '/auth/register', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password }),
+      signal: operation.controller.signal,
     });
+    if (!isCurrentAuthOperation(operation)) return;
     if (!regRes.ok) {
       let msg = '註冊失敗';
       try { const err = await regRes.json(); msg = translateError(err.detail) || msg; } catch {}
+      if (!isCurrentAuthOperation(operation)) return;
       if (regRes.status === 500) msg = '伺服器錯誤，請稍後再試';
       throw new Error(msg);
     }
     const loginRes = await fetch(API_BASE + '/auth/login', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password }),
+      signal: operation.controller.signal,
     });
+    if (!isCurrentAuthOperation(operation)) return;
     if (!loginRes.ok) {
       hideAppBoot(); showLoginForm(); showAuthError('註冊成功！請登入'); return;
     }
     const data = await loginRes.json();
+    if (!isCurrentAuthOperation(operation)) return;
     setAuth(data.access_token, username);
+    authenticatedSession = captureAuthSession();
     resetAuthInputs();
     resetAppLayout();
     showAppView({ keepBoot: true });
     loadAgentModels();
     await loadData();
+    if (!isCurrentAuthSession(authenticatedSession)) return;
     hideAppBoot();
   } catch (e) {
+    if (e.name === 'AbortError' || (authenticatedSession
+      ? !isCurrentAuthSession(authenticatedSession) : !isCurrentAuthOperation(operation))) return;
     hideAppBoot();
     showRegError(e.message);
-  }
+  } finally { finishAuthOperation(operation); }
 }
 
 function handleLogout() { clearAuth(); showLoginView(); }
 
 async function handleChangePassword() {
+  if (authOperation) return;
   hideChangeError();
   const username = document.getElementById('change-username').value.trim();
   const oldPassword = document.getElementById('change-old-password').value;
@@ -229,19 +292,25 @@ async function handleChangePassword() {
   if (!password) { showChangeError('請輸入新密碼'); return; }
   if (password.length < 4) { showChangeError('密碼至少 4 個字元'); return; }
   if (password !== password2) { showChangeError('兩次密碼不一致'); return; }
+  const operation = beginAuthOperation();
   try {
     const res = await fetch(API_BASE + '/auth/change-password', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, old_password: oldPassword, new_password: password }),
+      signal: operation.controller.signal,
     });
+    if (!isCurrentAuthOperation(operation)) return;
     if (!res.ok) {
       let msg = '重設失敗';
       try { const err = await res.json(); msg = translateError(err.detail) || msg; } catch {}
+      if (!isCurrentAuthOperation(operation)) return;
       throw new Error(msg);
     }
-    showLoginForm();
+    clearAuth();
+    showLoginView();
     showAuthError('密碼已重設，請重新登入');
   } catch (e) {
+    if (e.name === 'AbortError' || !isCurrentAuthOperation(operation)) return;
     showChangeError(e.message);
-  }
+  } finally { finishAuthOperation(operation); }
 }

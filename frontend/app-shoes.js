@@ -59,6 +59,7 @@ class ShoeModal {
   openForCreate() {
     this.mode = 'create';
     this.shoe = null;
+    this.context = { mode: this.mode, shoe: null, session: captureAuthSession(), saving: false };
     this._resetForm();
     this._updateUI({ title: '新增跑鞋', showDelete: false, showMove: false, monthly: 60, monthlyVisible: true });
     this._show();
@@ -67,6 +68,7 @@ class ShoeModal {
   openForEdit(shoe, isRetired) {
     this.mode = isRetired ? 'editRetired' : 'editActive';
     this.shoe = { ...shoe };
+    this.context = { mode: this.mode, shoe: this.shoe, session: captureAuthSession(), saving: false };
     this._fillForm(shoe);
     this._updateUI({
       title: isRetired ? '編輯退役跑鞋' : '編輯跑鞋',
@@ -109,8 +111,37 @@ class ShoeModal {
     document.getElementById('f-monthly').value = monthly;
   }
 
-  _show() { this.el.classList.add('active'); }
-  close() { this.el.classList.remove('active'); this.shoe = null; }
+  _setBusy(busy) {
+    this.saving = busy;
+    this.el.querySelector('.btn-primary').disabled = busy;
+    this.btnDelete.disabled = busy;
+    this.btnMove.disabled = busy;
+  }
+
+  _show() { this._setBusy(false); this.el.classList.add('active'); }
+  close() { this.context = null; this._setBusy(false); this.el.classList.remove('active'); this.shoe = null; }
+
+  _canSubmit(context) {
+    return context && !context.saving && isCurrentAuthSession(context.session);
+  }
+
+  async _mutate(context, request, errorMessage) {
+    context.saving = true;
+    this._setBusy(true);
+    try {
+      await request();
+      if (!isCurrentAuthSession(context.session)) return;
+      if (this.context === context) this.close();
+      await loadData();
+    } catch (error) {
+      if (this.context === context && isCurrentAuthSession(context.session) && error.name !== 'AbortError') {
+        alert(error.message || errorMessage);
+      }
+    } finally {
+      context.saving = false;
+      if (this.context === context) this._setBusy(false);
+    }
+  }
 
   _payload() {
     const get = id => document.getElementById(id).value;
@@ -131,56 +162,44 @@ class ShoeModal {
   }
 
   async submit() {
-    if (this.saving) return;
+    const context = this.context;
+    if (!this._canSubmit(context)) return;
     const data = this._payload();
     if (!data.brand || !data.model || !data.date) return alert('請填寫品牌、鞋款、日期');
-    this.saving = true;
-    const saveButton = this.el.querySelector('.btn-primary');
-    saveButton.disabled = true;
-    try {
-      if (this.mode === 'create') await apiPost('/shoes', data);
-      else {
-        const changes = Object.fromEntries(Object.entries(data).filter(([key, value]) => JSON.stringify(value) !== JSON.stringify(this.shoe[key])));
-        await apiPut('/shoes/' + this.shoe.id, { ...changes, expected_version: this.shoe.version });
-      }
-      this.close();
-      await loadData();
-    } catch (e) { alert(e.message || '儲存失敗'); }
-    finally {
-      this.saving = false;
-      saveButton.disabled = false;
-    }
+    return this._mutate(context, () => {
+      if (context.mode === 'create') return apiPost('/shoes', data);
+      const changes = Object.fromEntries(Object.entries(data).filter(([key, value]) => JSON.stringify(value) !== JSON.stringify(context.shoe[key])));
+      return apiPut('/shoes/' + context.shoe.id, { ...changes, expected_version: context.shoe.version });
+    }, '儲存失敗');
   }
 
   async delete() {
-    if (!confirm(`確定刪除 ${this.shoe.brand} ${this.shoe.model}？跑步紀錄會保留，但鞋款無法復原。`)) return;
-    try { await apiDelete('/shoes/' + this.shoe.id + '?expected_version=' + (this.shoe.version || 0)); }
-    catch (e) { return alert(e.message || '刪除失敗'); }
-    this.close();
-    await loadData();
+    const context = this.context;
+    if (!this._canSubmit(context) || !context.shoe) return;
+    const shoe = context.shoe;
+    if (!confirm(`確定刪除 ${shoe.brand} ${shoe.model}？跑步紀錄會保留，但鞋款無法復原。`)) return;
+    return this._mutate(context, () => apiDelete('/shoes/' + shoe.id + '?expected_version=' + (shoe.version || 0)), '刪除失敗');
   }
 
   async move() {
-    const targetRetired = this.mode === 'editActive';
+    const context = this.context;
+    if (!this._canSubmit(context) || !context.shoe) return;
+    const shoe = context.shoe;
+    const targetRetired = context.mode === 'editActive';
     if (!confirm(`確定要移至${targetRetired ? '退役' : '現役'}？`)) return;
-    try {
-      const payload = { is_retired: targetRetired, expected_version: this.shoe.version, monthly_km: this.shoe.monthly_km };
-      if (targetRetired) {
-        payload.monthly_km = 0;
-      } else if (!payload.monthly_km) {
-        // 退役時月跑量被歸零，回到現役時用其他現役鞋的平均月跑量當起始參考，
-        // 避免硬編碼 60。
-        const activeKm = shoes
-          .filter(s => s.id !== this.shoe.id && !s.is_retired && s.monthly_km > 0)
-          .map(s => s.monthly_km);
-        payload.monthly_km = activeKm.length
-          ? Math.round(activeKm.reduce((a, b) => a + b, 0) / activeKm.length * 10) / 10
-          : 60;
-      }
-      await apiPut('/shoes/' + this.shoe.id, payload);
-    } catch (e) { return alert(e.message || '移動失敗'); }
-    this.close();
-    await loadData();
+    const payload = { is_retired: targetRetired, expected_version: shoe.version, monthly_km: shoe.monthly_km };
+    if (targetRetired) {
+      payload.monthly_km = 0;
+    } else if (!payload.monthly_km) {
+      // 退役時月跑量被歸零，回到現役時用其他現役鞋的平均月跑量當起始參考。
+      const activeKm = shoes
+        .filter(s => s.id !== shoe.id && !s.is_retired && s.monthly_km > 0)
+        .map(s => s.monthly_km);
+      payload.monthly_km = activeKm.length
+        ? Math.round(activeKm.reduce((a, b) => a + b, 0) / activeKm.length * 10) / 10
+        : 60;
+    }
+    return this._mutate(context, () => apiPut('/shoes/' + shoe.id, payload), '移動失敗');
   }
 }
 

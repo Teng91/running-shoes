@@ -2,6 +2,21 @@
 
 本專案的重要變更依 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.1.0/) 分類，版本號遵循 [Semantic Versioning](https://semver.org/lang/zh-TW/)。完整部署說明另見各版本的 GitHub Release。
 
+## [3.2.2] - 2026-10-20
+
+### Fixed
+
+- 登入／註冊／更改密碼加入共用操作鎖、取消與過期回應隔離；舊請求不能覆蓋新帳號或 loading 狀態。
+- 跑鞋新增、編輯、刪除與移動以視窗 context 保存版本及 session，防止重送和晚到回應關閉新草稿。
+- 月報 GET／歷史／串流統一輸出帶時區 UTC，讀取與生成都使用同一本地時間格式。
+
+### Changed
+
+- Strava 上傳後的 CSV／filter／DB service 工作移入 worker thread，保留原交易與帳號隔離。
+- 拆出匯出、目標設定、跑鞋圖表與月跑量圖表，保留 plain-script 契約與原版面。
+- PWA shell v19、asset revision 3.2.2 納入四個新增 modules。
+- 新增 SPEC-013，更新 SDD、harness module 清單與 Node／Python／雙引擎回歸測試。
+
 ## [3.2.1] - 2026-10-20
 
 ### Fixed
@@ -87,6 +102,7 @@
 
 - 強化資料載入、API 邊界、工程 harness 與架構驗證。
 
+[3.2.2]: https://github.com/Teng91/running-shoes/releases/tag/v3.2.2
 [3.2.1]: https://github.com/Teng91/running-shoes/releases/tag/v3.2.1
 [3.2.0]: https://github.com/Teng91/running-shoes/releases/tag/v3.2.0
 [3.1.0]: https://github.com/Teng91/running-shoes/releases/tag/v3.1.0
