@@ -24,12 +24,18 @@ MAX_REASON_CHARS = 8_000
 
 LAYOUT_FILES = {
     "frontend/app.js",
+    "frontend/app-boot.js",
+    "frontend/app-state.js",
+    "frontend/app-api.js",
+    "frontend/app-auth.js",
     "frontend/app-core.js",
     "frontend/app-dashboard.js",
     "frontend/app-monthly.js",
     "frontend/app-charts.js",
     "frontend/app-spending.js",
     "frontend/app-runs.js",
+    "frontend/app-strava.js",
+    "frontend/app-run-insights.js",
     "frontend/app-shoes.js",
     "frontend/index.html",
     "frontend/styles.css",

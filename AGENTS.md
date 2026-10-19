@@ -13,10 +13,14 @@
 - `backend/rate_limits.py`: shared authentication and AI request throttling.
 - `docs/architecture.md`: current SDD, module boundaries, diagrams, and evolution sequence.
 - `docs/testing-strategy.md`: test design, traceability matrix, and definition of done.
-- `backend/agent.py`: LLM orchestration, deterministic query planning, and SSE events.
+- `backend/agent.py`: LLM and tool-loop runner; planning, dispatch, and SSE serialization live in `backend/agent_*.py` modules.
 - `backend/tools/`: trusted database and web-search tools used by the agent.
 - `frontend/index.html`: dependency-light single-page dashboard markup.
-- `frontend/app-core.js`: shared dashboard state, authentication, API, and data loading.
+- `frontend/app-boot.js`: startup loading, stylesheet readiness, timeout, and retry state.
+- `frontend/app-state.js`: shared browser state and presentation constants.
+- `frontend/app-api.js`: authenticated JSON and upload transport helpers.
+- `frontend/app-auth.js`: authentication state, forms, and account transitions.
+- `frontend/app-core.js`: dashboard shell, theme, tabs, and aggregate data loading.
 - `frontend/app-dashboard.js`: dashboard cards, alerts, and shoe tables.
 - `frontend/app-monthly.js`: monthly mileage, goals, and export interactions.
 - `frontend/app-charts.js`: shoe, mileage, and yearly charts.
@@ -24,7 +28,9 @@
 - `frontend/app.js`: bootstrap and global dialog event wiring.
 - `frontend/app-agent.js`: AI assistant models, chat streaming, and safe Markdown rendering.
 - `frontend/app-reports.js`: monthly report loading, generation, and streaming UI.
-- `frontend/app-runs.js`: run log, Strava import, dashboard insight, and shoe analytics UI.
+- `frontend/app-runs.js`: run CRUD, paging, and shoe selection.
+- `frontend/app-strava.js`: Strava preview, mapping, and import UI.
+- `frontend/app-run-insights.js`: run cards, calendar, charts, and shoe analytics UI.
 - `frontend/app-shoes.js`: shoe editing and modal interactions.
 - `frontend/styles.css`: dashboard themes and responsive layout.
 - `unit_tests/`: backend, frontend, security, migration, and agent regression tests.

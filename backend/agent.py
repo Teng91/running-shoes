@@ -1,35 +1,12 @@
-"""Agent loop — 跑鞋推薦助手的核心。
-
-流程（ReAct 風格，使用 OpenRouter / OpenAI 原生 tool calling）：
-
-    system(含工具說明) → user 訊息 → 呼叫 LLM
-      ├─ LLM 回傳 tool_calls
-      │     → 解析並執行工具（讀 DB / 上網搜尋）→ 把結果作為新一輪
-      │       role=tool 訊息餵回 → 再呼叫 LLM
-      └─ 沒有 tool_calls → 文字內容就是最終回覆
-
-舊的 `<tool>name {json}</tool>` 文字標記仍保留解析相容性，但不再放進
-system prompt；正常情況一律走原生 tool_calls。
-
-為求在免費模型上穩定，LLM 呼叫採**串流**；token 以 SSE 逐字即時送達前端。
-
-    {"type": "reasoning", "text": "..."}  # LLM 呼叫工具前的推理過程（逐字串流）
-    {"type": "tool", "name": "...", "args": {...}}
-    {"type": "tool_done", "name": "..."}  # 工具執行完成（前端即時打勾）
-    {"type": "token", "text": "..."}      # 最終回覆的逐字片段
-    {"type": "error", "text": "..."}
-    {"type": "done"}
-"""
+"""Agent runner coordinating deterministic planning, tools, LLM, and SSE."""
 
 import json
-import re
 from collections.abc import Generator
-from dataclasses import dataclass
 from typing import Any
 
 from sqlalchemy.orm import Session
 
-from backend import llm
+from backend import agent_planner, agent_protocol, agent_tools, llm
 from backend.tools import db_tools
 from backend.tools.search_tool import is_failure, run_web_search
 
@@ -70,303 +47,46 @@ SYSTEM_PROMPT = """你是「跑鞋推薦助手」，服務一位熱愛跑步的�
 - 工具由系統透過原生 function calling 提供。需要資料時直接呼叫工具；不要用文字、XML、Markdown 或程式碼區塊模擬工具呼叫。
 """
 
-MAX_TURNS = 6  # 防止 tool loop 失控（多留一輪給模型收斂）
-
-# web_search 連續失敗達此次數後，強制提醒模型改用現有資料收斂，
-# 避免免費模型一直重 call 搜尋把回合數耗光。
+MAX_TURNS = 6
 WEB_SEARCH_FAIL_LIMIT = 3
 WEB_SEARCH_CALL_LIMIT = 3
 SOURCE_SUMMARY_LIMIT = 8
-
-_TOOL_INTENT_TERMS = (
-    "跑鞋", "鞋", "鞋款", "鞋況", "鞋櫃", "跑量", "里程", "壽命", "退役",
-    "換鞋", "補鞋", "推薦", "比較", "分析", "課表", "訓練",
-    "馬拉松", "半馬", "全馬", "比賽", "競速", "越野", "daily", "tempo",
-    "speed", "race", "trail", "資料", "數字", "結果", "重新查", "不對", "錯了",
-    "類別", "缺什麼", "搜尋", "查詢", "幫我查", "上網", "search", "new balance", "nb", "rebel",
-)
-
-_AFFIRMATIVE_REPLIES = (
-    "對", "對的", "好", "好的", "是", "是的", "沒錯", "可以", "查吧", "幫我查",
-    "對，查吧", "對,查吧", "好，查吧", "好,查吧",
-)
-_CONTEXT_TOOL_TERMS = ("搜尋", "查詢", "查", "工具", "資料")
-_NON_TOOL_REPLIES = ("謝謝", "感謝", "不用了", "沒事", "再見")
-_WEB_RESEARCH_TERMS = (
-    "市價", "售價", "價格", "定價", "評價", "規格", "上市",
-    "哪裡買", "哪裡有", "通路", "折扣", "優惠", "查網路", "上網查",
-)
-_SHOE_RESEARCH_QUESTIONS = (
-    "怎樣的鞋", "怎麼樣的鞋", "適合我", "值得買", "值得入手", "好穿嗎",
-)
-_PERSONAL_FIT_TERMS = ("適合我", "適不適合我", "我適合", "適合我的")
-_PRIVATE_DATA_TERMS = (
-    "我的跑量", "我最新的月跑量", "我的月跑量", "我的里程", "我的跑鞋",
-    "我的鞋", "我的鞋櫃", "我目前", "我的資料", "跑鞋里程", "月跑量",
-    "鞋櫃", "鞋況", "退役", "壽命",
-)
-_MONTHLY_DATA_TERMS = ("月跑量", "跑量", "跑量趨勢")
-_SHOE_DATA_TERMS = ("我的跑鞋", "我的鞋", "鞋櫃", "鞋況", "跑鞋里程")
-_LIFECYCLE_TERMS = ("壽命", "退役", "快壞", "換鞋", "剩餘里程")
-_CATEGORY_TERMS = ("缺什麼", "缺少", "類別", "覆蓋", "補鞋")
-_USAGE_ANALYTICS_TERMS = (
-    "穿幾次", "穿著次數", "使用次數", "輪替", "平均距離",
-    "最後穿", "最近里程", "實際月跑量",
-)
-_PRODUCT_FRESHNESS_TERMS = (
-    "跑鞋", "鞋款", "new balance", "nb", "nike", "adidas", "asics",
-    "mizuno", "puma", "hoka", "brooks", "saucony", "rebel", "elite",
-)
+QueryPlan = agent_planner.QueryPlan
 
 
-@dataclass(frozen=True)
-class QueryPlan:
-    web_queries: tuple[str, ...] = ()
-    database_tools: tuple[str, ...] = ()
-
-
-def _should_offer_tools(
-    user_message: str,
-    history: list[dict] | None = None,
-) -> bool:
-    """Expose tools when the current request or recent context may need them.
-
-    This only controls tool availability. The LLM still decides whether to
-    call a tool, ask a clarifying question, or answer without one.
-    """
-    normalized = " ".join(user_message.lower().split())
-    if any(term in normalized for term in _TOOL_INTENT_TERMS):
-        return True
-    if any(term in normalized for term in _NON_TOOL_REPLIES):
-        return False
-
-    recent_assistant = next((
-        str(turn.get("content", "")).lower()
-        for turn in reversed(history or [])
-        if turn.get("role") == "assistant"
-    ), "")
-    if normalized.strip("！!。,.？?") in _AFFIRMATIVE_REPLIES:
-        return any(term in recent_assistant for term in _CONTEXT_TOOL_TERMS)
-
-    recent_user = next((
-        str(turn.get("content", "")).lower()
-        for turn in reversed(history or [])
-        if turn.get("role") == "user"
-    ), "")
-    return any(term in recent_user for term in _TOOL_INTENT_TERMS)
+def _should_offer_tools(user_message: str, history: list[dict] | None = None) -> bool:
+    return agent_planner.should_offer_tools(user_message, history)
 
 
 def _requires_web_search(user_message: str) -> bool:
-    """Detect requests where answering from model memory would be misleading."""
-    normalized = " ".join(user_message.lower().split())
-    is_personal_data = any(term in normalized for term in _PRIVATE_DATA_TERMS) and any(
-        marker in normalized for marker in ("我", "我的", "目前", "最近")
-    )
-    if is_personal_data:
-        return any(term in normalized for term in _WEB_RESEARCH_TERMS)
-    if any(term in normalized for term in _WEB_RESEARCH_TERMS):
-        return True
-    if "最新" in normalized and any(term in normalized for term in _PRODUCT_FRESHNESS_TERMS):
-        return True
-    if any(term in normalized for term in _SHOE_RESEARCH_QUESTIONS):
-        return True
-    # Short model-name follow-ups such as "SC Elite v6 呢" should also be
-    # researched instead of inviting a weak model to invent specifications.
-    has_model_like_token = bool(re.search(r"[a-z]{2,}[^\n]{0,30}\d", normalized))
-    return has_model_like_token and normalized.rstrip("？?!！。 ").endswith("呢")
+    return agent_planner.requires_web_search(user_message)
 
 
 def _search_subject(user_message: str) -> str:
-    subject = user_message.strip()
-    removable = (
-        "幫我查", "查一下", "查", "適合我嗎", "適不適合我", "適合我",
-        "是一雙怎樣的鞋", "是一雙怎麼樣的鞋", "怎樣的鞋", "怎麼樣的鞋",
-        "值得買嗎", "值得入手嗎", "好穿嗎", "最新評價", "市價",
-    )
-    for phrase in removable:
-        subject = subject.replace(phrase, " ")
-    tokens = subject.strip("？?!！。,.，～~ ").split()
-    subject = " ".join(token for token in tokens if token not in {"的", "與", "和"})
-    return subject or user_message.strip()
+    return agent_planner.search_subject(user_message)
 
 
-def _build_query_plan(
-    user_message: str,
-    history: list[dict] | None = None,
-) -> QueryPlan:
-    """Build a deterministic minimum tool plan before asking the model."""
-    effective_message = user_message
-    normalized = " ".join(user_message.casefold().split()).strip("？?!！。,.， ")
-    if normalized in _AFFIRMATIVE_REPLIES:
-        recent_user = next((
-            str(turn.get("content", ""))
-            for turn in reversed(history or [])
-            if turn.get("role") == "user" and turn.get("content")
-        ), "")
-        recent_assistant = next((
-            str(turn.get("content", "")).casefold()
-            for turn in reversed(history or [])
-            if turn.get("role") == "assistant"
-        ), "")
-        if recent_user and any(term in recent_assistant for term in _CONTEXT_TOOL_TERMS):
-            effective_message = recent_user
-
-    lowered = effective_message.casefold()
-    needs_web = _requires_web_search(effective_message)
-    web_queries: tuple[str, ...] = ()
-    if needs_web:
-        subject = _search_subject(effective_message)
-        web_queries = (
-            f"{subject} 官方 規格",
-            f"{subject} 評價 價格 台灣",
-        )
-
-    database_tool_list: list[str] = []
-    has_personal_marker = any(
-        marker in lowered for marker in ("我", "我的", "目前", "最近")
-    )
-    if has_personal_marker:
-        needs_usage_analytics = any(term in lowered for term in _USAGE_ANALYTICS_TERMS)
-        if any(term in lowered for term in _SHOE_DATA_TERMS) and not needs_usage_analytics:
-            database_tool_list.append("list_my_shoes")
-        if any(term in lowered for term in _MONTHLY_DATA_TERMS):
-            database_tool_list.append("monthly_mileage_stats")
-        if any(term in lowered for term in _LIFECYCLE_TERMS):
-            database_tool_list.append("nearing_end_of_life")
-        if any(term in lowered for term in _CATEGORY_TERMS):
-            database_tool_list.append("shoe_category_status")
-        if needs_usage_analytics:
-            database_tool_list.append("shoe_usage_analytics")
-    if any(term in lowered for term in _PERSONAL_FIT_TERMS):
-        database_tool_list.extend(("list_my_shoes", "monthly_mileage_stats"))
-
-    database_tools = tuple(dict.fromkeys(database_tool_list))
-
-    return QueryPlan(web_queries=web_queries, database_tools=database_tools)
-
-
-def _search_payload(output: str) -> dict[str, Any] | None:
-    try:
-        payload = json.loads(output)
-    except (TypeError, json.JSONDecodeError):
-        return None
-    if payload.get("tool") != "web_search":
-        return None
-    return payload
-
-
-def _source_summary_event(search_payloads: list[dict[str, Any]]) -> str:
-    if not search_payloads:
-        return _sse({
-            "type": "source_summary",
-            "web": {"status": "none", "queries": [], "result_count": 0, "sources": []},
-        })
-
-    successful = [payload for payload in search_payloads if payload.get("ok") is True]
-    if not successful:
-        status = "failed"
-    elif all(payload.get("cached") is True for payload in successful):
-        status = "cached"
-    else:
-        status = "live"
-
-    sources: list[dict[str, str]] = []
-    seen_ids = set()
-    for payload in successful:
-        query_tokens = {
-            token
-            for token in re.findall(r"[a-z0-9]+", str(payload.get("query") or "").casefold())
-            if token not in {"official", "price", "review", "taiwan"}
-        }
-        for source in payload.get("results") or []:
-            source_id = str(source.get("id") or "")
-            if not source_id or source_id in seen_ids:
-                continue
-            seen_ids.add(source_id)
-            searchable = " ".join((
-                str(source.get("title") or ""),
-                str(source.get("snippet") or ""),
-                str(source.get("url") or ""),
-            )).casefold()
-            sources.append({
-                "id": source_id,
-                "title": str(source.get("title") or source.get("domain") or source_id),
-                "url": str(source.get("url") or ""),
-                "domain": str(source.get("domain") or ""),
-                "source_type": str(source.get("source_type") or "other"),
-                "_relevance": str(sum(token in searchable for token in query_tokens)),
-            })
-    source_type_rank = {
-        "official": 0,
-        "review": 1,
-        "other": 2,
-        "community_or_marketplace": 3,
-    }
-    sources.sort(key=lambda source: (
-        -int(source["_relevance"]),
-        source_type_rank.get(source["source_type"], 2),
-        0 if source["domain"].endswith(".tw") else 1,
-    ))
-    sources = sources[:SOURCE_SUMMARY_LIMIT]
-    for source in sources:
-        source.pop("_relevance", None)
-
-    return _sse({
-        "type": "source_summary",
-        "web": {
-            "status": status,
-            "queries": [str(payload.get("query") or "") for payload in search_payloads],
-            "result_count": len(sources),
-            "sources": sources,
-        },
-    })
+def _build_query_plan(user_message: str, history: list[dict] | None = None) -> QueryPlan:
+    return agent_planner.build_query_plan(user_message, history)
 
 
 def _sse(event: dict) -> str:
-    return f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+    return agent_protocol.sse(event)
+
+
+def _search_payload(output: str) -> dict[str, Any] | None:
+    return agent_protocol.search_payload(output)
+
+
+def _source_summary_event(search_payloads: list[dict[str, Any]]) -> str:
+    return agent_protocol.source_summary_event(search_payloads, limit=SOURCE_SUMMARY_LIMIT)
 
 
 def _tool_done_event(name: str, output: str) -> str:
-    """Build a completion event that distinguishes success from failure."""
-    event: dict[str, Any] = {"type": "tool_done", "name": name, "ok": True}
-    try:
-        payload = json.loads(output)
-    except (TypeError, json.JSONDecodeError):
-        payload = None
-    structured_failure = isinstance(payload, dict) and payload.get("ok") is False
-    if name != "web_search" and not structured_failure:
-        return _sse(event)
-    if name == "web_search" and not is_failure(output):
-        return _sse(event)
-
-    event["ok"] = False
-    if not isinstance(payload, dict):
-        event["status"] = "request_failed"
-        event["message"] = "搜尋服務暫時無法使用"
-        return _sse(event)
-
-    status = str(payload.get("status") or "request_failed")
-    messages = {
-        "dependency_missing": "搜尋套件未安裝",
-        "missing_query": "缺少搜尋關鍵字",
-        "invalid_query": "搜尋關鍵字格式不正確",
-        "no_results": "找不到相關搜尋結果",
-        "no_valid_results": "搜尋結果沒有可安全使用的網址",
-        "request_failed": "搜尋服務暫時無法連線",
-        "invalid_arguments": "模型提供的工具參數格式不正確",
-        "tool_execution_failed": "資料工具執行失敗",
-    }
-    event.update({
-        "status": status,
-        "message": messages.get(status, "搜尋失敗"),
-    })
-    if payload.get("error"):
-        event["error"] = str(payload["error"])
-    return _sse(event)
+    return agent_protocol.tool_done_event(name, output)
 
 
 def _build_messages(history: list[dict] | None, user_message: str) -> list[dict]:
-    """組裝送給 LLM 的 messages。history 只保留 user/assistant 輪次。"""
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
     for turn in history or []:
         role = turn.get("role")
@@ -384,7 +104,6 @@ def _append_preexecuted_tool(
     output: str,
     sequence: int,
 ) -> None:
-    """Represent deterministic prefetches as native assistant/tool messages."""
     call_id = f"prefetch_{sequence}_{name}"
     messages.append({
         "role": "assistant",
@@ -399,60 +118,21 @@ def _append_preexecuted_tool(
         }],
     })
     messages.append({
-        "role": "tool",
-        "tool_call_id": call_id,
-        "name": name,
-        "content": output,
+        "role": "tool", "tool_call_id": call_id, "name": name, "content": output,
     })
 
 
 def _execute_tool(
-    name: str,
-    arguments: Any,
-    db: Session | None,
-    user_id: int | None,
+    name: str, arguments: Any, db: Session | None, user_id: int | None
 ) -> str:
-    args = arguments if isinstance(arguments, dict) else {}
-    if name == "web_search":
-        return run_web_search(args)
-    fn = db_tools.REGISTRY.get(name)
-    if fn is None:
-        return f"（未知工具：{name}）"
-    if db is None or user_id is None:
-        return "（缺少使用者資料庫上下文）"
-    if name == "nearing_end_of_life":
-        try:
-            threshold = float(args.get("threshold", 0.8))
-        except (TypeError, ValueError):
-            threshold = 0.8
-        threshold = max(0.0, min(1.0, threshold))
-        return fn(db, user_id, threshold=threshold)
-    if name == "compare_shoes":
-        shoe_a = args.get("shoe_a", "")
-        shoe_b = args.get("shoe_b", "")
-        return fn(
-            db,
-            user_id,
-            shoe_a=shoe_a if isinstance(shoe_a, str) else "",
-            shoe_b=shoe_b if isinstance(shoe_b, str) else "",
-        )
-    if name in {"shoe_category_status", "shoe_usage_analytics"}:
-        shoe_name = args.get("shoe_name", "")
-        return fn(
-            db,
-            user_id,
-            shoe_name=shoe_name if isinstance(shoe_name, str) else "",
-        )
-    return fn(db, user_id)
+    return agent_tools.execute_tool(
+        name, arguments, db, user_id, web_search_fn=run_web_search
+    )
 
 
 def _execute_tool_safely(
-    name: str,
-    arguments: Any,
-    db: Session | None,
-    user_id: int | None,
+    name: str, arguments: Any, db: Session | None, user_id: int | None
 ) -> str:
-    """Keep malformed provider tool calls inside the SSE protocol."""
     try:
         return _execute_tool(name, arguments, db, user_id)
     except Exception:  # noqa: BLE001
@@ -462,17 +142,52 @@ def _execute_tool_safely(
                 rollback()
             except Exception:  # noqa: BLE001
                 pass
-        return json.dumps(
-            {
-                "tool": name,
-                "schema_version": 1,
-                "ok": False,
-                "status": "tool_execution_failed",
-                "error": "The tool could not process the supplied arguments.",
-            },
-            ensure_ascii=False,
-            separators=(",", ":"),
-        )
+        return json.dumps({
+            "tool": name,
+            "schema_version": 1,
+            "ok": False,
+            "status": "tool_execution_failed",
+            "error": "The tool could not process the supplied arguments.",
+        }, ensure_ascii=False, separators=(",", ":"))
+
+
+def _prefetch_plan(
+    query_plan: QueryPlan,
+    messages: list[dict],
+    db: Session | None,
+    user_id: int | None,
+) -> Generator[str, None, tuple[int, int, set[tuple[str, str]], list[dict[str, Any]]]]:
+    search_fails = 0
+    search_calls = 0
+    executed_calls: set[tuple[str, str]] = set()
+    search_payloads: list[dict[str, Any]] = []
+    sequence = 0
+    for query in query_plan.web_queries:
+        args = {"query": query}
+        yield _sse({"type": "tool", "name": "web_search", "args": args})
+        output = run_web_search(args)
+        yield _tool_done_event("web_search", output)
+        search_calls += 1
+        executed_calls.add(("web_search", json.dumps(args, ensure_ascii=False, sort_keys=True)))
+        payload = _search_payload(output)
+        if payload is not None:
+            search_payloads.append(payload)
+        if is_failure(output):
+            search_fails += 1
+        _append_preexecuted_tool(messages, "web_search", args, output, sequence)
+        sequence += 1
+    for tool_name in query_plan.database_tools:
+        db_args: dict[str, Any] = {}
+        yield _sse({"type": "tool", "name": tool_name, "args": db_args})
+        if db is None or user_id is None:
+            yield _sse({"type": "error", "text": "無法執行資料庫工具：缺少使用者資料庫上下文。"})
+            return search_fails, search_calls, executed_calls, search_payloads
+        output = _execute_tool_safely(tool_name, db_args, db, user_id)
+        yield _tool_done_event(tool_name, output)
+        executed_calls.add((tool_name, "{}"))
+        _append_preexecuted_tool(messages, tool_name, db_args, output, sequence)
+        sequence += 1
+    return search_fails, search_calls, executed_calls, search_payloads
 
 
 def run_agent_stream(
@@ -483,139 +198,74 @@ def run_agent_stream(
     db: Session | None = None,
     user_id: int | None = None,
 ) -> Generator[str, None, None]:
-    """串流版 agent loop，逐 token 產出 SSE 事件。
-
-    LLM 呼叫使用 streaming，token 會以 `token` SSE 事件即時送達前端。
-    若 LLM 中途呼叫工具，會發出 `reasoning_start` 事件讓前端把
-    已顯示的文字移到思考氣泡中。
-    """
     try:
         prov = llm.LLMProvider.from_str(provider)
     except llm.LLMError as exc:
         yield _sse({"type": "error", "text": str(exc)})
         yield _sse({"type": "done"})
         return
-
     if model is None:
-        models = llm.MODELS.get(prov.value, [])
-        model = models[0]["id"] if models else ""
+        available_models = llm.MODELS.get(prov.value, [])
+        model = available_models[0]["id"] if available_models else ""
 
     messages = _build_messages(history, user_message)
-    web_search_fails = 0
-    web_search_calls = 0
-    executed_calls: set[tuple[str, str]] = set()
-    search_payloads: list[dict[str, Any]] = []
     query_plan = _build_query_plan(user_message, history)
-    available_tools = (
-        db_tools.TOOL_DEFINITIONS
-        if query_plan.web_queries
-        or query_plan.database_tools
+    available_tools = db_tools.TOOL_DEFINITIONS if (
+        query_plan.web_queries or query_plan.database_tools
         or _should_offer_tools(user_message, history)
-        else None
-    )
-
-    # Execute the minimum deterministic plan before the first model call. This
-    # lets a suitability question use external facts and personal data in one
-    # response instead of asking the user for permission to query accessible data.
-    prefetch_sequence = 0
-    for query in query_plan.web_queries:
-        search_args = {"query": query}
-        yield _sse({"type": "tool", "name": "web_search", "args": search_args})
-        search_output = run_web_search(search_args)
-        yield _tool_done_event("web_search", search_output)
-        web_search_calls += 1
-        executed_calls.add((
-            "web_search",
-            json.dumps(search_args, ensure_ascii=False, sort_keys=True),
-        ))
-        payload = _search_payload(search_output)
-        if payload is not None:
-            search_payloads.append(payload)
-        if is_failure(search_output):
-            web_search_fails += 1
-        _append_preexecuted_tool(
-            messages, "web_search", search_args, search_output, prefetch_sequence
-        )
-        prefetch_sequence += 1
-
-    for tool_name in query_plan.database_tools:
-        tool_args: dict[str, Any] = {}
-        yield _sse({"type": "tool", "name": tool_name, "args": tool_args})
-        if db is None or user_id is None:
-            yield _sse({
-                "type": "error",
-                "text": "無法執行資料庫工具：缺少使用者資料庫上下文。",
-            })
-            yield _source_summary_event(search_payloads)
-            yield _sse({"type": "done"})
-            return
-        tool_output = _execute_tool_safely(tool_name, tool_args, db, user_id)
-        yield _tool_done_event(tool_name, tool_output)
-        executed_calls.add((tool_name, "{}"))
-        _append_preexecuted_tool(
-            messages, tool_name, tool_args, tool_output, prefetch_sequence
-        )
-        prefetch_sequence += 1
+    ) else None
+    prefetch = _prefetch_plan(query_plan, messages, db, user_id)
+    try:
+        while True:
+            yield next(prefetch)
+    except StopIteration as stop:
+        web_search_fails, web_search_calls, executed_calls, search_payloads = stop.value
+    if query_plan.database_tools and (db is None or user_id is None):
+        yield _source_summary_event(search_payloads)
+        yield _sse({"type": "done"})
+        return
 
     for turn in range(MAX_TURNS):
         is_last_turn = turn == MAX_TURNS - 1
         if is_last_turn:
-            messages.append({
-                "role": "user",
-                "content": (
-                    "[系統提示] 這是最後一輪，請「不要」再呼叫任何工具，"
-                    "直接根據上面已取得的跑鞋、跑量與搜尋資料，給出完整的最終建議。"
-                    "若某些市售鞋款資訊沒查到，就用你現有的資料分析並誠實說明。"
-                ),
-            })
-
-        # ── Streaming LLM call ──
+            messages.append({"role": "user", "content": (
+                "[系統提示] 這是最後一輪，請「不要」再呼叫任何工具，"
+                "直接根據上面已取得的跑鞋、跑量與搜尋資料，給出完整的最終建議。"
+                "若某些市售鞋款資訊沒查到，就用你現有的資料分析並誠實說明。"
+            )})
         full_content = ""
         seen_tool = False
-        tool_calls = []
-        native_tool_calls = []
+        tool_calls: list[dict[str, Any]] = []
         llm_result: dict[str, Any] = {}
-
         try:
             stream_gen = llm.call_llm_stream(
-                prov,
-                model,
-                messages,
-                tools=None if is_last_turn else available_tools,
+                prov, model, messages, tools=None if is_last_turn else available_tools
             )
             try:
                 while True:
                     chunk = next(stream_gen)
-                    if chunk:
-                        full_content += chunk
-
-                        if not seen_tool:
-                            # Check if we now have a complete tool call
-                            parsed = db_tools.parse_tool_calls(full_content)
-                            if parsed and not is_last_turn:
-                                seen_tool = True
-                                tool_calls = parsed
-                                yield _sse({
-                                    "type": "reasoning_start",
-                                    "text": db_tools.strip_tool_markers(full_content),
-                                })
-                                # A complete textual fallback call is enough.
-                                # Stop weak models before they repeat the same
-                                # JSON call hundreds of times in one response.
-                                close_stream = getattr(stream_gen, "close", None)
-                                if close_stream is not None:
-                                    close_stream()
-                                break
-                            else:
-                                yield _sse({"type": "token", "text": chunk})
-            except StopIteration as e:
-                # Generator returned via return value
-                llm_result = e.value or {}
+                    if not chunk:
+                        continue
+                    full_content += chunk
+                    if not seen_tool:
+                        parsed = db_tools.parse_tool_calls(full_content)
+                        if parsed and not is_last_turn:
+                            seen_tool = True
+                            tool_calls = parsed
+                            yield _sse({
+                                "type": "reasoning_start",
+                                "text": db_tools.strip_tool_markers(full_content),
+                            })
+                            close_stream = getattr(stream_gen, "close", None)
+                            if close_stream is not None:
+                                close_stream()
+                            break
+                        yield _sse({"type": "token", "text": chunk})
+            except StopIteration as stop:
+                llm_result = stop.value or {}
         except llm.LLMError as exc:
             yield _sse({"type": "error", "text": str(exc)})
             break
-        # Preserve the SSE contract if a provider SDK raises outside the
-        # normalized LLMError boundary.
         except Exception as exc:  # noqa: BLE001
             yield _sse({"type": "error", "text": f"模型呼叫發生錯誤：{exc}"})
             break
@@ -625,119 +275,72 @@ def run_agent_stream(
             seen_tool = True
             tool_calls = native_tool_calls
             yield _sse({"type": "reasoning_start", "text": full_content.strip()})
+        if not seen_tool:
+            if not full_content.strip():
+                yield _sse({"type": "token", "text": "（模型沒有回應，請再試一次或更換模型。）"})
+            break
 
-        # ── Post-stream processing ──
-        if seen_tool:
+        if native_tool_calls:
+            messages.append({
+                "role": "assistant", "content": full_content or None,
+                "tool_calls": [{
+                    "id": call["id"], "type": "function",
+                    "function": {
+                        "name": call["name"],
+                        "arguments": call.get("arguments_json")
+                        or json.dumps(call["arguments"], ensure_ascii=False),
+                    },
+                } for call in tool_calls],
+            })
+        else:
+            tool_calls = db_tools.parse_tool_calls(full_content)[:1]
+            last_close = full_content.rfind("</tool>")
+            clean_content = full_content[:last_close + len("</tool>")] if last_close != -1 else full_content
+            messages.append({"role": "assistant", "content": clean_content})
+
+        blocked_tool_call = False
+        for call in tool_calls:
+            name = call["name"]
+            arguments = call["arguments"]
+            yield _sse({"type": "tool", "name": name, "args": arguments})
+            if name in db_tools.REGISTRY and (db is None or user_id is None):
+                yield _sse({"type": "error", "text": "無法執行資料庫工具：缺少使用者資料庫上下文。"})
+                yield _sse({"type": "done"})
+                return
+            call_key = (name, json.dumps(arguments, ensure_ascii=False, sort_keys=True))
+            duplicate = call_key in executed_calls
+            limit_reached = name == "web_search" and web_search_calls >= WEB_SEARCH_CALL_LIMIT
+            if duplicate or limit_reached:
+                blocked_tool_call = True
+                output = json.dumps({
+                    "tool": name, "schema_version": 1, "ok": False,
+                    "status": "duplicate_call_blocked" if duplicate else "search_call_limit_reached",
+                    "error": "Do not call this tool again; answer with existing results.",
+                }, ensure_ascii=False, separators=(",", ":"))
+            else:
+                executed_calls.add(call_key)
+                if name == "web_search":
+                    web_search_calls += 1
+                output = _execute_tool_safely(name, arguments, db, user_id)
+            yield _tool_done_event(name, output)
+            if name == "web_search":
+                payload = _search_payload(output)
+                if payload is not None:
+                    search_payloads.append(payload)
+                if is_failure(output):
+                    web_search_fails += 1
             if native_tool_calls:
                 messages.append({
-                    "role": "assistant",
-                    "content": full_content or None,
-                    "tool_calls": [
-                        {
-                            "id": tc["id"],
-                            "type": "function",
-                            "function": {
-                                "name": tc["name"],
-                                "arguments": tc.get("arguments_json")
-                                or json.dumps(tc["arguments"], ensure_ascii=False),
-                            },
-                        }
-                        for tc in tool_calls
-                    ],
+                    "role": "tool", "tool_call_id": call["id"], "name": name,
+                    "content": output,
                 })
             else:
-                # Backward-compatible fallback for models that emit the old
-                # textual <tool> marker despite receiving native tools.
-                tool_calls = db_tools.parse_tool_calls(full_content)[:1]
-                _last_close = full_content.rfind("</tool>")
-                clean_content = (
-                    full_content[: _last_close + len("</tool>")]
-                    if _last_close != -1
-                    else full_content
-                )
-                messages.append({"role": "assistant", "content": clean_content})
-
-            blocked_tool_call = False
-            for tc in tool_calls:
-                yield _sse({"type": "tool", "name": tc["name"], "args": tc["arguments"]})
-                if (
-                    tc["name"] in db_tools.REGISTRY
-                    and (db is None or user_id is None)
-                ):
-                    yield _sse({
-                        "type": "error",
-                        "text": "無法執行資料庫工具：缺少使用者資料庫上下文。",
-                    })
-                    yield _sse({"type": "done"})
-                    return
-                call_key = (
-                    tc["name"],
-                    json.dumps(tc["arguments"], ensure_ascii=False, sort_keys=True),
-                )
-                duplicate_call = call_key in executed_calls
-                search_limit_reached = (
-                    tc["name"] == "web_search"
-                    and web_search_calls >= WEB_SEARCH_CALL_LIMIT
-                )
-                if duplicate_call or search_limit_reached:
-                    blocked_tool_call = True
-                    status = (
-                        "duplicate_call_blocked"
-                        if duplicate_call
-                        else "search_call_limit_reached"
-                    )
-                    tool_output = json.dumps({
-                        "tool": tc["name"],
-                        "schema_version": 1,
-                        "ok": False,
-                        "status": status,
-                        "error": "Do not call this tool again; answer with existing results.",
-                    }, ensure_ascii=False, separators=(",", ":"))
-                else:
-                    executed_calls.add(call_key)
-                    if tc["name"] == "web_search":
-                        web_search_calls += 1
-                    tool_output = _execute_tool_safely(
-                        tc["name"], tc["arguments"], db, user_id
-                    )
-                yield _tool_done_event(tc["name"], tool_output)
-                if tc["name"] == "web_search":
-                    payload = _search_payload(tool_output)
-                    if payload is not None:
-                        search_payloads.append(payload)
-                if tc["name"] == "web_search" and is_failure(tool_output):
-                    web_search_fails += 1
-                if native_tool_calls:
-                    messages.append({
-                        "role": "tool",
-                        "tool_call_id": tc["id"],
-                        "name": tc["name"],
-                        "content": tool_output,
-                    })
-                else:
-                    messages.append({
-                        "role": "user",
-                        "content": f"[工具 {tc['name']} 的結果]\n{tool_output}",
-                    })
-
-            if (
-                web_search_fails >= WEB_SEARCH_FAIL_LIMIT
-                or blocked_tool_call
-            ):
-                messages.append({
-                    "role": "user",
-                    "content": (
-                        "[系統提示] 工具呼叫已失敗、重複或達到上限。請**不要**再呼叫"
-                        "相同工具，直接根據前面取得的資料給出最終回答；缺少資訊時誠實說明。"
-                    ),
-                })
-            continue
-
-        # 無工具標記 → 最終回覆；token 已在串流過程中以 token 事件送出，
-        # 這裡僅處理空回覆的 fallback。
-        if not full_content.strip():
-            yield _sse({"type": "token", "text": "（模型沒有回應，請再試一次或更換模型。）"})
-        break
+                messages.append({"role": "user", "content": f"[工具 {name} 的結果]\n{output}"})
+        if web_search_fails >= WEB_SEARCH_FAIL_LIMIT or blocked_tool_call:
+            messages.append({"role": "user", "content": (
+                "[系統提示] 工具呼叫已失敗、重複或達到上限。請**不要**再呼叫"
+                "相同工具，直接根據前面取得的資料給出最終回答；缺少資訊時誠實說明。"
+            )})
 
     yield _source_summary_event(search_payloads)
     yield _sse({"type": "done"})

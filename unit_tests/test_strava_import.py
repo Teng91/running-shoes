@@ -11,7 +11,7 @@ from backend.main import app
 from backend.middleware import StravaUploadLimitMiddleware
 from backend.models import MonthlyMileage, Run, Shoe, StravaImport
 from backend.routers.reports import _local_today
-from backend.routers.runs import _parse_strava_csv
+from backend.routers.strava import _parse_strava_csv
 from unit_tests.test_api import _auth_header
 
 CSV = "活動 ID,活動日期,活動類型,活動裝備,距離\n" \
@@ -165,7 +165,7 @@ def test_strava_import_history_is_bounded(client, db, user_with_token, monkeypat
     shoe = Shoe(user_id=user.id, brand="Mizuno", model="Wave Sky 7", date="2026-01-01")
     db.add(shoe)
     db.commit()
-    monkeypatch.setattr("backend.routers.runs.MAX_STRAVA_IMPORT_HISTORY_PER_USER", 2)
+    monkeypatch.setattr("backend.routers.strava.MAX_STRAVA_IMPORT_HISTORY_PER_USER", 2)
     mapping = f'{{"Mizuno Wave Sky 7": {shoe.id}, "": null}}'
     for _ in range(3):
         assert upload(client, "/api/runs/import/strava", token, mapping).status_code == 200
@@ -314,14 +314,14 @@ def test_strava_upload_size_limit_is_bounded_before_full_read(
 ):
 
     _user, token = user_with_token
-    monkeypatch.setattr("backend.routers.runs.MAX_STRAVA_CSV_BYTES", 10)
+    monkeypatch.setattr("backend.routers.strava.MAX_STRAVA_CSV_BYTES", 10)
     response = upload(client, "/api/runs/import/strava/preview", token)
     assert response.status_code == 413
 
 
 def test_strava_parser_rejects_excess_rows_without_materializing_all(monkeypatch):
 
-    monkeypatch.setattr("backend.routers.runs.MAX_STRAVA_CSV_ROWS", 2)
+    monkeypatch.setattr("backend.routers.strava.MAX_STRAVA_CSV_ROWS", 2)
     csv_content = (
         "活動 ID,活動日期,活動類型,活動裝備,距離\n"
         "1,2026年1月1日,步行,Shoe,1000\n"
@@ -348,7 +348,7 @@ def test_strava_request_limit_rejects_before_endpoint_parsing(
         raise AssertionError("endpoint should not parse an oversized multipart body")
 
     monkeypatch.setattr(middleware, "MAX_STRAVA_REQUEST_BYTES", 10)
-    monkeypatch.setattr("backend.routers.runs._read_strava_upload", fail_if_endpoint_reads)
+    monkeypatch.setattr("backend.routers.strava._read_strava_upload", fail_if_endpoint_reads)
     response = upload(client, "/api/runs/import/strava/preview", token)
     assert response.status_code == 413
     assert response.headers["x-request-id"]

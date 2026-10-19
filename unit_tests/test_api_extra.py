@@ -21,7 +21,7 @@ from backend.main import app
 from backend.models import MonthlyMileage, Shoe
 from backend.rate_limits import _enforce_agent_rate_limit
 from backend.routers import auth as auth_routes
-from backend.routers.insights import export_shoes
+from backend.routers.exports import export_shoes
 from backend.routers.monthly import (
     create_monthly_mileage,
     delete_monthly_mileage,
@@ -686,7 +686,7 @@ def test_static_asset_and_non404_http_errors(client):
 
     service_worker = client.get("/service-worker.js")
     assert service_worker.status_code == 200
-    assert "running-shoes-shell-v10" in service_worker.text
+    assert "running-shoes-shell-v11" in service_worker.text
 
     agent_script = client.get("/app-agent.js")
     assert agent_script.status_code == 200
@@ -762,7 +762,10 @@ def test_export_defensive_empty_rows_and_unknown_direct_format(
 ):
     user, _ = user_with_token
     _add_export_shoes(db, user.id)
-    monkeypatch.setattr("backend.routers.insights.generate_shoe_rows", lambda *args, **kwargs: iter([]))
+    monkeypatch.setattr(
+        "backend.services.exports.generate_shoe_rows",
+        lambda *args, **kwargs: iter([]),
+    )
 
     csv_response = export_shoes(format="csv", mode="all", current_user=user, db=db)
     xlsx_response = export_shoes(format="xlsx", mode="all", current_user=user, db=db)

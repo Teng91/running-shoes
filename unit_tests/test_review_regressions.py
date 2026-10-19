@@ -3,7 +3,7 @@ from fastapi.testclient import TestClient
 
 from backend.database import get_db
 from backend.main import app
-from backend.routers.runs import _parse_strava_csv
+from backend.routers.strava import _parse_strava_csv
 
 
 @pytest.fixture

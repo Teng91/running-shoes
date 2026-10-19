@@ -36,24 +36,33 @@ flowchart TB
     Factory --> MonthlyRoutes[routers/monthly.py]
     Factory --> AgentRoutes[routers/agent.py]
     Factory --> ReportRoutes[routers/reports.py]
-    Factory --> Insights[routers/insights.py<br/>analytics / exports / spending]
+    Factory --> AnalyticsRoutes[routers/analytics.py]
+    Factory --> ExportRoutes[routers/exports.py]
+    Factory --> SpendingRoutes[routers/spending.py]
     Factory --> Shoes[routers/shoes.py]
     Factory --> Runs[routers/runs.py]
+    Factory --> StravaRoutes[routers/strava.py]
     Factory --> Health[routers/health.py]
     Factory --> Middleware[middleware.py]
     Factory --> Seed[seeding.py]
     Runs --> Mileage[services/mileage.py]
+    StravaRoutes --> StravaService[services/strava_imports.py]
+    StravaService --> Mileage
+    ExportRoutes --> ExportService[services/exports.py]
     AuthRoutes --> Limits[rate_limits.py]
     AgentRoutes --> Limits
     ReportRoutes --> Limits
-    AgentRoutes --> AI[agent.py]
+    AgentRoutes --> AI[agent.py<br/>runner]
+    AI --> Planner[agent_planner.py]
+    AI --> AgentTools[agent_tools.py]
+    AI --> Protocol[agent_protocol.py]
     ReportRoutes --> Reports[reports.py]
 
-    Insights --> Auth[auth.py]
-    Insights --> Analytics[analytics.py]
-    Insights --> Exporting[exporting.py]
+    AnalyticsRoutes --> Auth[auth.py]
+    AnalyticsRoutes --> Analytics[analytics.py]
+    ExportService --> Exporting[exporting.py]
     GoalRoutes --> Goals[goals.py]
-    Runs --> Strava[strava_import.py]
+    StravaService --> Strava[strava_import.py]
     AI --> Tools[tools/]
 
     Auth --> Models[models.py]
@@ -73,11 +82,49 @@ flowchart TB
 `backend/main.py` 只輸出由 `create_app()` 建立的 ASGI app，不包含 route 或歷史相容 aliases。
 `backend/app_factory.py` 建立 FastAPI、掛載 middleware／router，並從 `app.state` 取得 settings、engine、
 session factory 與 frontend path，使測試可完整注入隔離環境。
-auth、goals、monthly、agent、reports、insights、shoes、runs 與 health 都是獨立垂直切片；runs 把跨資料表的里程
-同步委派給 framework-independent service。啟動 migration 位於 `backend/migrations.py` 並寫入
+auth、goals、monthly、agent、reports、analytics、exports、spending、shoes、runs、strava 與 health 都是獨立垂直切片；runs 與 strava 把跨資料表的里程
+同步委派給 framework-independent service，exports router 只負責 HTTP response mapping。啟動 migration 位於 `backend/migrations.py` 並寫入
 schema version。router 不能反向 import `backend.main`，service 也不能 import FastAPI 或 router。
 
-## 4. 模組責任與依賴方向
+## 4. 前端 module 與載入順序
+
+前端刻意維持無 bundler 的 plain scripts；`index.html` 的順序就是可執行的 dependency graph，
+並由前端 regression test 與 Service Worker asset list 鎖定。
+
+```mermaid
+flowchart LR
+    HTML[index.html] --> Boot[app-boot.js<br/>啟動狀態]
+    HTML --> State[app-state.js<br/>共享 state]
+    State --> API[app-api.js<br/>HTTP adapters]
+    API --> AuthUI[app-auth.js<br/>session lifecycle]
+    AuthUI --> Core[app-core.js<br/>shell / theme / loadData]
+    Core --> AgentUI[app-agent.js]
+    Core --> ReportsUI[app-reports.js]
+    Core --> RunCRUD[app-runs.js]
+    RunCRUD --> StravaUI[app-strava.js]
+    RunCRUD --> RunInsights[app-run-insights.js]
+    Core --> ShoesUI[app-shoes.js]
+    Core --> Dashboard[app-dashboard.js]
+    Core --> Monthly[app-monthly.js]
+    Core --> Charts[app-charts.js]
+    Core --> Spending[app-spending.js]
+    Core --> Bootstrap[app.js<br/>init / dialog wiring]
+    AgentUI --> Bootstrap
+    ReportsUI --> Bootstrap
+    StravaUI --> Bootstrap
+    RunInsights --> Bootstrap
+    ShoesUI --> Bootstrap
+    Dashboard --> Bootstrap
+    Monthly --> Bootstrap
+    Charts --> Bootstrap
+    Spending --> Bootstrap
+```
+
+`app-state.js` 只保存共享 state 與常數；`app-api.js` 是 transport adapter；`app-auth.js` 管理 session
+transition；`app-core.js` 組合畫面資料但不承擔 feature-specific rendering。跑步 CRUD、Strava 與洞察分別位於
+三個 module，降低修改匯入功能時誤動月曆或編輯流程的風險。
+
+## 5. 模組責任與依賴方向
 
 | 模組 | 責任 | 可以依賴 | 不應依賴 |
 | --- | --- | --- | --- |
@@ -92,33 +139,62 @@ schema version。router 不能反向 import `backend.main`，service 也不能 i
 | `backend/analytics.py`、`goals.py`、`reports.py` | 可重用的業務計算與 use case | models、LLM adapter（僅 AI use case） | FastAPI app、frontend |
 | `backend/exporting.py`、`strava_import.py` | 輸入／輸出轉換 | models 或純資料 | FastAPI app |
 | `backend/tools/` | Agent 可使用的受信任工具 | database、models | route 與 UI state |
+| `backend/agent.py` | LLM／tool loop runner | planner、tools、protocol、LLM adapter | HTTP response、frontend state |
+| `backend/agent_planner.py` | deterministic query plan | Python stdlib | database、FastAPI、LLM network |
+| `backend/agent_tools.py` | user-scoped tool dispatch | trusted tools、database session | routers、SSE serialization |
+| `backend/agent_protocol.py` | SSE event 與來源摘要 serialization | search result contract | database、FastAPI |
 | `backend/database.py`、`models.py` | persistence 與 schema | SQLAlchemy | router、frontend |
 
 依賴方向由入口往內：`main → app factory → router → domain/service → persistence/adapters`。CI 的
 `architecture-check` 會阻止 router 反向 import `backend.main`、service 穿透 HTTP layer，並檢查
 API method/path 重複、OpenAPI path contract、`main.py` route 數與最小 entry-point imports。
 
-## 5. 關鍵流程：跑鞋匯出
+## 6. 關鍵流程：跑鞋匯出
 
 ```mermaid
 sequenceDiagram
     actor U as 使用者
-    participant R as insights router
+    participant R as exports router
     participant A as auth dependency
     participant D as SQLite
-    participant E as exporting service
+    participant E as services/exports.py
 
     U->>R: GET /api/export?format=xlsx&mode=active
     R->>A: 驗證 JWT
     A-->>R: current_user
-    R->>D: 只查 current_user.id 的未刪除鞋款
-    D-->>R: shoes
-    R->>E: 產生安全欄位與檔名
-    E-->>R: rows / filename
-    R-->>U: StreamingResponse
+    R->>E: user_id / format / mode
+    E->>D: 只查 current_user.id 的未刪除鞋款
+    D-->>E: shoes
+    E-->>R: bytes / media type / filename
+    R-->>U: Response
 ```
 
-## 6. 不可破壞的品質屬性
+## 7. PWA 與 Fly runtime topology
+
+```mermaid
+flowchart TB
+    Browser[Browser / installed PWA]
+    SW[Service Worker<br/>cache-first static assets<br/>network-first navigation refresh]
+    Shell[(App shell cache v11)]
+    FlyProxy[Fly Proxy / HTTPS]
+    Machine[Fly Machine<br/>FastAPI container]
+    Volume[(Fly Volume<br/>SQLite)]
+    External[OpenRouter / Search]
+
+    Browser --> SW
+    SW --> Shell
+    SW -->|navigation + uncached assets| FlyProxy
+    Browser -->|/api JSON / SSE| FlyProxy
+    FlyProxy --> Machine
+    Machine --> Volume
+    Machine --> External
+```
+
+Service Worker 不攔截 `/api/`，因此資料與 SSE 永遠走網路；靜態 module、CSS、vendor assets 與離線頁面
+屬於 app shell。Navigation 可先回傳 cache 讓 loading 畫面立即出現，再背景刷新首頁；Fly Machine 喚醒
+期間使用者不會只看到空白頁。SQLite 永遠位於掛載 volume，不包含在 app shell 或 container image。
+
+## 8. 不可破壞的品質屬性
 
 - **帳號隔離**：任何 user-owned table 查詢都必須包含 `user_id`。
 - **交易一致性**：跑步日誌與鞋款／月跑量的里程差額在同一交易內完成。
@@ -127,13 +203,14 @@ sequenceDiagram
 - **確定性測試**：測試使用暫存／記憶體資料庫，LLM 與搜尋必須 mock。
 - **可部署性**：維持單一 container 與 SQLite volume；拆分模組不等於拆分服務。
 
-## 7. 演進順序
+## 9. 演進順序
 
 1. **已完成**：前端拆出 AI、月報、跑步與跑鞋互動；後端建立 insights／shoes／runs／health routers。
 2. **已完成**：共用里程交易整理成 service，startup migration 移到有版本的 migration 模組。
 3. **已完成**：抽出 auth／rate-limit 與 agent／reports／goals／monthly routers，main route budget 降為 0。
 4. **已完成**：前端再依 core、dashboard、monthly、charts、spending、bootstrap 拆分，加入真實瀏覽器 CRUD E2E。
 5. **已完成**：導入 app factory 與 typed settings，注入 lifespan dependencies，移除 `backend.main` route aliases。
+6. **已完成**：拆分 frontend boot／state／API／auth 與 run／Strava／insights modules；拆分 backend insights、Strava transaction 與 Agent planner／tools／protocol。
 
 每一階段都先以既有 API regression tests 鎖住行為，再移動程式碼；不在同一個 commit 同時
 改變 endpoint contract 與模組邊界。
