@@ -72,6 +72,7 @@ running-shoes/
 │   ├── agent_protocol.py # SSE 與搜尋來源摘要 contract
 │   ├── reports.py        # AI 月度跑步報告（後端算統計 + one-shot LLM 串流 + 報告留存）
 │   ├── goals.py          # 個人月／年跑量目標與達成率計算
+│   ├── forecasting.py    # 共用退役預估與 user-scoped 批次查詢
 │   ├── analytics.py      # 首頁洞察與單鞋使用分析
 │   ├── strava_import.py  # Strava CSV 解析、篩選、去重與預覽統計
 │   ├── exporting.py      # CSV／XLSX 安全匯出列與檔名
@@ -87,6 +88,7 @@ running-shoes/
 │   ├── app-state.js      # 共用記憶體 state 與 presentation constants
 │   ├── app-api.js        # HTTP／upload helpers
 │   ├── app-auth.js       # 登入、註冊、登出與帳號切換
+│   ├── app-streams.js    # 共用 SSE 解碼、取消與完成狀態
 │   ├── app-core.js       # Shell、主題、分頁與聚合資料載入
 │   ├── app-dashboard.js  # 首頁卡片、提醒與跑鞋表格
 │   ├── app-monthly.js    # 月跑量、目標與匯出互動
@@ -228,6 +230,7 @@ LLM_MAX_OUTPUT_TOKENS=4096
 - **購鞋資訊集中管理**：現役／退役跑鞋清單聚焦使用狀態；尺寸、買價、原價、折數統一在「支出 → 支出明細」查看。新增／編輯跑鞋仍保留原有尺寸與價格欄位，不刪除既有資料
 - **鞋櫃類別覆蓋分析**：判斷某雙鞋退役後其所有用途是否仍有其他現役鞋覆蓋，避免不必要地補鞋 (支援多用途鞋款)
 - **智慧試算**：自動計算每 km／每次穿著成本、折數、生命進度，並依近 90 天實際使用預估退役日期
+- **一致的退役預估**：跑鞋清單、時間軸及單鞋分析共用後端預估；有近 90 天紀錄時使用實際月均，否則回退計畫月跑量。清單日期提示及分析卡片會標示依據；無法預估或已達壽命時不虛構日期
 - **圖表視覺化**：生命進度條、每 km 成本比較、退役時間軸、月跑量佔比（圓餅圖直接標示公里數與百分比，Chart.js）
 - **亮色 / 暗色主題切換**：右上角一鍵切換，全域 UI 元素與所有 Chart.js 圖表（網格線、刻度文字、數據標籤）皆自動對應色調，偏好透過 `localStorage` 自動記憶
 - **安全的里程統計**：跑鞋與月跑量都明確區分「逐筆跑步日誌」與「歷史／手動調整」，手動總數不能低於日誌合計；所有新輸入的里程與金額統一保存至小數點後兩位
@@ -239,6 +242,8 @@ LLM_MAX_OUTPUT_TOKENS=4096
 - **資料匯出與備份**：跑鞋可匯出 **XLSX / CSV**，並可下載不含密碼或 token 的完整 JSON 帳號備份（跑鞋、日誌、月跑量、目標、月報與 Strava 匯入摘要）
 - **AI 跑鞋推薦助手**：依你的實際資料給換鞋與選鞋建議（需設定 OpenRouter API Key），可從本日熱門、免費且支援工具呼叫的模型中選擇
 - **AI 月度跑步報告**：可自行選擇本日免費模型，一鍵產生指定月份的跑步報告（跑量趨勢、鞋款狀態、退役提醒與下月建議），報告自動保存、可隨時回看，不需重打 LLM
+- **安全的編輯與串流**：跑步／月跑量視窗保存開啟時的 ID 與版本；重新載入後仍由後端檢查衝突。AI／月報共用串流處理，AI 中斷會保留可見內容、提示重試，不把半截答案放進歷史
+- **按需圖表**：只建立或更新目前分頁的圖表；未變更的分頁可重用，資料或主題更新後在切入時重繪，年度跑步資料只在月跑量分頁需要時載入
 - **個人跑量目標**：預設自 2026 年起每月 125 km，年度目標自動以月目標 × 12 計算；目標、首頁與 AI 月報統一以逐筆跑步日誌計算，可切換月份查看達成率與「截至所選月份」年度進度
 - **多使用者隔離**：每人資料完全獨立，支援註冊/登入/改密碼；切換帳號會清除洞察快取並取消 AI 串流，過期請求不會影響新登入
 
@@ -419,7 +424,7 @@ Playwright／Chromium／WebKit 齊全時，也會執行版面測試。
 避免每次停止都重跑。Hook 不會呼叫其他模型、外部 API，或傳送提示、diff、原始碼與測試輸出。
 GitHub Actions 仍會在 push／pull request 執行 `verify`，並在獨立工作中安裝 Chromium／WebKit、跑完完整版面矩陣與真實 CRUD E2E；Dependabot 每週檢查 Python 與 GitHub Actions 更新。
 
-本次驗證基線為 Python **353 passed**、前端回歸測試 **41 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
+本次驗證基線為 Python **360 passed**、前端回歸測試 **48 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
 版面檢查涵蓋 WebKit／Chromium、亮／暗模式與 7 組直橫向尺寸，共 28 組設定，檢查五個分頁、表單、圖表、彈窗及空資料狀態。
 
 `docs-check` 會從 pytest collection、前端測試檔、Agent tool registry、Playwright 測試矩陣與實際檔案系統核對上述數字及 harness 路徑。新增測試、工具或版面設定卻忘記同步 README 時，`verify` 和 GitHub Actions 會直接失敗。

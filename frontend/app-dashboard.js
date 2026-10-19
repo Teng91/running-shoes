@@ -1,18 +1,13 @@
 // Dashboard calculations, cards, alerts, and shoe tables.
 function calc(shoe) {
-  const { price, orig_price, mileage, expected_mileage, monthly_km } = shoe;
+  const { price, orig_price, mileage, expected_mileage } = shoe;
   const discount = orig_price > 0 ? price / orig_price : 0;
   const costPerKm = mileage > 0 ? price / mileage : null;
   const expectedCost = expected_mileage > 0 ? price / expected_mileage : 0;
   const lifeProgress = expected_mileage > 0 ? mileage / expected_mileage : 0;
   const remainingMileage = Math.max(0, expected_mileage - mileage);
-  const remainingMonths = monthly_km > 0 ? remainingMileage / monthly_km : null;
-  const today = new Date();
-  let retireDate = null;
-  if (remainingMonths !== null) {
-    const remainDays = remainingMonths * 30;
-    retireDate = new Date(today.getTime() + remainDays * 86400000);
-  }
+  const remainingMonths = shoe.forecast_monthly_km > 0 ? remainingMileage / shoe.forecast_monthly_km : null;
+  const retireDate = shoe.forecast_retirement_date ? new Date(shoe.forecast_retirement_date + 'T00:00:00') : null;
   return { discount, costPerKm, expectedCost, lifeProgress, remainingMileage, remainingMonths, retireDate };
 }
 
@@ -44,21 +39,8 @@ function render() {
   shoes.sort(byDate);
   retiredShoes.sort(byDate);
 
-  renderCards();
-  renderAlerts();
-  renderCategorySummary();
-  renderTable();
-  renderRetiredTable();
-  renderMonthlyTable();
-  populateRunShoeSelects();
-  renderRunLog();
-  if (typeof Chart !== 'undefined') {
-    renderCharts();
-    renderMonthlyCharts();
-    if (document.querySelector('.tab-panel.active').dataset.panel === 'spending') {
-      renderSpendingCharts();
-    }
-  }
+  invalidatePanels();
+  renderActivePanel();
 }
 
 function renderCards() {
@@ -167,7 +149,7 @@ function renderTable() {
       <td>${fmtCostPerKm(c.expectedCost)}</td>
       <td style="color:${pc}">${fmtPct(c.lifeProgress)}</td>
       <td class="editable" ondblclick="inlineEditRow(shoes, ${i}, 'monthly_km', this)">${s.monthly_km}</td>
-      <td>${fmtDate(c.retireDate)}</td>
+      <td title="${s.forecast_source === 'recent_90_days' ? '依近 90 天實際使用' : '依計畫月跑量'}">${fmtDate(c.retireDate)}</td>
       <td>${esc(shoeCategories(s).join(', ') || '未分類')}</td>
       <td>
         <button class="btn btn-sm" onclick="openShoeAnalytics(${s.id})">分析</button>

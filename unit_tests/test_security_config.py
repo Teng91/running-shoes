@@ -23,6 +23,7 @@ FRONTEND_SOURCE = "\n".join(
         "app-state.js",
         "app-api.js",
         "app-auth.js",
+        "app-streams.js",
         "app-core.js",
         "app-agent.js",
         "app-reports.js",
@@ -102,7 +103,7 @@ def test_agent_frontend_handles_http_auth_and_non_sse_errors_before_streaming():
     fetch_start = source.index(
         "const res = await authenticatedFetch(API_BASE + '/agent/chat/stream'"
     )
-    reader_start = source.index("const reader = res.body.getReader()", fetch_start)
+    reader_start = source.index("readJsonEventStream(res", fetch_start)
     guarded_section = source[fetch_start:reader_start]
 
     adapter = (PROJECT_ROOT / "frontend/app-api.js").read_text(encoding="utf-8")
@@ -111,9 +112,11 @@ def test_agent_frontend_handles_http_auth_and_non_sse_errors_before_streaming():
     assert guard.index("requireAuthSession(session);") < guard.index("response.status === 401")
     assert "clearAuth();" in guard
     assert "showLoginView();" in guard
-    assert "!res.ok" in guarded_section
-    assert "text/event-stream" in guarded_section
-    assert "!res.body" in guarded_section
+    assert "isCurrentRequest()" in guarded_section
+    stream_adapter = (PROJECT_ROOT / "frontend/app-streams.js").read_text(encoding="utf-8")
+    assert stream_adapter.index("!response.ok") < stream_adapter.index("response.body.getReader()")
+    assert "text/event-stream" in stream_adapter
+    assert "!response.body" in stream_adapter
 
 
 def test_agent_frontend_distinguishes_failed_tools_from_completed_tools():

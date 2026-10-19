@@ -2,6 +2,21 @@
 
 本專案的重要變更依 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.1.0/) 分類，版本號遵循 [Semantic Versioning](https://semver.org/lang/zh-TW/)。完整部署說明另見各版本的 GitHub Release。
 
+## [3.2.1] - 2026-10-20
+
+### Fixed
+
+- 跑步／月跑量編輯保存原始 ID、版本及 session，避免資料重新載入後修改錯筆或覆蓋較新內容；提交鎖與回應更新以視窗為單位。
+- AI 串流只有成功 done 才保存完整對話；錯誤、提前 EOF 或連線中斷保留可見內容並提供重試，不污染歷史。
+- 清單、退役時間軸與單鞋分析共用後端預估及來源，批次查詢不產生逐鞋 N+1。
+
+### Changed
+
+- 抽出 `app-streams.js`，共用認證 SSE 檢查、解碼、取消及 terminal state。
+- 圖表按 active panel 載入、快取及失效，資料／主題更新不重畫隱藏分頁；年度跑步資料按需載入。
+- PWA cache v18、asset revision `3.2.1` 納入新 module，避免混用舊版 shell。
+- 新增 SPEC-012、模組圖、回歸追蹤矩陣與 deterministic Node／SQLite／雙引擎 browser 測試。
+
 ## [3.2.0] - 2026-10-19
 
 ### Changed
@@ -72,6 +87,7 @@
 
 - 強化資料載入、API 邊界、工程 harness 與架構驗證。
 
+[3.2.1]: https://github.com/Teng91/running-shoes/releases/tag/v3.2.1
 [3.2.0]: https://github.com/Teng91/running-shoes/releases/tag/v3.2.0
 [3.1.0]: https://github.com/Teng91/running-shoes/releases/tag/v3.1.0
 [2.14.0]: https://github.com/Teng91/running-shoes/releases/tag/v2.14.0

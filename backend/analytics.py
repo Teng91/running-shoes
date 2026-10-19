@@ -9,6 +9,7 @@ from datetime import date, datetime, timedelta, timezone
 from sqlalchemy.orm import Session
 
 from backend import goals, models
+from backend.forecasting import retirement_forecast
 
 
 def _round(value: float | None, digits: int = 2) -> float:
@@ -47,19 +48,7 @@ def shoe_analytics(db: Session, user_id: int, shoe_id: int, *, today: date | Non
     cutoff_90 = (as_of - timedelta(days=89)).isoformat()
     km_30 = _round(sum(run.km for run in runs if cutoff_30 <= run.date <= as_of.isoformat()))
     km_90 = _round(sum(run.km for run in runs if cutoff_90 <= run.date <= as_of.isoformat()))
-    actual_monthly_rate = _round(km_90 / 90 * 30.4375) if km_90 > 0 else 0.0
-    remaining = _round(max(0, shoe.expected_mileage - shoe.mileage))
-    forecast_rate = actual_monthly_rate or _round(shoe.monthly_km)
-    forecast_source = "recent_90_days" if actual_monthly_rate > 0 else "planned_monthly_km"
-    forecast_date = None
-    if remaining > 0 and forecast_rate > 0:
-        forecast_days = round(remaining / forecast_rate * 30.4375)
-        try:
-            forecast_date = (as_of + timedelta(days=forecast_days)).isoformat()
-        except (OverflowError, ValueError):
-            # Existing databases may contain values created before practical
-            # API bounds were introduced.  Analytics must still be readable.
-            forecast_date = None
+    forecast = retirement_forecast(shoe, km_90, as_of)
 
     monthly: dict[tuple[int, int], dict[str, float | int]] = defaultdict(
         lambda: {"km": 0.0, "count": 0}
@@ -93,14 +82,14 @@ def shoe_analytics(db: Session, user_id: int, shoe_id: int, *, today: date | Non
             "logged_mileage_km": metrics["km"],
             "historical_adjustment_km": _round(shoe.baseline_mileage),
             "expected_mileage_km": _round(shoe.expected_mileage),
-            "remaining_mileage_km": remaining,
+            "remaining_mileage_km": forecast["remaining_mileage_km"],
             "usage_percent": (
                 _round(shoe.mileage / shoe.expected_mileage * 100, 1)
                 if shoe.expected_mileage > 0 else None
             ),
-            "forecast_retirement_date": forecast_date,
-            "forecast_monthly_km": forecast_rate,
-            "forecast_source": forecast_source,
+            "forecast_retirement_date": forecast["forecast_retirement_date"],
+            "forecast_monthly_km": forecast["forecast_monthly_km"],
+            "forecast_source": forecast["forecast_source"],
         },
         "usage": {
             **metrics,
@@ -108,7 +97,7 @@ def shoe_analytics(db: Session, user_id: int, shoe_id: int, *, today: date | Non
             "last_run_date": runs[-1].date if runs else None,
             "km_30_days": km_30,
             "km_90_days": km_90,
-            "actual_monthly_km_90_days": actual_monthly_rate,
+            "actual_monthly_km_90_days": forecast["actual_monthly_km_90_days"],
             "cost_per_km": _round(shoe.price / shoe.mileage) if shoe.mileage > 0 else None,
             "cost_per_wear": _round(shoe.price / len(runs)) if runs else None,
         },

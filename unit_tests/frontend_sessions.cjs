@@ -42,10 +42,10 @@ module.exports = async function checkSessionIsolation(browser, baseUrl) {
       check(dashboardAnalyticsCache.size === 0, 'late A analytics cannot refill cache');
 
       setAuth('synthetic-A', 'user-A');
-      let oldSignal, oldStream;
+      let oldSignal, oldStream, oldCancelled = false;
       window.fetch = async (_, options) => {
         oldSignal = options.signal;
-        return new Response(new ReadableStream({ start(controller) { oldStream = controller; } }), {
+        return new Response(new ReadableStream({ start(controller) { oldStream = controller; }, cancel() { oldCancelled = true; } }), {
           headers: { 'Content-Type': 'text/event-stream' },
         });
       };
@@ -69,8 +69,10 @@ module.exports = async function checkSessionIsolation(browser, baseUrl) {
       const token = text => new TextEncoder().encode(`data: ${JSON.stringify({ type: 'token', text })}\n\n`);
       // Deliberately ignore cancellation in the fake transport: generation checks
       // must protect B even if A's stream still resolves after its signal aborts.
-      oldStream.enqueue(token('private answer A'));
-      oldStream.close();
+      if (!oldCancelled) {
+        oldStream.enqueue(token('private answer A'));
+        oldStream.close();
+      }
       await oldChat;
       check(input.disabled, 'old completion cannot unlock the new chat');
       check(agentHistory.length === 0, 'old completion cannot refill history');
@@ -78,6 +80,7 @@ module.exports = async function checkSessionIsolation(browser, baseUrl) {
       check(!document.querySelector('.agent-retry-btn'), 'old completion cannot add retry UI');
       check(!document.getElementById('agent-messages').textContent.includes('private'), 'no A chat remains');
       newStream.enqueue(token('answer B'));
+      newStream.enqueue(new TextEncoder().encode('data: {"type":"done"}\n\n'));
       newStream.close();
       await newChat;
       check(!input.disabled, 'new chat completes normally');
