@@ -46,6 +46,17 @@ async function stopProcess(processHandle) {
   if (processHandle.exitCode === null) processHandle.kill('SIGKILL');
 }
 
+async function assertPurchaseDetails(page, status) {
+  await page.locator('.tab[data-tab="spending"]').click();
+  const row = page.locator('#spending-table tr').filter({ hasText: 'Browser Runner v2' });
+  await row.getByText('US 9.5/27.5cm', { exact: true }).waitFor();
+  assert.equal(await row.locator('td').count(), 9);
+  assert.equal(await row.locator('td').nth(4).textContent(), '$2,800');
+  assert.equal(await row.locator('td').nth(5).textContent(), '$5,000');
+  assert.equal(await row.locator('td').nth(6).textContent(), '56.0%');
+  assert.equal(await row.locator('td').nth(8).textContent(), status);
+}
+
 async function run() {
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'running-shoes-e2e-'));
   const databasePath = path.join(tempRoot, 'shoes.db');
@@ -101,6 +112,7 @@ async function run() {
     await page.locator('#f-size').fill('US 9');
     await page.locator('#f-price').fill('2500');
     await page.locator('#f-orig').fill('4000');
+    await page.locator('#f-mileage').fill('40');
     await page.locator('#f-expected').fill('800');
     await page.locator('#modal').getByRole('button', { name: '儲存' }).click();
     await page.locator('#modal').waitFor({ state: 'hidden' });
@@ -109,8 +121,15 @@ async function run() {
     const shoeRow = page.locator('#shoe-table tr').filter({ hasText: 'Browser Runner' });
     await shoeRow.getByRole('button', { name: '編輯' }).click();
     await page.locator('#f-model').fill('Browser Runner v2');
+    await page.locator('#f-size').fill('US 9.5/27.5cm');
+    await page.locator('#f-price').fill('2800');
+    await page.locator('#f-orig').fill('5000');
     await page.locator('#modal').getByRole('button', { name: '儲存' }).click();
     await page.locator('#shoe-table').getByText('Browser Runner v2', { exact: true }).waitFor();
+    assert.equal(await page.locator('#shoe-table tr').first().locator('td').count(), 12);
+    assert.equal(await page.locator('#shoe-table tr').first().locator('td').nth(3).textContent(), '40', 'editing purchase details preserves existing mileage');
+    assert.equal(await page.locator('#shoe-table').getByText('US 9.5/27.5cm', { exact: true }).count(), 0);
+    await assertPurchaseDetails(page, '使用中');
 
     await page.locator('.tab[data-tab="runs"]').click();
     await page.locator('#run-date').fill(today);
@@ -133,6 +152,8 @@ async function run() {
     await page.locator('#login-password').fill(password);
     await page.locator('#login-form').getByRole('button', { name: '登入' }).click();
     await page.locator('#run-table').getByText('7.25 km', { exact: true }).waitFor();
+    await assertPurchaseDetails(page, '使用中');
+    await page.locator('.tab[data-tab="runs"]').click();
 
     await page.locator('#run-table tr').filter({ hasText: '7.25 km' }).getByRole('button', { name: '編輯' }).click();
     await page.locator('#run-modal').getByRole('button', { name: '刪除' }).click();
@@ -141,8 +162,16 @@ async function run() {
     await page.locator('.tab[data-tab="shoes"]').click();
     const updatedShoeRow = page.locator('#shoe-table tr').filter({ hasText: 'Browser Runner v2' });
     await updatedShoeRow.getByRole('button', { name: '編輯' }).click();
+    await page.locator('#btn-move').click();
+    await page.locator('#retired-table').getByText('Browser Runner v2', { exact: true }).waitFor();
+    assert.equal(await page.locator('#retired-table tr').first().locator('td').count(), 10);
+    await assertPurchaseDetails(page, '已退役');
+    await page.locator('.tab[data-tab="shoes"]').click();
+    await page.locator('#retired-table tr').filter({ hasText: 'Browser Runner v2' }).getByRole('button', { name: '編輯' }).click();
     await page.locator('#modal').getByRole('button', { name: '刪除' }).click();
-    await page.locator('#shoe-table').getByText('Browser Runner v2', { exact: true }).waitFor({ state: 'detached' });
+    await page.locator('#retired-table').getByText('Browser Runner v2', { exact: true }).waitFor({ state: 'detached' });
+    await page.locator('.tab[data-tab="spending"]').click();
+    await page.locator('#spending-table').getByText('Browser Runner v2', { exact: true }).waitFor({ state: 'detached' });
 
     assert.deepEqual(pageErrors, [], 'browser JavaScript errors');
     assert.ok(fs.existsSync(databasePath), 'FastAPI used the isolated temporary database');

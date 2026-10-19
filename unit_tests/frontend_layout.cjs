@@ -32,6 +32,18 @@ async function assertLayout(page, label) {
     const problems = [];
     const visible = e => e.getClientRects().length && getComputedStyle(e).visibility !== 'hidden';
     if (document.documentElement.scrollWidth > innerWidth + 1) problems.push('page overflow');
+    for (const [id, expected] of [['shoe-table', 12], ['retired-table', 10], ['spending-table', 9]]) {
+      const tbody = document.getElementById(id);
+      if (!visible(tbody.closest('table'))) continue;
+      const headers = [...tbody.closest('table').querySelectorAll('thead th')].map(th => th.textContent);
+      if (headers.length !== expected) problems.push(`${id} header count`);
+      if (id === 'spending-table') {
+        if (headers.slice(3, 7).join('/') !== '尺寸/買價/原價/折數') problems.push('purchase columns missing from spending');
+      } else if (['尺寸', '買價', '原價', '折數'].some(label => headers.includes(label))) {
+        problems.push('purchase columns remain on shoes');
+      }
+      for (const row of tbody.rows) if (row.cells.length !== expected) problems.push(`${id} cells do not align with headers`);
+    }
     for (const e of document.querySelectorAll('.form-group input, .form-group select, .form-group textarea')) {
       if (!visible(e)) continue;
       const box = e.getBoundingClientRect(), parent = e.parentElement.getBoundingClientRect();
@@ -185,6 +197,9 @@ async function run(engine, name) {
             wrapper.scrollLeft = 0;
           }));
           if (screenshots && width === 390) await page.screenshot({ path: path.join(screenshots, `${name}-${theme}-${tab}.png`), fullPage: true });
+          if (screenshots && width === 1440 && ['shoes', 'spending'].includes(tab)) {
+            await page.screenshot({ path: path.join(screenshots, `${name}-${theme}-${tab}-desktop.png`), fullPage: true });
+          }
           if (screenshots && width === 390 && tab === 'runs') {
             await page.locator('.run-metrics').screenshot({ path: path.join(screenshots, `${name}-${theme}-run-metrics.png`) });
             await page.evaluate(() => window.scrollTo(0, 0));

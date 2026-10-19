@@ -124,6 +124,11 @@ flowchart LR
 transition；`app-core.js` 組合畫面資料但不承擔 feature-specific rendering。跑步 CRUD、Strava 與洞察分別位於
 三個 module，降低修改匯入功能時誤動月曆或編輯流程的風險。
 
+依 [SPEC-011](specs/011-shoe-purchase-details-in-spending.md)，`app-dashboard.js` 的現役／退役表格
+只呈現使用指標與操作；尺寸、買價、原價、折數集中由 `app-spending.js` 顯示。
+兩者仍使用同一份 user-scoped shoe state，`app-shoes.js` 的新增／編輯表單保留完整欄位；
+此為呈現責任調整，不拆開資料模型，也不改變 API、資料儲存或匯出契約。
+
 帳號生命週期遵循 [SPEC-010](specs/010-session-and-restore-safety.md)：`app-auth.js` 提供
 generation/token snapshot，`app-api.js` 的 `authenticatedFetch` 與 `readAuthenticatedBody` 在回應及
 body 讀取後驗證 snapshot。過期 session 拋出 `AbortError`，只有目前 session 的 401 可以登出。
@@ -198,7 +203,7 @@ sequenceDiagram
 flowchart TB
     Browser[Browser / installed PWA]
     SW[Service Worker<br/>cache-first static assets<br/>network-first navigation refresh]
-    Shell[(App shell cache v16)]
+    Shell[(App shell cache v17)]
     FlyProxy[Fly Proxy / HTTPS]
     Machine[Fly Machine<br/>FastAPI container]
     Volume[(Fly Volume<br/>SQLite)]

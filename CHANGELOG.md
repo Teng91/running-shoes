@@ -2,6 +2,19 @@
 
 本專案的重要變更依 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.1.0/) 分類，版本號遵循 [Semantic Versioning](https://semver.org/lang/zh-TW/)。完整部署說明另見各版本的 GitHub Release。
 
+## [3.2.0] - 2026-10-19
+
+### Changed
+
+- 現役與退役跑鞋清單移除尺寸、買價、原價、折數四欄，保留使用指標與分析／編輯操作。
+- 支出明細新增尺寸，集中呈現購鞋資訊；既有資料、編輯表單、匯出及成本計算保持不變。
+- 無尺寸或無原價時以「—」呈現，不再顯示無意義的「—%」。
+- 靜態資產版本更新為 3.2.0，PWA app shell cache 更新為 v17。
+
+### Documentation
+
+- 新增 SPEC-011，更新呈現責任說明、README、測試矩陣及欄位／資料持續性回歸測試。
+
 ## [3.1.0] - 2026-10-19
 
 ### Fixed
@@ -59,6 +72,7 @@
 
 - 強化資料載入、API 邊界、工程 harness 與架構驗證。
 
+[3.2.0]: https://github.com/Teng91/running-shoes/releases/tag/v3.2.0
 [3.1.0]: https://github.com/Teng91/running-shoes/releases/tag/v3.1.0
 [2.14.0]: https://github.com/Teng91/running-shoes/releases/tag/v2.14.0
 [2.13.1]: https://github.com/Teng91/running-shoes/releases/tag/v2.13.1
