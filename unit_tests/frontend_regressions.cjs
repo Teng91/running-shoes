@@ -2,6 +2,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
+const path = require('node:path');
 const vm = require('node:vm');
 const htmlSource = fs.readFileSync('frontend/index.html', 'utf8');
 const scriptPaths = [
@@ -34,29 +35,20 @@ test('PWA metadata, local dependencies and service worker registration are prese
   assert.match(source, /src="\/vendor\/marked\.min\.js"/);
   assert.doesNotMatch(source, /cdn\.jsdelivr\.net/);
   const serviceWorker = fs.readFileSync('frontend/service-worker.js', 'utf8');
+  const assetVersion = serviceWorker.match(/APP_ASSET_VERSION = '([^']+)'/)?.[1];
+  assert.ok(assetVersion, 'service worker declares an application asset version');
   assert.match(serviceWorker, /'\/vendor\/chart\.umd\.min\.js'/);
   assert.match(serviceWorker, /'\/vendor\/marked\.min\.js'/);
-  assert.match(serviceWorker, /'\/app-agent\.js'/);
-  assert.match(serviceWorker, /'\/app-boot\.js'/);
-  assert.match(serviceWorker, /'\/app-state\.js'/);
-  assert.match(serviceWorker, /'\/app-api\.js'/);
-  assert.match(serviceWorker, /'\/app-auth\.js'/);
-  assert.match(serviceWorker, /'\/app-core\.js'/);
-  assert.match(serviceWorker, /'\/app-reports\.js'/);
-  assert.match(serviceWorker, /'\/app-runs\.js'/);
-  assert.match(serviceWorker, /'\/app-strava\.js'/);
-  assert.match(serviceWorker, /'\/app-run-insights\.js'/);
-  assert.match(serviceWorker, /'\/app-shoes\.js'/);
-  assert.match(serviceWorker, /'\/app-dashboard\.js'/);
-  assert.match(serviceWorker, /'\/app-monthly\.js'/);
-  assert.match(serviceWorker, /'\/app-charts\.js'/);
-  assert.match(serviceWorker, /'\/app-spending\.js'/);
-  assert.match(serviceWorker, /'\/app\.js'/);
-  assert.match(serviceWorker, /'\/styles\.css'/);
+  const appAssets = scriptPaths.map(file => `/${path.basename(file)}`).concat('/styles.css');
+  for (const asset of appAssets) {
+    assert.ok(serviceWorker.includes(`versioned('${asset}')`), `${asset} is precached with a version`);
+    const attribute = asset.endsWith('.css') ? 'href' : 'src';
+    assert.ok(htmlSource.includes(`${attribute}="${asset}?v=${assetVersion}"`), `${asset} uses the service worker version`);
+  }
   assert.match(serviceWorker, /event\.waitUntil\(networkResponse/);
   assert.match(serviceWorker, /caches\.match\('\/'\)\.then\(cached => cached \|\| networkResponse\)/);
-  assert.match(htmlSource, /src="\/app-boot\.js"[\s\S]*src="\/app-state\.js"[\s\S]*src="\/app-api\.js"[\s\S]*src="\/app-auth\.js"[\s\S]*src="\/app-core\.js"[\s\S]*src="\/app-agent\.js"[\s\S]*src="\/app-reports\.js"[\s\S]*src="\/app-runs\.js"[\s\S]*src="\/app-strava\.js"[\s\S]*src="\/app-run-insights\.js"[\s\S]*src="\/app-shoes\.js"[\s\S]*src="\/app\.js"/);
-  assert.match(htmlSource, /href="\/styles\.css"/);
+  const unversionedHtml = htmlSource.replaceAll(`?v=${assetVersion}`, '');
+  assert.match(unversionedHtml, /src="\/app-boot\.js"[\s\S]*src="\/app-state\.js"[\s\S]*src="\/app-api\.js"[\s\S]*src="\/app-auth\.js"[\s\S]*src="\/app-core\.js"[\s\S]*src="\/app-agent\.js"[\s\S]*src="\/app-reports\.js"[\s\S]*src="\/app-runs\.js"[\s\S]*src="\/app-strava\.js"[\s\S]*src="\/app-run-insights\.js"[\s\S]*src="\/app-shoes\.js"[\s\S]*src="\/app\.js"/);
 });
 
 test('startup and login show progress until the application is ready', () => {
@@ -66,7 +58,7 @@ test('startup and login show progress until the application is ready', () => {
   assert.ok(htmlSource.indexOf('id="app-boot"') < htmlSource.indexOf('src="/vendor/chart.umd.min.js"'));
   assert.match(htmlSource, /__appBootLegacyPoll/);
   assert.match(htmlSource, /Critical startup UI must not depend[\s\S]+body \{ margin: 0; opacity: 1 !important; \}/);
-  assert.match(htmlSource, /id="app-styles" rel="preload" href="\/styles\.css" as="style"/);
+  assert.match(htmlSource, /id="app-styles" rel="preload" href="\/styles\.css\?v=[^"]+" as="style"/);
   assert.match(htmlSource, /dataset\.ready='true';window\.dispatchEvent\(new Event\('appstylesready'\)\)/);
   assert.match(source, /\.app-boot\.is-hidden \{ opacity: 0; visibility: hidden/);
   assert.match(source, /@media \(prefers-reduced-motion: reduce\)/);
