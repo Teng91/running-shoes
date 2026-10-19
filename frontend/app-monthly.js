@@ -199,18 +199,12 @@ async function doExport() {
       mode: backendMode
     });
 
-    const res = await fetch(API_BASE + '/export?' + params.toString(), {
+    const res = await authenticatedFetch(API_BASE + '/export?' + params.toString(), {
       headers: authHeaders()
     });
 
-    if (res.status === 401) {
-      clearAuth();
-      showLoginView();
-      throw new Error('Unauthorized');
-    }
-
     if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
+      const err = await readAuthenticatedError(res);
       throw new Error(err.detail || `匯出失敗: ${res.status}`);
     }
 
@@ -223,7 +217,7 @@ async function doExport() {
     }
 
     // Download the file
-    const blob = await res.blob();
+    const blob = await readAuthenticatedBody(res, 'blob');
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -236,6 +230,7 @@ async function doExport() {
     closeExportModal();
 
   } catch (e) {
+    if (e.name === 'AbortError') return;
     console.error('匯出失敗:', e);
     document.getElementById('export-error').textContent = '匯出失敗：' + e.message;
   } finally {
@@ -248,12 +243,11 @@ async function exportAccountData() {
   const error = document.getElementById('export-error');
   error.textContent = '';
   try {
-    const res = await fetch(API_BASE + '/export/account', { headers: authHeaders() });
-    if (res.status === 401) { clearAuth(); showLoginView(); throw new Error('Unauthorized'); }
+    const res = await authenticatedFetch(API_BASE + '/export/account', { headers: authHeaders() });
     if (!res.ok) throw new Error('完整備份失敗：' + res.status);
     const disposition = res.headers.get('Content-Disposition') || '';
     const match = disposition.match(/filename="([^"]+)"/);
-    const blob = await res.blob();
+    const blob = await readAuthenticatedBody(res, 'blob');
     const url = window.URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
@@ -264,6 +258,7 @@ async function exportAccountData() {
     window.URL.revokeObjectURL(url);
     closeExportModal();
   } catch (e) {
+    if (e.name === 'AbortError') return;
     error.textContent = e.message || '完整備份失敗';
   }
 }

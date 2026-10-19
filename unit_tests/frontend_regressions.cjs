@@ -106,7 +106,8 @@ test('monthly reports progressively render markdown with document styling', () =
 
 test('temporary auth connectivity failures preserve the stored session', () => {
   const initSource = source.slice(source.indexOf('async function init()'), source.indexOf('\ninit();'));
-  assert.match(initSource, /response\.status === 401/);
+  assert.match(initSource, /authenticatedFetch\(API_BASE \+ '\/auth\/me'/);
+  assert.match(extract('authenticatedFetch'), /response\.status === 401/);
   assert.match(initSource, /catch \(error\)[\s\S]+showAppView\(\{ keepBoot: true \}\);[\s\S]+await loadData\(\);/);
   assert.doesNotMatch(initSource.match(/catch \(error\) \{[\s\S]+?\n    \}/)[0], /clearAuth\(\)/);
 });
@@ -380,9 +381,9 @@ test('the report tab wires its panel and only loads data after login', () => {
 });
 
 test('the report tab talks to the monthly report endpoints', () => {
-  assert.match(source, /fetch\(API_BASE \+ '\/reports\/generate'/);
-  assert.match(source, /fetch\(API_BASE \+ '\/reports', \{ headers: authHeaders\(\) \}\)/);
-  assert.match(source, /fetch\(API_BASE \+ '\/reports\/' \+ parts\[0\] \+ '\/' \+ parts\[1\]/);
+  assert.match(extract('generateReport'), /authenticatedFetch\(API_BASE \+ '\/reports\/generate'/);
+  assert.match(extract('loadReportHistory'), /authenticatedFetch\(API_BASE \+ '\/reports', \{ headers: authHeaders\(\) \}\)/);
+  assert.match(extract('loadSavedReport'), /authenticatedFetch\(API_BASE \+ '\/reports\/' \+ parts\[0\] \+ '\/' \+ parts\[1\]/);
 });
 
 test('monthly reports have their own selector backed by the daily model list', () => {
@@ -471,10 +472,87 @@ test('dashboard monthly goal shows whether current progress is ahead or behind',
 test('dashboard analytics cache expires by local date and goals invalidate it', () => {
   const loader = extract('loadDashboardAnalytics');
   const saveGoal = extract('saveRunningGoal');
-  assert.match(loader, /const cacheKey = `\$\{localDateISO\(\)\}\|\$\{month\}`/);
-  assert.match(loader, /!key\.startsWith\(`/);
+  assert.match(loader, /const cachePrefix = `\$\{session\.generation\}\|\$\{localDateISO\(\)\}\|`/);
+  assert.match(loader, /const cacheKey = `\$\{cachePrefix\}\$\{month\}`/);
+  assert.match(loader, /!key\.startsWith\(cachePrefix\)/);
   assert.match(saveGoal, /expected_version: Number\(runningGoal\.version \|\| 0\)/);
   assert.match(saveGoal, /dashboardAnalyticsCache\.clear\(\)/);
+});
+
+function transportContext() {
+  const context = vm.createContext({
+    window: { location: { origin: 'http://test.local' } },
+    DOMException, FormData, Blob,
+    clearCalls: 0, loginCalls: 0,
+  });
+  vm.runInContext(`let authToken = 'A', authGeneration = 1;
+    ${extract('captureAuthSession')}
+    ${extract('isCurrentAuthSession')}
+    ${extract('requireAuthSession')}
+    function clearAuth() { authToken = null; authGeneration++; clearCalls++; }
+    function showLoginView() { loginCalls++; }
+    function switchSession(token) { authToken = token; authGeneration++; }
+    function activeToken() { return authToken; }
+    ${fs.readFileSync('frontend/app-api.js', 'utf8')}`, context);
+  return context;
+}
+
+test('every JSON and upload helper ignores a previous session 401', async () => {
+  for (const call of [
+    ctx => ctx.apiGet('/test'), ctx => ctx.apiPost('/test', {}),
+    ctx => ctx.apiPut('/test', {}), ctx => ctx.apiDelete('/test'),
+    ctx => ctx.apiUpload('/test', new Blob(['test']), { mapping: '{}' }),
+  ]) {
+    const context = transportContext();
+    let finish;
+    context.fetch = () => new Promise(resolve => { finish = resolve; });
+    const request = call(context);
+    context.switchSession('B');
+    finish({ status: 401 });
+    await assert.rejects(request, { name: 'AbortError' });
+    assert.equal(context.activeToken(), 'B');
+    assert.equal(context.clearCalls, 0);
+    assert.equal(context.loginCalls, 0);
+  }
+});
+
+test('late JSON bodies and network errors cannot return old session data', async () => {
+  const context = transportContext();
+  let finishBody;
+  const reading = new Promise(resolve => {
+    context.fetch = async () => ({ status: 200, ok: true, json: () => {
+      resolve();
+      return new Promise(finish => { finishBody = finish; });
+    } });
+  });
+  const request = context.apiGet('/test');
+  await reading;
+  context.switchSession('B');
+  finishBody({ private: 'A' });
+  await assert.rejects(request, { name: 'AbortError' });
+  let fail;
+  context.fetch = () => new Promise((_, reject) => { fail = reject; });
+  const failed = context.apiGet('/test');
+  context.switchSession('C');
+  fail(new TypeError('offline'));
+  await assert.rejects(failed, { name: 'AbortError' });
+  assert.equal(context.activeToken(), 'C');
+});
+
+test('current 401 expires login, but an identical token from a new session is protected', async () => {
+  const context = transportContext();
+  let finish;
+  context.fetch = () => new Promise(resolve => { finish = resolve; });
+  const request = context.apiGet('/test');
+  context.switchSession('A');
+  finish({ status: 401 });
+  await assert.rejects(request, { name: 'AbortError' });
+  assert.equal(context.activeToken(), 'A');
+  context.fetch = async () => ({ status: 401 });
+  await assert.rejects(context.apiGet('/test'), /登入已過期/);
+  assert.equal(context.activeToken(), null);
+  assert.equal(context.clearCalls, 1);
+  assert.equal(context.loginCalls, 1);
 });
 
 test('selected-month YTD and forecast remain without removed dashboard features', () => {

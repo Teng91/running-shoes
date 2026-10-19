@@ -24,13 +24,9 @@ async function init() {
   document.getElementById('run-month').value = localDateISO().slice(0, 7);
   document.getElementById('report-month').value = previousMonthValue();
   if (authToken) {
+    const session = captureAuthSession();
     try {
-      const response = await fetch(API_BASE + '/auth/me', { headers: authHeaders() });
-      if (response.status === 401) {
-        clearAuth();
-        showLoginView();
-        return;
-      }
+      const response = await authenticatedFetch(API_BASE + '/auth/me', { headers: authHeaders() });
       if (!response.ok) throw new Error('驗證服務暫時無法使用');
       showAppView({ keepBoot: true });
       loadAgentModels();
@@ -40,6 +36,7 @@ async function init() {
       await loadData();
       hideAppBoot();
     } catch (error) {
+      if (error.name === 'AbortError' || !isCurrentAuthSession(session)) return;
       // 離線或伺服器暫時無法連線時保留 token，避免 PWA 被迫重新登入。
       console.warn('無法驗證登入狀態，保留目前工作階段:', error);
       showAppView({ keepBoot: true });

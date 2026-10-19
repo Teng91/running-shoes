@@ -13,7 +13,8 @@
 - 保留 SQLite 與單一 volume，但 migration 集中於 `backend/migrations.py` 並寫入 schema version。
 - readiness 必須確認資料庫可查詢且 schema version 等於程式預期版本。
 - 正式 migration 前使用 SQLite backup API 建立快照，並執行 checksum、integrity 與必要資料表驗證。
-- restore 必須停寫、明確確認，並先保存 pre-restore snapshot。
+- restore 必須停止目標的 server／worker 連線、明確確認，並先保存 pre-restore snapshot。
+- SPEC-010 補強：restore 先讓 SQLite 處理殘留 WAL、退出 WAL 模式並持有獨占鎖；在同一連線以 backup API 還原，不直接替換主檔或手動刪除 WAL／SHM。目標 busy 時拒絕，完成後驗證目標。
 - volume 內 retention 只處理快速回滾，重要備份仍需下載到不同故障域。
 
 ## Consequences

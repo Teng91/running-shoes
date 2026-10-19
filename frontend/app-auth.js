@@ -1,6 +1,19 @@
 // Authentication state, forms, and account transitions.
 let authToken = localStorage.getItem('token');
 let currentUser = localStorage.getItem('username');
+let authGeneration = 0;
+
+function captureAuthSession() {
+  return { generation: authGeneration, token: authToken };
+}
+
+function isCurrentAuthSession(session) {
+  return session.generation === authGeneration && session.token === authToken;
+}
+
+function requireAuthSession(session) {
+  if (!isCurrentAuthSession(session)) throw new DOMException('登入工作階段已變更', 'AbortError');
+}
 const AUTH_INPUT_IDS = [
   'login-username', 'login-password',
   'reg-username', 'reg-password', 'reg-password2',
@@ -15,6 +28,7 @@ function resetAuthInputs() {
 }
 
 function setAuth(token, username) {
+  clearAuth();
   authToken = token;
   currentUser = username;
   localStorage.setItem('token', token);
@@ -22,6 +36,18 @@ function setAuth(token, username) {
 }
 
 function clearAuth() {
+  authGeneration += 1;
+  dashboardAnalyticsCache.clear();
+  dashboardAnalyticsRequest += 1;
+  document.getElementById('dashboard-insights').replaceChildren();
+  resetAgentChat();
+  stravaPreviewController?.abort();
+  stravaPreviewController = null;
+  stravaPreviewRequestId += 1;
+  stravaPreview = null;
+  stravaPreviewKey = '';
+  closeShoeAnalytics();
+  document.querySelectorAll('.modal-overlay.active').forEach(modal => modal.classList.remove('active'));
   shoes = []; retiredShoes = []; monthlyMileages = [];
   monthlySpending = []; runs = []; stravaImports = [];
   yearlyRunsCache.clear();
@@ -35,6 +61,10 @@ function clearAuth() {
   reportGenerationRequestId += 1;
   reportGenerationController?.abort();
   reportGenerationController = null;
+  document.getElementById('report-content').textContent = '尚未選擇報告。';
+  document.getElementById('report-content').classList.remove('is-streaming');
+  document.getElementById('report-history').replaceChildren();
+  setReportStatus('');
   setReportControlsDisabled(false);
   const reportButton = document.getElementById('generate-report-btn');
   if (reportButton) {
@@ -183,7 +213,7 @@ async function handleRegister() {
   }
 }
 
-function handleLogout() { clearAuth(); resetAgentChat(); showLoginView(); }
+function handleLogout() { clearAuth(); showLoginView(); }
 
 async function handleChangePassword() {
   hideChangeError();

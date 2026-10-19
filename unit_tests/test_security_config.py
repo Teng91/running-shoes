@@ -99,11 +99,18 @@ def test_http_exception_handler_preserves_protocol_headers():
 def test_agent_frontend_handles_http_auth_and_non_sse_errors_before_streaming():
     source = FRONTEND_SOURCE
 
-    fetch_start = source.index("const res = await fetch(API_BASE + '/agent/chat/stream'")
+    fetch_start = source.index(
+        "const res = await authenticatedFetch(API_BASE + '/agent/chat/stream'"
+    )
     reader_start = source.index("const reader = res.body.getReader()", fetch_start)
     guarded_section = source[fetch_start:reader_start]
 
-    assert "res.status === 401" in guarded_section
+    adapter = (PROJECT_ROOT / "frontend/app-api.js").read_text(encoding="utf-8")
+    guard = adapter[adapter.index("async function authenticatedFetch"):]
+    guard = guard[:guard.index("async function readAuthenticatedBody")]
+    assert guard.index("requireAuthSession(session);") < guard.index("response.status === 401")
+    assert "clearAuth();" in guard
+    assert "showLoginView();" in guard
     assert "!res.ok" in guarded_section
     assert "text/event-stream" in guarded_section
     assert "!res.body" in guarded_section
