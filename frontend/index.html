@@ -33,8 +33,8 @@ body { margin: 0; opacity: 1 !important; }
 @keyframes app-boot-critical-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .app-boot { transition: none; } .app-boot-spinner { animation: none; } }
 </style>
-<link id="app-styles" rel="preload" href="/styles.css?v=3.0.1" as="style" onload="this.onload=null;this.rel='stylesheet';this.dataset.ready='true';window.dispatchEvent(new Event('appstylesready'))">
-<noscript><link rel="stylesheet" href="/styles.css?v=3.0.1"></noscript>
+<link id="app-styles" rel="preload" href="/styles.css?v=3.0.2" as="style" onload="this.onload=null;this.rel='stylesheet';this.dataset.ready='true';window.dispatchEvent(new Event('appstylesready'))">
+<noscript><link rel="stylesheet" href="/styles.css?v=3.0.2"></noscript>
 </head>
 <body>
 
@@ -154,9 +154,13 @@ window.__appBootLegacyPoll = window.setInterval(function () {
       <div>
         <h1>跑鞋追蹤</h1>
         <p class="subtitle" id="today-label"></p>
+        <p class="mobile-page-label" id="mobile-page-label">跑步日誌</p>
       </div>
     </div>
 
+    <div class="sidebar-menu" id="sidebar-menu">
+      <button class="mobile-menu-toggle" type="button" aria-expanded="false" aria-controls="sidebar-navigation" onclick="setMobileMenu(this.getAttribute('aria-expanded') !== 'true')"><span aria-hidden="true">☰</span> 選單</button>
+      <div class="sidebar-navigation" id="sidebar-navigation">
     <div class="app-nav-label">功能選單</div>
     <div class="tabs" role="tablist" aria-label="主要功能">
       <button class="tab active" role="tab" aria-selected="true" aria-controls="panel-runs" data-tab="runs" onclick="switchTab('runs')"><span class="tab-icon" aria-hidden="true">🏃</span><span>跑步日誌</span></button>
@@ -172,6 +176,8 @@ window.__appBootLegacyPoll = window.setInterval(function () {
       <div class="sidebar-actions">
         <button class="btn btn-sm btn-edit" id="theme-toggle-btn" onclick="toggleTheme()">☀️ 亮色模式</button>
         <button class="btn btn-sm btn-edit" onclick="handleLogout()">登出</button>
+      </div>
+    </div>
       </div>
     </div>
   </aside>
@@ -580,21 +586,21 @@ window.__appBootLegacyPoll = window.setInterval(function () {
 
 <script src="/vendor/chart.umd.min.js"></script>
 <script src="/vendor/marked.min.js"></script>
-<script src="/app-boot.js?v=3.0.1"></script>
-<script src="/app-state.js?v=3.0.1"></script>
-<script src="/app-api.js?v=3.0.1"></script>
-<script src="/app-auth.js?v=3.0.1"></script>
-<script src="/app-core.js?v=3.0.1"></script>
-<script src="/app-agent.js?v=3.0.1"></script>
-<script src="/app-reports.js?v=3.0.1"></script>
-<script src="/app-runs.js?v=3.0.1"></script>
-<script src="/app-strava.js?v=3.0.1"></script>
-<script src="/app-run-insights.js?v=3.0.1"></script>
-<script src="/app-shoes.js?v=3.0.1"></script>
-<script src="/app-dashboard.js?v=3.0.1"></script>
-<script src="/app-monthly.js?v=3.0.1"></script>
-<script src="/app-charts.js?v=3.0.1"></script>
-<script src="/app-spending.js?v=3.0.1"></script>
-<script src="/app.js?v=3.0.1"></script>
+<script src="/app-boot.js?v=3.0.2"></script>
+<script src="/app-state.js?v=3.0.2"></script>
+<script src="/app-api.js?v=3.0.2"></script>
+<script src="/app-auth.js?v=3.0.2"></script>
+<script src="/app-core.js?v=3.0.2"></script>
+<script src="/app-agent.js?v=3.0.2"></script>
+<script src="/app-reports.js?v=3.0.2"></script>
+<script src="/app-runs.js?v=3.0.2"></script>
+<script src="/app-strava.js?v=3.0.2"></script>
+<script src="/app-run-insights.js?v=3.0.2"></script>
+<script src="/app-shoes.js?v=3.0.2"></script>
+<script src="/app-dashboard.js?v=3.0.2"></script>
+<script src="/app-monthly.js?v=3.0.2"></script>
+<script src="/app-charts.js?v=3.0.2"></script>
+<script src="/app-spending.js?v=3.0.2"></script>
+<script src="/app.js?v=3.0.2"></script>
 </body>
 </html>

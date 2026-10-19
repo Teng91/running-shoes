@@ -64,6 +64,8 @@ function showAppView({ keepBoot = false } = {}) {
 }
 
 function resetAppLayout() {
+  setMobileMenu(false);
+  document.getElementById('mobile-page-label').textContent = '跑步日誌';
   document.getElementById('app-workspace').classList.remove('agent-mode');
   document.querySelectorAll('.tab').forEach(tab => {
     const active = tab.dataset.tab === 'runs';

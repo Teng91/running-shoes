@@ -125,7 +125,7 @@ transition；`app-core.js` 組合畫面資料但不承擔 feature-specific rende
 三個 module，降低修改匯入功能時誤動月曆或編輯流程的風險。
 
 登入後的 UI shell 由 `index.html` 與 `styles.css` 組成：桌面使用左側 sidebar 保存全域導覽與帳號操作，
-右側 workspace 只呈現唯一 active feature panel；窄螢幕則轉為單欄頂部導覽。`app-core.js` 只同步 active、
+右側 workspace 只呈現唯一 active feature panel；窄螢幕則轉為單欄精簡頂部列，透過帶 ARIA 展開狀態的按鈕顯示同一組導覽及帳號操作，選取功能後收起。`app-core.js` 只同步 active、
 ARIA 與 `agent-mode` 狀態，不以 inline style 決定 shell 幾何，因此功能 rendering 與 responsive layout 維持單向依賴。
 
 ## 5. 模組責任與依賴方向
