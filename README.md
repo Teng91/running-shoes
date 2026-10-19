@@ -2,6 +2,8 @@
 
 跑鞋追蹤 Dashboard — 記錄每雙跑鞋的里程、成本與生命週期，並以跑步日誌追蹤每次跑步的日期、公里數及穿著鞋款。支援每月跑量與鞋款里程圖表，並內建 AI 跑鞋推薦助手。支援多使用者帳號，每人資料獨立隔離，也可在手機上安裝為 PWA。
 
+版本演進與相容性說明集中於 [`CHANGELOG.md`](CHANGELOG.md)，設計與測試規格位於 `docs/`。
+
 ## 使用方式
 
 ### 直接使用線上服務
@@ -47,10 +49,15 @@ running-shoes/
 │   │   ├── agent.py      # AI provider 與對話 routes
 │   │   ├── reports.py    # AI 月報 routes
 │   │   ├── health.py     # Liveness／readiness probes
-│   │   ├── insights.py   # 分析、匯出與支出統計 HTTP routes
-│   │   ├── runs.py       # 跑步日誌與 Strava HTTP routes
+│   │   ├── analytics.py  # Dashboard 與單鞋分析 routes
+│   │   ├── exports.py    # 帳號備份與跑鞋匯出 routes
+│   │   ├── spending.py   # 支出統計 routes
+│   │   ├── strava.py     # Strava upload／import routes
+│   │   ├── runs.py       # 跑步日誌 CRUD routes
 │   │   └── shoes.py      # 跑鞋 CRUD HTTP routes
 │   ├── services/
+│   │   ├── exports.py    # Framework-independent 匯出內容生成
+│   │   ├── strava_imports.py # Strava 匯入 transaction 與配對驗證
 │   │   └── mileage.py    # 跑步、鞋款、月份彙總的交易式里程同步
 │   ├── migrations.py     # 有版本的 SQLite schema upgrade
 │   ├── observability.py  # Request ID 與不含敏感內容的結構化 HTTP log
@@ -59,7 +66,10 @@ running-shoes/
 │   ├── database.py       # SQLite 資料庫連線
 │   ├── models.py         # 資料表定義
 │   ├── schemas.py        # Pydantic schema
-│   ├── agent.py          # AI 助手 agent loop（工具呼叫 + SSE 串流，僅保留 streaming 版）
+│   ├── agent.py          # AI 助手 runner 與公開 orchestration entry point
+│   ├── agent_planner.py  # Deterministic intent 與最小查詢計畫
+│   ├── agent_tools.py    # 受信任工具 dispatch
+│   ├── agent_protocol.py # SSE 與搜尋來源摘要 contract
 │   ├── reports.py        # AI 月度跑步報告（後端算統計 + one-shot LLM 串流 + 報告留存）
 │   ├── goals.py          # 個人月／年跑量目標與達成率計算
 │   ├── analytics.py      # 首頁洞察與單鞋使用分析
@@ -73,14 +83,20 @@ running-shoes/
 ├── frontend/
 │   ├── index.html        # Dashboard HTML 結構
 │   ├── app.js            # Dashboard 初始化與全域 dialog wiring
-│   ├── app-core.js       # 共用狀態、認證、API 與資料載入
+│   ├── app-boot.js       # 啟動 loading、逾時與 stylesheet readiness
+│   ├── app-state.js      # 共用記憶體 state 與 presentation constants
+│   ├── app-api.js        # HTTP／upload helpers
+│   ├── app-auth.js       # 登入、註冊、登出與帳號切換
+│   ├── app-core.js       # Shell、主題、分頁與聚合資料載入
 │   ├── app-dashboard.js  # 首頁卡片、提醒與跑鞋表格
 │   ├── app-monthly.js    # 月跑量、目標與匯出互動
 │   ├── app-charts.js     # 跑鞋、月份與年度圖表
 │   ├── app-spending.js   # 支出摘要、圖表與表格
 │   ├── app-agent.js      # AI 助手對話、模型清單與安全 Markdown 顯示
 │   ├── app-reports.js    # 月報讀取、產生與串流顯示
-│   ├── app-runs.js       # 跑步、Strava、洞察與單鞋分析互動
+│   ├── app-runs.js       # 跑步 CRUD、分頁與鞋款選擇
+│   ├── app-strava.js     # Strava 預覽、配對與匯入 UI
+│   ├── app-run-insights.js # 跑步月曆、洞察與單鞋分析 UI
 │   ├── app-shoes.js      # 跑鞋編輯與 modal 互動
 │   ├── styles.css        # Dashboard 亮／暗色與響應式版面
 │   ├── manifest.webmanifest # PWA 名稱、顏色與圖示設定
@@ -110,6 +126,7 @@ running-shoes/
 │   └── frontend_e2e.cjs  # 真實 FastAPI + 暫存 SQLite 的瀏覽器 CRUD
 ├── AGENTS.md             # Coding Agent 專案規則與完成條件
 ├── CLAUDE.md             # 讓 Claude Code 匯入共用的 AGENTS.md
+├── CHANGELOG.md          # 版本演進與 release 摘要
 ├── pyproject.toml        # pytest、Ruff 與 mypy 設定
 ├── requirements.in       # 正式環境直接依賴與核准版本
 ├── requirements.txt      # 含雜湊的完整正式環境鎖定檔

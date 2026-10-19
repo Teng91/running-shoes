@@ -36,7 +36,7 @@ flowchart LR
     E2E -->|DB_DIR=temp| TempDB
 ```
 
-`app-core.js` 必須先載入共享 API／state，feature modules 其後載入，`app.js` 最後執行初始化。
+`app-boot.js`、`app-state.js`、`app-api.js`、`app-auth.js` 與 `app-core.js` 必須依序載入；feature modules 其後載入，`app.js` 最後執行初始化。
 E2E 由 repository task runner 傳入專案 Python，動態取得 loopback port，並以作業系統暫存目錄
 作為 `DB_DIR` 啟動 uvicorn；無論成功失敗都終止 server 並移除該暫存目錄。
 

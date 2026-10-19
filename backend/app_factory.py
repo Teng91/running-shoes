@@ -16,7 +16,20 @@ from backend import migrations
 from backend.database import SessionLocal, engine, get_db
 from backend.middleware import StravaUploadLimitMiddleware
 from backend.observability import RequestContextMiddleware
-from backend.routers import agent, auth, goals, health, insights, monthly, reports, runs, shoes
+from backend.routers import (
+    agent,
+    analytics,
+    auth,
+    exports,
+    goals,
+    health,
+    monthly,
+    reports,
+    runs,
+    shoes,
+    spending,
+    strava,
+)
 from backend.seeding import seed_default_data
 from backend.settings import Settings
 from backend.settings import settings as default_settings
@@ -106,9 +119,12 @@ def create_app(
         monthly.router,
         agent.router,
         reports.router,
-        insights.router,
+        analytics.router,
+        exports.router,
+        spending.router,
         shoes.router,
         runs.router,
+        strava.router,
         health.router,
     ):
         app.include_router(router)

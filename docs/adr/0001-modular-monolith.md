@@ -12,13 +12,13 @@
 
 保留單一部署單元，依功能建立 `backend/routers/`，並讓 domain/service 模組承擔可重用邏輯。
 `backend/main.py` 作為 composition root，只能由外往內組裝；router 不可反向 import main。
-拆分採垂直切片逐步進行，第一個切片為 analytics／exports／spending。
+拆分採垂直切片逐步進行；analytics、exports、spending 與 Strava 已各自形成 router／service 邊界。
 
 ## Consequences
 
 - API path 與部署方式不變，重構風險較低。
 - 模組可以獨立測試，且 circular import 可由 architecture check 阻止。
-- 在所有 routes 搬完前，`main.py` 仍會同時包含舊路由與 composition code；SDD 必須如實反映。
+- `main.py` 維持最小 ASGI entry point，composition 與 lifecycle 由可注入的 app factory 負責。
 - 若未來確實需要獨立 scaling 或不同資料儲存，再以量測結果新增 ADR 評估服務拆分。
 
 ## Rejected alternatives
@@ -26,4 +26,3 @@
 - **立刻拆微服務**：會增加網路錯誤、認證傳遞、部署與資料一致性成本，沒有目前需求支持。
 - **只依檔案行數任意切割**：行數會下降，但責任與依賴方向不會因此清楚。
 - **一次重寫所有 routes**：review 範圍過大，難以證明行為沒有改變。
-
