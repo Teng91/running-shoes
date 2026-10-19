@@ -67,6 +67,29 @@ async function assertLayout(page, label) {
       if (innerWidth <= 800 && !document.getElementById('sidebar-menu').classList.contains('menu-open') && sidebarBox.height > 88) problems.push('collapsed mobile header is too tall');
       if (innerWidth <= 800 && (parseFloat(getComputedStyle(workspace).paddingLeft) < 12 || parseFloat(getComputedStyle(workspace).paddingRight) < 12)) problems.push('mobile content needs side gutters');
     }
+    const metrics = document.querySelector('.run-metrics');
+    if (visible(metrics)) {
+      const cards = [...metrics.querySelectorAll('#run-stats > .card, .insight-grid > .insight-card')];
+      if (cards.length === 6) {
+        const boxes = cards.map(card => card.getBoundingClientRect());
+        if (innerWidth <= 800) {
+          for (let row = 0; row < 3; row++) {
+            const [left, right] = boxes.slice(row * 2, row * 2 + 2);
+            if (Math.abs(left.top - right.top) > 1 || Math.abs(left.bottom - right.bottom) > 1) problems.push(`run metrics row ${row + 1} is not aligned`);
+            if (Math.abs(left.width - right.width) > 1 || left.right >= right.left) problems.push('run metrics need two equal columns');
+            if (Math.abs(left.left - boxes[0].left) > 1 || Math.abs(right.left - boxes[1].left) > 1) problems.push('run metrics columns do not line up');
+            if (row > 0 && left.top <= boxes[row * 2 - 2].bottom) problems.push('run metrics rows overlap');
+          }
+          for (const card of cards) if (card.scrollWidth > card.clientWidth + 1) problems.push('run metric text overflows');
+          for (const alert of metrics.querySelectorAll('.insight-alerts')) {
+            const box = alert.getBoundingClientRect();
+            if (Math.abs(box.left - boxes[0].left) > 1 || Math.abs(box.right - boxes[1].right) > 1 || box.top < boxes[5].bottom) problems.push('run alerts must follow all six cards at full width');
+          }
+        } else {
+          for (const start of [0, 3]) if (boxes.slice(start, start + 3).some(box => Math.abs(box.top - boxes[start].top) > 1)) problems.push('desktop run metrics must keep three columns');
+        }
+      }
+    }
     for (const modal of document.querySelectorAll('.modal-overlay.active .modal')) {
       const box = modal.getBoundingClientRect();
       if (box.left < 0 || box.right > innerWidth + 1 || box.top < 0 || box.bottom > innerHeight + 1 ||
@@ -115,7 +138,7 @@ async function run(engine, name) {
       document.querySelector('#app-view').style.display = '';
       document.querySelector('#user-label').textContent = 'runner_with_a_very_long_username';
       shoes = Array.from({ length: 8 }, (_, i) => ({ id: i + 1, brand: 'Mizuno',
-        model: i === 0 ? 'Wave Sky 7' : `非常長的鞋款名稱 Very long running shoe model ${i}`,
+        model: i === 0 ? 'Wave Rider 29 非常長的鞋款名稱' : `非常長的鞋款名稱 Very long running shoe model ${i}`,
         date: '2026-01-01', price: 4000, orig_price: 5000, mileage: 120 + i * 10,
         expected_mileage: 800, monthly_km: 80, category: 'Daily', size: 'US 9' }));
       retiredShoes = [{ ...shoes[0], id: 20, is_retired: true }];
@@ -134,6 +157,14 @@ async function run(engine, name) {
       document.querySelector('#strava-mapping').innerHTML = '<div class="strava-group"><div>Very long imported shoe name from Strava</div><select><option>Very long matching running shoe name</option></select></div>';
       document.querySelectorAll('input[type="date"]').forEach(e => { e.value = '2026-09-06'; });
       render();
+      window.layoutAnalytics = {
+        comparison: { label: '較上月同期', delta_km: -23.45, through_day: 19, previous_km: 80.52 },
+        recent_7_days: { km: 6.4, delta_km: -25.72 },
+        goal: { active: true, start_year: 2026, month_state: 'current', month_achievement_percent: 45.7, pace_delta_km: -19.54, remaining_days: 12, required_daily_km: 5.66 },
+        forecast: { state: 'current', projected_month_km: 93.11 },
+        alerts: [{ severity: 'warning', message: 'Wave Rider 29 已使用 82.2% 預期壽命' }],
+      };
+      renderDashboardInsights(window.layoutAnalytics);
     });
     const screenshots = process.env.LAYOUT_SCREENSHOT_DIR;
     if (screenshots) fs.mkdirSync(screenshots, { recursive: true });
@@ -155,6 +186,7 @@ async function run(engine, name) {
           }));
           if (screenshots && width === 390) await page.screenshot({ path: path.join(screenshots, `${name}-${theme}-${tab}.png`), fullPage: true });
           if (screenshots && width === 390 && tab === 'runs') {
+            await page.locator('.run-metrics').screenshot({ path: path.join(screenshots, `${name}-${theme}-run-metrics.png`) });
             await page.evaluate(() => window.scrollTo(0, 0));
             await page.screenshot({ path: path.join(screenshots, `${name}-${theme}-runs-top.png`) });
             await page.locator('.mobile-menu-toggle').click();
@@ -180,6 +212,19 @@ async function run(engine, name) {
         console.log(`PASS ${name} ${theme} ${width}x${height}: all tabs, populated charts, controls and dialogs`);
       }
     }
+    await page.setViewportSize({ width: 390, height: 844 });
+    await selectTab(page, 'runs');
+    for (const message of ['<div class="insight-card">分析載入中…</div>', '<div class="insight-alert warning">進階分析暫時無法載入</div>']) {
+      await page.evaluate(message => { document.getElementById('dashboard-insights').innerHTML = message; }, message);
+      const widths = await page.evaluate(() => ({
+        grid: document.querySelector('.run-metrics').clientWidth,
+        message: document.querySelector('#dashboard-insights > div').getBoundingClientRect().width,
+      }));
+      assert.ok(Math.abs(widths.grid - widths.message) <= 1, 'analytics loading and error states span both columns');
+      await assertLayout(page, `${name} analytics message`);
+    }
+    await page.evaluate(() => renderDashboardInsights(window.layoutAnalytics));
+    await assertLayout(page, `${name} analytics recovery`);
     await page.evaluate(() => { shoes = []; retiredShoes = []; runs = []; monthlyMileages = []; monthlySpending = []; render(); });
     for (const tab of ['runs', 'shoes', 'monthly', 'spending', 'report']) {
       await selectTab(page, tab);

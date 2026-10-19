@@ -686,7 +686,7 @@ def test_static_asset_and_non404_http_errors(client):
 
     service_worker = client.get("/service-worker.js")
     assert service_worker.status_code == 200
-    assert "running-shoes-shell-v14" in service_worker.text
+    assert "running-shoes-shell-v15" in service_worker.text
 
     agent_script = client.get("/app-agent.js")
     assert agent_script.status_code == 200

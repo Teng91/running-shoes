@@ -342,7 +342,14 @@ h1 { font-size: 28px; font-weight: 700; margin-bottom: 4px; }
   .run-intro p { font-size: 13px; line-height: 1.55; }
   .run-filter { margin-top: 12px; }
   .run-hero { grid-template-columns: 1fr; }
-  .run-stats { grid-template-columns: 1fr; }
+  .run-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 28px; }
+  .run-metrics .run-stats, .run-metrics .dashboard-insights, .run-metrics .insight-grid { display: contents; }
+  .run-metrics .card, .run-metrics .insight-card { min-width: 0; min-height: 126px; padding: 16px; }
+  .run-metrics .card-value, .run-metrics .insight-card-value { font-size: clamp(19px, 5.5vw, 24px); line-height: 1.25; overflow-wrap: anywhere; }
+  .run-metrics .card-sub, .run-metrics .insight-card-sub { font-size: 12px; line-height: 1.5; margin-top: 4px; overflow-wrap: anywhere; }
+  .run-metrics .insight-alerts, .run-metrics .dashboard-insights > .insight-card, .run-metrics .dashboard-insights > .insight-alert { grid-column: 1 / -1; }
+  .run-metrics .insight-alerts { margin-top: 0; }
+  .run-metrics .dashboard-insights > .insight-card { min-height: 0; }
   .calendar-day { min-height:62px; padding:4px; }
   .calendar-run { display:none; }
 }
@@ -633,7 +640,6 @@ input::-webkit-date-and-time-value { text-align: left; min-width: 0; }
   .card, .chart-box, .table-section, .run-entry, .run-intro { padding: 16px; }
   .charts, .charts-3col { grid-template-columns: minmax(0, 1fr); }
   .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-  .run-stats { grid-template-columns: minmax(0, 1fr); }
   .card-value { font-size: 24px; }
   .btn, .tab, .agent-config button { min-height: 44px; }
   .form-group input, .form-group select, .form-group textarea,
@@ -647,7 +653,6 @@ input::-webkit-date-and-time-value { text-align: left; min-width: 0; }
   .modal-actions > .btn { flex: 1 1 auto; }
   .run-shoe-canvas { height: 260px; }
   .insight-grid, .shoe-analysis-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
-  .dashboard-insights .insight-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
   .run-shoe-legend-row { grid-template-columns: minmax(0,1fr) auto auto auto; gap: 8px; padding: 9px 6px; }
   .run-shoe-legend-name span:last-child { white-space: normal; overflow-wrap: anywhere; }
   .run-calendar { gap: 3px; }
@@ -673,7 +678,6 @@ input::-webkit-date-and-time-value { text-align: left; min-width: 0; }
   .run-entry-grid, .form-row { grid-template-columns: minmax(0, 1fr); }
   .modal-overlay { padding: 8px; }
   .modal { padding: 16px; }
-  .dashboard-insights .insight-grid { grid-template-columns:1fr; }
   .category-checkboxes { gap: 4px; }
   .category-checkboxes label { gap: 3px; padding: 7px 2px; font-size: 11.5px; }
   .category-checkboxes input[type="checkbox"] { flex-basis: 13px; width: 13px; height: 13px; }
