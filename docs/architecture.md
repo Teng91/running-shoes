@@ -46,8 +46,9 @@ flowchart TB
     Factory --> Middleware[middleware.py]
     Factory --> Seed[seeding.py]
     Runs --> Mileage[services/mileage.py]
-    StravaRoutes --> StravaService[services/strava_imports.py]
     StravaService --> Mileage
+    StravaRoutes --> Worker[worker thread<br/>parse / filter / service transaction]
+    Worker --> StravaService[services/strava_imports.py]
     ExportRoutes --> ExportService[services/exports.py]
     AuthRoutes --> Limits[rate_limits.py]
     AgentRoutes --> Limits
@@ -111,8 +112,13 @@ flowchart LR
     RunCRUD --> RunInsights[app-run-insights.js]
     Core --> ShoesUI[app-shoes.js]
     Core --> Dashboard[app-dashboard.js]
-    Core --> Monthly[app-monthly.js]
-    Core --> Charts[app-charts.js]
+    Core --> Monthly[app-monthly.js<br/>月跑量 CRUD]
+    Core --> ExportsUI[app-exports.js<br/>匯出下載]
+    Core --> GoalsUI[app-goals.js<br/>目標設定與進度]
+    Core --> Charts[app-charts.js<br/>共用 registry / utilities]
+    Charts --> ShoeCharts[app-shoe-charts.js]
+    Charts --> MileageCharts[app-monthly-charts.js]
+    GoalsUI -.-> MileageCharts
     Core --> Spending[app-spending.js]
     Core --> Bootstrap[app.js<br/>init / dialog wiring]
     AgentUI --> Bootstrap
@@ -122,13 +128,30 @@ flowchart LR
     ShoesUI --> Bootstrap
     Dashboard --> Bootstrap
     Monthly --> Bootstrap
+    ExportsUI --> Bootstrap
+    GoalsUI --> Bootstrap
     Charts --> Bootstrap
+    ShoeCharts --> Bootstrap
+    MileageCharts --> Bootstrap
     Spending --> Bootstrap
 ```
 
 `app-state.js` 只保存共享 state 與常數；`app-api.js` 是 transport adapter；`app-auth.js` 管理 session
 transition；`app-core.js` 組合畫面資料但不承擔 feature-specific rendering。跑步 CRUD、Strava 與洞察分別位於
 三個 module，降低修改匯入功能時誤動月曆或編輯流程的風險。
+
+[SPEC-013](specs/013-auth-modal-and-module-boundaries.md) 再依責任分離月跑量 CRUD、匯出、目標與兩類圖表；
+`app-charts.js` 僅保存共用 registry／label utilities，各 feature 保留既有函式契約。
+登入／註冊／更改密碼共用單一 auth operation，具有 AbortController、generation 與物件 identity；
+切換表單或 clearAuth 使舊操作失效，回應及 JSON body 後都再次檢查。成功登入後改以新 session
+保護後續資料載入，舊 finally 不解鎖或隱藏新操作的 UI。
+跑鞋視窗的 create/update/delete/move 共用 context 級鎖與原始 version/session，close/logout 失效 context。
+報告 GET／list／SSE completion 以共用 serializer 輸出帶 offset UTC，前端統一轉成本地時間。
+
+Strava route 保留 async upload 與 byte limit，之後一次 `run_in_threadpool` 執行 parse/filter/service。
+傳入 scalar user ID；request DB session 的 worker 工作順序執行，不在多個 worker 同時使用同一 session，
+資料庫提交、重複檢查與里程同步仍位於現有 service transaction。這不是背景工作佇列；
+HTTP 回應仍等到匯入完成，取消 HTTP 也不代表撤銷已提交的交易。
 
 [SPEC-012](specs/012-edit-stream-and-render-safety.md) 將 JSON SSE 的 HTTP 檢查、UTF-8／CRLF 解碼、
 取消及 done/error 狀態集中於 `app-streams.js`；AI／月報只處理事件呈現，AI 只在完整成功後提交對話 pair。
@@ -219,7 +242,7 @@ sequenceDiagram
 flowchart TB
     Browser[Browser / installed PWA]
     SW[Service Worker<br/>cache-first static assets<br/>network-first navigation refresh]
-    Shell[(App shell cache v18<br/>asset revision 3.2.1)]
+    Shell[(App shell cache v19<br/>asset revision 3.2.2)]
     FlyProxy[Fly Proxy / HTTPS]
     Machine[Fly Machine<br/>FastAPI container]
     Volume[(Fly Volume<br/>SQLite)]

@@ -1,23 +1,78 @@
 import asyncio
 import io
+import threading
 from datetime import timedelta
+from types import SimpleNamespace
 
 import pytest
-from fastapi import HTTPException
+from fastapi import HTTPException, UploadFile
 from fastapi.testclient import TestClient
 
 from backend.database import get_db
 from backend.main import app
 from backend.middleware import StravaUploadLimitMiddleware
 from backend.models import MonthlyMileage, Run, Shoe, StravaImport
+from backend.routers import strava as strava_routes
 from backend.routers.reports import _local_today
 from backend.routers.strava import _parse_strava_csv
+from backend.services.strava_imports import ImportResult
 from unit_tests.test_api import _auth_header
 
 CSV = "活動 ID,活動日期,活動類型,活動裝備,距離\n" \
     "1001,2026年8月30日 上午11:40:36,跑步,Mizuno Wave Sky 7,5250\n" \
     "1002,2026年8月29日,步行,Mizuno Wave Sky 7,3000\n" \
     "1003,2026年8月28日,跑步,,6100\n"
+
+
+@pytest.mark.parametrize("action", ["preview", "import"])
+def test_strava_worker_keeps_event_loop_responsive(monkeypatch, action):
+    loop_thread = threading.get_ident()
+    started, release = threading.Event(), threading.Event()
+    worker_threads = []
+    session = object()
+
+    def parse(raw):
+        worker_threads.append(threading.get_ident())
+        assert threading.get_ident() != loop_thread
+        assert raw == b"mock csv"
+        started.set()
+        assert release.wait(timeout=3), "event loop did not release worker"
+        return [], 0, []
+
+    def service(db, user_id, *args, **kwargs):
+        assert db is session and user_id == 7
+        assert threading.get_ident() == worker_threads[0]
+        if action == "preview":
+            return {"run_count": 0}
+        return ImportResult(0, 0, 0, 0, 0, 0.0, 0)
+
+    monkeypatch.setattr(strava_routes, "_parse_strava_csv", parse)
+    monkeypatch.setattr(strava_routes.strava_imports, "preview" if action == "preview" else "import_runs", service)
+
+    async def scenario():
+        file = UploadFile(io.BytesIO(b"mock csv"), filename="test.csv")
+        kwargs = dict(file=file, start_date="", end_date="", current_user=SimpleNamespace(id=7), db=session)
+        if action == "import":
+            kwargs["mapping"] = "{}"
+        route = strava_routes.preview_strava_import if action == "preview" else strava_routes.import_strava_runs
+        task = asyncio.create_task(route(**kwargs))
+        try:
+            async def wait_started():
+                while not started.is_set():
+                    await asyncio.sleep(0.001)
+            await asyncio.wait_for(wait_started(), timeout=1)
+            # The worker is still blocked, but this coroutine continues on the loop.
+            assert not task.done()
+            release.set()
+            result = await asyncio.wait_for(task, timeout=3)
+            assert result.get("run_count", result.get("imported")) == 0
+        finally:
+            release.set()
+            await file.close()
+            if not task.done():
+                await task
+
+    asyncio.run(scenario())
 
 
 @pytest.fixture

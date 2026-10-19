@@ -20,13 +20,142 @@ const scriptPaths = [
   'frontend/app-shoes.js',
   'frontend/app-dashboard.js',
   'frontend/app-monthly.js',
+  'frontend/app-exports.js',
+  'frontend/app-goals.js',
   'frontend/app-charts.js',
+  'frontend/app-shoe-charts.js',
+  'frontend/app-monthly-charts.js',
   'frontend/app-spending.js',
   'frontend/app.js',
 ];
 const scriptSource = scriptPaths.map(path => fs.readFileSync(path, 'utf8')).join('\n');
 const styleSource = fs.readFileSync('frontend/styles.css', 'utf8');
 const source = `${htmlSource}\n${styleSource}\n${scriptSource}`;
+
+function authOperationContext() {
+  const controls = [{ disabled: false }];
+  const elements = new Proxy({}, { get: (target, id) => target[id] ||= { value: '', style: {}, textContent: '' } });
+  const state = { account: null, hides: 0, writes: [] };
+  const context = vm.createContext({ AbortController,
+    document: { getElementById: id => elements[id], querySelectorAll: () => controls },
+    API_BASE: '/api', translateError: value => value,
+    hideAuthError() {}, hideRegError() {}, hideChangeError() {},
+    showAuthError: text => state.writes.push(text), showRegError: text => state.writes.push(text),
+    showChangeError: text => state.writes.push(text), showAppBoot() {}, hideAppBoot: () => state.hides++,
+    resetAuthInputs() {}, resetAgentChat() {}, resetAppLayout() {}, showAppView() {}, showLoginView() {},
+    loadAgentModels() {}, loadData: async () => {},
+  });
+  vm.runInContext('let authGeneration = 0, authOperation = null;\n' + [
+    'setAuthControlsDisabled', 'cancelAuthOperation', 'beginAuthOperation', 'isCurrentAuthOperation',
+    'finishAuthOperation', 'handleLogin', 'handleRegister', 'handleChangePassword',
+  ].map(extract).join('\n'), context);
+  context.captureAuthSession = () => ({ generation: vm.runInContext('authGeneration', context) });
+  context.isCurrentAuthSession = session => session.generation === vm.runInContext('authGeneration', context);
+  context.clearAuth = () => { context.cancelAuthOperation(); vm.runInContext('authGeneration++', context); state.account = null; };
+  context.setAuth = (_, username) => { context.clearAuth(); state.account = username; };
+  return { context, elements, controls, state };
+}
+
+test('login locks duplicates and ignores a late body or failure after a new account starts', async () => {
+  const { context, elements, controls, state } = authOperationContext();
+  elements['login-username'].value = 'A'; elements['login-password'].value = 'pass';
+  let finishBody, calls = 0;
+  context.fetch = async () => { calls++; return { ok: true, json: () => new Promise(resolve => { finishBody = resolve; }) }; };
+  const old = context.handleLogin(); await Promise.resolve();
+  await context.handleLogin();
+  assert.equal(calls, 1); assert.equal(controls[0].disabled, true);
+  context.clearAuth(); elements['login-username'].value = 'B';
+  context.fetch = async () => ({ ok: true, json: async () => ({ access_token: 'mock' }) });
+  await context.handleLogin();
+  const hides = state.hides;
+  finishBody({ access_token: 'old-mock' }); await old;
+  assert.equal(state.account, 'B'); assert.equal(state.hides, hides);
+
+  let fail;
+  context.fetch = () => new Promise((_, reject) => { fail = reject; });
+  const failed = context.handleLogin(); const rejectOld = fail;
+  context.cancelAuthOperation();
+  const pending = context.handleLogin();
+  const rejectCurrent = fail;
+  // An invalidated operation cannot unlock a newer pending form.
+  rejectOld(new Error('stale failure')); await failed;
+  assert.equal(controls[0].disabled, true);
+  assert.equal(state.writes.length, 0);
+  rejectCurrent(new Error('current failure')); await pending;
+  assert.equal(controls[0].disabled, false); assert.deepEqual(state.writes, ['current failure']);
+});
+
+test('register and password-change callbacks cannot mutate a replacement session', async () => {
+  for (const action of ['handleRegister', 'handleChangePassword']) {
+    const { context, elements, state } = authOperationContext();
+    for (const id of ['reg-username', 'change-username']) elements[id].value = 'A';
+    for (const id of ['reg-password', 'reg-password2', 'change-old-password', 'change-new-password', 'change-new-password2']) elements[id].value = 'pass';
+    let finish, calls = 0;
+    context.fetch = () => { calls++; return new Promise(resolve => { finish = resolve; }); };
+    const request = context[action](); await context[action]();
+    assert.equal(calls, 1);
+    context.setAuth('mock-B', 'B');
+    finish({ ok: true, json: async () => ({ access_token: 'mock-A' }) });
+    await request;
+    assert.equal(state.account, 'B'); assert.equal(calls, 1); assert.equal(state.writes.length, 0);
+  }
+});
+
+test('all shoe mutations lock their snapshot and leave replacement drafts and sessions untouched', async () => {
+  const definition = source.slice(source.indexOf('class ShoeModal {'), source.indexOf('// 初始化一次'));
+  for (const action of ['submit', 'delete', 'move']) {
+    for (const failure of [false, true]) {
+      for (const switchSession of [false, true]) {
+      let session = { current: true }, finish, writes = 0, alerts = 0;
+      const context = vm.createContext({ captureAuthSession: () => session,
+        isCurrentAuthSession: value => value.current, alert: () => alerts++, confirm: () => true,
+        loadData: async () => {}, shoes: [],
+      });
+      vm.runInContext(definition + '\nglobalThis.Modal = ShoeModal;', context);
+      const button = {}, modal = Object.create(context.Modal.prototype);
+      Object.assign(modal, { btnDelete: {}, btnMove: {}, el: { querySelector: () => button,
+        classList: { add() {}, remove() {} } }, _fillForm() {}, _updateUI() {},
+        _payload: () => ({ brand: 'A', model: 'draft', date: '2026-01-01' }),
+      });
+      const write = () => { writes++; return new Promise((resolve, reject) => { finish = failure ? reject : resolve; }); };
+      context.apiPut = write; context.apiDelete = write;
+      modal.openForEdit({ id: 1, version: 3 }, false);
+      const old = modal[action](); await modal[action]();
+      assert.equal(writes, 1); assert.equal(button.disabled, true);
+      modal.close();
+      if (switchSession) { session.current = false; session = { current: true }; }
+      modal.openForEdit({ id: 2, version: 7 }, false);
+      const replacement = modal.context;
+      finish(failure ? new Error('old failure') : {}); await old;
+      assert.equal(modal.context, replacement); assert.equal(modal.shoe.id, 2);
+      assert.equal(button.disabled, false); assert.equal(alerts, 0);
+      }
+    }
+  }
+});
+
+test('saved and streamed report timestamps share local formatting', () => {
+  const elements = new Proxy({}, { get: (target, id) => target[id] ||= { options: [], textContent: '' } });
+  const context = vm.createContext({ document: { getElementById: id => elements[id] }, renderMarkdown: value => value });
+  vm.runInContext(['formatLocalTimestamp', 'reportMonthLabel', 'setReportStatus', 'renderReport'].map(extract).join('\n'), context);
+  const timestamp = '2026-10-20T00:30:00+00:00';
+  context.renderReport({ year: 2026, month: 9, updated_at: timestamp, model: 'mock', content_md: 'mock' });
+  assert.ok(elements['report-status'].textContent.endsWith(context.formatLocalTimestamp(timestamp)));
+  assert.ok(extract('generateReport').includes('formatLocalTimestamp(event.updated_at)'));
+});
+
+test('exports, goals and chart modules retain single responsibilities and startup order', () => {
+  const monthly = fs.readFileSync('frontend/app-monthly.js', 'utf8');
+  assert.doesNotMatch(monthly, /function (?:doExport|saveRunningGoal|renderMonthlyYearChart)\(/);
+  assert.match(fs.readFileSync('frontend/app-exports.js', 'utf8'), /function exportAccountData\(/);
+  assert.match(fs.readFileSync('frontend/app-goals.js', 'utf8'), /function saveRunningGoal\(/);
+  assert.match(fs.readFileSync('frontend/app-shoe-charts.js', 'utf8'), /function renderCharts\(/);
+  assert.match(fs.readFileSync('frontend/app-monthly-charts.js', 'utf8'), /function renderMonthlyYearChart\(/);
+  const common = fs.readFileSync('frontend/app-charts.js', 'utf8');
+  assert.doesNotMatch(common, /new Chart\(/);
+  assert.ok(htmlSource.indexOf('/app-charts.js?') < htmlSource.indexOf('/app-shoe-charts.js?'));
+  assert.ok(htmlSource.indexOf('/app-monthly-charts.js?') < htmlSource.indexOf('/app.js?'));
+});
 
 function streamContext() {
   const context = vm.createContext({ DOMException, TextDecoder,
@@ -395,11 +524,12 @@ test('replacement alerts require backup for every purpose and handle unclassifie
 
 test('shoe save ignores duplicate submissions and unlocks after errors', async () => {
   const definition = source.slice(source.indexOf('class ShoeModal {'), source.indexOf('// 初始化一次'));
-  const context = vm.createContext({ alert() {}, loadData: async () => {} });
+  const context = vm.createContext({ alert() {}, loadData: async () => {}, isCurrentAuthSession: session => session.current });
   vm.runInContext(definition + '\nglobalThis.Modal = ShoeModal;', context);
   const modal = Object.create(context.Modal.prototype);
   const button = {};
-  Object.assign(modal, { mode: 'create', el: { querySelector: () => button },
+  Object.assign(modal, { mode: 'create', context: { mode: 'create', session: { current: true } },
+    btnDelete: {}, btnMove: {}, el: { querySelector: () => button },
     _payload: () => ({ brand: 'A', model: 'B', date: '2026-09-06' }), close() {} });
   let resolve, calls = 0;
   context.apiPost = () => { calls++; return new Promise(r => { resolve = r; }); };
@@ -517,7 +647,7 @@ test('monthly inline edits commit once and include the loaded version', async ()
 test('monthly, run, and shoe deletes carry optimistic versions', () => {
   assert.match(extract('deleteMonthlyMileage'), /expected_version=' \+ \(m\.version \|\| 0\)/);
   const modal = source.slice(source.indexOf('class ShoeModal {'), source.indexOf('// 初始化一次'));
-  assert.match(modal, /expected_version=' \+ \(this\.shoe\.version \|\| 0\)/);
+  assert.match(modal, /expected_version=' \+ \(shoe\.version \|\| 0\)/);
 });
 
 test('report history model labels are inserted as text, not HTML', () => {

@@ -1,7 +1,7 @@
 """Tests for the AI monthly report feature (one-shot generation + persistence)."""
 
 import json
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
 import pytest
@@ -10,7 +10,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from backend import llm, reports
+from backend import llm, reports, schemas
 from backend.auth import create_access_token, get_password_hash
 from backend.database import Base, get_db
 from backend.main import app
@@ -67,6 +67,32 @@ def mock_llm(monkeypatch):
 
 def _auth_header(token):
     return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.mark.parametrize("timestamp", [
+    datetime(2026, 10, 20, 0, 30, tzinfo=UTC).replace(tzinfo=None),  # SQLite representation
+    datetime(2026, 10, 20, 0, 30, tzinfo=UTC),
+    datetime(2026, 10, 20, 8, 30, tzinfo=timezone(timedelta(hours=8))),
+])
+def test_report_timestamp_normalizes_to_explicit_utc(timestamp):
+    assert schemas.serialize_utc_timestamp(timestamp) == "2026-10-20T00:30:00+00:00"
+
+
+def test_saved_report_timestamps_include_timezone(client, db, user_with_token):
+    user, token = user_with_token
+    db.add(MonthlyReport(
+        user_id=user.id, year=2026, month=9, content_md="mock report", model="mock",
+        created_at=datetime(2026, 10, 20, 0, 30, tzinfo=UTC),
+        updated_at=datetime(2026, 10, 20, 0, 30, tzinfo=UTC),
+    ))
+    db.commit()
+    db.expire_all()
+    result = client.get("/api/reports/2026/9", headers=_auth_header(token))
+    assert result.status_code == 200
+    for key in ("created_at", "updated_at"):
+        assert result.json()[key] == "2026-10-20T00:30:00+00:00"
+    history = client.get("/api/reports", headers=_auth_header(token))
+    assert history.json()[0]["updated_at"] == result.json()["updated_at"]
 
 
 def _all_events(text):

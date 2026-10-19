@@ -24,8 +24,12 @@
 - `frontend/app-streams.js`: shared authenticated SSE decoding, cancellation, and terminal state.
 - `frontend/app-core.js`: dashboard shell, theme, tabs, and aggregate data loading.
 - `frontend/app-dashboard.js`: dashboard cards, alerts, and shoe tables.
-- `frontend/app-monthly.js`: monthly mileage, goals, and export interactions.
-- `frontend/app-charts.js`: shoe, mileage, and yearly charts.
+- `frontend/app-monthly.js`: monthly mileage table, inline forms, and edit snapshots.
+- `frontend/app-exports.js`: authenticated shoe exports and account backup downloads.
+- `frontend/app-goals.js`: running-goal settings and progress presentation.
+- `frontend/app-charts.js`: shared chart registry and label utilities.
+- `frontend/app-shoe-charts.js`: shoe lifecycle, cost, retirement, and allocation charts.
+- `frontend/app-monthly-charts.js`: month/year selectors and monthly/annual mileage charts.
 - `frontend/app-spending.js`: spending cards, charts, and table.
 - `frontend/app.js`: bootstrap and global dialog event wiring.
 - `frontend/app-agent.js`: AI assistant models, chat streaming, and safe Markdown rendering.

@@ -5,6 +5,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from backend import models, schemas, strava_import
 from backend.auth import get_current_user
@@ -46,37 +47,23 @@ def _parsed_mapping(raw_mapping: str) -> dict[str, Any]:
     return parsed
 
 
-@router.post("/api/runs/import/strava/preview")
-async def preview_strava_import(
-    file: UploadFile = File(...),
-    start_date: str = Form(""),
-    end_date: str = Form(""),
-    current_user: models.User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    rows, invalid, warnings = _parse_strava_csv(await _read_strava_upload(file))
+def _preview_upload(db: Session, user_id: int, raw: bytes, start_date: str, end_date: str):
+    """One sequential worker owns CSV parsing and all request-session DB work."""
+    rows, invalid, warnings = _parse_strava_csv(raw)
     rows, filtered_out = _filter_strava_rows(rows, start_date, end_date)
-    result = strava_imports.preview(db, current_user.id, rows, invalid, warnings)
+    result = strava_imports.preview(db, user_id, rows, invalid, warnings)
     result["filtered_out"] = filtered_out
     return result
 
 
-@router.post("/api/runs/import/strava")
-async def import_strava_runs(
-    file: UploadFile = File(...),
-    mapping: str = Form("{}"),
-    start_date: str = Form(""),
-    end_date: str = Form(""),
-    current_user: models.User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
+def _import_upload(db: Session, user_id: int, raw: bytes, mapping: str, start_date: str, end_date: str):
     parsed_mapping = _parsed_mapping(mapping)
-    rows, invalid, _ = _parse_strava_csv(await _read_strava_upload(file))
+    rows, invalid, _ = _parse_strava_csv(raw)
     rows, filtered_out = _filter_strava_rows(rows, start_date, end_date)
     try:
         result = strava_imports.import_runs(
             db,
-            current_user.id,
+            user_id,
             rows,
             parsed_mapping,
             start_date=start_date,
@@ -99,6 +86,33 @@ async def import_strava_runs(
             status_code=409, detail="部分 Strava 活動已存在，請重新預覽"
         ) from exc
     return result.as_dict()
+
+
+@router.post("/api/runs/import/strava/preview")
+async def preview_strava_import(
+    file: UploadFile = File(...),
+    start_date: str = Form(""),
+    end_date: str = Form(""),
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    user_id = current_user.id
+    raw = await _read_strava_upload(file)
+    return await run_in_threadpool(_preview_upload, db, user_id, raw, start_date, end_date)
+
+
+@router.post("/api/runs/import/strava")
+async def import_strava_runs(
+    file: UploadFile = File(...),
+    mapping: str = Form("{}"),
+    start_date: str = Form(""),
+    end_date: str = Form(""),
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    user_id = current_user.id
+    raw = await _read_strava_upload(file)
+    return await run_in_threadpool(_import_upload, db, user_id, raw, mapping, start_date, end_date)
 
 
 @router.get("/api/runs/import/strava/history", response_model=list[schemas.StravaImportOut])

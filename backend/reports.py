@@ -15,7 +15,7 @@ from sqlalchemy import func
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
-from backend import goals, llm, models
+from backend import goals, llm, models, schemas
 from backend.tools import db_tools
 
 REPORT_SECTIONS = ["本月總覽", "趨勢解讀", "鞋款壽命與退役提醒", "下月建議"]
@@ -316,6 +316,6 @@ def generate_report_stream(
             "model": model,
             "year": year,
             "month": month,
-            "updated_at": updated_at.isoformat(),
+            "updated_at": schemas.serialize_utc_timestamp(updated_at),
         }
     )
