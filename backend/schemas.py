@@ -31,6 +31,13 @@ ShoeName = Annotated[str, Field(min_length=1, max_length=100)]
 ShoeSize = Annotated[str, Field(max_length=50)]
 
 
+def serialize_utc_timestamp(value: datetime) -> str:
+    """SQLite drops timezone metadata; application timestamps are stored as UTC."""
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=UTC)
+    return value.astimezone(UTC).isoformat()
+
+
 def _validate_password(value: str) -> str:
     if len(value.encode("utf-8")) > MAX_PASSWORD_BYTES:
         raise ValueError(f"password must be at most {MAX_PASSWORD_BYTES} UTF-8 bytes")
@@ -486,6 +493,4 @@ class StravaImportOut(BaseModel):
 
     @field_serializer("imported_at")
     def serialize_imported_at(self, value: datetime) -> str:
-        if value.tzinfo is None:
-            value = value.replace(tzinfo=UTC)
-        return value.isoformat()
+        return serialize_utc_timestamp(value)

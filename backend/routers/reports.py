@@ -57,7 +57,7 @@ def list_monthly_reports(
             "year": row.year,
             "month": row.month,
             "model": row.model,
-            "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+            "updated_at": schemas.serialize_utc_timestamp(row.updated_at) if row.updated_at else None,
         }
         for row in rows
     ]
@@ -84,6 +84,6 @@ def get_monthly_report(
         "model": row.model,
         "content_md": row.content_md,
         "stats_json": row.stats_json,
-        "created_at": row.created_at.isoformat() if row.created_at else None,
-        "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+        "created_at": schemas.serialize_utc_timestamp(row.created_at) if row.created_at else None,
+        "updated_at": schemas.serialize_utc_timestamp(row.updated_at) if row.updated_at else None,
     }

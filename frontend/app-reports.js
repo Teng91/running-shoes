@@ -46,7 +46,7 @@ function renderReport(report) {
     modelSelect.value = report.model;
   }
   setReportStatus('已儲存報告 · 模型 ' + (report.model || '—') +
-    ' · 更新於 ' + (report.updated_at || '').replace('T', ' ').slice(0, 16));
+    ' · 更新於 ' + formatLocalTimestamp(report.updated_at));
 }
 
 async function loadReportHistory() {
