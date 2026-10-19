@@ -64,11 +64,12 @@ function showAppView({ keepBoot = false } = {}) {
 }
 
 function resetAppLayout() {
-  const appView = document.getElementById('app-view');
-  appView.style.height = '';
-  appView.style.overflow = '';
-  appView.style.flexDirection = '';
-  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === 'runs'));
+  document.getElementById('app-workspace').classList.remove('agent-mode');
+  document.querySelectorAll('.tab').forEach(tab => {
+    const active = tab.dataset.tab === 'runs';
+    tab.classList.toggle('active', active);
+    tab.setAttribute('aria-selected', String(active));
+  });
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.dataset.panel === 'runs'));
 }
 

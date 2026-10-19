@@ -1,7 +1,12 @@
 // Dashboard shell, theme, tab navigation, and aggregate data loading.
 function switchTab(name) {
-  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
-  document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.dataset.panel === name));
+  document.querySelectorAll('.tab').forEach(tab => {
+    const active = tab.dataset.tab === name;
+    tab.classList.toggle('active', active);
+    tab.setAttribute('aria-selected', String(active));
+  });
+  document.querySelectorAll('.tab-panel').forEach(panel => panel.classList.toggle('active', panel.dataset.panel === name));
+  document.getElementById('app-workspace').classList.toggle('agent-mode', name === 'agent');
   localStorage.setItem('activeTab', name);
   if (name === 'monthly') requestAnimationFrame(() => renderMonthlyCharts());
   if (name === 'spending') requestAnimationFrame(() => renderSpendingCharts());
@@ -9,18 +14,6 @@ function switchTab(name) {
   if (name === 'report' && authToken) {
     loadReportHistory();
     loadSavedReport();
-  }
-  const appView = document.getElementById('app-view');
-  if (name === 'agent') {
-    appView.style.height = 'max(100dvh, 680px)';
-    appView.style.overflow = 'hidden';
-    appView.style.display = 'flex';
-    appView.style.flexDirection = 'column';
-  } else {
-    appView.style.height = '';
-    appView.style.overflow = '';
-    appView.style.display = '';
-    appView.style.flexDirection = '';
   }
 }
 
