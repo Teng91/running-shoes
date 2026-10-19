@@ -147,28 +147,39 @@ window.__appBootLegacyPoll = window.setInterval(function () {
 </div>
 
 <!-- App View -->
-<div class="container" id="app-view" style="display:none;">
-  <div id="data-load-error" role="alert" hidden>載入資料失敗，目前顯示上次載入的資料。<button class="btn" onclick="loadData()">重新載入</button></div>
-  <div class="app-header">
-    <h1>跑鞋追蹤 Dashboard</h1>
+<div class="app-shell" id="app-view" style="display:none;">
+  <aside class="app-sidebar">
+    <div class="app-brand">
+      <div class="app-brand-mark" aria-hidden="true">🏃</div>
+      <div>
+        <h1>跑鞋追蹤</h1>
+        <p class="subtitle" id="today-label"></p>
+      </div>
+    </div>
+
+    <div class="app-nav-label">功能選單</div>
+    <div class="tabs" role="tablist" aria-label="主要功能">
+      <button class="tab active" role="tab" aria-selected="true" aria-controls="panel-runs" data-tab="runs" onclick="switchTab('runs')"><span class="tab-icon" aria-hidden="true">🏃</span><span>跑步日誌</span></button>
+      <button class="tab" role="tab" aria-selected="false" aria-controls="panel-shoes" data-tab="shoes" onclick="switchTab('shoes')"><span class="tab-icon" aria-hidden="true">👟</span><span>跑鞋</span></button>
+      <button class="tab" role="tab" aria-selected="false" aria-controls="panel-monthly" data-tab="monthly" onclick="switchTab('monthly')"><span class="tab-icon" aria-hidden="true">📊</span><span>月跑量</span></button>
+      <button class="tab" role="tab" aria-selected="false" aria-controls="panel-spending" data-tab="spending" onclick="switchTab('spending')"><span class="tab-icon" aria-hidden="true">💳</span><span>支出</span></button>
+      <button class="tab" role="tab" aria-selected="false" aria-controls="panel-agent" data-tab="agent" onclick="switchTab('agent')"><span class="tab-icon" aria-hidden="true">✨</span><span>AI 助手</span></button>
+      <button class="tab" role="tab" aria-selected="false" aria-controls="panel-report" data-tab="report" onclick="switchTab('report')"><span class="tab-icon" aria-hidden="true">📝</span><span>月報</span></button>
+    </div>
+
     <div class="user-info">
       <span class="user-name" id="user-label"></span>
-      <button class="btn btn-sm btn-edit" id="theme-toggle-btn" onclick="toggleTheme()">☀️ 亮色模式</button>
-      <button class="btn btn-sm btn-edit" onclick="handleLogout()">登出</button>
+      <div class="sidebar-actions">
+        <button class="btn btn-sm btn-edit" id="theme-toggle-btn" onclick="toggleTheme()">☀️ 亮色模式</button>
+        <button class="btn btn-sm btn-edit" onclick="handleLogout()">登出</button>
+      </div>
     </div>
-  </div>
-  <p class="subtitle" id="today-label"></p>
+  </aside>
 
-  <div class="tabs">
-    <button class="tab active" data-tab="runs" onclick="switchTab('runs')">跑步日誌</button>
-    <button class="tab" data-tab="shoes" onclick="switchTab('shoes')">跑鞋</button>
-    <button class="tab" data-tab="monthly" onclick="switchTab('monthly')">月跑量</button>
-    <button class="tab" data-tab="spending" onclick="switchTab('spending')">支出</button>
-    <button class="tab" data-tab="agent" onclick="switchTab('agent')">AI 助手</button>
-    <button class="tab" data-tab="report" onclick="switchTab('report')">月報</button>
-  </div>
+  <main class="app-workspace" id="app-workspace">
+    <div id="data-load-error" role="alert" hidden>載入資料失敗，目前顯示上次載入的資料。<button class="btn" onclick="loadData()">重新載入</button></div>
 
-  <div class="tab-panel" data-panel="shoes">
+  <div class="tab-panel" id="panel-shoes" role="tabpanel" data-panel="shoes">
 
     <div class="cards" id="summary-cards"></div>
     <div class="shoe-alerts" id="shoe-alerts"></div>
@@ -225,7 +236,7 @@ window.__appBootLegacyPoll = window.setInterval(function () {
 
   </div><!-- /tab-panel shoes -->
 
-  <div class="tab-panel active" data-panel="runs">
+  <div class="tab-panel active" id="panel-runs" role="tabpanel" data-panel="runs">
     <div class="run-hero">
       <div class="run-intro">
         <h2>這個月，你是怎麼跑的？</h2>
@@ -265,7 +276,7 @@ window.__appBootLegacyPoll = window.setInterval(function () {
     </div>
   </div><!-- /tab-panel runs -->
 
-  <div class="tab-panel" data-panel="monthly">
+  <div class="tab-panel" id="panel-monthly" role="tabpanel" data-panel="monthly">
 
     <div class="goal-settings">
       <div class="form-group"><label>目標開始年份</label><input id="goal-start-year" type="number" min="1900" max="2100"></div>
@@ -326,7 +337,7 @@ window.__appBootLegacyPoll = window.setInterval(function () {
   </div><!-- /tab-panel monthly -->
 
   <!-- Spending Tab -->
-  <div class="tab-panel" data-panel="spending">
+  <div class="tab-panel" id="panel-spending" role="tabpanel" data-panel="spending">
 
     <div class="cards" id="spending-cards"></div>
 
@@ -366,7 +377,7 @@ window.__appBootLegacyPoll = window.setInterval(function () {
   </div><!-- /tab-panel spending -->
 
   <!-- Agent Chat Panel -->
-  <div class="tab-panel agent-panel" data-panel="agent">
+  <div class="tab-panel agent-panel" id="panel-agent" role="tabpanel" data-panel="agent">
     <div class="agent-config">
       <label style="font-size:13px;color:var(--text-dim);white-space:nowrap;">今日免費模型</label>
       <select id="agent-model"></select>
@@ -384,7 +395,7 @@ window.__appBootLegacyPoll = window.setInterval(function () {
   </div><!-- /tab-panel agent -->
 
   <!-- Monthly Report Panel -->
-  <div class="tab-panel" data-panel="report">
+  <div class="tab-panel" id="panel-report" role="tabpanel" data-panel="report">
     <div class="run-hero">
       <div class="run-intro">
         <h2>AI 月度跑步報告</h2>
@@ -416,6 +427,7 @@ window.__appBootLegacyPoll = window.setInterval(function () {
     </div>
   </div><!-- /tab-panel report -->
 
+  </main>
 </div>
 
 <!-- Add/Edit Modal -->

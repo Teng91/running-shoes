@@ -37,6 +37,13 @@ async function assertLayout(page, label) {
       const box = tab.getBoundingClientRect();
       if (box.left < 0 || box.right > innerWidth + 1 || tab.scrollWidth > tab.clientWidth + 1) problems.push('clipped tab');
     }
+    const sidebar = document.querySelector('.app-sidebar');
+    const workspace = document.querySelector('.app-workspace');
+    if (visible(sidebar) && visible(workspace)) {
+      const sidebarBox = sidebar.getBoundingClientRect(), workspaceBox = workspace.getBoundingClientRect();
+      if (innerWidth > 800 && workspaceBox.left < sidebarBox.right - 1) problems.push('workspace does not follow sidebar');
+      if (innerWidth <= 800 && workspaceBox.top < sidebarBox.bottom - 1) problems.push('mobile workspace overlaps navigation');
+    }
     for (const modal of document.querySelectorAll('.modal-overlay.active .modal')) {
       const box = modal.getBoundingClientRect();
       if (box.left < 0 || box.right > innerWidth + 1 || box.top < 0 || box.bottom > innerHeight + 1 ||
@@ -82,7 +89,7 @@ async function run(engine, name) {
     await page.evaluate(() => {
       Chart.defaults.animation = false;
       document.querySelector('#auth-view').style.display = 'none';
-      document.querySelector('#app-view').style.display = 'block';
+      document.querySelector('#app-view').style.display = '';
       document.querySelector('#user-label').textContent = 'runner_with_a_very_long_username';
       shoes = Array.from({ length: 8 }, (_, i) => ({ id: i + 1, brand: 'Mizuno',
         model: i === 0 ? 'Wave Sky 7' : `非常長的鞋款名稱 Very long running shoe model ${i}`,
@@ -127,6 +134,10 @@ async function run(engine, name) {
           if (screenshots && width === 390 && tab === 'runs') {
             await page.evaluate(() => window.scrollTo(0, 0));
             await page.screenshot({ path: path.join(screenshots, `${name}-${theme}-runs-top.png`) });
+          }
+          if (screenshots && width === 1440 && tab === 'runs') {
+            await page.evaluate(() => window.scrollTo(0, 0));
+            await page.screenshot({ path: path.join(screenshots, `${name}-${theme}-runs-desktop.png`) });
           }
         }
         await page.locator('.tab[data-tab="shoes"]').click();
