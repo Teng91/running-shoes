@@ -45,6 +45,7 @@ flowchart LR
 
 - Schema／資料 migration：不需要。
 - 上線與 smoke test：登入後逐一切換六個功能，驗證桌面左右分欄、手機單欄、亮暗主題與 AI 訊息區。
+- PWA 資產一致性：HTML 的 application CSS／JavaScript 與 Service Worker 使用相同版本 query；新版 HTML 不得搭配舊版快取資產。
 - 回滾方式與資料相容性：可直接回滾前端 commit；不涉及資料格式，無相容性風險。
 
 ## Acceptance criteria
