@@ -63,12 +63,3 @@ if ('serviceWorker' in navigator) {
       .catch(error => console.warn('Service Worker 註冊失敗:', error));
   });
 }
-
-// Resize handler — re-apply agent tab layout on window resize
-window.addEventListener('resize', () => {
-  const activePanel = document.querySelector('.tab-panel.active');
-  if (activePanel && activePanel.dataset.panel === 'agent') {
-    const appView = document.getElementById('app-view');
-    appView.style.height = 'max(100dvh, 680px)';
-  }
-});

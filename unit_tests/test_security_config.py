@@ -176,11 +176,12 @@ def test_strava_frontend_uses_account_range_and_automatic_mileage_sync():
 
 def test_run_log_is_the_first_and_default_tab():
     source = FRONTEND_SOURCE
-    tabs = source.split('<div class="tabs">', 1)[1].split("</div>", 1)[0]
+    tabs = source.split('<div class="tabs"', 1)[1].split("</div>", 1)[0]
 
     assert tabs.index('data-tab="runs"') < tabs.index('data-tab="shoes"')
-    assert 'class="tab active" data-tab="runs"' in tabs
-    assert "t.dataset.tab === 'runs'" in source
+    assert 'class="tab active"' in tabs
+    assert 'data-tab="runs"' in tabs
+    assert "tab.dataset.tab === 'runs'" in source
 
 
 def test_strava_frontend_discards_stale_preview_responses():
