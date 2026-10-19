@@ -1,11 +1,12 @@
 // Real browser flow against FastAPI. The database always lives in a fresh OS temp directory.
-const { chromium } = require('playwright');
+const { chromium, webkit } = require('playwright');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const net = require('node:net');
 const os = require('node:os');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
+const checkSessionIsolation = require('./frontend_sessions.cjs');
 
 const projectRoot = path.resolve(__dirname, '..');
 
@@ -146,6 +147,13 @@ async function run() {
     assert.deepEqual(pageErrors, [], 'browser JavaScript errors');
     assert.ok(fs.existsSync(databasePath), 'FastAPI used the isolated temporary database');
     console.log('PASS Chromium: registration, login, shoe CRUD, run CRUD, and persistence');
+    await checkSessionIsolation(browser, baseUrl);
+    const safari = await webkit.launch({ headless: true });
+    try {
+      await checkSessionIsolation(safari, baseUrl);
+    } finally {
+      await safari.close();
+    }
   } catch (error) {
     error.message += `\nFastAPI log:\n${logs.join('')}`;
     throw error;

@@ -50,16 +50,13 @@ function renderReport(report) {
 }
 
 async function loadReportHistory() {
+  const session = captureAuthSession();
   const select = document.getElementById('report-history');
   try {
-    const res = await fetch(API_BASE + '/reports', { headers: authHeaders() });
-    if (res.status === 401) {
-      clearAuth();
-      showLoginView();
-      return;
-    }
+    const res = await authenticatedFetch(API_BASE + '/reports', { headers: authHeaders() });
     if (!res.ok) return;
-    const rows = await res.json();
+    const rows = await readAuthenticatedBody(res);
+    if (!isCurrentAuthSession(session)) return;
     select.replaceChildren();
     const placeholder = document.createElement('option');
     placeholder.value = '';
@@ -73,6 +70,7 @@ async function loadReportHistory() {
       select.appendChild(option);
     });
   } catch (e) {
+    if (e.name === 'AbortError' || !isCurrentAuthSession(session)) return;
     console.error('載入報告歷史失敗:', e);
   }
 }
@@ -97,7 +95,7 @@ async function loadSavedReport() {
   document.getElementById('report-title').textContent = '報告內容 — ' + reportMonthLabel(requestedMonth);
   content.textContent = '載入中…';
   try {
-    const res = await fetch(API_BASE + '/reports/' + parts[0] + '/' + parts[1], {
+    const res = await authenticatedFetch(API_BASE + '/reports/' + parts[0] + '/' + parts[1], {
       headers: authHeaders(),
       signal: controller.signal,
     });
@@ -106,17 +104,12 @@ async function loadSavedReport() {
       content.textContent = '此月份尚無報告，按「產生報告」由 AI 生成。';
       return;
     }
-    if (res.status === 401) {
-      clearAuth();
-      showLoginView();
-      return;
-    }
     if (!res.ok) {
       content.textContent = '尚未選擇報告。';
       setReportStatus('讀取報告失敗（HTTP ' + res.status + '）');
       return;
     }
-    const report = await res.json();
+    const report = await readAuthenticatedBody(res);
     if (requestId !== reportLoadRequestId || selectedReportMonth() !== requestedMonth) return;
     renderReport(report);
   } catch (e) {
@@ -137,6 +130,7 @@ function setReportControlsDisabled(disabled) {
 }
 
 async function generateReport() {
+  const session = captureAuthSession();
   const parts = reportMonthParts();
   if (!parts) {
     setReportStatus('請先選擇報告月份。');
@@ -170,13 +164,14 @@ async function generateReport() {
     if (markdownFrame !== null) return;
     markdownFrame = requestAnimationFrame(() => {
       markdownFrame = null;
+      if (requestId !== reportGenerationRequestId || !isCurrentAuthSession(session)) return;
       content.innerHTML = renderMarkdown(fullText);
     });
   };
 
   try {
     content.classList.add('is-streaming');
-    const res = await fetch(API_BASE + '/reports/generate', {
+    const res = await authenticatedFetch(API_BASE + '/reports/generate', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -189,16 +184,11 @@ async function generateReport() {
       }),
       signal: controller.signal,
     });
-    if (requestId !== reportGenerationRequestId) return;
-    if (res.status === 401) {
-      clearAuth();
-      showLoginView();
-      throw new Error('登入已過期，請重新登入。');
-    }
+    if (requestId !== reportGenerationRequestId || !isCurrentAuthSession(session)) return;
     if (!res.ok) {
       let message = '報告請求失敗（HTTP ' + res.status + '）';
       try {
-        const errorBody = await res.json();
+        const errorBody = await readAuthenticatedBody(res);
         if (typeof errorBody.detail === 'string') {
           message = errorBody.detail;
         } else if (Array.isArray(errorBody.detail)) {
@@ -246,6 +236,7 @@ async function generateReport() {
 
     while (true) {
       const { done, value } = await reader.read();
+      if (requestId !== reportGenerationRequestId || !isCurrentAuthSession(session)) return;
       if (done) break;
       buffer += decoder.decode(value, { stream: true });
       const lines = buffer.split('\n');
@@ -272,6 +263,7 @@ async function generateReport() {
     content.textContent = '⚠️ ' + message;
     console.error('報告請求失敗:', e);
   } finally {
+    if (markdownFrame !== null) cancelAnimationFrame(markdownFrame);
     if (requestId !== reportGenerationRequestId) return;
     reportGenerationController = null;
     content.classList.remove('is-streaming');

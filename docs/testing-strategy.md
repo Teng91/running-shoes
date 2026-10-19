@@ -35,6 +35,7 @@ flowchart BT
 | 品質需求 | 主要驗證 | 失敗代表 |
 | --- | --- | --- |
 | 帳號資料隔離 | API tests + security regressions | query 缺少 user scope 或 authorization |
+| 帳號切換非同步隔離 | Node transport tests + Chromium/WebKit session E2E | 舊洞察、AI history/retry 或 401 回填／清除新 session |
 | 跑步／鞋款／月跑量一致 | transaction 與 edge-case tests | partial commit、差額或 optimistic lock 錯誤 |
 | 匯出與備份安全 | export API tests | 格式、欄位、帳號範圍或 secret 洩漏回歸 |
 | AI 工具安全與選擇 | agent evals + mocked stream tests | prompt/tool policy 或 fallback 回歸 |
@@ -45,7 +46,7 @@ flowchart BT
 | App composition 隔離 | app factory tests | lifespan 誤用正式 database globals 或設定漂移 |
 | API contract | method/path snapshot | endpoint 被意外新增、刪除或改名 |
 | Runtime module boundary | architecture check + frontend asset/order regressions | router/service 或 plain-script dependency 再次混合 |
-| 備份可恢復性 | backup/restore tests | checksum、integrity、retention 或安全快照失效 |
+| 備份可恢復性 | backup/restore tests | checksum、integrity、retention、安全快照、殘留 WAL 還原或 busy 鎖失效 |
 | Coverage floor | branch coverage ≥ 92% | 測試保護範圍明顯退化 |
 | Secret hygiene | `security-check` | tracked files 包含明確 credential 特徵 |
 | 文件與實作一致 | `docs-check` | 測試數、命令、檔案或工具數過期 |

@@ -2,8 +2,8 @@
 
 import argparse
 import hashlib
-import os
 import sqlite3
+from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -92,25 +92,48 @@ def restore_backup(backup: Path, destination: Path, *, confirmation: str) -> Pat
         raise ValueError("restore requires --confirm RESTORE")
     backup = backup.resolve()
     destination = destination.resolve()
+    if backup == destination:
+        raise ValueError("backup and destination must be different files")
     verify_backup(backup)
     destination.parent.mkdir(parents=True, exist_ok=True)
 
     safety_backup: Path | None = None
-    if destination.exists():
-        safety_backup = destination.with_name(
-            f"{destination.stem}.pre-restore-{_timestamp()}{destination.suffix}"
-        )
-        _sqlite_snapshot(destination, safety_backup)
-        verify_backup(safety_backup, check_checksum=False)
-
-    temporary = destination.with_name(f".{destination.name}.restore-{os.getpid()}")
-    temporary.unlink(missing_ok=True)
-    try:
-        _sqlite_snapshot(backup, temporary)
-        verify_backup(temporary, check_checksum=False)
-        temporary.replace(destination)
-    finally:
-        temporary.unlink(missing_ok=True)
+    existed = destination.exists()
+    with (
+        closing(sqlite3.connect(f"file:{backup}?mode=ro", uri=True)) as source_connection,
+        closing(sqlite3.connect(destination, timeout=0)) as target_connection,
+    ):
+        # SQLite recovers/checkpoints any old WAL itself. Switching journal mode
+        # refuses active WAL connections; the retained exclusive lock prevents
+        # another writer from entering while taking the safety copy/restoring.
+        try:
+            target_connection.execute("PRAGMA journal_mode=DELETE")
+            target_connection.execute("PRAGMA locking_mode=EXCLUSIVE")
+            target_connection.execute("BEGIN EXCLUSIVE")
+            target_connection.commit()
+        except sqlite3.OperationalError as exc:
+            raise ValueError(
+                "destination database is busy; stop all servers/workers before restore"
+            ) from exc
+        if existed:
+            safety_backup = destination.with_name(
+                f"{destination.stem}.pre-restore-{_timestamp()}{destination.suffix}"
+            )
+            safety_connection = sqlite3.connect(safety_backup)
+            try:
+                target_connection.backup(safety_connection)
+            finally:
+                safety_connection.close()
+            safety_backup.chmod(0o600)
+            verify_backup(safety_backup, check_checksum=False)
+        # Restore through the database connection, never replace a main file
+        # underneath WAL/SHM files or SQLite's locking protocol.
+        source_connection.backup(target_connection)
+        integrity = target_connection.execute("PRAGMA quick_check").fetchone()
+        if integrity is None or integrity[0] != "ok":
+            raise ValueError(f"restored database integrity check failed: {integrity}")
+    destination.chmod(0o600)
+    verify_backup(destination, check_checksum=False)
     return safety_backup
 
 

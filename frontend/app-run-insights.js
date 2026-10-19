@@ -34,9 +34,11 @@ function renderRunLog() {
 async function loadDashboardAnalytics(month) {
   const target = document.getElementById('dashboard-insights');
   if (!target || !authToken) return;
-  const cacheKey = `${localDateISO()}|${month}`;
+  const session = captureAuthSession();
+  const cachePrefix = `${session.generation}|${localDateISO()}|`;
+  const cacheKey = `${cachePrefix}${month}`;
   for (const key of dashboardAnalyticsCache.keys()) {
-    if (!key.startsWith(`${localDateISO()}|`)) dashboardAnalyticsCache.delete(key);
+    if (!key.startsWith(cachePrefix)) dashboardAnalyticsCache.delete(key);
   }
   if (dashboardAnalyticsCache.has(cacheKey)) {
     renderDashboardInsights(dashboardAnalyticsCache.get(cacheKey));
@@ -47,11 +49,11 @@ async function loadDashboardAnalytics(month) {
   try {
     const [year, monthNumber] = month.split('-').map(Number);
     const data = await apiGet(`/analytics/dashboard?year=${year}&month=${monthNumber}`);
-    if (requestId !== dashboardAnalyticsRequest || selectedRunMonth() !== month) return;
+    if (!isCurrentAuthSession(session) || requestId !== dashboardAnalyticsRequest || selectedRunMonth() !== month) return;
     dashboardAnalyticsCache.set(cacheKey, data);
     renderDashboardInsights(data);
   } catch (error) {
-    if (requestId !== dashboardAnalyticsRequest) return;
+    if (!isCurrentAuthSession(session) || requestId !== dashboardAnalyticsRequest) return;
     target.innerHTML = `<div class="insight-alert warning">進階分析暫時無法載入：${esc(error.message || '未知錯誤')}</div>`;
   }
 }

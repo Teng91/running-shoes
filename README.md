@@ -239,7 +239,7 @@ LLM_MAX_OUTPUT_TOKENS=4096
 - **AI 跑鞋推薦助手**：依你的實際資料給換鞋與選鞋建議（需設定 OpenRouter API Key），可從本日熱門、免費且支援工具呼叫的模型中選擇
 - **AI 月度跑步報告**：可自行選擇本日免費模型，一鍵產生指定月份的跑步報告（跑量趨勢、鞋款狀態、退役提醒與下月建議），報告自動保存、可隨時回看，不需重打 LLM
 - **個人跑量目標**：預設自 2026 年起每月 125 km，年度目標自動以月目標 × 12 計算；目標、首頁與 AI 月報統一以逐筆跑步日誌計算，可切換月份查看達成率與「截至所選月份」年度進度
-- **多使用者隔離**：每人資料完全獨立，支援註冊/登入/改密碼
+- **多使用者隔離**：每人資料完全獨立，支援註冊/登入/改密碼；切換帳號會清除洞察快取並取消 AI 串流，過期請求不會影響新登入
 
 ## 跑步日誌
 
@@ -401,7 +401,7 @@ npm install --no-save --package-lock=false playwright
 npx playwright install chromium webkit
 python3 scripts/task.py frontend-layout
 
-# 以 Chromium 操作真實 FastAPI；資料庫只建立在系統暫存目錄
+# Chromium 真實 CRUD（暫存 SQLite）＋ Chromium/WebKit mock 帳號切換與串流競態
 python3 scripts/task.py frontend-e2e
 ```
 
@@ -418,7 +418,7 @@ Playwright／Chromium／WebKit 齊全時，也會執行版面測試。
 避免每次停止都重跑。Hook 不會呼叫其他模型、外部 API，或傳送提示、diff、原始碼與測試輸出。
 GitHub Actions 仍會在 push／pull request 執行 `verify`，並在獨立工作中安裝 Chromium／WebKit、跑完完整版面矩陣與真實 CRUD E2E；Dependabot 每週檢查 Python 與 GitHub Actions 更新。
 
-本次驗證基線為 Python **349 passed**、前端回歸測試 **36 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
+本次驗證基線為 Python **353 passed**、前端回歸測試 **39 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
 版面檢查涵蓋 WebKit／Chromium、亮／暗模式與 7 組直橫向尺寸，共 28 組設定，檢查五個分頁、表單、圖表、彈窗及空資料狀態。
 
 `docs-check` 會從 pytest collection、前端測試檔、Agent tool registry、Playwright 測試矩陣與實際檔案系統核對上述數字及 harness 路徑。新增測試、工具或版面設定卻忘記同步 README 時，`verify` 和 GitHub Actions 會直接失敗。
@@ -561,8 +561,9 @@ venv/bin/python scripts/database_backup.py verify \
   --backup backups/shoes-YYYYMMDDTHHMMSSffffffZ.db
 ```
 
-還原會覆蓋目標資料庫，因此必須先停止所有會寫入該資料庫的 server／worker。工具要求明確輸入
-`RESTORE`，而且在覆蓋前會自動建立 `pre-restore` 安全快照：
+還原會覆蓋目標資料庫，因此必須先停止所有連線到該資料庫的 server／worker。工具要求明確輸入
+`RESTORE`，取得 SQLite 獨占鎖，而且在覆蓋前會自動建立 `pre-restore` 安全快照；目標忙碌時會拒絕還原。
+還原透過 SQLite backup API 處理，不直接替換主檔或手動刪除 WAL／SHM，避免殘留 WAL 蓋回舊資料；完成後再驗證目標：
 
 ```bash
 venv/bin/python scripts/database_backup.py restore \
