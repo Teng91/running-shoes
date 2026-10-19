@@ -1,4 +1,37 @@
 // Dashboard shell, theme, tab navigation, and aggregate data loading.
+let panelRevision = 0;
+const renderedPanels = new Map();
+
+function invalidatePanels() {
+  panelRevision += 1;
+  stackedRunsRequestId += 1;
+}
+
+function resetPanelRendering() {
+  invalidatePanels();
+  renderedPanels.clear();
+  Object.values(chartInstances).forEach(chart => chart.destroy());
+  chartInstances = {};
+}
+
+function renderActivePanel() {
+  const name = document.querySelector('.tab-panel.active')?.dataset.panel;
+  const key = `${panelRevision}|${currentTheme}|${localDateISO()}|${name === 'runs' ? selectedRunMonth() : ''}`;
+  if (!name || renderedPanels.get(name) === key) return;
+  renderedPanels.set(name, key);
+  if (name === 'shoes') {
+    renderCards(); renderAlerts(); renderCategorySummary(); renderTable(); renderRetiredTable();
+    if (typeof Chart !== 'undefined') renderCharts();
+  } else if (name === 'runs') {
+    populateRunShoeSelects(); renderRunLog();
+  } else if (name === 'monthly') {
+    renderMonthlyTable();
+    if (typeof Chart !== 'undefined') renderMonthlyCharts();
+  } else if (name === 'spending') {
+    renderSpendingCharts();
+  }
+}
+
 function setMobileMenu(open) {
   document.getElementById('sidebar-menu').classList.toggle('menu-open', open);
   document.querySelector('.mobile-menu-toggle').setAttribute('aria-expanded', String(open));
@@ -20,9 +53,7 @@ function switchTab(name) {
     window.scrollTo(0, 0);
   }
   localStorage.setItem('activeTab', name);
-  if (name === 'monthly') requestAnimationFrame(() => renderMonthlyCharts());
-  if (name === 'spending') requestAnimationFrame(() => renderSpendingCharts());
-  if (name === 'runs') requestAnimationFrame(() => renderRunLog());
+  requestAnimationFrame(() => renderActivePanel());
   if (name === 'report' && authToken) {
     loadReportHistory();
     loadSavedReport();
@@ -44,11 +75,8 @@ function applyTheme(theme) {
 
 function toggleTheme() {
   applyTheme(currentTheme === 'dark' ? 'light' : 'dark');
-  const activeTab = document.querySelector('.tab.active')?.dataset?.tab || 'runs';
-  if (activeTab === 'shoes') renderCharts();
-  else if (activeTab === 'monthly') renderMonthlyCharts();
-  else if (activeTab === 'spending') renderSpendingCharts();
-  else if (activeTab === 'runs') renderRunLog();
+  invalidatePanels();
+  renderActivePanel();
 }
 
 applyTheme(currentTheme);

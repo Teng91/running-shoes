@@ -1,5 +1,5 @@
 // Run CRUD, paging, and shoe selection.
-let editingRunId = null;
+let editingRun = null;
 
 function localDateISO(date = new Date()) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
@@ -57,7 +57,8 @@ async function loadRunsForSelectedMonth() {
     const loadedRuns = await fetchRunPages({ year, month });
     if (requestId !== runListRequestId) return;
     runs = loadedRuns;
-    renderRunLog();
+    renderedPanels.delete('runs');
+    renderActivePanel();
   } catch (error) {
     if (requestId !== runListRequestId) return;
     console.error('載入跑步紀錄失敗:', error);
@@ -104,7 +105,7 @@ async function addRun() {
 function openRunModal(runId) {
   const run = runs.find(item => item.id === runId);
   if (!run) return;
-  editingRunId = runId;
+  editingRun = { ...run, session: captureAuthSession() };
   document.getElementById('edit-run-date').value = run.date;
   document.getElementById('edit-run-km').value = run.km;
   populateRunShoeSelects(run.shoe_id);
@@ -113,24 +114,20 @@ function openRunModal(runId) {
 }
 
 function closeRunModal() {
-  editingRunId = null;
+  editingRun = null;
   document.getElementById('run-modal').classList.remove('active');
 }
 
 async function saveRun() {
-  if (!editingRunId) return;
+  if (!editingRun || editingRun.saving) return;
+  const snapshot = editingRun;
   const error = document.getElementById('edit-run-error');
-  const editingRun = runs.find(item => item.id === editingRunId);
-  if (!editingRun) {
-    error.textContent = '找不到這筆跑步紀錄，請重新載入。';
-    error.style.display = 'block';
-    return;
-  }
+  if (!isCurrentAuthSession(snapshot.session)) return;
   const payload = {
     date: document.getElementById('edit-run-date').value,
     km: parseFloat(document.getElementById('edit-run-km').value),
     shoe_id: parseInt(document.getElementById('edit-run-shoe').value, 10),
-    expected_version: editingRun.version || 0,
+    expected_version: snapshot.version || 0,
   };
   if (!payload.date || !Number.isFinite(payload.km) || payload.km <= 0 || !payload.shoe_id) {
     error.textContent = '請完整填寫紀錄。'; error.style.display = 'block'; return;
@@ -139,22 +136,34 @@ async function saveRun() {
     error.textContent = '跑步日期不可晚於今天。'; error.style.display = 'block'; return;
   }
   try {
-    await apiPut('/runs/' + editingRunId, payload);
-    closeRunModal();
-    document.getElementById('run-month').value = payload.date.slice(0, 7);
+    snapshot.saving = true;
+    await apiPut('/runs/' + snapshot.id, payload);
+    if (!isCurrentAuthSession(snapshot.session)) return;
+    if (editingRun === snapshot) {
+      closeRunModal();
+      document.getElementById('run-month').value = payload.date.slice(0, 7);
+    }
     await loadData();
   } catch (saveError) {
+    if (editingRun !== snapshot || !isCurrentAuthSession(snapshot.session) || saveError.name === 'AbortError') return;
     error.textContent = saveError.message || '儲存失敗。';
     error.style.display = 'block';
+  } finally {
+    snapshot.saving = false;
   }
 }
 
 async function deleteEditingRun() {
-  const run = runs.find(item => item.id === editingRunId);
+  const run = editingRun;
+  if (run?.saving || (run && !isCurrentAuthSession(run.session))) return;
   if (!run || !confirm(`確定刪除 ${run.date.replace(/-/g, '/')} 的 ${run.km} km 紀錄？`)) return;
   try {
-    await apiDelete('/runs/' + editingRunId + '?expected_version=' + (run.version || 0));
-    closeRunModal();
+    run.saving = true;
+    await apiDelete('/runs/' + run.id + '?expected_version=' + (run.version || 0));
+    if (!isCurrentAuthSession(run.session)) return;
+    if (editingRun === run) closeRunModal();
     await loadData();
-  } catch (error) { alert(error.message || '刪除失敗'); }
+  } catch (error) {
+    if (editingRun === run && isCurrentAuthSession(run.session) && error.name !== 'AbortError') alert(error.message || '刪除失敗');
+  } finally { run.saving = false; }
 }

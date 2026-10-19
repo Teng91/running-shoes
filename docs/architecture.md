@@ -67,6 +67,9 @@ flowchart TB
 
     Auth --> Models[models.py]
     Analytics --> Models
+    Shoes --> Forecast[forecasting.py<br/>shared retirement policy]
+    Analytics --> Forecast
+    Forecast --> Models
     Exporting --> Models
     Goals --> Models
     Strava --> Models
@@ -97,7 +100,10 @@ flowchart LR
     HTML --> State[app-state.js<br/>共享 state]
     State --> API[app-api.js<br/>HTTP adapters]
     API --> AuthUI[app-auth.js<br/>session lifecycle]
-    AuthUI --> Core[app-core.js<br/>shell / theme / loadData]
+    AuthUI --> Streams[app-streams.js<br/>JSON SSE lifecycle]
+    Streams --> Core[app-core.js<br/>shell / theme / loadData]
+    Streams -.-> AgentUI
+    Streams -.-> ReportsUI
     Core --> AgentUI[app-agent.js]
     Core --> ReportsUI[app-reports.js]
     Core --> RunCRUD[app-runs.js]
@@ -123,6 +129,16 @@ flowchart LR
 `app-state.js` 只保存共享 state 與常數；`app-api.js` 是 transport adapter；`app-auth.js` 管理 session
 transition；`app-core.js` 組合畫面資料但不承擔 feature-specific rendering。跑步 CRUD、Strava 與洞察分別位於
 三個 module，降低修改匯入功能時誤動月曆或編輯流程的風險。
+
+[SPEC-012](specs/012-edit-stream-and-render-safety.md) 將 JSON SSE 的 HTTP 檢查、UTF-8／CRLF 解碼、
+取消及 done/error 狀態集中於 `app-streams.js`；AI／月報只處理事件呈現，AI 只在完整成功後提交對話 pair。
+編輯 modal 保存 ID/version/session 快照與單一視窗的提交鎖，重新載入不會改變編輯對象，晚到回應也不操作新視窗。
+Core 維護 panel revision／theme／date 呈現 key；`render()` 只使分頁失效並繪製 active feature，
+切換分頁時重用未變更的圖表；年度日誌只在 monthly 分頁按需讀取，完成後再次確認 active panel。
+
+退役預估由 `backend/forecasting.py` 提供單一規則，shoes router 使用 user-scoped grouped query
+批次取得 90 天跑量，透過 ShoeOut 唯讀欄位 `forecast_retirement_date`、`forecast_source`、`forecast_monthly_km`
+提供清單與時間軸；單鞋分析使用相同 helper。API path、輸入格式及資料庫 schema 不變。
 
 依 [SPEC-011](specs/011-shoe-purchase-details-in-spending.md)，`app-dashboard.js` 的現役／退役表格
 只呈現使用指標與操作；尺寸、買價、原價、折數集中由 `app-spending.js` 顯示。
@@ -203,7 +219,7 @@ sequenceDiagram
 flowchart TB
     Browser[Browser / installed PWA]
     SW[Service Worker<br/>cache-first static assets<br/>network-first navigation refresh]
-    Shell[(App shell cache v17)]
+    Shell[(App shell cache v18<br/>asset revision 3.2.1)]
     FlyProxy[Fly Proxy / HTTPS]
     Machine[Fly Machine<br/>FastAPI container]
     Volume[(Fly Volume<br/>SQLite)]

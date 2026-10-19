@@ -276,6 +276,7 @@ function onStackedYearChange() {
 }
 
 async function renderShoeStackedChart() {
+  if (document.querySelector('.tab-panel.active')?.dataset.panel !== 'monthly') return;
   if (chartInstances.shoeStacked) { chartInstances.shoeStacked.destroy(); delete chartInstances.shoeStacked; }
   const sel = document.getElementById('stacked-year-select');
   const year = parseInt(sel ? sel.value : selectedStackedYear, 10);
@@ -287,12 +288,18 @@ async function renderShoeStackedChart() {
       yearRuns = await fetchRunPages({ year });
     } catch (error) {
       console.error('載入年度跑步紀錄失敗:', error);
+      if (requestId === stackedRunsRequestId) renderedPanels.delete('monthly');
       return;
     }
     if (requestId !== stackedRunsRequestId) return;
     yearlyRunsCache.set(year, yearRuns);
   }
   if (requestId !== stackedRunsRequestId) return;
+
+  if (document.querySelector('.tab-panel.active')?.dataset.panel !== 'monthly') {
+    renderedPanels.delete('monthly');
+    return;
+  }
 
   const labels = Array.from({length: 12}, (_, i) => (i + 1) + '月');
   const allShoes = [...shoes, ...retiredShoes];

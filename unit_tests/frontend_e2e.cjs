@@ -7,6 +7,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
 const checkSessionIsolation = require('./frontend_sessions.cjs');
+const checkFrontendSafety = require('./frontend_safety.cjs');
 
 const projectRoot = path.resolve(__dirname, '..');
 
@@ -50,6 +51,7 @@ async function assertPurchaseDetails(page, status) {
   await page.locator('.tab[data-tab="spending"]').click();
   const row = page.locator('#spending-table tr').filter({ hasText: 'Browser Runner v2' });
   await row.getByText('US 9.5/27.5cm', { exact: true }).waitFor();
+  await row.getByText(status, { exact: true }).waitFor();
   assert.equal(await row.locator('td').count(), 9);
   assert.equal(await row.locator('td').nth(4).textContent(), '$2,800');
   assert.equal(await row.locator('td').nth(5).textContent(), '$5,000');
@@ -141,6 +143,18 @@ async function run() {
     const runRow = page.locator('#run-table tr').filter({ hasText: '5.50 km' });
     await runRow.getByRole('button', { name: '編輯' }).click();
     await page.locator('#edit-run-km').fill('7.25');
+    await page.evaluate(async () => {
+      const run = runs.find(item => item.id === editingRun.id);
+      await apiPut('/runs/' + run.id, { km: 6.25, expected_version: run.version });
+      await loadData();
+    });
+    await page.locator('#run-modal').getByRole('button', { name: '儲存' }).click();
+    await page.getByText('跑步紀錄已被更新，請重新載入後再編輯', { exact: true }).waitFor();
+    assert.equal(await page.locator('#edit-run-km').inputValue(), '7.25', 'conflict preserves the draft');
+    assert.equal(await page.evaluate(async () => (await apiGet('/runs'))[0].km), 6.25, 'stale form did not overwrite newer data');
+    await page.evaluate(() => closeRunModal());
+    await page.locator('#run-table tr').filter({ hasText: '6.25 km' }).getByRole('button', { name: '編輯' }).click();
+    await page.locator('#edit-run-km').fill('7.25');
     await page.locator('#run-modal').getByRole('button', { name: '儲存' }).click();
     await page.locator('#run-table').getByText('7.25 km', { exact: true }).waitFor();
 
@@ -177,9 +191,11 @@ async function run() {
     assert.ok(fs.existsSync(databasePath), 'FastAPI used the isolated temporary database');
     console.log('PASS Chromium: registration, login, shoe CRUD, run CRUD, and persistence');
     await checkSessionIsolation(browser, baseUrl);
+    await checkFrontendSafety(browser, baseUrl);
     const safari = await webkit.launch({ headless: true });
     try {
       await checkSessionIsolation(safari, baseUrl);
+      await checkFrontendSafety(safari, baseUrl);
     } finally {
       await safari.close();
     }

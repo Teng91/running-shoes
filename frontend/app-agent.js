@@ -2,6 +2,7 @@
 let agentHistory = [];
 let agentRequestId = 0;
 let agentController = null;
+let agentRetryHistory = [];
 
 const AGENT_GREETING = '你好！我是跑鞋助手，可以幫你查詢跑鞋資料、分析跑量、推薦新鞋。有什麼想問的嗎？';
 
@@ -13,6 +14,7 @@ function resetAgentChat() {
   agentController = null;
   lastUserText = '';
   agentHistory = [];
+  agentRetryHistory = [];
   document.getElementById('agent-input').value = '';
   setAgentLoading(false);
   const container = document.getElementById('agent-messages');
@@ -212,10 +214,10 @@ function setAgentLoading(loading) {
 let lastUserText = '';
 const AGENT_HISTORY_CHAR_BUDGET = 48000;
 
-function agentHistoryForRequest() {
+function agentHistoryForRequest(history = agentHistory) {
   const selected = [];
   let remaining = AGENT_HISTORY_CHAR_BUDGET;
-  for (const turn of agentHistory.slice(-20).reverse()) {
+  for (const turn of history.slice(-20).reverse()) {
     if (remaining <= 0) break;
     const content = String(turn.content || '').slice(0, 12000);
     if (!content) continue;
@@ -237,6 +239,8 @@ async function sendAgentMessage(retryText) {
   agentController = controller;
   const isCurrentRequest = () => requestId === agentRequestId && isCurrentAuthSession(session) && !controller.signal.aborted;
   const isRetry = !!retryText;
+  const requestHistory = isRetry ? agentRetryHistory.slice() : agentHistory.slice();
+  agentRetryHistory = requestHistory.slice();
 
   // Store for retry
   lastUserText = text;
@@ -258,10 +262,8 @@ async function sendAgentMessage(retryText) {
         lastUser.nextElementSibling.remove();
       }
     }
-    // Pop the last failed assistant response from history
-    if (agentHistory.length >= 2 && agentHistory[agentHistory.length - 1].role === 'assistant') {
-      agentHistory.pop();
-    }
+    // A retry replaces the last attempt without duplicating its user turn.
+    agentHistory = requestHistory.slice();
   }
 
   const container = document.getElementById('agent-messages');
@@ -286,6 +288,7 @@ async function sendAgentMessage(retryText) {
 
   const provider = 'openrouter';
   const model = document.getElementById('agent-model').value;
+  let fullText = '';
 
   try {
     const res = await authenticatedFetch(API_BASE + '/agent/chat/stream', {
@@ -296,121 +299,83 @@ async function sendAgentMessage(retryText) {
       },
       body: JSON.stringify({
         user_message: text,
-        history: agentHistoryForRequest(),
+        history: agentHistoryForRequest(requestHistory),
         provider: provider,
         model: model,
       }),
       signal: controller.signal,
     });
     if (!isCurrentRequest()) return;
-    if (!res.ok) {
-      let message = `Agent 請求失敗（HTTP ${res.status}）`;
-      try {
-        const errorBody = await readAuthenticatedBody(res);
-        if (typeof errorBody.detail === 'string') {
-          message = errorBody.detail;
-        } else if (Array.isArray(errorBody.detail)) {
-          message = errorBody.detail.map(item => item.msg || String(item)).join('；');
-        }
-      } catch {}
-      throw new Error(message);
-    }
-    const contentType = res.headers.get('content-type') || '';
-    if (!contentType.includes('text/event-stream') || !res.body) {
-      throw new Error('伺服器回傳了非預期格式，請稍後再試。');
-    }
-
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-    let fullText = '';
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (!isCurrentRequest()) return;
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || '';
-
-      for (const line of lines) {
-        if (!line.startsWith('data: ')) continue;
-        const data = line.slice(6).trim();
-        if (!data) continue;
-
-        try {
-          const event = JSON.parse(data);
-          if (event.type === 'tool') {
-            if (event.name === 'web_search') webSearchAttempted = true;
-            // Finalize current thinking bubble
-            thinkingDiv = null;
-            // Create a new tool group if needed (inserted after the thinking bubble)
-            if (!toolStatusDiv) {
-              toolStatusDiv = document.createElement('div');
-              toolStatusDiv.className = 'agent-tools';
-              container.insertBefore(toolStatusDiv, botDiv);
-            }
-            // Use a sequence counter so each tool item has a unique ID
-            const seq = toolStatusDiv.children.length;
-            const toolItem = document.createElement('div');
-            toolItem.className = 'tool-item';
-            toolItem.dataset.toolSeq = seq;
-            const query = event.name === 'web_search' && event.args && event.args.query
-              ? '：' + event.args.query
-              : '';
-            toolItem.innerHTML = '<span class="tool-icon">🔍</span> <span class="tool-name">' + esc((event.name || '查詢中') + query) + '</span>';
-            toolStatusDiv.appendChild(toolItem);
-            container.scrollTop = container.scrollHeight;
-          } else if (event.type === 'tool_done') {
-            if (event.name === 'web_search' && event.ok !== false) webSearchSucceeded = true;
-            // 個別工具完成；執行完成不等於成功，搜尋失敗需明確顯示。
-            const group = toolStatusDiv;
-            if (group) {
-              const pending = group.querySelector('.tool-item:not(.done):not(.failed)');
-              if (pending) {
-                const failed = event.ok === false;
-                pending.classList.add(failed ? 'failed' : 'done');
-                pending.querySelector('.tool-icon').textContent = failed ? '⚠️' : '✅';
-                if (failed) {
-                  const detail = document.createElement('span');
-                  detail.className = 'tool-detail';
-                  detail.textContent = '（' + (event.message || '執行失敗') + '）';
-                  pending.appendChild(detail);
-                  if (event.error) pending.title = event.error;
-                }
+    const result = await readJsonEventStream(res, {
+      signal: controller.signal, isCurrent: isCurrentRequest,
+      onEvent: event => {
+        if (event.type === 'tool') {
+          if (event.name === 'web_search') webSearchAttempted = true;
+          // Finalize current thinking bubble
+          thinkingDiv = null;
+          // Create a new tool group if needed (inserted after the thinking bubble)
+          if (!toolStatusDiv) {
+            toolStatusDiv = document.createElement('div');
+            toolStatusDiv.className = 'agent-tools';
+            container.insertBefore(toolStatusDiv, botDiv);
+          }
+          // Use a sequence counter so each tool item has a unique ID
+          const seq = toolStatusDiv.children.length;
+          const toolItem = document.createElement('div');
+          toolItem.className = 'tool-item';
+          toolItem.dataset.toolSeq = seq;
+          const query = event.name === 'web_search' && event.args && event.args.query
+            ? '：' + event.args.query
+            : '';
+          toolItem.innerHTML = '<span class="tool-icon">🔍</span> <span class="tool-name">' + esc((event.name || '查詢中') + query) + '</span>';
+          toolStatusDiv.appendChild(toolItem);
+          container.scrollTop = container.scrollHeight;
+        } else if (event.type === 'tool_done') {
+          if (event.name === 'web_search' && event.ok !== false) webSearchSucceeded = true;
+          // 個別工具完成；執行完成不等於成功，搜尋失敗需明確顯示。
+          const group = toolStatusDiv;
+          if (group) {
+            const pending = group.querySelector('.tool-item:not(.done):not(.failed)');
+            if (pending) {
+              const failed = event.ok === false;
+              pending.classList.add(failed ? 'failed' : 'done');
+              pending.querySelector('.tool-icon').textContent = failed ? '⚠️' : '✅';
+              if (failed) {
+                const detail = document.createElement('span');
+                detail.className = 'tool-detail';
+                detail.textContent = '（' + (event.message || '執行失敗') + '）';
+                pending.appendChild(detail);
+                if (event.error) pending.title = event.error;
               }
             }
-          } else if (event.type === 'reasoning_start') {
-            // 串流過程中發現 LLM 要呼叫工具 → 把已顯示的文字移到思考氣泡
-            const reasoningText = typeof event.text === 'string' ? event.text : fullText;
-            if (reasoningText) {
-              thinkingDiv = document.createElement('div');
-              thinkingDiv.className = 'agent-thinking';
-              thinkingDiv.textContent = '💭 ' + reasoningText;
-              container.insertBefore(thinkingDiv, botDiv);
-              toolStatusDiv = null;
-            }
-            fullText = '';
-            botContent.textContent = '';
-          } else if (event.type === 'token') {
-            // First token — allow next reasoning round
-            thinkingDiv = null;
-            fullText += event.text;
-            // During streaming, use textContent to avoid broken partial markdown rendering
-            botContent.textContent = fullText;
-            container.scrollTop = container.scrollHeight;
-          } else if (event.type === 'error') {
-            fullText += '\n\n⚠️ ' + event.text;
-            botContent.textContent = fullText;
-          } else if (event.type === 'source_summary') {
-            sourceSummary = event;
           }
-        } catch (e) {
-          console.error('解析 SSE 事件失敗:', e);
+        } else if (event.type === 'reasoning_start') {
+          // 串流過程中發現 LLM 要呼叫工具 → 把已顯示的文字移到思考氣泡
+          const reasoningText = typeof event.text === 'string' ? event.text : fullText;
+          if (reasoningText) {
+            thinkingDiv = document.createElement('div');
+            thinkingDiv.className = 'agent-thinking';
+            thinkingDiv.textContent = '💭 ' + reasoningText;
+            container.insertBefore(thinkingDiv, botDiv);
+            toolStatusDiv = null;
+          }
+          fullText = '';
+          botContent.textContent = '';
+        } else if (event.type === 'token') {
+          // First token — allow next reasoning round
+          thinkingDiv = null;
+          fullText += event.text;
+          // During streaming, use textContent to avoid broken partial markdown rendering
+          botContent.textContent = fullText;
+          container.scrollTop = container.scrollHeight;
+        } else if (event.type === 'error') {
+          fullText += '\n\n⚠️ ' + event.text;
+          botContent.textContent = fullText;
+        } else if (event.type === 'source_summary') {
+          sourceSummary = event;
         }
-      }
-    }
+      },
+    });
 
     if (!isCurrentRequest()) return;
     botDiv.classList.remove('agent-typing');
@@ -422,8 +387,9 @@ async function sendAgentMessage(retryText) {
         webSearchAttempted,
         webSearchSucceeded,
       );
-      if (!isRetry) agentHistory.push({ role: 'user', content: text });
-      agentHistory.push({ role: 'assistant', content: fullText });
+      if (result.completed) {
+        agentHistory = [...requestHistory, { role: 'user', content: text }, { role: 'assistant', content: fullText }];
+      }
     } else {
       botContent.textContent = '（模型沒有回應，請再試一次或更換模型。）';
       appendAgentSourceStatus(
@@ -432,7 +398,11 @@ async function sendAgentMessage(retryText) {
         webSearchAttempted,
         webSearchSucceeded,
       );
-      if (!isRetry) agentHistory.push({ role: 'user', content: text });
+    }
+    if (!result.completed && !result.receivedError) {
+      const warning = document.createElement('p');
+      warning.textContent = '⚠️ 連線中斷，內容不完整，請重新產生。';
+      botContent.appendChild(warning);
     }
     addRetryButton(); // 不管成功失敗都顯示重試
   } catch (e) {
@@ -440,7 +410,7 @@ async function sendAgentMessage(retryText) {
     const message = e instanceof TypeError
       ? '連線失敗，請確認後端服務已啟動。'
       : (e.message || 'Agent 請求失敗，請稍後再試。');
-    botContent.textContent = '⚠️ ' + message;
+    botContent.textContent = (fullText ? fullText + '\n\n' : '') + '⚠️ ' + message + (fullText ? '（內容不完整，請重試）' : '');
     botDiv.classList.remove('agent-typing');
     console.error('Agent 請求失敗:', e);
     addRetryButton();

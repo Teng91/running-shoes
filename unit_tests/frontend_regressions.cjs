@@ -10,6 +10,7 @@ const scriptPaths = [
   'frontend/app-state.js',
   'frontend/app-api.js',
   'frontend/app-auth.js',
+  'frontend/app-streams.js',
   'frontend/app-core.js',
   'frontend/app-agent.js',
   'frontend/app-reports.js',
@@ -26,6 +27,158 @@ const scriptPaths = [
 const scriptSource = scriptPaths.map(path => fs.readFileSync(path, 'utf8')).join('\n');
 const styleSource = fs.readFileSync('frontend/styles.css', 'utf8');
 const source = `${htmlSource}\n${styleSource}\n${scriptSource}`;
+
+function streamContext() {
+  const context = vm.createContext({ DOMException, TextDecoder,
+    authenticatedResponses: new WeakMap(),
+    requireAuthSession: session => { if (!session?.current) throw new DOMException('stale', 'AbortError'); },
+    readAuthenticatedError: async response => response.json(),
+  });
+  vm.runInContext(extract('readJsonEventStream'), context);
+  context.bind = response => { context.authenticatedResponses.set(response, { current: true }); return response; };
+  return context;
+}
+
+test('shared SSE reader handles byte boundaries, UTF-8, CRLF, comments and multiline data', async () => {
+  const context = streamContext();
+  const encoded = new TextEncoder().encode(': heartbeat\r\ndata: {"type":"token",\r\ndata: "text":"跑步🏃"}\r\n\r\ndata: {"type":"done"}');
+  const response = context.bind(new Response(new ReadableStream({ start(controller) {
+    for (const byte of encoded) controller.enqueue(new Uint8Array([byte]));
+    controller.close();
+  } }), { headers: { 'Content-Type': 'text/event-stream' } }));
+  const events = [];
+  const result = await context.readJsonEventStream(response, { onEvent: event => events.push(event) });
+  assert.equal(events[0].text, '跑步🏃');
+  assert.equal(result.completed, true);
+  assert.equal(events.length, 2);
+});
+
+test('shared SSE reader distinguishes EOF, application errors, malformed data and HTTP failures', async () => {
+  const context = streamContext();
+  const response = body => context.bind(new Response(body, { headers: { 'Content-Type': 'text/event-stream' } }));
+  const incomplete = await context.readJsonEventStream(response('data: {"type":"token","text":"half"}\n\n'), { onEvent() {} });
+  assert.equal(incomplete.completed, false);
+  const failed = await context.readJsonEventStream(response('data: {"type":"error","text":"failure"}\n\ndata: {"type":"done"}\n\n'), { onEvent() {} });
+  assert.equal(failed.receivedError, true);
+  assert.equal(failed.completed, false);
+  await assert.rejects(context.readJsonEventStream(response('data: broken\n\n'), { onEvent() {} }), /格式錯誤/);
+  await assert.rejects(context.readJsonEventStream(context.bind(new Response('{"detail":"unavailable"}', { status: 503 })), { onEvent() {} }), /unavailable/);
+  await assert.rejects(context.readJsonEventStream(context.bind(new Response('{}')), { onEvent() {} }), /非預期格式/);
+});
+
+test('shared SSE reader cancels pending reads and ignores stale sessions', async () => {
+  const context = streamContext();
+  const abort = new AbortController();
+  let cancelled = false;
+  const response = context.bind(new Response(new ReadableStream({ cancel() { cancelled = true; } }), {
+    headers: { 'Content-Type': 'text/event-stream' },
+  }));
+  const reading = context.readJsonEventStream(response, { signal: abort.signal, onEvent() { assert.fail('aborted event'); } });
+  abort.abort();
+  await assert.rejects(reading, { name: 'AbortError' });
+  assert.equal(cancelled, true);
+  const stale = context.bind(new Response('data: {"type":"done"}\n\n', { headers: { 'Content-Type': 'text/event-stream' } }));
+  context.authenticatedResponses.get(stale).current = false;
+  await assert.rejects(context.readJsonEventStream(stale, { onEvent() { assert.fail('stale event'); } }), { name: 'AbortError' });
+});
+
+function editContext() {
+  const elements = new Proxy({}, { get: (target, id) => target[id] ||= {
+    value: '', style: {}, classList: { add() {}, remove() {} },
+  } });
+  const context = vm.createContext({ document: { getElementById: id => elements[id] },
+    captureAuthSession: () => ({ current: true }), isCurrentAuthSession: session => session.current,
+    populateRunShoeSelects() {}, populateMonthlyEditSelects(year, month) {
+      elements['m-year'].value = year; elements['m-month'].value = month;
+    }, localDateISO: () => '2026-10-19', loadData: async () => {},
+    translateError: value => value, confirm: () => true, alert() {},
+  });
+  vm.runInContext(`let editingRun = null, editingMonthly = null;\n` +
+    ['openRunModal', 'closeRunModal', 'saveRun', 'deleteEditingRun',
+      'editMonthlyMileage', 'closeMonthlyModal', 'saveMonthlyMileage'].map(extract).join('\n'), context);
+  return { context, elements };
+}
+
+test('run modal keeps its original version and does not close a newer modal after saving', async () => {
+  const { context, elements } = editContext();
+  context.runs = [{ id: 1, shoe_id: 3, km: 5, version: 6, date: '2026-01-01' }];
+  context.openRunModal(1);
+  elements['edit-run-shoe'].value = '3';
+  context.runs = [{ ...context.runs[0], km: 10, version: 7 }, { ...context.runs[0], id: 2 }];
+  let finish, calls = 0;
+  context.apiPut = (url, payload) => {
+    calls++; assert.equal(url, '/runs/1'); assert.equal(payload.expected_version, 6);
+    return new Promise(resolve => { finish = resolve; });
+  };
+  const save = context.saveRun();
+  await context.saveRun();
+  assert.equal(calls, 1);
+  context.closeRunModal(); context.openRunModal(2);
+  finish(); await save;
+  assert.equal(vm.runInContext('editingRun.id', context), 2);
+  assert.equal(context.runs[0].km, 10);
+  context.apiPut = async () => { throw new Error('409 conflict'); };
+  await context.saveRun();
+  assert.equal(elements['edit-run-error'].textContent, '409 conflict');
+});
+
+test('monthly modal keeps its original ID/version after reorder or deletion and guards old callbacks', async () => {
+  const { context, elements } = editContext();
+  context.monthlyMileages = [{ id: 10, year: 2026, month: 1, km: 100, version: 0 }];
+  context.editMonthlyMileage(0);
+  context.monthlyMileages = [{ id: 20, year: 2026, month: 2, km: 200, version: 4 }];
+  let finish, calls = 0;
+  context.apiPut = (url, payload) => {
+    calls++; assert.equal(url, '/monthly-mileage/10'); assert.equal(payload.expected_version, 0);
+    return new Promise(resolve => { finish = resolve; });
+  };
+  const save = context.saveMonthlyMileage();
+  await context.saveMonthlyMileage();
+  assert.equal(calls, 1);
+  context.closeMonthlyModal(); context.editMonthlyMileage(0);
+  finish(); await save;
+  assert.equal(vm.runInContext('editingMonthly.id', context), 20);
+  assert.equal(elements['save-monthly-btn'].disabled, false);
+  context.apiPut = async () => { throw new Error('404 deleted'); };
+  await context.saveMonthlyMileage();
+  assert.equal(elements['monthly-error'].textContent, '404 deleted');
+});
+
+test('panel rendering is lazy, reused, and invalidated by data or theme changes', () => {
+  const counts = {};
+  const hooks = ['renderCards', 'renderAlerts', 'renderCategorySummary', 'renderTable', 'renderRetiredTable',
+    'renderCharts', 'populateRunShoeSelects', 'renderRunLog', 'renderMonthlyTable', 'renderMonthlyCharts', 'renderSpendingCharts'];
+  let active = 'runs';
+  const context = vm.createContext({ document: { querySelector: () => ({ dataset: { panel: active } }) },
+    Chart() {}, localDateISO: () => '2026-10-19', selectedRunMonth: () => '2026-10',
+    ...Object.fromEntries(hooks.map(name => [name, () => { counts[name] = (counts[name] || 0) + 1; }])),
+  });
+  vm.runInContext(`let panelRevision = 0, stackedRunsRequestId = 0, currentTheme = 'light';
+    const renderedPanels = new Map();\n${extract('invalidatePanels')}\n${extract('renderActivePanel')}`, context);
+  context.renderActivePanel(); context.renderActivePanel();
+  assert.equal(counts.renderRunLog, 1);
+  assert.equal(counts.renderCharts, undefined);
+  assert.equal(counts.renderMonthlyCharts, undefined);
+  active = 'monthly'; context.renderActivePanel();
+  assert.equal(counts.renderMonthlyCharts, 1);
+  active = 'runs'; context.renderActivePanel();
+  assert.equal(counts.renderRunLog, 1);
+  context.invalidatePanels(); context.renderActivePanel();
+  assert.equal(counts.renderRunLog, 2);
+  assert.equal(counts.renderMonthlyCharts, 1, 'data changes do not redraw hidden panels');
+  vm.runInContext("currentTheme = 'dark'", context); context.renderActivePanel();
+  assert.equal(counts.renderRunLog, 3);
+});
+
+test('shoe retirement presentation uses only the backend date, including no forecast', () => {
+  const context = vm.createContext({});
+  vm.runInContext(extract('calc'), context);
+  const shoe = { price: 3000, mileage: 300, expected_mileage: 900, monthly_km: 60,
+    forecast_retirement_date: '2027-04-17', forecast_monthly_km: 101.46 };
+  const forecast = context.calc(shoe).retireDate;
+  assert.equal(forecast.getFullYear(), 2027); assert.equal(forecast.getMonth(), 3); assert.equal(forecast.getDate(), 17);
+  assert.equal(context.calc({ ...shoe, forecast_retirement_date: null }).retireDate, null);
+});
 
 function tableHeaders(tbodyId) {
   const beforeBody = htmlSource.slice(0, htmlSource.indexOf(`<tbody id="${tbodyId}"`));
@@ -329,12 +482,12 @@ test('long conversations fit the backend aggregate history and content limits', 
   assert.equal(result.reduce((total, turn) => total + turn.content.length, 0), 48000);
   assert.ok(result.every(turn => turn.content.length === 12000));
   assert.equal(history[0].content.length, 15000);
-  assert.match(source, /history: agentHistoryForRequest\(\)/);
+  assert.match(extract('sendAgentMessage'), /history: agentHistoryForRequest\(requestHistory\)/);
 });
 
 test('run edits send an optimistic concurrency version', () => {
   const save = extract('saveRun');
-  assert.match(save, /expected_version: editingRun\.version \|\| 0/);
+  assert.match(save, /expected_version: snapshot\.version \|\| 0/);
   assert.match(extract('deleteEditingRun'), /expected_version=' \+ \(run\.version \|\| 0\)/);
 });
 
@@ -487,7 +640,7 @@ test('shoe purposes use four full-width, non-shrinking options', () => {
 
 test('report streaming distinguishes saved completion from an interrupted response', () => {
   const generateReport = extract('generateReport');
-  assert.match(generateReport, /buffer \+= decoder\.decode\(\)/);
+  assert.match(generateReport, /readJsonEventStream\(res/);
   assert.match(generateReport, /receivedDone = true/);
   assert.match(generateReport, /receivedError = true/);
   assert.match(generateReport, /!receivedDone && !receivedError/);

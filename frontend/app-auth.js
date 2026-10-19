@@ -41,6 +41,9 @@ function clearAuth() {
   dashboardAnalyticsRequest += 1;
   document.getElementById('dashboard-insights').replaceChildren();
   resetAgentChat();
+  closeRunModal();
+  closeMonthlyModal();
+  resetPanelRendering();
   stravaPreviewController?.abort();
   stravaPreviewController = null;
   stravaPreviewRequestId += 1;
