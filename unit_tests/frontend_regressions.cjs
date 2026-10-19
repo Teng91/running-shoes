@@ -27,6 +27,68 @@ const scriptSource = scriptPaths.map(path => fs.readFileSync(path, 'utf8')).join
 const styleSource = fs.readFileSync('frontend/styles.css', 'utf8');
 const source = `${htmlSource}\n${styleSource}\n${scriptSource}`;
 
+function tableHeaders(tbodyId) {
+  const beforeBody = htmlSource.slice(0, htmlSource.indexOf(`<tbody id="${tbodyId}"`));
+  const header = beforeBody.slice(beforeBody.lastIndexOf('<thead>'));
+  return [...header.matchAll(/<th>(.*?)<\/th>/g)].map(match => match[1]);
+}
+
+test('shoe purchase columns live only in spending details, with aligned table rows', () => {
+  const elements = { 'shoe-table': {}, 'retired-table': {} };
+  const shoe = { id: 7, brand: 'Test', model: 'Runner', date: '2026-01-02',
+    size: 'UNIQUE-SIZE', price: 2400, orig_price: 4000, mileage: 100,
+    expected_mileage: 800, monthly_km: 50, categories: ['Daily'] };
+  const context = vm.createContext({
+    document: { getElementById: id => elements[id] },
+    shoes: [shoe], retiredShoes: [{ ...shoe, id: 8, is_retired: true }],
+    brandColor: () => '#123456', progressColor: () => '#123456',
+    shoeCategories: s => s.categories,
+  });
+  vm.runInContext(['esc', 'calc', 'fmtPct', 'fmtCostPerKm', 'fmtDate',
+    'renderTable', 'renderRetiredTable'].map(extract).join('\n'), context);
+  context.renderTable();
+  context.renderRetiredTable();
+  for (const [id, count] of [['shoe-table', 12], ['retired-table', 10]]) {
+    const headers = tableHeaders(id);
+    assert.equal(headers.length, count);
+    assert.ok(['尺寸', '買價', '原價', '折數'].every(label => !headers.includes(label)));
+    assert.equal((elements[id].innerHTML.match(/<td\b/g) || []).length, count);
+    assert.doesNotMatch(elements[id].innerHTML, /UNIQUE-SIZE|\$2,400|\$4,000|60\.00%/);
+    assert.match(elements[id].innerHTML, /\$24\.00/); // Cost/km stays on shoes.
+    assert.match(elements[id].innerHTML, />分析<\/button>/);
+    assert.match(elements[id].innerHTML, />編輯<\/button>/);
+  }
+  assert.deepEqual(tableHeaders('spending-table'),
+    ['日期', '品牌', '鞋款', '尺寸', '買價', '原價', '折數', '類別', '狀態']);
+});
+
+test('spending details retain active and retired purchases, escape sizes and handle missing values', () => {
+  const tbody = {};
+  const shoe = { id: 1, brand: 'Test', model: 'Active', date: '2026-02-02',
+    size: '<img src=x onerror=alert(1)>', price: 2400, orig_price: 4000, categories: ['Daily'] };
+  const shoes = [shoe];
+  const retiredShoes = [{ ...shoe, id: 2, model: 'Retired', date: '2026-01-01',
+    size: '', price: 0, orig_price: 0, is_retired: true }];
+  const context = vm.createContext({ document: { getElementById: () => tbody },
+    shoes, retiredShoes, shoeCategories: s => s.categories,
+    byDate: (a, b) => a.date.localeCompare(b.date),
+  });
+  vm.runInContext(['esc', 'fmtMoney', 'renderSpendingTable'].map(extract).join('\n'), context);
+  context.renderSpendingTable();
+  const rows = [...tbody.innerHTML.matchAll(/<tr>([\s\S]*?)<\/tr>/g)].map(match => match[1]);
+  assert.equal(rows.length, 2);
+  for (const row of rows) assert.equal((row.match(/<td\b/g) || []).length, 9);
+  assert.match(rows[0], /Retired[\s\S]*<td>—<\/td>[\s\S]*<td>已退役<\/td>/);
+  assert.match(rows[1], /&lt;img src=x onerror=alert\(1\)&gt;/);
+  assert.match(rows[1], /\$2,400[\s\S]*\$4,000[\s\S]*60\.0%[\s\S]*使用中/);
+  assert.doesNotMatch(tbody.innerHTML, /<img|—%|NaN|Infinity/);
+  assert.equal(shoes[0].size, shoe.size, 'rendering must not modify purchase data');
+  shoes.length = 0;
+  retiredShoes.length = 0;
+  context.renderSpendingTable();
+  assert.equal(tbody.innerHTML, '');
+});
+
 test('PWA metadata, local dependencies and service worker registration are present', () => {
   assert.match(source, /rel="manifest" href="\/manifest\.webmanifest"/);
   assert.match(source, /rel="apple-touch-icon" href="\/icons\/apple-touch-icon\.png"/);

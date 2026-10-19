@@ -195,15 +195,16 @@ function renderSpendingTable() {
   const tbody = document.getElementById('spending-table');
   const allShoes = [...shoes, ...retiredShoes].sort(byDate);
   tbody.innerHTML = allShoes.map(s => {
-    const discount = s.orig_price > 0 ? (s.price / s.orig_price * 100).toFixed(1) : '—';
+    const discount = s.orig_price > 0 ? (s.price / s.orig_price * 100).toFixed(1) + '%' : '—';
     const status = s.is_retired ? '已退役' : '使用中';
     return `<tr>
       <td>${esc(s.date.replace(/-/g, '/'))}</td>
       <td>${esc(s.brand)}</td>
       <td>${esc(s.model)}</td>
+      <td>${esc(s.size || '—')}</td>
       <td>${fmtMoney(s.price)}</td>
       <td>${fmtMoney(s.orig_price)}</td>
-      <td>${discount}%</td>
+      <td>${discount}</td>
       <td>${esc(shoeCategories(s).join(', ') || '未分類')}</td>
       <td>${status}</td>
     </tr>`;

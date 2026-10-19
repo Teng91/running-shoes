@@ -169,10 +169,6 @@ function renderTable() {
       <td class="editable" ondblclick="inlineEditRow(shoes, ${i}, 'monthly_km', this)">${s.monthly_km}</td>
       <td>${fmtDate(c.retireDate)}</td>
       <td>${esc(shoeCategories(s).join(', ') || '未分類')}</td>
-      <td>${esc(s.size)}</td>
-      <td>${fmtMoney(s.price)}</td>
-      <td>${fmtMoney(s.orig_price)}</td>
-      <td>${fmtPct(c.discount)}</td>
       <td>
         <button class="btn btn-sm" onclick="openShoeAnalytics(${s.id})">分析</button>
         <button class="btn btn-sm btn-edit" onclick="openEditModal(${i})">編輯</button>
@@ -200,10 +196,6 @@ function renderRetiredTable() {
       <td>${fmtCostPerKm(c.expectedCost)}</td>
       <td style="color:${pc}">${fmtPct(c.lifeProgress)}</td>
       <td>${esc(shoeCategories(s).join(', ') || '未分類')}</td>
-      <td>${esc(s.size)}</td>
-      <td>${fmtMoney(s.price)}</td>
-      <td>${fmtMoney(s.orig_price)}</td>
-      <td>${fmtPct(c.discount)}</td>
       <td><button class="btn btn-sm" onclick="openShoeAnalytics(${s.id})">分析</button> <button class="btn btn-sm btn-edit" onclick="openRetiredEditModal(${i})">編輯</button></td>
     </tr>`;
   }).join('');
