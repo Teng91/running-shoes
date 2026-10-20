@@ -6,6 +6,8 @@
 - `backend/app_factory.py`: FastAPI composition, injectable lifecycle dependencies, routers, and SPA fallback.
 - `backend/settings.py`: immutable typed runtime configuration.
 - `backend/forecasting.py`: shared retirement policy and batched user-scoped forecasts.
+- `backend/shoe_metrics.py`: canonical shoe cost, discount and lifecycle arithmetic.
+- `backend/read_models/`: user-scoped native statistics shared by HTTP, reports and AI adapters; never import tools or HTTP frameworks.
 - `backend/seeding.py`: optional default data using an injected session factory.
 - `backend/middleware.py`: request-level transport guards.
 - `backend/routers/`: feature-oriented HTTP routes; routers must never import `backend.main`.
@@ -16,7 +18,16 @@
 - `docs/testing-strategy.md`: test design, traceability matrix, and definition of done.
 - `backend/agent.py`: LLM and tool-loop runner; planning, dispatch, and SSE serialization live in `backend/agent_*.py` modules.
 - `backend/tools/`: trusted database and web-search tools used by the agent.
-- `frontend/index.html`: dependency-light single-page dashboard markup.
+- `frontend/templates/`: editable shell, modal and service-worker sources.
+- `frontend/css/`: ordered editable CSS sources; preserve cascade order.
+- `frontend/assets.json`: ordered scripts, native modules, style sources and shell revision.
+- `scripts/build_frontend.py`: deterministic frontend generation; use `--write` after source changes and `--check` to verify.
+- `frontend/index.html`, `styles.css`, `service-worker.js`: generated static outputs; commit with their sources, do not edit directly.
+- `frontend/runtime/feature-lifecycle.mjs`: DOM-independent native module for feature lifecycle ownership.
+- `frontend/app-lifecycle.js`: compatibility bridge and reset registration.
+- `frontend/app-dates.js`: calendar parsing, cross-day limits and draft-safe foreground refresh.
+- `frontend/app-dialogs.js`: modal semantics and keyboard/focus lifecycle.
+- `frontend/app-updates.js`: shell version diagnostics and explicit update confirmation.
 - `frontend/app-boot.js`: startup loading, stylesheet readiness, timeout, and retry state.
 - `frontend/app-state.js`: shared browser state and presentation constants.
 - `frontend/app-api.js`: authenticated JSON and upload transport helpers.
@@ -32,13 +43,15 @@
 - `frontend/app-monthly-charts.js`: month/year selectors and monthly/annual mileage charts.
 - `frontend/app-spending.js`: spending cards, charts, and table.
 - `frontend/app.js`: bootstrap and global dialog event wiring.
-- `frontend/app-agent.js`: AI assistant models, chat streaming, and safe Markdown rendering.
+- `frontend/app-agent.js`: AI conversation and streaming presentation.
+- `frontend/app-models.js`: shared provider/model menus.
+- `frontend/app-markdown.js`: safe rendering of untrusted Markdown.
 - `frontend/app-reports.js`: monthly report loading, generation, and streaming UI.
 - `frontend/app-runs.js`: run CRUD, paging, and shoe selection.
 - `frontend/app-strava.js`: Strava preview, mapping, and import UI.
 - `frontend/app-run-insights.js`: run cards, calendar, charts, and shoe analytics UI.
 - `frontend/app-shoes.js`: shoe editing and modal interactions.
-- `frontend/styles.css`: dashboard themes and responsive layout.
+- `unit_tests/frontend/`: feature-oriented Node regressions through `frontend_regressions.cjs`.
 - `unit_tests/`: backend, frontend, security, migration, and agent regression tests.
 
 ## Working rules

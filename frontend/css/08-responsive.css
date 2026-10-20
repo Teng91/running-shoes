@@ -1,0 +1,106 @@
+/* Allow grid/flex children to shrink without pushing the viewport wider. */
+.cards > *, .charts > *, .run-hero > *, .run-entry-grid > *,
+.form-row > *, .category-grid > *, .strava-group > * { min-width: 0; }
+.card, .category-card, .shoe-alert, .strava-summary, .strava-group,
+.user-name, .agent-thinking, .agent-tools { overflow-wrap: anywhere; }
+input, select, textarea { min-width: 0; max-width: 100%; }
+select:not([multiple]) {
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='m2 4 4 4 4-4' fill='none' stroke='%2394a3b8' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 12px;
+  padding-right: 34px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Shared control geometry keeps native date/month and ordinary fields aligned. */
+.form-group input:not([type="checkbox"]):not([type="file"]), .form-group select,
+.year-select, .inline-add input, .inline-add select, .agent-config select,
+.agent-config input[type="text"], .strava-group select {
+  height: var(--control-height);
+  line-height: var(--control-line-height);
+}
+.form-group input[type="file"] { min-height: var(--control-height); padding: 6px; line-height: 30px; overflow: hidden; }
+input::file-selector-button { height: 30px; margin-right: 8px; padding: 0 10px; border: 0; border-radius: 5px; background: var(--btn-bg); color: var(--text); font: inherit; line-height: 30px; }
+/* Native iOS date controls can keep an intrinsic width inside a grid. */
+input[type="date"], input[type="month"] {
+  display: block; appearance: none; -webkit-appearance: none;
+  min-height: 44px;
+}
+input::-webkit-date-and-time-value { text-align: left; min-width: 0; line-height: var(--control-line-height); }
+input::-webkit-datetime-edit { padding: 0; }
+.table-header, .table-header > div,
+.chart-title-row, .agent-config, .run-filter, .modal-actions { flex-wrap: wrap; gap: 10px; }
+.table-header > div { display: flex; align-items: center; }
+.table-wrap { max-width: 100%; }
+.table-scroll-hint { display: none; }
+.modal-overlay { padding: 16px; }
+.modal { max-width: 100%; max-height: 90dvh; }
+.agent-msg-content { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+.agent-msg-content img { max-width: 100%; height: auto; }
+.agent-input-area textarea { min-width: 0; }
+
+@media (max-width: 760px) {
+  .container { --page-gutter: 16px; }
+  .run-entry-grid, .form-row { grid-template-columns: minmax(0, 1fr); }
+  .form-group input:not([type="checkbox"]), .form-group select { min-height: 44px; }
+  .card, .chart-box, .table-section, .run-entry, .run-intro { padding: 16px; }
+  .charts, .charts-3col { grid-template-columns: minmax(0, 1fr); }
+  .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .card-value { font-size: 24px; }
+  .btn, .tab, .agent-config button { min-height: 44px; }
+  .agent-retry-btn { min-height: var(--control-height); }
+  .inline-input { height: var(--control-height); }
+  .form-group input, .form-group select, .form-group textarea,
+  .inline-add input, .inline-add select, .year-select,
+  .agent-config select, .agent-config input[type="text"],
+  .agent-input-area textarea { font-size: 16px; }
+  .strava-group { grid-template-columns: minmax(0, 1fr); }
+  .strava-group select { min-width: 0; width: 100%; min-height: 44px; font-size: 16px; }
+  .table-scroll-hint { display: block; margin-bottom: 8px; font-size: 12px; color: var(--text-dim); }
+  .modal { padding: 20px; }
+  .modal-actions { flex-direction: column; align-items: stretch; }
+  .modal-actions-secondary, .modal-actions-primary { width: 100%; margin-right: 0; }
+  .modal-actions .btn { flex: 1 1 0; }
+  .run-shoe-canvas { height: 260px; }
+  .insight-grid, .shoe-analysis-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .run-shoe-legend-row { grid-template-columns: minmax(0,1fr) auto auto auto; gap: 8px; padding: 9px 6px; }
+  .run-shoe-legend-name span:last-child { white-space: normal; overflow-wrap: anywhere; }
+  .run-calendar { gap: 3px; }
+  .calendar-day { padding: 3px; }
+  .calendar-total { font-size: 11px; overflow-wrap: anywhere; }
+  .agent-config { grid-template-columns: minmax(0, 1fr) auto; }
+  .agent-config label { grid-column: 1 / -1; }
+  .agent-messages { padding: 10px; }
+  .agent-input-area button { padding: 10px 14px; }
+  .report-content { padding: 18px 16px; font-size: 14px; }
+  .report-content h1 { font-size: 21px; }
+  .report-content h2 { font-size: 17px; margin-top: 22px; }
+  .report-content table { display: block; }
+}
+@media (max-width: 380px) {
+  .container { --page-gutter: 12px; }
+  .app-sidebar { padding-right: max(12px, env(safe-area-inset-right)); padding-left: max(12px, env(safe-area-inset-left)); }
+  .app-workspace { padding-right: max(12px, env(safe-area-inset-right)); padding-left: max(12px, env(safe-area-inset-left)); }
+  .app-brand .subtitle { display: none; }
+  .tab { flex-direction: column; gap: 2px; min-height: 52px; font-size: 12px; }
+  .user-info { align-items: flex-start; }
+  .sidebar-actions { flex: 0 0 auto; }
+  .sidebar-actions .btn { padding-right: 8px; padding-left: 8px; font-size: 11px; }
+  .run-entry-grid, .form-row { grid-template-columns: minmax(0, 1fr); }
+  .modal-overlay { padding: 8px; }
+  .modal { padding: 16px; }
+  .category-checkboxes { gap: 4px; }
+  .category-checkboxes label { gap: 3px; padding: 7px 2px; font-size: 11.5px; }
+  .category-checkboxes input[type="checkbox"] { flex-basis: 13px; width: 13px; height: 13px; }
+}
+
+/* Feature lifecycle additions. Keep shared controls and responsive gutters intact. */
+[hidden] { display: none !important; }
+body.dialog-open { overflow: hidden; }
+.app-version { color: var(--text-dim); font-size: 11px; text-align: right; margin-bottom: 8px; }
+#app-update-notice { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; max-width: calc(100% - 32px); padding: 12px; margin: 12px auto; border: 1px solid var(--accent); border-radius: 10px; background: var(--card); }
+#run-paging { justify-content: flex-end; margin-top: 12px; }

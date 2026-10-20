@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from backend import goals, models
 from backend.forecasting import retirement_forecast
+from backend.shoe_metrics import shoe_metrics
 
 
 def _round(value: float | None, digits: int = 2) -> float:
@@ -43,12 +44,36 @@ def shoe_analytics(db: Session, user_id: int, shoe_id: int, *, today: date | Non
         models.Run.user_id == user_id,
         models.Run.shoe_id == shoe.id,
     ).order_by(models.Run.date, models.Run.id).all()
+    return _shoe_analytics(shoe, runs, as_of)
+
+
+def batch_shoe_analytics(
+    db: Session, user_id: int, shoes: list[models.Shoe], *, today: date | None = None
+) -> list[dict]:
+    """Load all matching run histories once, never once per shoe."""
+    scoped = [shoe for shoe in shoes if shoe.user_id == user_id and not shoe.is_deleted]
+    if not scoped:
+        return []
+    rows = db.query(models.Run).filter(
+        models.Run.user_id == user_id,
+        models.Run.shoe_id.in_([shoe.id for shoe in scoped]),
+    ).order_by(models.Run.date, models.Run.id).all()
+    by_shoe: dict[int, list[models.Run]] = defaultdict(list)
+    for run in rows:
+        by_shoe[run.shoe_id].append(run)
+    as_of = today or datetime.now(timezone(timedelta(hours=8))).date()
+    return [_shoe_analytics(shoe, by_shoe[shoe.id], as_of) for shoe in scoped]
+
+
+def _shoe_analytics(shoe: models.Shoe, runs: list[models.Run], as_of: date) -> dict:
+    """One calculation policy for single-shoe API and batched tool read models."""
     metrics = _run_metrics(runs)
     cutoff_30 = (as_of - timedelta(days=29)).isoformat()
     cutoff_90 = (as_of - timedelta(days=89)).isoformat()
     km_30 = _round(sum(run.km for run in runs if cutoff_30 <= run.date <= as_of.isoformat()))
     km_90 = _round(sum(run.km for run in runs if cutoff_90 <= run.date <= as_of.isoformat()))
     forecast = retirement_forecast(shoe, km_90, as_of)
+    costs = shoe_metrics(shoe)
 
     monthly: dict[tuple[int, int], dict[str, float | int]] = defaultdict(
         lambda: {"km": 0.0, "count": 0}
@@ -84,7 +109,7 @@ def shoe_analytics(db: Session, user_id: int, shoe_id: int, *, today: date | Non
             "expected_mileage_km": _round(shoe.expected_mileage),
             "remaining_mileage_km": forecast["remaining_mileage_km"],
             "usage_percent": (
-                _round(shoe.mileage / shoe.expected_mileage * 100, 1)
+                _round(costs["usage_percent"], 1)
                 if shoe.expected_mileage > 0 else None
             ),
             "forecast_retirement_date": forecast["forecast_retirement_date"],
@@ -98,7 +123,7 @@ def shoe_analytics(db: Session, user_id: int, shoe_id: int, *, today: date | Non
             "km_30_days": km_30,
             "km_90_days": km_90,
             "actual_monthly_km_90_days": forecast["actual_monthly_km_90_days"],
-            "cost_per_km": _round(shoe.price / shoe.mileage) if shoe.mileage > 0 else None,
+            "cost_per_km": costs["cost_per_km"],
             "cost_per_wear": _round(shoe.price / len(runs)) if runs else None,
         },
         "monthly_history": monthly_history,

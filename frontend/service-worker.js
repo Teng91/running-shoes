@@ -1,18 +1,22 @@
 const CACHE_PREFIX = 'running-shoes-shell-';
-const CACHE_NAME = 'running-shoes-shell-v22';
-const APP_ASSET_VERSION = '3.2.5';
+const CACHE_NAME = 'running-shoes-shell-v23';
+const APP_ASSET_VERSION = '3.3.0';
 const versioned = path => `${path}?v=${APP_ASSET_VERSION}`;
 const APP_SHELL = [
   '/',
   versioned('/app-boot.js'),
+  versioned('/app-lifecycle.js'),
   versioned('/app-state.js'),
   versioned('/app-api.js'),
   versioned('/app-auth.js'),
   versioned('/app-streams.js'),
   versioned('/app-core.js'),
+  versioned('/app-models.js'),
+  versioned('/app-markdown.js'),
   versioned('/app-agent.js'),
   versioned('/app-reports.js'),
   versioned('/app-runs.js'),
+  versioned('/app-dates.js'),
   versioned('/app-strava.js'),
   versioned('/app-run-insights.js'),
   versioned('/app-shoes.js'),
@@ -24,7 +28,10 @@ const APP_SHELL = [
   versioned('/app-shoe-charts.js'),
   versioned('/app-monthly-charts.js'),
   versioned('/app-spending.js'),
+  versioned('/app-dialogs.js'),
+  versioned('/app-updates.js'),
   versioned('/app.js'),
+  versioned('/runtime/feature-lifecycle.mjs'),
   versioned('/styles.css'),
   '/offline.html',
   '/manifest.webmanifest',
@@ -43,7 +50,7 @@ async function installShell() {
       const response = await fetch(new Request(path, { cache: 'reload' }));
       if (!response.ok) throw new Error('App shell asset unavailable');
       const type = response.headers.get('content-type') || '';
-      if ((path.includes('.js') && !type.includes('javascript')) ||
+      if ((/\.m?js(?:\?|$)/.test(path) && !type.includes('javascript')) ||
           (path.includes('.css') && !type.includes('text/css'))) {
         throw new Error('App shell asset has unexpected content type');
       }
@@ -68,6 +75,12 @@ async function installShell() {
 }
 
 self.addEventListener('install', event => { event.waitUntil(installShell()); });
+
+self.addEventListener('message', event => {
+  if (event.data?.type === 'GET_SHELL_VERSION') {
+    event.source?.postMessage({ type: 'SHELL_VERSION', version: APP_ASSET_VERSION });
+  }
+});
 
 self.addEventListener('activate', event => {
   event.waitUntil(

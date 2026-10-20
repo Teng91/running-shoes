@@ -4,6 +4,8 @@ let agentRequestId = 0;
 let agentController = null;
 let agentRetryHistory = [];
 
+registerFeatureReset('agent-chat', resetAgentChat);
+
 const AGENT_GREETING = '你好！我是跑鞋助手，可以幫你查詢跑鞋資料、分析跑量、推薦新鞋。有什麼想問的嗎？';
 
 // 清空對話（登出/切換帳號時呼叫）：重設上下文陣列 + 還原畫面為初始問候語，
@@ -23,106 +25,6 @@ function resetAgentChat() {
       '<div class="agent-message bot"><div class="agent-msg-content">' +
       AGENT_GREETING + '</div></div>';
   }
-}
-
-async function loadAgentModels() {
-  try {
-    const providers = await apiGet('/agent/providers');
-    const orProv = providers.find(p => p.id === 'openrouter');
-    if (!orProv) return;
-    for (const selectId of ['agent-model', 'report-model']) {
-      const modelSel = document.getElementById(selectId);
-      const previous = modelSel.value;
-      modelSel.replaceChildren();
-      if (orProv.models.length) {
-        orProv.models.forEach((model, index) => {
-          const option = document.createElement('option');
-          option.value = model.id;
-          option.textContent = '#' + (index + 1) + ' ' + model.display;
-          modelSel.appendChild(option);
-        });
-        if (orProv.models.some(model => model.id === previous)) {
-          modelSel.value = previous;
-        }
-      } else {
-        const option = document.createElement('option');
-        option.value = '';
-        option.textContent = '今日沒有可用的熱門免費工具模型';
-        modelSel.appendChild(option);
-      }
-      modelSel.disabled = !orProv.models.length;
-    }
-  } catch (e) {
-    console.error('載入模型清單失敗:', e);
-  }
-}
-
-async function refreshAgentModels() {
-  const btn = document.getElementById('agent-refresh-btn');
-  btn.disabled = true;
-  btn.textContent = '⏳';
-  try {
-    await apiPost('/agent/models/refresh', {});
-    await loadAgentModels();
-  } catch (e) {
-    alert('刷新模型列表失敗：' + e.message);
-  } finally {
-    btn.disabled = false;
-    btn.textContent = '🔄 刷新模型列表';
-  }
-}
-
-// Allowlisted HTML tags that marked may emit. Anything else (script, iframe,
-// svg, event handlers, javascript: URLs, etc.) is stripped to keep LLM output
-// from injecting markup.
-const MARKDOWN_ALLOWED_TAGS = new Set([
-  'p', 'br', 'hr', 'ul', 'ol', 'li', 'blockquote', 'pre', 'code',
-  'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'strong', 'em', 'del', 'a',
-  'table', 'thead', 'tbody', 'tr', 'th', 'td', 'span', 'div',
-]);
-
-function sanitizeMarkdownHtml(raw) {
-  const div = document.createElement('div');
-  div.innerHTML = raw;
-  const scrub = (el) => {
-    // Strip event-handler attributes (onclick, onerror, …) from every
-    // allowed tag — marked passes raw HTML through unchanged.
-    for (const attr of [...el.attributes]) {
-      if (/^on/i.test(attr.name)) el.removeAttribute(attr.name);
-    }
-    if (el.tagName === 'A' && el.href) {
-      // Only allow http(s) links; neutralise javascript: etc.
-      try {
-        const u = new URL(el.getAttribute('href'), window.location.origin);
-        if (u.protocol !== 'http:' && u.protocol !== 'https:') {
-          el.removeAttribute('href');
-        }
-      } catch { el.removeAttribute('href'); }
-      el.removeAttribute('target');
-    }
-    el.removeAttribute('style');
-  };
-  const all = div.querySelectorAll('*');
-  for (const el of all) {
-    if (!MARKDOWN_ALLOWED_TAGS.has(el.tagName.toLowerCase())) {
-      // Replace disallowed elements with their text content.
-      const parent = el.parentNode;
-      if (parent) parent.replaceChild(document.createTextNode(el.textContent), el);
-    } else {
-      scrub(el);
-    }
-  }
-  return div.innerHTML;
-}
-
-function renderMarkdown(text) {
-  if (typeof marked !== 'undefined' && marked.parse) {
-    const raw = marked.parse(text, { breaks: true, gfm: true });
-    return sanitizeMarkdownHtml(raw);
-  }
-  // fallback: escape HTML and preserve line breaks
-  const esc = text.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'})[c]);
-  return esc.replace(/\n/g, '<br>');
 }
 
 function addAgentMessage(role, text) {

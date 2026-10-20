@@ -1,4 +1,5 @@
 // Monthly mileage table, inline forms, and edit snapshot.
+registerFeatureReset('monthly-editor', closeMonthlyModal);
 function renderMonthlyTable() {
   const tbody = document.getElementById('monthly-table');
   if (monthlyMileages.length === 0) {
@@ -100,9 +101,14 @@ async function addMonthlyMileage() {
   const year = parseInt(document.getElementById('add-year').value, 10);
   const month = parseInt(document.getElementById('add-month').value, 10);
   const rawKm = parseFloat(document.getElementById('add-km').value);
-  const km = Number.isFinite(rawKm) ? rawKm : 0;
   const errEl = document.getElementById('add-error');
   errEl.style.display = 'none';
+  if (!Number.isFinite(rawKm) || rawKm < 0) {
+    errEl.textContent = '請輸入有效的非負跑量；若要記錄零，請明確輸入 0。';
+    errEl.style.display = 'block';
+    return;
+  }
+  const km = rawKm;
 
   const button = document.getElementById('add-monthly-btn');
   try {
@@ -179,9 +185,14 @@ async function saveMonthlyMileage() {
   const year = parseInt(document.getElementById('m-year').value, 10);
   const month = parseInt(document.getElementById('m-month').value, 10);
   const rawKm = parseFloat(document.getElementById('m-km').value);
-  const km = Number.isFinite(rawKm) ? rawKm : 0;
   const errEl = document.getElementById('monthly-error');
   errEl.style.display = 'none';
+  if (!Number.isFinite(rawKm) || rawKm < 0) {
+    errEl.textContent = '請輸入有效的非負跑量；若要清零，請明確輸入 0。';
+    errEl.style.display = 'block';
+    return;
+  }
+  const km = rawKm;
 
   const button = document.getElementById('save-monthly-btn');
   try {

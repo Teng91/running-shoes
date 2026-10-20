@@ -21,13 +21,19 @@ MAX_STRAVA_IMPORT_HISTORY_PER_USER = settings.max_strava_import_history_per_user
 
 
 def _parse_strava_csv(raw: bytes) -> tuple[list[dict[str, object]], int, list[str]]:
-    return strava_import.parse_csv(raw, max_rows=MAX_STRAVA_CSV_ROWS)
+    try:
+        return strava_import.parse_csv(raw, max_rows=MAX_STRAVA_CSV_ROWS)
+    except strava_import.InvalidCSVError as exc:
+        raise HTTPException(status_code=413 if exc.row_limit else 400, detail=str(exc)) from exc
 
 
 def _filter_strava_rows(
     rows: list[dict[str, object]], start_date: str, end_date: str
 ) -> tuple[list[dict[str, object]], int]:
-    return strava_import.filter_rows(rows, start_date, end_date)
+    try:
+        return strava_import.filter_rows(rows, start_date, end_date)
+    except strava_import.InvalidCSVError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 async def _read_strava_upload(file: UploadFile) -> bytes:

@@ -1,6 +1,17 @@
 // Run CRUD, paging, and shoe selection.
 let editingRun = null;
 
+registerFeatureReset('run-editor', () => {
+  closeRunModal();
+  runSaveOperation = null;
+  runSaving = false;
+  document.getElementById('add-run-btn').disabled = false;
+  document.getElementById('run-km').value = '';
+  document.getElementById('run-error').textContent = '';
+  document.getElementById('run-month').value = localDateISO().slice(0, 7);
+  document.getElementById('run-date').value = localDateISO();
+});
+
 function localDateISO(date = new Date()) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
@@ -37,6 +48,13 @@ function selectedRunMonth() {
 
 const RUN_PAGE_SIZE = 200;
 
+async function fetchRunPage({ year, month, offset = 0, day = null }) {
+  const params = new URLSearchParams({ year, month, offset, limit: RUN_PAGE_SIZE + 1 });
+  if (day !== null) params.set('day', String(day));
+  const rows = await apiGet('/runs?' + params);
+  return { rows: rows.slice(0, RUN_PAGE_SIZE), hasMore: rows.length > RUN_PAGE_SIZE };
+}
+
 async function fetchRunPages({ year, month = null }) {
   const rows = [];
   for (let offset = 0; ; offset += RUN_PAGE_SIZE) {
@@ -50,13 +68,20 @@ async function fetchRunPages({ year, month = null }) {
   }
 }
 
-async function loadRunsForSelectedMonth() {
+async function loadRunsForSelectedMonth({ offset = 0, day = null } = {}) {
   const requestId = ++runListRequestId;
   const [year, month] = selectedRunMonth().split('-').map(Number);
   try {
-    const loadedRuns = await fetchRunPages({ year, month });
+    const [page, summary] = await Promise.all([
+      fetchRunPage({ year, month, offset, day }),
+      apiGet(`/runs/summary?year=${year}&month=${month}`),
+    ]);
     if (requestId !== runListRequestId) return;
-    runs = loadedRuns;
+    runs = page.rows;
+    runSummary = summary;
+    runPageOffset = offset;
+    runPageHasMore = page.hasMore;
+    runDayFilter = day;
     renderedPanels.delete('runs');
     renderActivePanel();
   } catch (error) {
@@ -66,13 +91,23 @@ async function loadRunsForSelectedMonth() {
   }
 }
 
+function changeRunPage(direction) {
+  return loadRunsForSelectedMonth({ offset: Math.max(0, runPageOffset + direction * RUN_PAGE_SIZE), day: runDayFilter });
+}
+
+function filterRunDay(date) {
+  return loadRunsForSelectedMonth({ day: Number(date.slice(8)) });
+}
+
 function monthRuns() {
   const month = selectedRunMonth();
   return runs.filter(run => run.date.slice(0, 7) === month);
 }
 
 let runSaving = false;
+let runSaveOperation = null;
 async function addRun() {
+  refreshDateLimits();
   if (runSaving) return;
   const error = document.getElementById('run-error');
   error.textContent = '';
@@ -87,22 +122,30 @@ async function addRun() {
     error.textContent = '跑步日期不可晚於今天。';
     return;
   }
+  const operation = { session: captureAuthSession() };
+  runSaveOperation = operation;
   try {
     runSaving = true;
     document.getElementById('add-run-btn').disabled = true;
     await apiPost('/runs', { date, km, shoe_id: shoeId });
+    if (runSaveOperation !== operation || !isCurrentAuthSession(operation.session)) return;
     document.getElementById('run-km').value = '';
     document.getElementById('run-month').value = date.slice(0, 7);
     await loadData();
   } catch (errorMessage) {
+    if (errorMessage.name === 'AbortError' || runSaveOperation !== operation || !isCurrentAuthSession(operation.session)) return;
     error.textContent = errorMessage.message || '新增失敗，請稍後再試。';
   } finally {
-    runSaving = false;
-    document.getElementById('add-run-btn').disabled = false;
+    if (runSaveOperation === operation) {
+      runSaveOperation = null;
+      runSaving = false;
+      document.getElementById('add-run-btn').disabled = false;
+    }
   }
 }
 
 function openRunModal(runId) {
+  refreshDateLimits();
   const run = runs.find(item => item.id === runId);
   if (!run) return;
   editingRun = { ...run, session: captureAuthSession() };

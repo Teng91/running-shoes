@@ -58,6 +58,13 @@ flowchart TB
     AI --> AgentTools[agent_tools.py]
     AI --> Protocol[agent_protocol.py]
     ReportRoutes --> Reports[reports.py]
+    Reports --> ReadModels[read_models/<br/>shared user-scoped native statistics]
+    Tools --> ReadModels
+    ReadModels --> Models
+    Shoes --> Metrics[shoe_metrics.py<br/>canonical cost / lifecycle arithmetic]
+    Analytics --> Metrics
+    Exporting --> Metrics
+    ReadModels --> Metrics
 
     AnalyticsRoutes --> Auth[auth.py]
     AnalyticsRoutes --> Analytics[analytics.py]
@@ -73,7 +80,8 @@ flowchart TB
     Forecast --> Models
     Exporting --> Models
     Goals --> Models
-    Strava --> Models
+    StravaService --> Preview[read_models/strava_preview.py]
+    Preview --> Models
     Reports --> Models
     Tools --> Models
     Mileage --> Models
@@ -92,12 +100,16 @@ schema version。router 不能反向 import `backend.main`，service 也不能 i
 
 ## 4. 前端 module 與載入順序
 
-前端刻意維持無 bundler 的 plain scripts；`index.html` 的順序就是可執行的 dependency graph，
-並由前端 regression test 與 Service Worker asset list 鎖定。
+前端保留無 bundler 的 classic DOM handlers，漸進引入原生 ES module runtime。`assets.json` 定義載入順序，
+`scripts/build_frontend.py` 由 templates／CSS sources 產生完整 `index.html`、單一 `styles.css` 與 worker 清單，
+並由產物一致性、前端 regression 與 Service Worker 升級測試鎖定。
 
 ```mermaid
 flowchart LR
     HTML[index.html] --> Boot[app-boot.js<br/>啟動狀態]
+    HTML --> Lifecycle[app-lifecycle.js<br/>classic compatibility bridge]
+    Bootstrap --> Native[runtime/feature-lifecycle.mjs<br/>native module, no DOM / I/O]
+    Lifecycle --> Native
     HTML --> State[app-state.js<br/>共享 state]
     State --> API[app-api.js<br/>HTTP adapters]
     API --> AuthUI[app-auth.js<br/>session lifecycle]
@@ -106,6 +118,9 @@ flowchart LR
     Streams -.-> AgentUI
     Streams -.-> ReportsUI
     Core --> AgentUI[app-agent.js]
+    Core --> ModelsUI[app-models.js]
+    ModelsUI --> AgentUI
+    MarkdownUI[app-markdown.js] --> AgentUI
     Core --> ReportsUI[app-reports.js]
     Core --> RunCRUD[app-runs.js]
     RunCRUD --> StravaUI[app-strava.js]
@@ -134,11 +149,47 @@ flowchart LR
     ShoeCharts --> Bootstrap
     MileageCharts --> Bootstrap
     Spending --> Bootstrap
+    Dialogs[app-dialogs.js<br/>focus / keyboard / semantics] --> Bootstrap
+    Dates[app-dates.js<br/>calendar / cross-day] --> Bootstrap
+    Updates[app-updates.js<br/>explicit PWA update] --> Bootstrap
 ```
 
 `app-state.js` 只保存共享 state 與常數；`app-api.js` 是 transport adapter；`app-auth.js` 管理 session
 transition；`app-core.js` 組合畫面資料但不承擔 feature-specific rendering。跑步 CRUD、Strava 與洞察分別位於
 三個 module，降低修改匯入功能時誤動月曆或編輯流程的風險。
+
+### SPEC-017：真正的依賴與狀態邊界
+
+依 [ADR-0003](adr/0003-shared-read-models-and-feature-lifecycles.md)，API、AI tools、月報共同依賴
+`read_models`；月報不再 import tools 或解析工具 JSON。工具 facade 只加 tool/schema metadata；
+tool definitions、legacy markers parser 與 native statistics 分別維護。名稱歧義回傳 user-scoped 候選，
+ID 指定同樣限制使用者且排除已刪除鞋。批次分析只查一次鞋款與一次日誌，不逐鞋讀取。
+
+```mermaid
+flowchart LR
+    Auth[auth: invalidate session] --> Registry[Native feature lifecycle registry]
+    Registry --> Data[shared data reset]
+    Registry --> RunUI[run editor / insights]
+    Registry --> ReportUI[report GET / SSE cleanup]
+    Registry --> Other[goals / spending / imports / dialogs / charts]
+    Templates[templates + ordered CSS + assets.json] --> Build[build_frontend.py]
+    Build --> Static[index.html + styles.css + atomic worker shell]
+```
+
+各 feature 在自身 module 呼叫 `registerFeatureReset`；auth 不再知道其他 feature 的 DOM、controller 或 chart。
+Registry 繼續清理其他 feature，即使個別 reset 失敗；錯誤只記錄 feature 名稱，不能輸出私密資料。
+這是漸進邊界改善，不宣稱所有 classic globals 已轉成 ES modules。新增隔離的純 runtime 應放在 `runtime/`。
+
+`GET /api/runs/summary` 以日期／鞋款 grouping 供完整月曆與卡片；`GET /api/runs` 每頁最多取 201 筆判斷
+200 筆明細是否有下一頁，可加 day 篩選。切明細頁不截斷統計，日曆鞋款點選改為篩選當日明細。
+`/running-goal/progress` 與首頁／月報使用同一 `goals.goal_progress`，不混入手動歷史調整。
+`/spending/summary` 在後端依日曆年月計算平均，前端只排版；支出非首頁必要請求，失敗局部重試。
+`shoe_metrics` 統一 ShoeOut、分析、匯出與工具成本／壽命數值；前端只處理格式與比例單位。
+Run list reload 與 aggregate reload 共用 request identity，切月份時不讓晚到明細覆寫目前月份，其他彙總仍可更新。
+
+Dialog manager 使用 role/aria-modal/label、背景 inert、Tab trap 與 Escape；先解除 inert 才返回焦點，
+並保存 Safari pointer opener。跨日更新 max 於 pointer/Enter 的 native validation 之前，以及 foreground；
+不重設使用者草稿、月份或分頁。登出／換帳號則清除舊草稿與所有 feature 狀態。
 
 [SPEC-013](specs/013-auth-modal-and-module-boundaries.md) 再依責任分離月跑量 CRUD、匯出、目標與兩類圖表；
 `app-charts.js` 僅保存共用 registry／label utilities，各 feature 保留既有函式契約。
@@ -196,7 +247,7 @@ ARIA 與 `agent-mode` 狀態，不以 inline style 決定 shell 幾何，因此�
 `pageshow.persisted` 以相同 layout reset 與 Core active-panel renderer 處理快取還原，不重新登入或修改資料；
 一般 visibilitychange 不觸發首頁重設，登入 token 與主題偏好仍維持原本儲存方式。
 
-[SPEC-016](specs/016-frontend-alignment.md) 的呈現契約集中於 `styles.css`：主控制項 44px、桌面緊湊操作 36px，
+[SPEC-016](specs/016-frontend-alignment.md) 的呈現契約由 `css/` 來源產生單一 `styles.css`：主控制項 44px、桌面緊湊操作 36px，
 日期／月份／一般欄位共用行高與尺寸；工具列、彈窗操作分組及 native select 外觀由 CSS 管理。
 靜態表頭與動態數字格使用 `numeric` class 共用右側邊界；ShoeModal 只同步次要操作組的 hidden 狀態，
 不再以 inline display 指定按鈕版型。雙引擎幾何測試涵蓋 40 組尺寸／主題設定及認證／錯誤／編輯狀態。
@@ -212,10 +263,12 @@ ARIA 與 `agent-mode` 狀態，不以 inline style 決定 shell 幾何，因此�
 | `backend/rate_limits.py` | auth／AI 的 process 與 SQLite shared limits | models、database session | routers、`backend.main` |
 | `backend/routers/` | HTTP 參數、認證 dependency、response | auth、domain/service、models | `backend.main` |
 | `backend/services/` | 跨 route 的交易與 application use case | models、persistence | FastAPI、routers、`backend.main` |
+| `backend/read_models/` | user-scoped native statistics／身份消歧義 | models、純 domain、SQLAlchemy | HTTP frameworks、routers、tools |
+| `backend/shoe_metrics.py` | 折數、成本、壽命共同算術 | models | HTTP、AI、UI |
 | `backend/migrations.py` | ordered/idempotent schema upgrade 與版本 | models、database | routers、frontend |
 | `backend/analytics.py`、`goals.py`、`reports.py` | 可重用的業務計算與 use case | models、LLM adapter（僅 AI use case） | FastAPI app、frontend |
-| `backend/exporting.py`、`strava_import.py` | 輸入／輸出轉換 | models 或純資料 | FastAPI app |
-| `backend/tools/` | Agent 可使用的受信任工具 | database、models | route 與 UI state |
+| `backend/exporting.py`、`strava_import.py` | 輸入／輸出轉換 | models 或純資料 | FastAPI／HTTP exception |
+| `backend/tools/` | Agent JSON adapter、tool definitions、legacy parser | read models、受信任 adapter | route 與 UI state |
 | `backend/agent.py` | LLM／tool loop runner | planner、tools、protocol、LLM adapter | HTTP response、frontend state |
 | `backend/agent_planner.py` | deterministic query plan | Python stdlib | database、FastAPI、LLM network |
 | `backend/agent_tools.py` | user-scoped tool dispatch | trusted tools、database session | routers、SSE serialization |
@@ -225,6 +278,8 @@ ARIA 與 `agent-mode` 狀態，不以 inline style 決定 shell 幾何，因此�
 依賴方向由入口往內：`main → app factory → router → domain/service → persistence/adapters`。CI 的
 `architecture-check` 會阻止 router 反向 import `backend.main`、service 穿透 HTTP layer，並檢查
 API method/path 重複、OpenAPI path contract、`main.py` route 數與最小 entry-point imports。
+SPEC-017 同時追蹤 transitive/relative imports，禁止 service/read model 間接穿透 HTTP 或 tool adapters，
+檢查 native runtime 無 DOM／I/O 與 lifecycle ownership 不重複；來源生成漂移由 verify／docs-check 阻擋。
 
 ## 6. 關鍵流程：跑鞋匯出
 
@@ -252,7 +307,7 @@ sequenceDiagram
 flowchart TB
     Browser[Browser / installed PWA]
     SW[Service Worker<br/>immutable versioned shell<br/>complete install before activation]
-    Shell[(App shell cache v22<br/>asset revision 3.2.5)]
+    Shell[(App shell cache v23<br/>asset revision from assets.json)]
     FlyProxy[Fly Proxy / HTTPS]
     Machine[Fly Machine<br/>FastAPI container]
     Volume[(Fly Volume<br/>SQLite)]
@@ -272,6 +327,9 @@ Service Worker 不攔截 `/api/`，因此資料與 SSE 永遠走網路；靜態 
 不再用新版 network HTML 覆寫舊 cache。install 先下載、讀完 response body（避免有限連線池被未讀 body 佔住）、
 檢查 MIME 與 HTML revision，再保存完整 shell；成功才 skipWaiting，activate 只清理本 app 前綴的舊 cache。
 新版安裝失敗保留既有 shell。首次安裝與 v3.2.2 舊 worker 遷移需要連網；全新離線裝置無法憑空載入 app。
+`app-updates.js` 透過 controllerchange/message 比較安裝的 shell revision；只有完整新版啟用後顯示通知，
+不強制重載。通知在認證區外，所以登入前也能看到；使用者確認後才 reload，可能丟棄未儲存的草稿。
+`.mjs` 與 `.js` 都必須通過 JavaScript MIME 檢查。載入順序、CSS sources 與 worker module list 由同一 manifest 生成。
 SQLite 永遠位於掛載 volume，不包含在 app shell 或 container image。
 
 ### 7.1 異地備份與 restore drill

@@ -16,7 +16,8 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
 from backend import goals, llm, models, schemas
-from backend.tools import db_tools
+from backend.read_models import mileage as mileage_stats
+from backend.read_models import shoes as shoe_stats
 
 REPORT_SECTIONS = ["本月總覽", "趨勢解讀", "鞋款壽命與退役提醒", "下月建議"]
 
@@ -175,7 +176,7 @@ def build_report_stats(
         for item in range(1, month + 1)
     ))
 
-    mileage_payload = json.loads(db_tools.monthly_mileage_stats(db, user_id))
+    mileage_payload = mileage_stats.monthly_mileage_stats(db, user_id)
     mileage_keys = (
         "status",
         "recorded_month_count",
@@ -191,10 +192,10 @@ def build_report_stats(
     )
     overall = {key: mileage_payload.get(key) for key in mileage_keys}
 
-    shoes_payload = json.loads(db_tools.list_my_shoes(db, user_id))
+    shoes_payload = shoe_stats.list_my_shoes(db, user_id)
     shoes_context = [_shoe_context(shoe) for shoe in shoes_payload.get("shoes", [])]
 
-    end_of_life_payload = json.loads(db_tools.nearing_end_of_life(db, user_id))
+    end_of_life_payload = shoe_stats.nearing_end_of_life(db, user_id)
     end_of_life = [
         _end_of_life_context(shoe) for shoe in end_of_life_payload.get("shoes", [])
     ]

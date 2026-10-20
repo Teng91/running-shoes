@@ -237,7 +237,12 @@ async function run(engine, name) {
       if (asset !== frontendRoot && !asset.startsWith(frontendRoot + path.sep)) {
         return route.abort();
       }
-      const contentTypes = { '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css',
+      if (url.pathname === '/api/running-goal/progress') return route.fulfill({ json: {
+        active: true, start_year: 2026, monthly_km: 125, yearly_km: 1500,
+        month_km: 50, ytd_km: 150, month_achievement_percent: 40, year_achievement_percent: 10,
+        month_state: 'past', month_remaining_km: 75, year_remaining_km: 1350,
+      } });
+      const contentTypes = { '.html': 'text/html', '.js': 'application/javascript', '.mjs': 'application/javascript', '.css': 'text/css',
         '.json': 'application/json', '.webmanifest': 'application/manifest+json',
         '.svg': 'image/svg+xml', '.png': 'image/png' };
       if (relative === 'app-boot.js') await bootScriptGate;
@@ -251,6 +256,7 @@ async function run(engine, name) {
     } finally { allowBootScript(); }
     await navigation;
     await page.waitForFunction(() => typeof Chart !== 'undefined');
+    await page.locator('#app-boot').waitFor({ state: 'hidden' });
     await page.evaluate(() => {
       Chart.defaults.animation = false;
       document.querySelector('#auth-view').style.display = 'none';
@@ -260,12 +266,17 @@ async function run(engine, name) {
         model: i === 0 ? 'Wave Rider 29 非常長的鞋款名稱' : `非常長的鞋款名稱 Very long running shoe model ${i}`,
         date: '2026-01-01', price: 4000, orig_price: 5000, mileage: 120 + i * 10,
         expected_mileage: 800, monthly_km: 80, category: 'Daily', size: 'US 9',
+        discount_percent: 80, cost_per_km: 33.33, expected_cost_per_km: 5,
+        usage_percent: 15 + i * 1.25, remaining_mileage_km: 680 - i * 10,
         forecast_retirement_date: '2027-06-01', forecast_source: 'recent_90_days', forecast_monthly_km: 80 }));
       retiredShoes = [{ ...shoes[0], id: 20, is_retired: true }];
       runs = shoes.map((shoe, i) => ({ id: i + 1, shoe_id: shoe.id, date: `2026-09-${String(i + 1).padStart(2, '0')}`, km: 18.67, source: 'manual' }));
       yearlyRunsCache.set(2026, runs);
       monthlyMileages = Array.from({ length: 12 }, (_, i) => ({ id: i + 1, year: 2026, month: i + 1, km: 120 + i }));
       monthlySpending = Array.from({ length: 12 }, (_, i) => ({ year: 2026, month: i + 1, total_paid: 4000, total_orig: 5000 }));
+      spendingSummary = { total_paid: 48000, total_original: 60000, savings: 12000,
+        average_discount_percent: 80, average_monthly_paid: 4000, month_span: 12,
+        start_month: '2026-01', highest_month: { year: 2026, month: 1, total_paid: 4000 }, monthly: monthlySpending };
       document.querySelector('#run-month').value = '2026-09';
       document.querySelector('#agent-model').innerHTML = '<option>Very long model provider and model name</option>';
       document.querySelector('#report-model').innerHTML = '<option>Very long model provider and model name</option>';

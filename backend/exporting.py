@@ -3,6 +3,7 @@
 from datetime import datetime
 
 from backend import models
+from backend.shoe_metrics import shoe_metrics
 
 
 def spreadsheet_safe(value):
@@ -18,15 +19,11 @@ def generate_shoe_rows(
     """Generate CSV/XLSX rows without discarding stored decimal precision."""
     for shoe in shoes:
         status = "已退役" if shoe.is_retired else "使用中"
-        discount = round(shoe.price / shoe.orig_price * 100, 2) if shoe.orig_price > 0 else 0
-        cost_per_km = round(shoe.price / shoe.mileage, 2) if shoe.mileage > 0 else 0
-        expected_cost = (
-            round(shoe.price / shoe.expected_mileage, 2) if shoe.expected_mileage > 0 else 0
-        )
-        life_pct = (
-            round(shoe.mileage / shoe.expected_mileage * 100, 2)
-            if shoe.expected_mileage > 0 else 0
-        )
+        metrics = shoe_metrics(shoe)
+        discount = metrics["discount_percent"] or 0
+        cost_per_km = metrics["cost_per_km"] or 0
+        expected_cost = metrics["expected_cost_per_km"] or 0
+        life_pct = metrics["usage_percent"] or 0
         row = {
             "品牌": spreadsheet_safe(shoe.brand),
             "鞋款": spreadsheet_safe(shoe.model),

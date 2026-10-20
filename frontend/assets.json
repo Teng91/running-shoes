@@ -1,0 +1,46 @@
+{
+  "version": "3.3.0",
+  "cache_name": "running-shoes-shell-v23",
+  "scripts": [
+    "app-boot.js",
+    "app-lifecycle.js",
+    "app-state.js",
+    "app-api.js",
+    "app-auth.js",
+    "app-streams.js",
+    "app-core.js",
+    "app-models.js",
+    "app-markdown.js",
+    "app-agent.js",
+    "app-reports.js",
+    "app-runs.js",
+    "app-dates.js",
+    "app-strava.js",
+    "app-run-insights.js",
+    "app-shoes.js",
+    "app-dashboard.js",
+    "app-monthly.js",
+    "app-exports.js",
+    "app-goals.js",
+    "app-charts.js",
+    "app-shoe-charts.js",
+    "app-monthly-charts.js",
+    "app-spending.js",
+    "app-dialogs.js",
+    "app-updates.js",
+    "app.js"
+  ],
+  "modules": [
+    "runtime/feature-lifecycle.mjs"
+  ],
+  "styles": [
+    "css/01-foundation.css",
+    "css/02-shell.css",
+    "css/03-dashboard.css",
+    "css/04-runs.css",
+    "css/05-tables-forms.css",
+    "css/06-shoes.css",
+    "css/07-agent.css",
+    "css/08-responsive.css"
+  ]
+}

@@ -6,7 +6,8 @@ from typing import Any, cast
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from backend import models, strava_import
+from backend import models
+from backend.read_models.strava_preview import build_preview
 from backend.services.mileage import apply_run_mileage_deltas
 
 
@@ -51,7 +52,7 @@ def preview(
     invalid: int,
     warnings: list[str],
 ) -> dict[str, object]:
-    return strava_import.build_preview(db, user_id, rows, invalid, warnings)
+    return build_preview(db, user_id, rows, invalid, warnings)
 
 
 def import_runs(

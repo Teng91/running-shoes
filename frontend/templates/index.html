@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="app-asset-version" content="{{asset_version}}">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>跑鞋追蹤 Dashboard</title>
+<meta name="theme-color" content="#0f1117">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="跑鞋追蹤">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" type="image/png" href="/icons/icon-192.png">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<script>
+try {
+  if (localStorage.getItem('theme') === 'light') document.documentElement.classList.add('boot-light');
+} catch {}
+</script>
+<style>
+/* Critical startup UI must not depend on the non-blocking app stylesheet. */
+:root { --boot-bg: #0f1117; --boot-card: #1a1d2e; --boot-border: #2a2d3e; --boot-text: #e4e4e7; --boot-dim: #8b8d9a; --boot-accent: #818cf8; }
+html.boot-light { --boot-bg: #f4f5f9; --boot-card: #fff; --boot-border: #e2e8f0; --boot-text: #1e293b; --boot-dim: #64748b; --boot-accent: #4f46e5; }
+body { margin: 0; opacity: 1 !important; }
+.app-boot { position: fixed; inset: 0; z-index: 2000; display: grid; place-items: center; min-height: 100vh; min-height: 100dvh; padding: 24px; box-sizing: border-box; background: var(--boot-bg); color: var(--boot-text); font-family: 'Segoe UI', system-ui, sans-serif; transition: opacity .18s ease, visibility .18s ease; }
+.app-boot-card { width: min(100%, 320px); text-align: center; }
+.app-boot-mark { margin-bottom: 16px; font-size: 44px; line-height: 1; }
+.app-boot-spinner { width: 34px; height: 34px; margin: 0 auto 20px; border: 3px solid var(--boot-border); border-top-color: var(--boot-accent); border-radius: 50%; animation: app-boot-critical-spin .8s linear infinite; }
+.app-boot h1 { margin: 0 0 8px; font-size: 24px; }
+.app-boot p { margin: 0; color: var(--boot-dim); font-size: 14px; line-height: 1.6; }
+.app-boot-retry { margin-top: 18px; padding: 9px 18px; border: 1px solid var(--boot-border); border-radius: 8px; background: var(--boot-accent); color: #fff; font: inherit; cursor: pointer; }
+.app-boot-retry[hidden] { display: none; }
+.app-boot.is-hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+@keyframes app-boot-critical-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .app-boot { transition: none; } .app-boot-spinner { animation: none; } }
+</style>
+<link id="app-styles" rel="preload" href="/styles.css?v={{asset_version}}" as="style" onload="this.onload=null;this.rel='stylesheet';this.dataset.ready='true';window.dispatchEvent(new Event('appstylesready'))">
+<noscript><link rel="stylesheet" href="/styles.css?v={{asset_version}}"></noscript>
+</head>
+<body>
+
+<!-- Rendered before application scripts so PWA cold starts never look frozen. -->
+<div class="app-boot" id="app-boot" role="status" aria-live="polite" aria-busy="true">
+  <div class="app-boot-card">
+    <div class="app-boot-mark" aria-hidden="true">👟</div>
+    <div class="app-boot-spinner" aria-hidden="true"></div>
+    <h1>跑鞋追蹤</h1>
+    <p id="app-boot-message">正在準備應用程式…</p>
+    <button class="app-boot-retry" id="app-boot-retry" type="button" onclick="window.location.reload()" hidden>重新載入</button>
+  </div>
+</div>
+<script>
+// Compatibility bridge: a previously cached app bundle does not know about
+// #app-boot, so dismiss it once that bundle reveals either top-level view.
+window.__appBootWatchdog = window.setTimeout(function () {
+  const boot = document.getElementById('app-boot');
+  if (!boot || boot.hidden || boot.classList.contains('is-hidden')) return;
+  document.getElementById('app-boot-message').textContent = '載入時間比預期久，請檢查網路後重試。';
+  document.getElementById('app-boot-retry').hidden = false;
+  boot.setAttribute('aria-busy', 'false');
+}, 12000);
+window.__appBootLegacyPoll = window.setInterval(function () {
+  const auth = document.getElementById('auth-view');
+  const app = document.getElementById('app-view');
+  const styles = document.getElementById('app-styles');
+  const viewReady = (auth && auth.style.display !== 'none') || (app && app.style.display !== 'none');
+  if (styles && styles.dataset.ready === 'true' && viewReady) {
+    const boot = document.getElementById('app-boot');
+    if (boot) boot.classList.add('is-hidden');
+    window.clearInterval(window.__appBootLegacyPoll);
+    window.clearTimeout(window.__appBootWatchdog);
+  }
+}, 100);
+</script>
+<noscript><p class="app-boot-noscript">需要啟用 JavaScript 才能使用跑鞋追蹤。</p></noscript>
+
+<!-- Auth View -->
+<div id="app-update-notice" role="status" hidden>新版已準備好；請先儲存正在編輯的內容。<button class="btn btn-edit" onclick="applyAppUpdate()">重新載入套用</button></div>
+<div class="container" id="auth-view" style="display:none;">
+
+  <!-- Login Form -->
+  <form class="auth-box" id="login-form" autocomplete="off" onsubmit="handleLogin(); return false;">
+    <h1>跑鞋追蹤</h1>
+    <div class="form-group">
+      <label for="login-username">帳號</label>
+      <input id="login-username" autocomplete="off" placeholder="Username">
+    </div>
+    <div class="form-group">
+      <label for="login-password">密碼</label>
+      <input id="login-password" type="password" autocomplete="off" placeholder="Password">
+    </div>
+    <div class="auth-error" id="auth-error"></div>
+    <button type="submit" class="btn btn-primary" style="width:100%;margin-top:8px;">登入</button>
+    <div style="text-align:center;margin-top:12px;">
+      <a href="#" onclick="showChangeForm();return false;" style="color:var(--text-dim);font-size:13px;">更改密碼</a>
+      <span style="color:var(--border);margin:0 8px;">|</span>
+      <a href="#" onclick="showRegisterForm();return false;" style="color:var(--accent-light);font-size:13px;">註冊</a>
+    </div>
+  </form>
+
+  <!-- Register Form -->
+  <form class="auth-box" id="register-form" style="display:none;" onsubmit="handleRegister(); return false;">
+    <h1>註冊帳號</h1>
+    <div class="form-group">
+      <label for="reg-username">帳號</label>
+      <input id="reg-username" placeholder="Username">
+    </div>
+    <div class="form-group">
+      <label for="reg-password">密碼</label>
+      <input id="reg-password" type="password" placeholder="Password">
+    </div>
+    <div class="form-group">
+      <label for="reg-password2">確認密碼</label>
+      <input id="reg-password2" type="password" placeholder="Confirm Password">
+    </div>
+    <div class="auth-error" id="reg-error"></div>
+    <button type="submit" class="btn btn-primary" style="width:100%;margin-top:8px;">註冊</button>
+    <div style="text-align:center;margin-top:12px;">
+      <a href="#" onclick="showLoginForm();return false;" style="color:var(--accent-light);font-size:13px;">已有帳號？登入</a>
+    </div>
+  </form>
+
+  <!-- Change Password Form -->
+  <form class="auth-box" id="change-form" style="display:none;" onsubmit="handleChangePassword(); return false;">
+    <h1>更改密碼</h1>
+    <div class="form-group">
+      <label for="change-username">帳號</label>
+      <input id="change-username" placeholder="Username">
+    </div>
+    <div class="form-group">
+      <label for="change-old-password">舊密碼</label>
+      <input id="change-old-password" type="password" placeholder="Old Password">
+    </div>
+    <div class="form-group">
+      <label for="change-new-password">新密碼</label>
+      <input id="change-new-password" type="password" placeholder="New Password">
+    </div>
+    <div class="form-group">
+      <label for="change-new-password2">確認新密碼</label>
+      <input id="change-new-password2" type="password" placeholder="Confirm New Password">
+    </div>
+    <div class="auth-error" id="change-error"></div>
+    <button type="submit" class="btn btn-primary" style="width:100%;margin-top:8px;">更改密碼</button>
+    <div style="text-align:center;margin-top:12px;">
+      <a href="#" onclick="showLoginForm();return false;" style="color:var(--accent-light);font-size:13px;">回登入頁</a>
+    </div>
+  </form>
+
+</div>
+
+<!-- App View -->
+<div class="app-shell" id="app-view" style="display:none;">
+  <aside class="app-sidebar">
+    <div class="app-brand">
+      <div class="app-brand-mark" aria-hidden="true">🏃</div>
+      <div>
+        <h1>跑鞋追蹤</h1>
+        <p class="subtitle" id="today-label"></p>
+        <p class="mobile-page-label" id="mobile-page-label">跑步日誌</p>
+      </div>
+    </div>
+
+    <div class="sidebar-menu" id="sidebar-menu">
+      <button class="mobile-menu-toggle" type="button" aria-expanded="false" aria-controls="sidebar-navigation" onclick="setMobileMenu(this.getAttribute('aria-expanded') !== 'true')"><span aria-hidden="true">☰</span> 選單</button>
+      <div class="sidebar-navigation" id="sidebar-navigation">
+    <div class="app-nav-label">功能選單</div>
+    <div class="tabs" role="tablist" aria-label="主要功能">
+      <button class="tab active" role="tab" aria-selected="true" aria-controls="panel-runs" data-tab="runs" onclick="switchTab('runs')"><span class="tab-icon" aria-hidden="true">🏃</span><span>跑步日誌</span></button>
+      <button class="tab" role="tab" aria-selected="false" aria-controls="panel-shoes" data-tab="shoes" onclick="switchTab('shoes')"><span class="tab-icon" aria-hidden="true">👟</span><span>跑鞋</span></button>
+      <button class="tab" role="tab" aria-selected="false" aria-controls="panel-monthly" data-tab="monthly" onclick="switchTab('monthly')"><span class="tab-icon" aria-hidden="true">📊</span><span>月跑量</span></button>
+      <button class="tab" role="tab" aria-selected="false" aria-controls="panel-spending" data-tab="spending" onclick="switchTab('spending')"><span class="tab-icon" aria-hidden="true">💳</span><span>支出</span></button>
+      <button class="tab" role="tab" aria-selected="false" aria-controls="panel-agent" data-tab="agent" onclick="switchTab('agent')"><span class="tab-icon" aria-hidden="true">✨</span><span>AI 助手</span></button>
+      <button class="tab" role="tab" aria-selected="false" aria-controls="panel-report" data-tab="report" onclick="switchTab('report')"><span class="tab-icon" aria-hidden="true">📝</span><span>月報</span></button>
+    </div>
+
+    <div class="user-info">
+      <span class="user-name" id="user-label"></span>
+      <div class="sidebar-actions">
+        <button class="btn btn-sm btn-edit" id="theme-toggle-btn" onclick="toggleTheme()">☀️ 亮色模式</button>
+        <button class="btn btn-sm btn-edit" onclick="handleLogout()">登出</button>
+      </div>
+    </div>
+      </div>
+    </div>
+  </aside>
+
+  <main class="app-workspace" id="app-workspace">
+    <div class="app-version" id="app-version" aria-label="目前應用程式版本"></div>
+    <div id="data-load-error" role="alert" hidden>載入資料失敗，目前顯示上次載入的資料。<button class="btn" onclick="loadData()">重新載入</button></div>
+
+  <div class="tab-panel" id="panel-shoes" role="tabpanel" data-panel="shoes">
+
+    <div class="cards" id="summary-cards"></div>
+    <div class="shoe-alerts" id="shoe-alerts"></div>
+    <div class="category-grid" id="category-summary"></div>
+    <div class="charts">
+      <div class="chart-box"><h3>生命進度</h3><div class="chart-canvas"><canvas id="chart-progress"></canvas></div></div>
+      <div class="chart-box"><h3>每 km 成本比較</h3><div class="chart-canvas"><canvas id="chart-cost"></canvas></div></div>
+      <div class="chart-box"><h3>退役時間軸</h3><div class="chart-canvas"><canvas id="chart-retire"></canvas></div></div>
+      <div class="chart-box"><h3>月跑量佔比</h3><div class="chart-canvas"><canvas id="chart-value"></canvas></div></div>
+    </div>
+
+    <div class="table-section">
+      <div class="table-header">
+        <h2>現役跑鞋</h2>
+        <div class="table-header-actions">
+          <button class="btn btn-primary" onclick="openAddModal()">+ 新增跑鞋</button>
+          <button class="btn btn-edit" onclick="openExportModal()">匯出</button>
+        </div>
+      </div>
+      <p class="table-scroll-hint">欄位較多時，可左右滑動表格查看。</p>
+      <div class="table-wrap" tabindex="0" role="region" aria-label="可左右滑動的資料表">
+        <table>
+          <thead>
+            <tr>
+              <th>品牌</th><th>鞋款</th><th>購買日期</th>
+              <th class="numeric">跑鞋里程</th><th class="numeric">每km成本</th><th class="numeric">預期里程</th><th class="numeric">預期成本</th><th class="numeric">生命進度</th>
+              <th class="numeric">月跑量</th><th>預估退役</th><th>類別</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="shoe-table"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="table-section">
+      <div class="table-header">
+        <h2>退役跑鞋</h2>
+      </div>
+      <p class="table-scroll-hint">欄位較多時，可左右滑動表格查看。</p>
+      <div class="table-wrap" tabindex="0" role="region" aria-label="可左右滑動的資料表">
+        <table>
+          <thead>
+            <tr>
+              <th>品牌</th><th>鞋款</th><th>購買日期</th>
+              <th class="numeric">跑鞋里程</th><th class="numeric">每km成本</th><th class="numeric">預期里程</th><th class="numeric">預期成本</th><th class="numeric">生命進度</th>
+              <th>類別</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="retired-table"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div><!-- /tab-panel shoes -->
+
+  <div class="tab-panel active" id="panel-runs" role="tabpanel" data-panel="runs">
+    <div class="run-hero">
+      <div class="run-intro">
+        <h2>這個月，你是怎麼跑的？</h2>
+        <p>把每次跑步和鞋款記下來，就能看見訓練節奏，也更清楚每雙鞋子真正承擔了<span class="run-intro-tail">多少里程。</span></p>
+        <div class="run-filter">
+          <label for="run-month">查看月份</label>
+          <input id="run-month" class="year-select" type="month" onchange="loadRunsForSelectedMonth()">
+        </div>
+      </div>
+      <form class="run-entry" onsubmit="addRun(); return false;">
+        <h3>記下一次跑步</h3>
+        <div class="run-entry-grid">
+          <div class="form-group"><label for="run-date">日期</label><input id="run-date" type="date" required></div>
+          <div class="form-group"><label for="run-km">距離 (km)</label><input id="run-km" type="number" min="0.01" max="1000" step="0.01" placeholder="5.00" required></div>
+          <div class="form-group shoe-field"><label for="run-shoe">穿哪雙鞋</label><select id="run-shoe" required></select></div>
+        </div>
+        <div class="inline-error" id="run-error"></div>
+        <button class="btn btn-primary" id="add-run-btn" type="submit">+ 新增跑步紀錄</button>
+      </form>
+    </div>
+
+    <div class="run-metrics">
+      <div class="cards run-stats" id="run-stats"></div>
+      <div id="dashboard-insights" class="dashboard-insights"></div>
+    </div>
+    <div class="charts">
+      <div class="chart-box"><h3>跑步月曆</h3><div id="run-calendar" class="run-calendar"></div></div>
+      <div class="chart-box run-shoe-chart-box"><h3>鞋款里程分布</h3><div class="run-shoe-canvas"><canvas id="chart-run-shoes"></canvas></div><div id="run-shoe-legend" class="run-shoe-legend"></div></div>
+    </div>
+    <div class="table-section">
+      <div class="table-header"><h2 id="run-table-title">跑步紀錄</h2><div class="table-header-actions"><span id="strava-last" class="strava-last"></span><button class="btn btn-edit" onclick="openStravaModal()">↗ 匯入 Strava</button></div></div>
+      <p class="table-scroll-hint">欄位較多時，可左右滑動表格查看。</p>
+      <div class="table-wrap" tabindex="0" role="region" aria-label="可左右滑動的資料表">
+        <table>
+          <thead><tr><th>日期</th><th class="numeric">距離</th><th>鞋款</th><th>來源</th><th></th></tr></thead>
+          <tbody id="run-table"></tbody>
+        </table>
+      </div>
+      <div id="run-paging" class="table-header-actions" hidden>
+        <button id="run-prev" class="btn btn-edit" onclick="changeRunPage(-1)">上一頁</button>
+        <span id="run-page-label" role="status"></span>
+        <button id="run-next" class="btn btn-edit" onclick="changeRunPage(1)">下一頁</button>
+        <button id="run-clear-day" class="btn btn-edit" onclick="loadRunsForSelectedMonth()" hidden>整月明細</button>
+      </div>
+    </div>
+  </div><!-- /tab-panel runs -->
+
+  <div class="tab-panel" id="panel-monthly" role="tabpanel" data-panel="monthly">
+
+    <div class="goal-settings">
+      <div class="form-group"><label for="goal-start-year">目標開始年份</label><input id="goal-start-year" type="number" min="1900" max="2100"></div>
+      <div class="form-group"><label for="goal-monthly-km">每月目標 (km)</label><input id="goal-monthly-km" type="number" min="0.01" step="0.01"></div>
+      <div class="form-group"><label for="goal-month-select">查看月份</label><select id="goal-month-select" onchange="onGoalMonthChange()"></select></div>
+      <button class="btn btn-primary" id="save-goal-btn" onclick="saveRunningGoal()">儲存目標</button>
+      <span id="goal-settings-status" class="goal-settings-status"></span>
+    </div>
+    <div class="cards" id="goal-cards"></div>
+
+    <div class="charts charts-3col">
+      <div class="chart-box">
+        <div class="chart-title-row">
+          <h3>年度總跑量</h3>
+        </div>
+        <div class="chart-canvas"><canvas id="chart-yearly-total"></canvas></div>
+      </div>
+      <div class="chart-box">
+        <div class="chart-title-row">
+          <h3>年度月跑量</h3>
+          <select id="year-select" class="year-select" onchange="onYearChange()"></select>
+        </div>
+        <div class="chart-canvas"><canvas id="chart-monthly-year"></canvas></div>
+      </div>
+      <div class="chart-box">
+        <div class="chart-title-row">
+          <h3>跑鞋月度里程堆疊</h3>
+          <select id="stacked-year-select" class="year-select" onchange="onStackedYearChange()"></select>
+        </div>
+        <div class="chart-canvas"><canvas id="chart-shoe-stacked"></canvas></div>
+      </div>
+    </div>
+
+    <div class="table-section">
+      <div class="table-header">
+        <h2>月跑量紀錄</h2>
+      </div>
+      <div class="inline-add">
+        <select id="add-year"></select>
+        <select id="add-month"></select>
+        <input id="add-km" type="number" min="0" step="0.01" placeholder="km">
+        <button class="btn btn-sm btn-primary" id="add-monthly-btn" onclick="addMonthlyMileage()">新增</button>
+        <span class="inline-error" id="add-error"></span>
+      </div>
+      <p class="table-scroll-hint">欄位較多時，可左右滑動表格查看。</p>
+      <div class="table-wrap" tabindex="0" role="region" aria-label="可左右滑動的資料表">
+        <table>
+          <thead>
+            <tr>
+              <th class="numeric">年份</th><th class="numeric">月份</th><th class="numeric">日誌里程</th><th class="numeric">歷史／手動調整</th><th class="numeric">合計 (km)</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="monthly-table"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div><!-- /tab-panel monthly -->
+
+  <!-- Spending Tab -->
+  <div class="tab-panel" id="panel-spending" role="tabpanel" data-panel="spending">
+
+    <div class="cards" id="spending-cards"></div>
+
+    <div class="charts">
+      <div class="chart-box">
+        <div class="chart-title-row">
+          <h3>年度支出總覽</h3>
+        </div>
+        <div class="chart-canvas"><canvas id="chart-spending-yearly"></canvas></div>
+      </div>
+      <div class="chart-box">
+        <div class="chart-title-row">
+          <h3>年度月支出</h3>
+          <select id="spending-year-select" class="year-select" onchange="onSpendingYearChange()"></select>
+        </div>
+        <div class="chart-canvas"><canvas id="chart-spending"></canvas></div>
+      </div>
+    </div>
+
+    <div class="table-section">
+      <div class="table-header">
+        <h2>支出明細</h2>
+      </div>
+      <p class="table-scroll-hint">欄位較多時，可左右滑動表格查看。</p>
+      <div class="table-wrap" tabindex="0" role="region" aria-label="可左右滑動的資料表">
+        <table>
+          <thead>
+            <tr>
+              <th>日期</th><th>品牌</th><th>鞋款</th><th>尺寸</th><th class="numeric">買價</th><th class="numeric">原價</th><th class="numeric">折數</th><th>類別</th><th>狀態</th>
+            </tr>
+          </thead>
+          <tbody id="spending-table"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div><!-- /tab-panel spending -->
+
+  <!-- Agent Chat Panel -->
+  <div class="tab-panel agent-panel" id="panel-agent" role="tabpanel" data-panel="agent">
+    <div class="agent-config">
+      <label for="agent-model">今日免費模型</label>
+      <select id="agent-model"></select>
+      <button class="btn btn-edit" id="agent-refresh-btn" onclick="refreshAgentModels()">🔄 刷新模型列表</button>
+    </div>
+    <div class="agent-messages" id="agent-messages">
+      <div class="agent-message bot">
+        <div class="agent-msg-content">你好！我是跑鞋助手，可以幫你查詢跑鞋資料、分析跑量、推薦新鞋。有什麼想問的嗎？</div>
+      </div>
+    </div>
+    <div class="agent-input-area">
+      <textarea id="agent-input" rows="2" placeholder="問問你的跑鞋資料..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendAgentMessage()}"></textarea>
+      <button id="agent-send-btn" onclick="sendAgentMessage()">送出</button>
+    </div>
+  </div><!-- /tab-panel agent -->
+
+  <!-- Monthly Report Panel -->
+  <div class="tab-panel" id="panel-report" role="tabpanel" data-panel="report">
+    <div class="run-hero">
+      <div class="run-intro">
+        <h2>AI 月度跑步報告</h2>
+        <p>選擇月份後由 AI 整理當月跑量趨勢、鞋款狀態與退役提醒，報告會自動保存，之後可隨時回看。</p>
+        <div class="run-filter">
+          <label for="report-month">報告月份</label>
+          <input id="report-month" class="year-select" type="month" onchange="loadSavedReport()">
+        </div>
+      </div>
+      <div class="run-entry">
+        <h3>產生 / 查看報告</h3>
+        <div class="run-entry-grid">
+          <div class="form-group">
+            <label for="report-history">歷史報告</label>
+            <select id="report-history" onchange="onReportHistoryChange()"><option value="">選擇已儲存的月份…</option></select>
+          </div>
+          <div class="form-group">
+            <label for="report-model">本日免費模型</label>
+            <select id="report-model"></select>
+          </div>
+        </div>
+        <button class="btn btn-primary" id="generate-report-btn" onclick="generateReport()">產生報告</button>
+        <div class="report-status" id="report-status" role="status" aria-live="polite"></div>
+      </div>
+    </div>
+    <div class="table-section">
+      <div class="table-header"><h2 id="report-title">報告內容</h2></div>
+      <div id="report-content" class="agent-msg-content report-content">尚未選擇報告。</div>
+    </div>
+  </div><!-- /tab-panel report -->
+
+  </main>
+</div>
+
+<!-- include:shoe-modal.html -->
+<!-- include:run-modal.html -->
+<!-- include:strava-modal.html -->
+<!-- include:monthly-modal.html -->
+<!-- include:export-modal.html -->
+<!-- include:shoe-analysis-modal.html -->
+
+<script src="/vendor/chart.umd.min.js"></script>
+<script src="/vendor/marked.min.js"></script>
+<!-- app-scripts -->
+</body>
+</html>

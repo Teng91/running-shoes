@@ -68,44 +68,7 @@ function setAuth(token, username) {
 function clearAuth() {
   cancelAuthOperation();
   authGeneration += 1;
-  dashboardAnalyticsCache.clear();
-  dashboardAnalyticsRequest += 1;
-  document.getElementById('dashboard-insights').replaceChildren();
-  resetAgentChat();
-  closeRunModal();
-  closeMonthlyModal();
-  if (typeof shoeModal !== 'undefined') shoeModal.close();
-  resetPanelRendering();
-  stravaPreviewController?.abort();
-  stravaPreviewController = null;
-  stravaPreviewRequestId += 1;
-  stravaPreview = null;
-  stravaPreviewKey = '';
-  closeShoeAnalytics();
-  document.querySelectorAll('.modal-overlay.active').forEach(modal => modal.classList.remove('active'));
-  shoes = []; retiredShoes = []; monthlyMileages = [];
-  monthlySpending = []; runs = []; stravaImports = [];
-  yearlyRunsCache.clear();
-  runListRequestId += 1;
-  stackedRunsRequestId += 1;
-  runningGoal = { version: 0, start_year: 2026, monthly_km: 125, yearly_km: 1500 };
-  dataLoadGeneration += 1;
-  reportLoadRequestId += 1;
-  reportLoadController?.abort();
-  reportLoadController = null;
-  reportGenerationRequestId += 1;
-  reportGenerationController?.abort();
-  reportGenerationController = null;
-  document.getElementById('report-content').textContent = '尚未選擇報告。';
-  document.getElementById('report-content').classList.remove('is-streaming');
-  document.getElementById('report-history').replaceChildren();
-  setReportStatus('');
-  setReportControlsDisabled(false);
-  const reportButton = document.getElementById('generate-report-btn');
-  if (reportButton) {
-    reportButton.disabled = false;
-    reportButton.textContent = '產生報告';
-  }
+  resetFeatureLifecycles();
   authToken = null;
   currentUser = null;
   localStorage.removeItem('token');
