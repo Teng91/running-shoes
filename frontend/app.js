@@ -14,6 +14,8 @@ document.getElementById('shoe-analysis-modal').addEventListener('click', e => {
 
 // Check stored token on load
 async function init() {
+  // Every new document starts at the home page, regardless of legacy saved tabs.
+  resetAppLayout();
   populateAddSelects();
   const today = localDateISO();
   document.getElementById('run-date').value = today;
@@ -30,9 +32,6 @@ async function init() {
       if (!response.ok) throw new Error('驗證服務暫時無法使用');
       showAppView({ keepBoot: true });
       loadAgentModels();
-      // 還原 F5 之前的 tab（init 走 stored token，沒經過 resetAppLayout）。
-      const savedTab = localStorage.getItem('activeTab');
-      if (savedTab && savedTab !== 'runs') switchTab(savedTab);
       await loadData();
       hideAppBoot();
     } catch (error) {
@@ -52,6 +51,13 @@ async function init() {
 init().catch(error => {
   console.error('應用程式初始化失敗:', error);
   showAppBootError();
+});
+
+// Back/forward cache restores a live document without running init again.
+window.addEventListener('pageshow', event => {
+  if (!event.persisted) return;
+  resetAppLayout();
+  if (authToken) renderActivePanel();
 });
 
 if ('serviceWorker' in navigator) {

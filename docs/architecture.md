@@ -191,6 +191,11 @@ sequenceDiagram
 右側 workspace 只呈現唯一 active feature panel；窄螢幕則轉為單欄精簡頂部列，透過帶 ARIA 展開狀態的按鈕顯示同一組導覽及帳號操作，選取功能後收起。`app-core.js` 只同步 active、
 ARIA 與 `agent-mode` 狀態，不以 inline style 決定 shell 幾何，因此功能 rendering 與 responsive layout 維持單向依賴。
 
+[SPEC-015](specs/015-run-log-home.md) 定義跑步日誌為固定首頁：`app.js` 在 init 驗證登入前
+呼叫 Auth 既有 `resetAppLayout()`，忽略舊版 activeTab；`switchTab()` 僅更新本文件，不保存分頁。
+`pageshow.persisted` 以相同 layout reset 與 Core active-panel renderer 處理快取還原，不重新登入或修改資料；
+一般 visibilitychange 不觸發首頁重設，登入 token 與主題偏好仍維持原本儲存方式。
+
 ## 5. 模組責任與依賴方向
 
 | 模組 | 責任 | 可以依賴 | 不應依賴 |
@@ -242,7 +247,7 @@ sequenceDiagram
 flowchart TB
     Browser[Browser / installed PWA]
     SW[Service Worker<br/>immutable versioned shell<br/>complete install before activation]
-    Shell[(App shell cache v20<br/>asset revision 3.2.3)]
+    Shell[(App shell cache v21<br/>asset revision 3.2.4)]
     FlyProxy[Fly Proxy / HTTPS]
     Machine[Fly Machine<br/>FastAPI container]
     Volume[(Fly Volume<br/>SQLite)]
