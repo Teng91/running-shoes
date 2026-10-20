@@ -134,8 +134,22 @@ test('all shoe mutations lock their snapshot and leave replacement drafts and se
   }
 });
 
+test('report status separates saved confirmations from errors and clears stale error styles', () => {
+  const classes = new Set();
+  const status = { textContent: '', classList: { toggle(name, on) { if (on) classes.add(name); else classes.delete(name); } } };
+  const context = vm.createContext({ document: { getElementById: () => status } });
+  vm.runInContext(extract('setReportStatus'), context);
+  context.setReportStatus('讀取失敗'); assert.equal(classes.has('is-error'), true);
+  context.setReportStatus('報告已儲存', 'success'); assert.equal(classes.has('is-error'), false);
+  assert.equal(status.textContent, '報告已儲存');
+  context.setReportStatus('未儲存'); context.setReportStatus('');
+  assert.equal(status.textContent, ''); assert.equal(classes.size, 0);
+  assert.match(extract('renderReport'), /formatLocalTimestamp\(report\.updated_at\), 'success'/);
+  assert.match(extract('generateReport'), /formatLocalTimestamp\(event\.updated_at\), 'success'/);
+});
+
 test('saved and streamed report timestamps share local formatting', () => {
-  const elements = new Proxy({}, { get: (target, id) => target[id] ||= { options: [], textContent: '' } });
+  const elements = new Proxy({}, { get: (target, id) => target[id] ||= { options: [], textContent: '', classList: { toggle() {} } } });
   const context = vm.createContext({ document: { getElementById: id => elements[id] }, renderMarkdown: value => value });
   vm.runInContext(['formatLocalTimestamp', 'reportMonthLabel', 'setReportStatus', 'renderReport'].map(extract).join('\n'), context);
   const timestamp = '2026-10-20T00:30:00+00:00';
@@ -312,8 +326,37 @@ test('shoe retirement presentation uses only the backend date, including no fore
 function tableHeaders(tbodyId) {
   const beforeBody = htmlSource.slice(0, htmlSource.indexOf(`<tbody id="${tbodyId}"`));
   const header = beforeBody.slice(beforeBody.lastIndexOf('<thead>'));
-  return [...header.matchAll(/<th>(.*?)<\/th>/g)].map(match => match[1]);
+  return [...header.matchAll(/<th\b[^>]*>(.*?)<\/th>/g)].map(match => match[1]);
 }
+
+test('table numeric headers and shared component geometry have explicit presentation contracts', () => {
+  for (const [id, expected] of Object.entries({ 'shoe-table': [3,4,5,6,7,8], 'retired-table': [3,4,5,6,7], 'run-table': [1], 'monthly-table': [0,1,2,3,4], 'spending-table': [4,5,6] })) {
+    const before = htmlSource.slice(0, htmlSource.indexOf(`<tbody id="${id}"`));
+    const heads = [...before.slice(before.lastIndexOf('<thead>')).matchAll(/<th\b([^>]*)>/g)];
+    assert.deepEqual(heads.flatMap((head, index) => head[1].includes('numeric') ? [index] : []), expected);
+  }
+  assert.match(styleSource, /--control-height:\s*44px/);
+  assert.match(styleSource, /--control-compact-height:\s*36px/);
+  assert.match(styleSource, /th\.numeric, td\.numeric \{ text-align: right/);
+  assert.match(htmlSource, /<label for="agent-model">今日免費模型/);
+  assert.doesNotMatch(htmlSource, /<span style="flex:1"><\/span>/);
+});
+
+test('shoe action groups show only relevant controls without overriding shared button layout', () => {
+  const definition = source.slice(source.indexOf('class ShoeModal {'), source.indexOf('// 初始化一次'));
+  const elements = { 'shoe-secondary-actions': { hidden: false }, 'f-monthly': {} };
+  const context = vm.createContext({ document: { getElementById: id => elements[id] } });
+  vm.runInContext(definition + '\nglobalThis.Modal = ShoeModal;', context);
+  const modal = Object.create(context.Modal.prototype);
+  Object.assign(modal, { titleEl: {}, btnDelete: { style: {} }, btnMove: { style: {} }, monthlyRow: { style: {} } });
+  modal._updateUI({ title: '新增', showDelete: false, showMove: false, monthly: 60, monthlyVisible: true });
+  assert.equal(elements['shoe-secondary-actions'].hidden, true);
+  assert.equal(modal.btnDelete.style.display, 'none');
+  modal._updateUI({ title: '編輯', showDelete: true, showMove: true, moveText: '移至退役', monthly: 80, monthlyVisible: true });
+  assert.equal(elements['shoe-secondary-actions'].hidden, false);
+  assert.equal(modal.btnDelete.style.display, ''); assert.equal(modal.btnMove.style.display, '');
+  assert.equal(modal.btnMove.textContent, '移至退役'); assert.equal(elements['f-monthly'].value, 80);
+});
 
 test('shoe purchase columns live only in spending details, with aligned table rows', () => {
   const elements = { 'shoe-table': {}, 'retired-table': {} };

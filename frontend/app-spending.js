@@ -202,9 +202,9 @@ function renderSpendingTable() {
       <td>${esc(s.brand)}</td>
       <td>${esc(s.model)}</td>
       <td>${esc(s.size || '—')}</td>
-      <td>${fmtMoney(s.price)}</td>
-      <td>${fmtMoney(s.orig_price)}</td>
-      <td>${discount}</td>
+      <td class="numeric">${fmtMoney(s.price)}</td>
+      <td class="numeric">${fmtMoney(s.orig_price)}</td>
+      <td class="numeric">${discount}</td>
       <td>${esc(shoeCategories(s).join(', ') || '未分類')}</td>
       <td>${status}</td>
     </tr>`;

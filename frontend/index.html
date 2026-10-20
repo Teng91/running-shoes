@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
 <meta charset="UTF-8">
-<meta name="app-asset-version" content="3.2.4">
+<meta name="app-asset-version" content="3.2.5">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>跑鞋追蹤 Dashboard</title>
 <meta name="theme-color" content="#0f1117">
@@ -34,8 +34,8 @@ body { margin: 0; opacity: 1 !important; }
 @keyframes app-boot-critical-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .app-boot { transition: none; } .app-boot-spinner { animation: none; } }
 </style>
-<link id="app-styles" rel="preload" href="/styles.css?v=3.2.4" as="style" onload="this.onload=null;this.rel='stylesheet';this.dataset.ready='true';window.dispatchEvent(new Event('appstylesready'))">
-<noscript><link rel="stylesheet" href="/styles.css?v=3.2.4"></noscript>
+<link id="app-styles" rel="preload" href="/styles.css?v=3.2.5" as="style" onload="this.onload=null;this.rel='stylesheet';this.dataset.ready='true';window.dispatchEvent(new Event('appstylesready'))">
+<noscript><link rel="stylesheet" href="/styles.css?v=3.2.5"></noscript>
 </head>
 <body>
 
@@ -81,11 +81,11 @@ window.__appBootLegacyPoll = window.setInterval(function () {
   <form class="auth-box" id="login-form" autocomplete="off" onsubmit="handleLogin(); return false;">
     <h1>跑鞋追蹤</h1>
     <div class="form-group">
-      <label>帳號</label>
+      <label for="login-username">帳號</label>
       <input id="login-username" autocomplete="off" placeholder="Username">
     </div>
     <div class="form-group">
-      <label>密碼</label>
+      <label for="login-password">密碼</label>
       <input id="login-password" type="password" autocomplete="off" placeholder="Password">
     </div>
     <div class="auth-error" id="auth-error"></div>
@@ -101,15 +101,15 @@ window.__appBootLegacyPoll = window.setInterval(function () {
   <form class="auth-box" id="register-form" style="display:none;" onsubmit="handleRegister(); return false;">
     <h1>註冊帳號</h1>
     <div class="form-group">
-      <label>帳號</label>
+      <label for="reg-username">帳號</label>
       <input id="reg-username" placeholder="Username">
     </div>
     <div class="form-group">
-      <label>密碼</label>
+      <label for="reg-password">密碼</label>
       <input id="reg-password" type="password" placeholder="Password">
     </div>
     <div class="form-group">
-      <label>確認密碼</label>
+      <label for="reg-password2">確認密碼</label>
       <input id="reg-password2" type="password" placeholder="Confirm Password">
     </div>
     <div class="auth-error" id="reg-error"></div>
@@ -123,19 +123,19 @@ window.__appBootLegacyPoll = window.setInterval(function () {
   <form class="auth-box" id="change-form" style="display:none;" onsubmit="handleChangePassword(); return false;">
     <h1>更改密碼</h1>
     <div class="form-group">
-      <label>帳號</label>
+      <label for="change-username">帳號</label>
       <input id="change-username" placeholder="Username">
     </div>
     <div class="form-group">
-      <label>舊密碼</label>
+      <label for="change-old-password">舊密碼</label>
       <input id="change-old-password" type="password" placeholder="Old Password">
     </div>
     <div class="form-group">
-      <label>新密碼</label>
+      <label for="change-new-password">新密碼</label>
       <input id="change-new-password" type="password" placeholder="New Password">
     </div>
     <div class="form-group">
-      <label>確認新密碼</label>
+      <label for="change-new-password2">確認新密碼</label>
       <input id="change-new-password2" type="password" placeholder="Confirm New Password">
     </div>
     <div class="auth-error" id="change-error"></div>
@@ -201,9 +201,9 @@ window.__appBootLegacyPoll = window.setInterval(function () {
     <div class="table-section">
       <div class="table-header">
         <h2>現役跑鞋</h2>
-        <div style="display:flex; gap:8px; align-items:center;">
+        <div class="table-header-actions">
           <button class="btn btn-primary" onclick="openAddModal()">+ 新增跑鞋</button>
-          <button class="btn btn-sm" style="background:#475569;color:#fff;" onclick="openExportModal()">匯出</button>
+          <button class="btn btn-edit" onclick="openExportModal()">匯出</button>
         </div>
       </div>
       <p class="table-scroll-hint">欄位較多時，可左右滑動表格查看。</p>
@@ -212,8 +212,8 @@ window.__appBootLegacyPoll = window.setInterval(function () {
           <thead>
             <tr>
               <th>品牌</th><th>鞋款</th><th>購買日期</th>
-              <th>跑鞋里程</th><th>每km成本</th><th>預期里程</th><th>預期成本</th><th>生命進度</th>
-              <th>月跑量</th><th>預估退役</th><th>類別</th><th></th>
+              <th class="numeric">跑鞋里程</th><th class="numeric">每km成本</th><th class="numeric">預期里程</th><th class="numeric">預期成本</th><th class="numeric">生命進度</th>
+              <th class="numeric">月跑量</th><th>預估退役</th><th>類別</th><th></th>
             </tr>
           </thead>
           <tbody id="shoe-table"></tbody>
@@ -230,7 +230,7 @@ window.__appBootLegacyPoll = window.setInterval(function () {
           <thead>
             <tr>
               <th>品牌</th><th>鞋款</th><th>購買日期</th>
-              <th>跑鞋里程</th><th>每km成本</th><th>預期里程</th><th>預期成本</th><th>生命進度</th>
+              <th class="numeric">跑鞋里程</th><th class="numeric">每km成本</th><th class="numeric">預期里程</th><th class="numeric">預期成本</th><th class="numeric">生命進度</th>
               <th>類別</th><th></th>
             </tr>
           </thead>
@@ -272,11 +272,11 @@ window.__appBootLegacyPoll = window.setInterval(function () {
       <div class="chart-box run-shoe-chart-box"><h3>鞋款里程分布</h3><div class="run-shoe-canvas"><canvas id="chart-run-shoes"></canvas></div><div id="run-shoe-legend" class="run-shoe-legend"></div></div>
     </div>
     <div class="table-section">
-      <div class="table-header"><h2 id="run-table-title">跑步紀錄</h2><div><span id="strava-last" class="strava-last"></span><button class="btn btn-sm btn-edit" onclick="openStravaModal()">↗ 匯入 Strava</button></div></div>
+      <div class="table-header"><h2 id="run-table-title">跑步紀錄</h2><div class="table-header-actions"><span id="strava-last" class="strava-last"></span><button class="btn btn-edit" onclick="openStravaModal()">↗ 匯入 Strava</button></div></div>
       <p class="table-scroll-hint">欄位較多時，可左右滑動表格查看。</p>
       <div class="table-wrap" tabindex="0" role="region" aria-label="可左右滑動的資料表">
         <table>
-          <thead><tr><th>日期</th><th>距離</th><th>鞋款</th><th>來源</th><th></th></tr></thead>
+          <thead><tr><th>日期</th><th class="numeric">距離</th><th>鞋款</th><th>來源</th><th></th></tr></thead>
           <tbody id="run-table"></tbody>
         </table>
       </div>
@@ -286,10 +286,10 @@ window.__appBootLegacyPoll = window.setInterval(function () {
   <div class="tab-panel" id="panel-monthly" role="tabpanel" data-panel="monthly">
 
     <div class="goal-settings">
-      <div class="form-group"><label>目標開始年份</label><input id="goal-start-year" type="number" min="1900" max="2100"></div>
-      <div class="form-group"><label>每月目標 (km)</label><input id="goal-monthly-km" type="number" min="0.01" step="0.01"></div>
-      <div class="form-group"><label>查看月份</label><select id="goal-month-select" onchange="onGoalMonthChange()"></select></div>
-      <button class="btn btn-sm btn-primary" onclick="saveRunningGoal()">儲存目標</button>
+      <div class="form-group"><label for="goal-start-year">目標開始年份</label><input id="goal-start-year" type="number" min="1900" max="2100"></div>
+      <div class="form-group"><label for="goal-monthly-km">每月目標 (km)</label><input id="goal-monthly-km" type="number" min="0.01" step="0.01"></div>
+      <div class="form-group"><label for="goal-month-select">查看月份</label><select id="goal-month-select" onchange="onGoalMonthChange()"></select></div>
+      <button class="btn btn-primary" onclick="saveRunningGoal()">儲存目標</button>
       <span id="goal-settings-status" class="goal-settings-status"></span>
     </div>
     <div class="cards" id="goal-cards"></div>
@@ -333,7 +333,7 @@ window.__appBootLegacyPoll = window.setInterval(function () {
         <table>
           <thead>
             <tr>
-              <th>年份</th><th>月份</th><th>日誌里程</th><th>歷史／手動調整</th><th>合計 (km)</th><th></th>
+              <th class="numeric">年份</th><th class="numeric">月份</th><th class="numeric">日誌里程</th><th class="numeric">歷史／手動調整</th><th class="numeric">合計 (km)</th><th></th>
             </tr>
           </thead>
           <tbody id="monthly-table"></tbody>
@@ -373,7 +373,7 @@ window.__appBootLegacyPoll = window.setInterval(function () {
         <table>
           <thead>
             <tr>
-              <th>日期</th><th>品牌</th><th>鞋款</th><th>尺寸</th><th>買價</th><th>原價</th><th>折數</th><th>類別</th><th>狀態</th>
+              <th>日期</th><th>品牌</th><th>鞋款</th><th>尺寸</th><th class="numeric">買價</th><th class="numeric">原價</th><th class="numeric">折數</th><th>類別</th><th>狀態</th>
             </tr>
           </thead>
           <tbody id="spending-table"></tbody>
@@ -386,9 +386,9 @@ window.__appBootLegacyPoll = window.setInterval(function () {
   <!-- Agent Chat Panel -->
   <div class="tab-panel agent-panel" id="panel-agent" role="tabpanel" data-panel="agent">
     <div class="agent-config">
-      <label style="font-size:13px;color:var(--text-dim);white-space:nowrap;">今日免費模型</label>
+      <label for="agent-model">今日免費模型</label>
       <select id="agent-model"></select>
-      <button id="agent-refresh-btn" onclick="refreshAgentModels()">🔄 刷新模型列表</button>
+      <button class="btn btn-edit" id="agent-refresh-btn" onclick="refreshAgentModels()">🔄 刷新模型列表</button>
     </div>
     <div class="agent-messages" id="agent-messages">
       <div class="agent-message bot">
@@ -425,7 +425,7 @@ window.__appBootLegacyPoll = window.setInterval(function () {
           </div>
         </div>
         <button class="btn btn-primary" id="generate-report-btn" onclick="generateReport()">產生報告</button>
-        <div class="inline-error" id="report-status"></div>
+        <div class="report-status" id="report-status" role="status" aria-live="polite"></div>
       </div>
     </div>
     <div class="table-section">
@@ -442,23 +442,23 @@ window.__appBootLegacyPoll = window.setInterval(function () {
   <div class="modal">
     <h2 id="modal-title">新增跑鞋</h2>
     <div class="form-row">
-      <div class="form-group"><label>品牌</label><input id="f-brand" placeholder="Mizuno"></div>
-      <div class="form-group"><label>鞋款</label><input id="f-model" placeholder="Wave Sky 7"></div>
+      <div class="form-group"><label for="f-brand">品牌</label><input id="f-brand" placeholder="Mizuno"></div>
+      <div class="form-group"><label for="f-model">鞋款</label><input id="f-model" placeholder="Wave Sky 7"></div>
     </div>
     <div class="form-row">
-      <div class="form-group"><label>購買日期</label><input id="f-date" type="date"></div>
-      <div class="form-group"><label>尺寸</label><input id="f-size" placeholder="us13/31cm"></div>
+      <div class="form-group"><label for="f-date">購買日期</label><input id="f-date" type="date"></div>
+      <div class="form-group"><label for="f-size">尺寸</label><input id="f-size" placeholder="us13/31cm"></div>
     </div>
     <div class="form-row">
-      <div class="form-group"><label>買價</label><input id="f-price" type="number" placeholder="2390"></div>
-      <div class="form-group"><label>原價</label><input id="f-orig" type="number" placeholder="4780"></div>
+      <div class="form-group"><label for="f-price">買價</label><input id="f-price" type="number" placeholder="2390"></div>
+      <div class="form-group"><label for="f-orig">原價</label><input id="f-orig" type="number" placeholder="4780"></div>
     </div>
     <div class="form-row">
-      <div class="form-group"><label>跑鞋里程 (km)</label><input id="f-mileage" type="number" placeholder="0"></div>
-      <div class="form-group"><label>預期里程 (km)</label><input id="f-expected" type="number" placeholder="800"></div>
+      <div class="form-group"><label for="f-mileage">跑鞋里程 (km)</label><input id="f-mileage" type="number" placeholder="0"></div>
+      <div class="form-group"><label for="f-expected">預期里程 (km)</label><input id="f-expected" type="number" placeholder="800"></div>
     </div>
     <div class="form-row">
-      <div class="form-group"><label>月跑量 (km)</label><input id="f-monthly" type="number" placeholder="60"></div>
+      <div class="form-group"><label for="f-monthly">月跑量 (km)</label><input id="f-monthly" type="number" placeholder="60"></div>
     </div>
     <div class="form-row">
       <div class="form-group category-field"><label>用途類別 (可多選)</label>
@@ -471,11 +471,14 @@ window.__appBootLegacyPoll = window.setInterval(function () {
       </div>
     </div>
     <div class="modal-actions">
-      <button class="btn btn-sm btn-delete" id="btn-delete" style="display:none">刪除</button>
-      <button class="btn btn-sm btn-edit" id="btn-move" style="display:none">移動</button>
-      <span style="flex:1"></span>
-      <button class="btn btn-cancel" onclick="closeModal()">取消</button>
-      <button class="btn btn-primary" onclick="saveShoe()">儲存</button>
+      <div class="modal-actions-secondary" id="shoe-secondary-actions" hidden>
+        <button class="btn btn-delete" id="btn-delete" style="display:none">刪除</button>
+        <button class="btn btn-edit" id="btn-move" style="display:none">移動</button>
+      </div>
+      <div class="modal-actions-primary">
+        <button class="btn btn-cancel" onclick="closeModal()">取消</button>
+        <button class="btn btn-primary" onclick="saveShoe()">儲存</button>
+      </div>
     </div>
   </div>
 </div>
@@ -491,10 +494,11 @@ window.__appBootLegacyPoll = window.setInterval(function () {
     <div class="form-group"><label for="edit-run-shoe">穿哪雙鞋</label><select id="edit-run-shoe" required></select></div>
     <div class="auth-error" id="edit-run-error"></div>
     <div class="modal-actions">
-      <button type="button" class="btn btn-sm btn-delete" onclick="deleteEditingRun()">刪除</button>
-      <span style="flex:1"></span>
-      <button type="button" class="btn btn-cancel" onclick="closeRunModal()">取消</button>
-      <button type="submit" class="btn btn-primary">儲存</button>
+      <div class="modal-actions-secondary"><button type="button" class="btn btn-delete" onclick="deleteEditingRun()">刪除</button></div>
+      <div class="modal-actions-primary">
+        <button type="button" class="btn btn-cancel" onclick="closeRunModal()">取消</button>
+        <button type="submit" class="btn btn-primary">儲存</button>
+      </div>
     </div>
   </form>
 </div>
@@ -514,7 +518,7 @@ window.__appBootLegacyPoll = window.setInterval(function () {
     <div id="strava-summary"></div>
     <div id="strava-mapping" class="strava-groups"></div>
     <div class="auth-error" id="strava-error"></div>
-    <div class="modal-actions"><span style="flex:1"></span><button class="btn btn-cancel" onclick="closeStravaModal()">取消</button><button class="btn btn-primary" id="strava-import-btn" onclick="importStrava()" disabled>匯入</button></div>
+    <div class="modal-actions"><div class="modal-actions-primary"><button class="btn btn-cancel" onclick="closeStravaModal()">取消</button><button class="btn btn-primary" id="strava-import-btn" onclick="importStrava()" disabled>匯入</button></div></div>
   </div>
 </div>
 
@@ -524,23 +528,24 @@ window.__appBootLegacyPoll = window.setInterval(function () {
     <h2 id="monthly-modal-title">新增月份</h2>
     <div class="form-row">
       <div class="form-group">
-        <label>年份</label>
+        <label for="m-year">年份</label>
         <select id="m-year"></select>
       </div>
       <div class="form-group">
-        <label>月份</label>
+        <label for="m-month">月份</label>
         <select id="m-month"></select>
       </div>
     </div>
     <div class="form-group">
-      <label>跑量 (km)</label>
+      <label for="m-km">跑量 (km)</label>
       <input id="m-km" type="number" placeholder="0" min="0" step="0.01">
     </div>
     <div class="auth-error" id="monthly-error"></div>
     <div class="modal-actions">
-      <span style="flex:1"></span>
-      <button class="btn btn-cancel" onclick="closeMonthlyModal()">取消</button>
-      <button class="btn btn-primary" id="save-monthly-btn" onclick="saveMonthlyMileage()">儲存</button>
+      <div class="modal-actions-primary">
+        <button class="btn btn-cancel" onclick="closeMonthlyModal()">取消</button>
+        <button class="btn btn-primary" id="save-monthly-btn" onclick="saveMonthlyMileage()">儲存</button>
+      </div>
     </div>
   </div>
 </div>
@@ -550,7 +555,7 @@ window.__appBootLegacyPoll = window.setInterval(function () {
   <div class="modal" style="width: 380px;">
     <h2 id="export-modal-title">匯出跑鞋資料</h2>
     <div class="form-group">
-      <label>匯出範圍</label>
+      <label for="export-mode">匯出範圍</label>
       <select id="export-mode">
         <option value="active">現役跑鞋</option>
         <option value="retired">退役跑鞋</option>
@@ -558,7 +563,7 @@ window.__appBootLegacyPoll = window.setInterval(function () {
       </select>
     </div>
     <div class="form-group">
-      <label>檔案格式</label>
+      <label for="export-format">檔案格式</label>
       <select id="export-format">
         <option value="xlsx">Excel (.xlsx)</option>
         <option value="csv">CSV (.csv)</option>
@@ -566,10 +571,11 @@ window.__appBootLegacyPoll = window.setInterval(function () {
     </div>
     <div class="auth-error" id="export-error"></div>
     <div class="modal-actions">
-      <span style="flex:1"></span>
-      <button class="btn btn-cancel" onclick="closeExportModal()">取消</button>
-      <button class="btn btn-primary" onclick="doExport()">匯出</button>
-      <button class="btn btn-edit" onclick="exportAccountData()">完整備份 JSON</button>
+      <div class="modal-actions-secondary"><button class="btn btn-edit" onclick="exportAccountData()">完整備份 JSON</button></div>
+      <div class="modal-actions-primary">
+        <button class="btn btn-cancel" onclick="closeExportModal()">取消</button>
+        <button class="btn btn-primary" onclick="doExport()">匯出</button>
+      </div>
     </div>
   </div>
 </div>
@@ -587,26 +593,26 @@ window.__appBootLegacyPoll = window.setInterval(function () {
 
 <script src="/vendor/chart.umd.min.js"></script>
 <script src="/vendor/marked.min.js"></script>
-<script src="/app-boot.js?v=3.2.4"></script>
-<script src="/app-state.js?v=3.2.4"></script>
-<script src="/app-api.js?v=3.2.4"></script>
-<script src="/app-auth.js?v=3.2.4"></script>
-<script src="/app-streams.js?v=3.2.4"></script>
-<script src="/app-core.js?v=3.2.4"></script>
-<script src="/app-agent.js?v=3.2.4"></script>
-<script src="/app-reports.js?v=3.2.4"></script>
-<script src="/app-runs.js?v=3.2.4"></script>
-<script src="/app-strava.js?v=3.2.4"></script>
-<script src="/app-run-insights.js?v=3.2.4"></script>
-<script src="/app-shoes.js?v=3.2.4"></script>
-<script src="/app-dashboard.js?v=3.2.4"></script>
-<script src="/app-monthly.js?v=3.2.4"></script>
-<script src="/app-exports.js?v=3.2.4"></script>
-<script src="/app-goals.js?v=3.2.4"></script>
-<script src="/app-charts.js?v=3.2.4"></script>
-<script src="/app-shoe-charts.js?v=3.2.4"></script>
-<script src="/app-monthly-charts.js?v=3.2.4"></script>
-<script src="/app-spending.js?v=3.2.4"></script>
-<script src="/app.js?v=3.2.4"></script>
+<script src="/app-boot.js?v=3.2.5"></script>
+<script src="/app-state.js?v=3.2.5"></script>
+<script src="/app-api.js?v=3.2.5"></script>
+<script src="/app-auth.js?v=3.2.5"></script>
+<script src="/app-streams.js?v=3.2.5"></script>
+<script src="/app-core.js?v=3.2.5"></script>
+<script src="/app-agent.js?v=3.2.5"></script>
+<script src="/app-reports.js?v=3.2.5"></script>
+<script src="/app-runs.js?v=3.2.5"></script>
+<script src="/app-strava.js?v=3.2.5"></script>
+<script src="/app-run-insights.js?v=3.2.5"></script>
+<script src="/app-shoes.js?v=3.2.5"></script>
+<script src="/app-dashboard.js?v=3.2.5"></script>
+<script src="/app-monthly.js?v=3.2.5"></script>
+<script src="/app-exports.js?v=3.2.5"></script>
+<script src="/app-goals.js?v=3.2.5"></script>
+<script src="/app-charts.js?v=3.2.5"></script>
+<script src="/app-shoe-charts.js?v=3.2.5"></script>
+<script src="/app-monthly-charts.js?v=3.2.5"></script>
+<script src="/app-spending.js?v=3.2.5"></script>
+<script src="/app.js?v=3.2.5"></script>
 </body>
 </html>

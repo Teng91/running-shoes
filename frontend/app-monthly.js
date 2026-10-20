@@ -7,11 +7,11 @@ function renderMonthlyTable() {
   }
   tbody.innerHTML = monthlyMileages.map((m, i) => `
     <tr>
-      <td>${m.year}</td>
-      <td>${m.month}</td>
-      <td>${(m.km - (m.adjustment_km || 0)).toFixed(2)} km</td>
-      <td>${(m.adjustment_km || 0).toFixed(2)} km</td>
-      <td class="editable" ondblclick="inlineEditMonthly(${i},'km',this)"><strong>${m.km.toFixed(2)}</strong></td>
+      <td class="numeric">${m.year}</td>
+      <td class="numeric">${m.month}</td>
+      <td class="numeric">${(m.km - (m.adjustment_km || 0)).toFixed(2)} km</td>
+      <td class="numeric">${(m.adjustment_km || 0).toFixed(2)} km</td>
+      <td class="editable numeric" ondblclick="inlineEditMonthly(${i},'km',this)"><strong>${m.km.toFixed(2)}</strong></td>
       <td>
         <button class="btn btn-sm btn-edit" onclick="editMonthlyMileage(${i})">編輯</button>
         <button class="btn btn-sm btn-delete" onclick="deleteMonthlyMileage(${i})">刪除</button>

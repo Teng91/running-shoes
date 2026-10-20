@@ -20,18 +20,23 @@ async function selectTab(page, name) {
     const label = await page.locator(`.tab[data-tab="${name}"] > span:last-child`).textContent();
     assert.equal(await page.locator('#mobile-page-label').textContent(), label);
   }
+  // switchTab schedules lazy rendering; let it finish before opening inline editors.
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
 }
 
 async function assertLayout(page, label) {
   // Chart.js resizes via ResizeObserver after the viewport changes. Wait for
   // the observable result instead of assuming a fixed 100 ms is enough on CI.
   await page.waitForFunction(() => Object.values(chartInstances).every(chart =>
-    !chart.canvas.getClientRects().length || chart.width <= chart.canvas.parentElement.clientWidth + 1
+    !chart.canvas.getClientRects().length || (chart.width > 0 && chart.chartArea?.width > 0 && chart.chartArea?.height > 0 && chart.width <= chart.canvas.parentElement.clientWidth + 1)
   ), null, { timeout: 5000 });
   const issues = await page.evaluate(() => {
     const problems = [];
     const visible = e => e.getClientRects().length && getComputedStyle(e).visibility !== 'hidden';
-    if (document.documentElement.scrollWidth > innerWidth + 1) problems.push('page overflow');
+    if (document.documentElement.scrollWidth > innerWidth + 1) {
+      const overflowing = [...document.querySelectorAll('body *')].filter(node => visible(node) && !node.closest('.table-wrap, pre') && (node.getBoundingClientRect().right > innerWidth + 1 || node.getBoundingClientRect().left < -1 || node.scrollWidth > node.clientWidth + 1));
+      problems.push(`page overflow ${document.documentElement.scrollWidth}/${innerWidth}: ` + overflowing.slice(0, 8).map(node => node.id || node.className || node.tagName).join(', '));
+    }
     for (const [id, expected] of [['shoe-table', 12], ['retired-table', 10], ['spending-table', 9]]) {
       const tbody = document.getElementById(id);
       if (!visible(tbody.closest('table'))) continue;
@@ -75,7 +80,8 @@ async function assertLayout(page, label) {
     if (visible(sidebar) && visible(workspace)) {
       const sidebarBox = sidebar.getBoundingClientRect(), workspaceBox = workspace.getBoundingClientRect();
       if (innerWidth > 800 && workspaceBox.left < sidebarBox.right - 1) problems.push('workspace does not follow sidebar');
-      if (innerWidth <= 800 && workspaceBox.top < sidebarBox.bottom - 1) problems.push('mobile workspace overlaps navigation');
+      // A sticky sidebar may cover already-scrolled content; compare flow origins.
+      if (innerWidth <= 800 && workspaceBox.top + scrollY < sidebarBox.height - 1) problems.push('mobile workspace overlaps navigation');
       if (innerWidth <= 800 && !document.getElementById('sidebar-menu').classList.contains('menu-open') && sidebarBox.height > 88) problems.push('collapsed mobile header is too tall');
       if (innerWidth <= 800 && (parseFloat(getComputedStyle(workspace).paddingLeft) < 12 || parseFloat(getComputedStyle(workspace).paddingRight) < 12)) problems.push('mobile content needs side gutters');
     }
@@ -114,7 +120,104 @@ async function assertLayout(page, label) {
     }
     return problems;
   });
+  if (issues.length && process.env.LAYOUT_SCREENSHOT_DIR) {
+    fs.mkdirSync(process.env.LAYOUT_SCREENSHOT_DIR, { recursive: true });
+    await page.screenshot({ path: path.join(process.env.LAYOUT_SCREENSHOT_DIR, 'failed-layout.png'), fullPage: true });
+  }
   assert.deepEqual(issues, [], label);
+  assert.deepEqual(await page.evaluate(alignmentIssues), [], `${label}: component alignment`);
+}
+
+function alignmentIssues() {
+  const issues = [];
+  const visible = node => node.getClientRects().length && getComputedStyle(node).visibility !== 'hidden';
+  const box = node => node.getBoundingClientRect();
+  const near = (a, b) => Math.abs(a - b) <= 1;
+  const controls = '.form-group input:not([type="checkbox"]):not([type="file"]), .form-group select, .year-select, .inline-add input, .inline-add select, .goal-settings button, .inline-add button, .agent-config select, .agent-config button, .strava-group select';
+  for (const node of document.querySelectorAll(controls)) {
+    if (visible(node) && !near(box(node).height, 44)) issues.push(`44px control: ${node.id || node.className} is ${box(node).height}`);
+  }
+  for (const input of document.querySelectorAll('.inline-input')) if (visible(input) && !near(box(input).height, innerWidth <= 760 ? 44 : 36)) issues.push('inline editor height');
+  for (const form of document.querySelectorAll('.auth-box')) {
+    if (!visible(form)) continue;
+    const submit = form.querySelector('button[type="submit"]'), field = form.querySelector('input');
+    if (!near(box(submit).height, 44) || !near(box(submit).left, box(field).left) || !near(box(submit).right, box(field).right)) issues.push('auth action alignment');
+  }
+  for (const grid of document.querySelectorAll('#summary-cards, #spending-cards')) {
+    if (!visible(grid)) continue;
+    const columns = innerWidth > 1100 ? 3 : 2;
+    if (getComputedStyle(grid).gridTemplateColumns.split(' ').length !== columns) issues.push('summary cards need balanced columns');
+    const cards = [...grid.children];
+    for (let i = 0; i < cards.length; i += columns) {
+      const row = cards.slice(i, i + columns);
+      if (row.some(card => !near(box(card).top, box(row[0]).top) || !near(box(card).bottom, box(row[0]).bottom))) issues.push('summary card row edges');
+    }
+  }
+  for (const grid of document.querySelectorAll('.shoe-analysis-grid')) {
+    if (visible(grid) && getComputedStyle(grid).gridTemplateColumns.split(' ').length !== (innerWidth <= 760 ? 2 : 3)) issues.push('shoe analysis needs balanced columns');
+  }
+  for (const grid of document.querySelectorAll('.form-row, .run-entry-grid')) {
+    if (!visible(grid) || getComputedStyle(grid).gridTemplateColumns.split(' ').length !== 2) continue;
+    const fields = [...grid.children].filter(node => visible(node) && node.classList.contains('form-group'));
+    for (let i = 0; i + 1 < fields.length; i += 2) {
+      if (fields[i].classList.contains('shoe-field') || fields[i].classList.contains('category-field')) continue;
+      const [a, b] = [fields[i], fields[i + 1]].map(field => field.querySelector('input:not([type="checkbox"]), select'));
+      if (!a || !b) continue;
+      if (!near(box(a).top, box(b).top) || !near(box(a).bottom, box(b).bottom) || !near(box(a).width, box(b).width)) issues.push(`paired controls: ${a.id}/${b.id}`);
+    }
+  }
+  for (const row of document.querySelectorAll('.modal-actions, .table-header, .inline-add, .agent-config')) {
+    if (!visible(row)) continue;
+    const buttons = [...row.querySelectorAll('button')].filter(visible);
+    for (const button of buttons) {
+      if (!near(box(button).height, 44)) issues.push(`44px action: ${button.id || button.textContent.trim()}`);
+      if (button.scrollWidth > button.clientWidth + 1) issues.push(`clipped action: ${button.textContent.trim()}`);
+    }
+    for (const a of buttons) for (const b of buttons) {
+      if (a === b || Math.min(box(a).bottom, box(b).bottom) - Math.max(box(a).top, box(b).top) <= 1) continue;
+      if (!near(box(a).top, box(b).top) || !near(box(a).bottom, box(b).bottom)) issues.push('actions on same row are not aligned');
+    }
+  }
+  const agent = document.querySelector('.agent-config');
+  if (visible(agent)) {
+    const select = box(document.getElementById('agent-model')), refresh = box(document.getElementById('agent-refresh-btn'));
+    if (!near(select.top, refresh.top) || !near(select.bottom, refresh.bottom)) issues.push('agent model and refresh must share a row');
+    if (innerWidth > 760) {
+      const label = box(agent.querySelector('label'));
+      if (!near(label.top + label.height / 2, select.top + select.height / 2)) issues.push('agent label center');
+    }
+    const input = box(document.getElementById('agent-input')), send = box(document.getElementById('agent-send-btn'));
+    if (!near(input.bottom, send.bottom)) issues.push('chat composer bottom');
+  }
+  for (const chartGrid of document.querySelectorAll('.charts')) {
+    const charts = [...chartGrid.children].filter(visible);
+    for (let i = 0; i < charts.length; i++) for (let j = i + 1; j < charts.length; j++) {
+      if (!near(box(charts[i]).top, box(charts[j]).top)) continue;
+      const a = charts[i].querySelector('.chart-canvas, .run-calendar, .run-shoe-canvas');
+      const b = charts[j].querySelector('.chart-canvas, .run-calendar, .run-shoe-canvas');
+      if (a && b && !near(box(a).top, box(b).top)) issues.push('chart content start');
+    }
+  }
+  for (const table of document.querySelectorAll('.table-wrap table')) {
+    if (!visible(table)) continue;
+    for (const row of table.rows) for (const cell of row.cells) {
+      if (cell.classList.contains('numeric') && getComputedStyle(cell).textAlign !== 'right') issues.push('numeric cell must align right');
+    }
+    for (const row of table.tBodies[0]?.rows || []) {
+      if (row.cells.length !== table.rows[0].cells.length) continue;
+      for (let i = 0; i < row.cells.length; i++) {
+        if (row.cells[i].classList.contains('numeric') !== table.rows[0].cells[i].classList.contains('numeric')) issues.push('numeric header/body mismatch');
+        if (row.cells[i].classList.contains('numeric') && getComputedStyle(row.cells[i]).paddingRight !== getComputedStyle(table.rows[0].cells[i]).paddingRight) issues.push('numeric header/body right edge');
+      }
+      const buttons = [...row.querySelectorAll('button')];
+      if (buttons.some(button => !near(box(button).height, innerWidth <= 760 ? 44 : 36))) issues.push('table action density');
+    }
+  }
+  for (const [id, numeric] of Object.entries({ 'shoe-table': [3,4,5,6,7,8], 'retired-table': [3,4,5,6,7], 'run-table': [1], 'monthly-table': [0,1,2,3,4], 'spending-table': [4,5,6] })) {
+    const table = document.getElementById(id).closest('table');
+    if (visible(table) && numeric.some(index => !table.rows[0].cells[index].classList.contains('numeric'))) issues.push(`${id} numeric column contract`);
+  }
+  return [...new Set(issues)];
 }
 
 async function run(engine, name) {
@@ -123,6 +226,8 @@ async function run(engine, name) {
   try {
     const page = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, locale: 'zh-TW' });
     const errors = [];
+    let allowBootScript;
+    const bootScriptGate = new Promise(resolve => { allowBootScript = resolve; });
     page.on('pageerror', error => errors.push(error.message));
     await page.route('http://layout.test/**', async route => {
       const url = new URL(route.request().url());
@@ -135,13 +240,15 @@ async function run(engine, name) {
       const contentTypes = { '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css',
         '.json': 'application/json', '.webmanifest': 'application/manifest+json',
         '.svg': 'image/svg+xml', '.png': 'image/png' };
-      if (relative === 'app-boot.js') await new Promise(resolve => setTimeout(resolve, 250));
+      if (relative === 'app-boot.js') await bootScriptGate;
       return route.fulfill({ contentType: contentTypes[path.extname(asset)] || 'application/octet-stream',
         body: fs.readFileSync(asset) });
     });
     const navigation = page.goto('http://layout.test');
-    await page.locator('#app-boot').waitFor({ state: 'visible' });
-    assert.match(await page.locator('#app-boot-message').textContent(), /正在準備應用程式/);
+    try {
+      await page.locator('#app-boot').waitFor({ state: 'visible' });
+      assert.match(await page.locator('#app-boot-message').textContent(), /正在準備應用程式/);
+    } finally { allowBootScript(); }
     await navigation;
     await page.waitForFunction(() => typeof Chart !== 'undefined');
     await page.evaluate(() => {
@@ -167,7 +274,15 @@ async function run(engine, name) {
           '<div class="insight-card"><div class="insight-card-label">指標 ' + i + '</div><div class="insight-card-value">' + value + '</div><div class="insight-card-sub">長內容測試</div></div>').join('') +
         '</div><div class="shoe-analysis-chart"></div>';
       document.querySelector('#agent-messages').innerHTML += '<div class="agent-message bot"><div class="agent-msg-content"><p>' + 'long-message'.repeat(40) + '</p><pre>' + 'code'.repeat(100) + '</pre><table><tr><td>' + 'wide-table'.repeat(50) + '</td></tr></table></div></div>';
+      addAgentMessage('user', '請幫我檢查這個月的跑步紀錄與跑鞋使用情況。');
+      document.querySelector('#agent-messages').insertAdjacentHTML('beforeend', '<div class="agent-thinking">正在分析很長的訓練內容與跑鞋資料。</div><div class="agent-tools"><div class="tool-item done"><span class="tool-icon">✅</span><span class="tool-name">query_run_history</span></div><div class="tool-item failed"><span class="tool-icon">⚠️</span><span class="tool-name">web_search_' + 'very-long-query'.repeat(10) + '</span><span class="tool-detail">來源暫時無法使用</span></div></div>');
+      const markdown = '# 跑步與鞋款分析\n\n> 本月穩定進步，請繼續保持。\n\n## 訓練摘要\n\n- 第一項訓練建議\n- 第二項訓練建議\n\n| 指標 | 本月 | 上月 |\n| --- | --- | --- |\n| 總里程 | 120.50 km | 100.00 km |\n\n**注意恢復**，資料僅供訓練參考。';
+      const answer = addAgentMessage('bot', markdown);
+      appendAgentSourceStatus(answer, { web: { status: 'live', result_count: 1, sources: [{ id: '1', title: '這是一個很長的參考資料標題', url: 'https://example.test/source' }] } }, true, true);
+      addRetryButton();
+      renderReport({ year: 2026, month: 9, model: 'mock', content_md: markdown, updated_at: '2026-10-01T00:00:00Z' });
       document.querySelector('#strava-mapping').innerHTML = '<div class="strava-group"><div>Very long imported shoe name from Strava</div><select><option>Very long matching running shoe name</option></select></div>';
+      renderStravaImportHistory();
       document.querySelectorAll('input[type="date"]').forEach(e => { e.value = '2026-09-06'; });
       render();
       window.layoutAnalytics = {
@@ -183,7 +298,7 @@ async function run(engine, name) {
     if (screenshots) fs.mkdirSync(screenshots, { recursive: true });
     for (const theme of ['light', 'dark']) {
       await page.evaluate(theme => applyTheme(theme), theme);
-      for (const [width, height] of [[320, 740], [375, 812], [390, 844], [430, 932], [844, 390], [768, 1024], [1440, 900]]) {
+      for (const [width, height] of [[320, 740], [375, 812], [390, 844], [430, 932], [844, 390], [768, 1024], [800, 1024], [1024, 768], [1280, 800], [1440, 900]]) {
         await page.setViewportSize({ width, height });
         for (const tab of ['runs', 'shoes', 'monthly', 'spending', 'agent', 'report']) {
           await selectTab(page, tab);
@@ -198,8 +313,13 @@ async function run(engine, name) {
             wrapper.scrollLeft = 0;
           }));
           if (screenshots && width === 390) await page.screenshot({ path: path.join(screenshots, `${name}-${theme}-${tab}.png`), fullPage: true });
-          if (screenshots && width === 1440 && ['shoes', 'spending'].includes(tab)) {
+          if (screenshots && width === 1440) {
             await page.screenshot({ path: path.join(screenshots, `${name}-${theme}-${tab}-desktop.png`), fullPage: true });
+          }
+          if (screenshots && [390, 1440].includes(width) && tab === 'agent') {
+            await page.locator('#agent-messages').evaluate(node => { node.scrollTop = node.scrollHeight; });
+            await page.screenshot({ path: path.join(screenshots, `${name}-${theme}-agent-status-${width}.png`) });
+            await page.locator('#agent-messages').evaluate(node => { node.scrollTop = 0; });
           }
           if (screenshots && width === 390 && tab === 'runs') {
             await page.locator('.run-metrics').screenshot({ path: path.join(screenshots, `${name}-${theme}-run-metrics.png`) });
@@ -220,11 +340,56 @@ async function run(engine, name) {
           canvases.map(canvas => canvas.closest('.chart-box').getBoundingClientRect().height));
         assert.ok(Math.abs(pairedHeights[0] - pairedHeights[1]) <= 1, 'retirement and monthly share cards have equal heights');
         for (const id of await page.locator('.modal-overlay').evaluateAll(es => es.map(e => e.id))) {
+          if (id === 'modal') await page.evaluate(() => shoeModal.openForCreate());
+          if (id === 'run-modal') await page.evaluate(() => openRunModal(runs[0].id));
+          if (id === 'monthly-modal') await page.evaluate(() => editMonthlyMileage(0));
+          if (id === 'shoe-analysis-modal') await page.evaluate(() => renderShoeAnalytics({
+            shoe: { brand: 'Mizuno', model: 'Wave Rider 29 非常長的鞋款名稱', categories: ['Daily'], purchase_date: '2026-01-01', is_retired: false },
+            lifecycle: { total_mileage_km: 627.62, usage_percent: 78.5, remaining_mileage_km: 172.38, forecast_retirement_date: '2027-06-01', forecast_source: 'recent_90_days', forecast_monthly_km: 80 },
+            usage: { count: 87, km_30_days: 61.9, km_90_days: 222.7, actual_monthly_km_90_days: 74.2, first_run_date: '2026-01-01', last_run_date: '2026-10-01' },
+            recent_runs: runs.slice(0, 2), monthly_history: Array.from({ length: 12 }, (_, i) => ({ year: 2026, month: i + 1, km: 60, count: 4 })),
+          }));
           await page.evaluate(id => document.getElementById(id).classList.add('active'), id);
           await assertLayout(page, `${name} ${theme} ${width} ${id}`);
-          if (screenshots && width === 390) await page.screenshot({ path: path.join(screenshots, `${name}-${theme}-${id}.png`) });
+          if (screenshots && [390, 1440].includes(width)) await page.screenshot({ path: path.join(screenshots, `${name}-${theme}-${id}-${width}.png`) });
+          if (id === 'modal') {
+            for (const retired of [false, true]) {
+              await page.evaluate(retired => shoeModal.openForEdit(retired ? retiredShoes[0] : shoes[0], retired), retired);
+              assert.equal(await page.locator('#shoe-secondary-actions').isVisible(), true);
+              await assertLayout(page, `${name} ${theme} ${width} shoe edit ${retired}`);
+              if (screenshots && [390, 1440].includes(width)) await page.screenshot({ path: path.join(screenshots, `${name}-${theme}-shoe-edit-${retired}-${width}.png`) });
+            }
+          }
+          const error = page.locator(`#${id} .auth-error`).first();
+          if (await error.count()) {
+            await error.evaluate(node => { node.textContent = '驗證失敗：這是一段很長的錯誤訊息，請檢查輸入資料後再試一次。'; node.style.display = 'block'; });
+            await assertLayout(page, `${name} ${theme} ${width} ${id} error`);
+            await error.evaluate(node => { node.textContent = ''; node.style.display = ''; });
+          }
+          const buttons = page.locator(`#${id} .modal-actions button`);
+          const disabled = await buttons.evaluateAll(nodes => nodes.map(node => node.disabled));
+          await buttons.evaluateAll(nodes => nodes.forEach(node => { node.disabled = true; }));
+          await assertLayout(page, `${name} ${theme} ${width} ${id} disabled`);
+          await buttons.evaluateAll((nodes, states) => nodes.forEach((node, index) => { node.disabled = states[index]; }), disabled);
           await page.evaluate(id => document.getElementById(id).classList.remove('active'), id);
+          if (id === 'shoe-analysis-modal') await page.evaluate(() => closeShoeAnalytics());
         }
+        for (const tab of ['shoes', 'monthly']) {
+          await selectTab(page, tab);
+          await page.evaluate(tab => {
+            if (tab === 'shoes') inlineEditRow(shoes, 0, 'mileage', document.querySelector('#shoe-table .editable'));
+            else inlineEditMonthly(0, 'km', document.querySelector('#monthly-table .editable'));
+          }, tab);
+          await assertLayout(page, `${name} ${theme} ${width} ${tab} inline edit`);
+          await page.locator('.inline-input').press('Escape');
+        }
+        await page.evaluate(() => { document.getElementById('app-view').style.display = 'none'; document.getElementById('auth-view').style.display = ''; });
+        for (const action of ['showLoginForm', 'showRegisterForm', 'showChangeForm']) {
+          await page.evaluate(action => window[action](), action);
+          await assertLayout(page, `${name} ${theme} ${width} ${action}`);
+          if (screenshots && [390, 1440].includes(width)) await page.screenshot({ path: path.join(screenshots, `${name}-${theme}-${action}-${width}.png`), fullPage: true });
+        }
+        await page.evaluate(() => { document.getElementById('app-view').style.display = ''; document.getElementById('auth-view').style.display = 'none'; });
         console.log(`PASS ${name} ${theme} ${width}x${height}: all tabs, populated charts, controls and dialogs`);
       }
     }

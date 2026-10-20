@@ -2,6 +2,21 @@
 
 本專案的重要變更依 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.1.0/) 分類，版本號遵循 [Semantic Versioning](https://semver.org/lang/zh-TW/)。完整部署說明另見各版本的 GitHub Release。
 
+## [3.2.5] - 2026-10-20
+
+### Fixed
+
+- 全前端表單、日期／月份欄位、模型工具列與操作按鈕共用尺寸及行高；修正 WebKit 長選單溢出。
+- 彈窗次要／主要操作明確分組，桌面等高對齊、手機換行不留下 spacer；保留新增、現役／退役編輯與停用行為。
+- 表格數字與表頭統一右對齊及等寬數字，修正可編輯格的邊界；圖表標題與繪圖區起點、卡片文字節奏一致，跑鞋／支出六張摘要採平衡的三欄或兩欄排列。
+- 補齊欄位 label 對應，修正跑鞋分析／Strava 彈窗被通用寬度覆蓋；PWA revision 3.2.5／shell v22。
+- 月報狀態與產生按鈕保留間距，已儲存訊息不再顯示錯誤紅色，真正失敗仍有明確錯誤樣式。
+
+### Testing
+
+- 排版矩陣擴為 40 組（雙引擎、亮暗及 10 組尺寸），遍歷六個功能分頁、三個認證表單、全部彈窗及新增／編輯／錯誤／停用／行內輸入。
+- 新增控制項、按鈕、工具列、圖表與數字欄位幾何斷言；啟動畫面測試改用明確 gate，避免固定延遲的競態。更新 SPEC-016、SDD、README 與測試矩陣。
+
 ## [3.2.4] - 2026-10-20
 
 ### Fixed
@@ -124,6 +139,7 @@
 
 - 強化資料載入、API 邊界、工程 harness 與架構驗證。
 
+[3.2.5]: https://github.com/Teng91/running-shoes/releases/tag/v3.2.5
 [3.2.4]: https://github.com/Teng91/running-shoes/releases/tag/v3.2.4
 [3.2.3]: https://github.com/Teng91/running-shoes/releases/tag/v3.2.3
 [3.2.2]: https://github.com/Teng91/running-shoes/releases/tag/v3.2.2

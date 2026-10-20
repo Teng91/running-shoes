@@ -101,6 +101,7 @@ def main() -> None:
         "docs/specs/013-auth-modal-and-module-boundaries.md",
         "docs/specs/014-offsite-backup-and-pwa-upgrades.md",
         "docs/specs/015-run-log-home.md",
+        "docs/specs/016-frontend-alignment.md",
         "docs/testing-strategy.md",
         "backend/agent.py",
         "backend/agent_planner.py",
