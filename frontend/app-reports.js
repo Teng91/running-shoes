@@ -33,8 +33,10 @@ function reportMonthParts() {
   return month.split('-').map(Number);
 }
 
-function setReportStatus(text) {
-  document.getElementById('report-status').textContent = text || '';
+function setReportStatus(text, state = 'error') {
+  const status = document.getElementById('report-status');
+  status.textContent = text || '';
+  status.classList.toggle('is-error', Boolean(text) && state === 'error');
 }
 
 function renderReport(report) {
@@ -46,7 +48,7 @@ function renderReport(report) {
     modelSelect.value = report.model;
   }
   setReportStatus('已儲存報告 · 模型 ' + (report.model || '—') +
-    ' · 更新於 ' + formatLocalTimestamp(report.updated_at));
+    ' · 更新於 ' + formatLocalTimestamp(report.updated_at), 'success');
 }
 
 async function loadReportHistory() {
@@ -204,7 +206,7 @@ async function generateReport() {
           receivedDone = true;
           content.innerHTML = renderMarkdown(fullText);
           setReportStatus('報告已儲存 · 模型 ' + (event.model || '—') +
-            ' · ' + formatLocalTimestamp(event.updated_at));
+            ' · ' + formatLocalTimestamp(event.updated_at), 'success');
         }
       },
     });

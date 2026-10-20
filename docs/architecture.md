@@ -196,6 +196,11 @@ ARIA 與 `agent-mode` 狀態，不以 inline style 決定 shell 幾何，因此�
 `pageshow.persisted` 以相同 layout reset 與 Core active-panel renderer 處理快取還原，不重新登入或修改資料；
 一般 visibilitychange 不觸發首頁重設，登入 token 與主題偏好仍維持原本儲存方式。
 
+[SPEC-016](specs/016-frontend-alignment.md) 的呈現契約集中於 `styles.css`：主控制項 44px、桌面緊湊操作 36px，
+日期／月份／一般欄位共用行高與尺寸；工具列、彈窗操作分組及 native select 外觀由 CSS 管理。
+靜態表頭與動態數字格使用 `numeric` class 共用右側邊界；ShoeModal 只同步次要操作組的 hidden 狀態，
+不再以 inline display 指定按鈕版型。雙引擎幾何測試涵蓋 40 組尺寸／主題設定及認證／錯誤／編輯狀態。
+
 ## 5. 模組責任與依賴方向
 
 | 模組 | 責任 | 可以依賴 | 不應依賴 |
@@ -247,7 +252,7 @@ sequenceDiagram
 flowchart TB
     Browser[Browser / installed PWA]
     SW[Service Worker<br/>immutable versioned shell<br/>complete install before activation]
-    Shell[(App shell cache v21<br/>asset revision 3.2.4)]
+    Shell[(App shell cache v22<br/>asset revision 3.2.5)]
     FlyProxy[Fly Proxy / HTTPS]
     Machine[Fly Machine<br/>FastAPI container]
     Volume[(Fly Volume<br/>SQLite)]

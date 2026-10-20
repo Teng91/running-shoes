@@ -11,4 +11,4 @@ def test_docs_harness_reads_agent_tool_count():
 
 
 def test_docs_harness_reads_layout_matrix_count():
-    assert check_docs.layout_matrix_count() == 28
+    assert check_docs.layout_matrix_count() == 40
