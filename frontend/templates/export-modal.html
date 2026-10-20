@@ -1,0 +1,29 @@
+<!-- Export Modal -->
+<div class="modal-overlay" id="export-modal">
+  <div class="modal" style="width: 380px;">
+    <h2 id="export-modal-title">匯出跑鞋資料</h2>
+    <div class="form-group">
+      <label for="export-mode">匯出範圍</label>
+      <select id="export-mode">
+        <option value="active">現役跑鞋</option>
+        <option value="retired">退役跑鞋</option>
+        <option value="all">全部跑鞋</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label for="export-format">檔案格式</label>
+      <select id="export-format">
+        <option value="xlsx">Excel (.xlsx)</option>
+        <option value="csv">CSV (.csv)</option>
+      </select>
+    </div>
+    <div class="auth-error" id="export-error"></div>
+    <div class="modal-actions">
+      <div class="modal-actions-secondary"><button class="btn btn-edit" onclick="exportAccountData()">完整備份 JSON</button></div>
+      <div class="modal-actions-primary">
+        <button class="btn btn-cancel" onclick="closeExportModal()">取消</button>
+        <button class="btn btn-primary" onclick="doExport()">匯出</button>
+      </div>
+    </div>
+  </div>
+</div>

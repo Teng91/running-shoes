@@ -318,6 +318,11 @@ class ShoeUpdate(BaseModel):
 
 
 class ShoeOut(ShoeBase):
+    discount_percent: float | None = None
+    cost_per_km: float | None = None
+    expected_cost_per_km: float | None = None
+    usage_percent: float | None = None
+    remaining_mileage_km: float = 0
     forecast_retirement_date: str | None = None
     forecast_source: Literal["recent_90_days", "planned_monthly_km"] | None = None
     forecast_monthly_km: float = 0

@@ -1,6 +1,6 @@
 """Running-goal HTTP endpoints."""
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
@@ -59,3 +59,13 @@ def update_running_goal(
         db.rollback()
         raise
     return goal_service.goal_values(db, current_user.id)
+
+
+@router.get("/progress")
+def running_goal_progress(
+    year: int = Query(ge=1900, le=2100),
+    month: int = Query(ge=1, le=12),
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return goal_service.goal_progress(db, current_user.id, year, month)

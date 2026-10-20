@@ -206,6 +206,7 @@ class ShoeModal {
 
 // 初始化一次
 const shoeModal = new ShoeModal();
+registerFeatureReset('shoe-editor', () => shoeModal.close());
 
 // 給舊呼叫處用的精簡 wrapper
 function openAddModal()      { shoeModal.openForCreate(); }

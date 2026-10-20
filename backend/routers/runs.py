@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from backend import models, schemas
 from backend.auth import get_current_user
 from backend.database import get_db
+from backend.read_models.runs import month_run_summary
 from backend.services.mileage import apply_run_mileage_deltas
 from backend.settings import settings
 
@@ -33,11 +34,14 @@ def list_runs(
     month: int | None = Query(default=None, ge=1, le=12),
     limit: int | None = Query(default=None, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
+    day: int | None = Query(default=None, ge=1, le=31),
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     if month is not None and year is None:
         raise HTTPException(status_code=422, detail="month requires year")
+    if day is not None and (month is None or year is None):
+        raise HTTPException(status_code=422, detail="day requires year and month")
     query = db.query(models.Run).filter(models.Run.user_id == current_user.id)
     if year is not None:
         if month is None:
@@ -51,10 +55,24 @@ def list_runs(
             models.Run.date >= start_date,
             models.Run.date <= end_date,
         )
+        if day is not None:
+            if month is None or day > monthrange(year, month)[1]:
+                raise HTTPException(status_code=422, detail="invalid calendar day")
+            query = query.filter(models.Run.date == f"{year:04d}-{month:02d}-{day:02d}")
     query = query.order_by(models.Run.date.desc(), models.Run.id.desc()).offset(offset)
     if limit is not None:
         query = query.limit(limit)
     return query.all()
+
+
+@router.get("/api/runs/summary")
+def run_summary(
+    year: int = Query(ge=1900, le=2100),
+    month: int = Query(ge=1, le=12),
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return month_run_summary(db, current_user.id, year, month)
 
 
 @router.post("/api/runs", response_model=schemas.RunOut)

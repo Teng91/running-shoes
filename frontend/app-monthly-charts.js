@@ -100,7 +100,9 @@ async function renderShoeStackedChart() {
 
   // Filter to shoes that actually have runs in this selected year
   const activeShoeIds = [...shoeMonthlyMap.keys()];
-  const displayShoes = allShoes.filter(s => activeShoeIds.includes(s.id));
+  const displayShoes = activeShoeIds.map(id => allShoes.find(shoe => shoe.id === id) || {
+    id, brand: '歷史鞋款', model: `已刪除 #${id}`, is_retired: false,
+  });
 
   let brandSeq = {};
   const datasets = displayShoes.map(s => {

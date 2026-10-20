@@ -6,12 +6,17 @@ import math
 import re
 from collections.abc import Sequence
 from datetime import UTC, datetime
-from typing import cast
 
-from fastapi import HTTPException
-from sqlalchemy.orm import Session
+from backend import schemas
 
-from backend import models, schemas
+
+class InvalidCSVError(ValueError):
+    """Invalid CSV or date range; HTTP mapping belongs to the router."""
+
+    def __init__(self, message: str, *, row_limit: int | None = None):
+        super().__init__(message)
+        self.row_limit = row_limit
+
 
 STRAVA_HEADERS = {
     "id": ("活動 ID", "Activity ID"),
@@ -65,23 +70,20 @@ def parse_csv(
     try:
         csv_text = raw.decode("utf-8-sig")
     except UnicodeDecodeError as exc:
-        raise HTTPException(status_code=400, detail="無法讀取 CSV，請使用 UTF-8 編碼") from exc
+        raise InvalidCSVError("無法讀取 CSV，請使用 UTF-8 編碼") from exc
     reader = csv.DictReader(io.StringIO(csv_text))
     headers = reader.fieldnames or []
     fields = {key: _field(headers, key) for key in STRAVA_HEADERS}
     missing = [key for key in STRAVA_REQUIRED_FIELDS if fields[key] is None]
     if missing:
-        raise HTTPException(status_code=400, detail="CSV 缺少必要欄位：" + ", ".join(missing))
+        raise InvalidCSVError("CSV 缺少必要欄位：" + ", ".join(missing))
     rows: list[dict[str, object]] = []
     invalid = 0
     warnings: list[str] = []
     try:
         for row_number, row in enumerate(reader, start=1):
             if row_number > max_rows:
-                raise HTTPException(
-                    status_code=413,
-                    detail=f"CSV 資料列不可超過 {max_rows:,} 筆",
-                )
+                raise InvalidCSVError(f"CSV 資料列不可超過 {max_rows:,} 筆", row_limit=max_rows)
             if (row.get(fields["type"] or "") or "").strip() not in STRAVA_RUN_TYPES:
                 continue
             try:
@@ -109,7 +111,7 @@ def parse_csv(
                 "activity_type": (row.get(fields["type"] or "") or "").strip(),
             })
     except csv.Error as exc:
-        raise HTTPException(status_code=400, detail="CSV 格式錯誤") from exc
+        raise InvalidCSVError("CSV 格式錯誤") from exc
     if invalid:
         warnings.append(f"已略過 {invalid} 筆格式不完整的跑步活動")
     return rows, invalid, warnings
@@ -128,69 +130,13 @@ def filter_rows(
                 datetime.strptime(value, "%Y-%m-%d").replace(tzinfo=UTC).date().isoformat()
             )
         except ValueError as exc:
-            raise HTTPException(status_code=400, detail=f"{label}日期格式錯誤") from exc
+            raise InvalidCSVError(f"{label}日期格式錯誤") from exc
     normalized_start, normalized_end = normalized_dates
     if normalized_start and normalized_end and normalized_start > normalized_end:
-        raise HTTPException(status_code=400, detail="起始日期不可晚於結束日期")
+        raise InvalidCSVError("起始日期不可晚於結束日期")
     filtered = [
         row for row in rows
         if (not normalized_start or str(row["date"]) >= normalized_start)
         and (not normalized_end or str(row["date"]) <= normalized_end)
     ]
     return filtered, len(rows) - len(filtered)
-
-
-def build_preview(
-    db: Session,
-    user_id: int,
-    rows: list[dict[str, object]],
-    invalid: int,
-    warnings: list[str],
-) -> dict[str, object]:
-    existing_ids = {
-        value[0] for value in db.query(models.Run.strava_id).filter(
-            models.Run.user_id == user_id, models.Run.strava_id.isnot(None)
-        ).all()
-    }
-    shoes = db.query(models.Shoe).filter(
-        models.Shoe.user_id == user_id,
-        models.Shoe.is_deleted.is_(False),
-    ).all()
-    shoes_by_key: dict[str, list[models.Shoe]] = {}
-    for shoe in shoes:
-        key = _normalize_gear(f"{shoe.brand} {shoe.model}")
-        if key:
-            shoes_by_key.setdefault(key, []).append(shoe)
-    groups: dict[str, dict[str, object]] = {}
-    seen: set[str] = set()
-    duplicate_count = 0
-    importable_km = 0.0
-    for row in rows:
-        strava_id = str(row["strava_id"])
-        if strava_id in existing_ids or strava_id in seen:
-            duplicate_count += 1
-            continue
-        seen.add(strava_id)
-        importable_km += float(cast(float, row["km"]))
-        gear = str(row["gear"])
-        group = groups.setdefault(gear, {"gear": gear, "count": 0, "km": 0.0})
-        group["count"] = int(cast(int, group["count"])) + 1
-        group["km"] = round(float(cast(float, group["km"])) + float(cast(float, row["km"])), 2)
-    for group in groups.values():
-        candidates = shoes_by_key.get(_normalize_gear(str(group["gear"])), [])
-        suggested_shoe = candidates[0] if len(candidates) == 1 else None
-        group["suggested_shoe_id"] = suggested_shoe.id if suggested_shoe else None
-        group["shoe_name"] = (
-            f"{suggested_shoe.brand} {suggested_shoe.model}" if suggested_shoe else None
-        )
-        group["ambiguous_match"] = len(candidates) > 1
-    return {
-        "total_rows": len(rows) + invalid,
-        "run_count": len(rows),
-        "importable_count": len(rows) - duplicate_count,
-        "importable_km": round(importable_km, 2),
-        "duplicate_count": duplicate_count,
-        "invalid_count": invalid,
-        "gear_groups": sorted(groups.values(), key=lambda group: str(group["gear"])),
-        "warnings": warnings,
-    }

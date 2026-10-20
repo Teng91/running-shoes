@@ -1,4 +1,20 @@
 // ── 月報 ──────────────────────────────────────────────────────
+registerFeatureReset('monthly-reports', () => {
+  reportLoadRequestId += 1;
+  reportLoadController?.abort();
+  reportLoadController = null;
+  reportGenerationRequestId += 1;
+  reportGenerationController?.abort();
+  reportGenerationController = null;
+  document.getElementById('report-content').textContent = '尚未選擇報告。';
+  document.getElementById('report-content').classList.remove('is-streaming');
+  document.getElementById('report-history').replaceChildren();
+  setReportStatus('');
+  setReportControlsDisabled(false);
+  const button = document.getElementById('generate-report-btn');
+  button.disabled = false;
+  button.textContent = '產生報告';
+});
 
 function previousMonthValue(now = new Date()) {
   const year = now.getFullYear();

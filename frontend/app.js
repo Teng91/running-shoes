@@ -23,6 +23,7 @@ async function init() {
   document.getElementById('edit-run-date').max = today;
   document.getElementById('strava-start-date').max = today;
   document.getElementById('strava-end-date').max = today;
+  refreshDateLimits();
   document.getElementById('run-month').value = localDateISO().slice(0, 7);
   document.getElementById('report-month').value = previousMonthValue();
   if (authToken) {
@@ -48,7 +49,11 @@ async function init() {
   }
 }
 
-init().catch(error => {
+initializeFeatureLifecycle().then(() => {
+  initializeDialogs();
+  initializeAppUpdates();
+  return init();
+}).catch(error => {
   console.error('應用程式初始化失敗:', error);
   showAppBootError();
 });
@@ -59,10 +64,3 @@ window.addEventListener('pageshow', event => {
   resetAppLayout();
   if (authToken) renderActivePanel();
 });
-
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/service-worker.js')
-      .catch(error => console.warn('Service Worker 註冊失敗:', error));
-  });
-}

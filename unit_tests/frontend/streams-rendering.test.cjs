@@ -1,0 +1,221 @@
+const { test, assert, fs, path, vm, htmlSource, scriptPaths, scriptSource, styleSource, source, authOperationContext, streamContext, editContext, tableHeaders, extract, transportContext } = require('./helpers.cjs');
+
+test('monthly modal keeps its original ID/version after reorder or deletion and guards old callbacks', async () => {
+  const { context, elements } = editContext();
+  context.monthlyMileages = [{ id: 10, year: 2026, month: 1, km: 100, version: 0 }];
+  context.editMonthlyMileage(0);
+  context.monthlyMileages = [{ id: 20, year: 2026, month: 2, km: 200, version: 4 }];
+  let finish, calls = 0;
+  context.apiPut = (url, payload) => {
+    calls++; assert.equal(url, '/monthly-mileage/10'); assert.equal(payload.expected_version, 0);
+    return new Promise(resolve => { finish = resolve; });
+  };
+  const save = context.saveMonthlyMileage();
+  await context.saveMonthlyMileage();
+  assert.equal(calls, 1);
+  context.closeMonthlyModal(); context.editMonthlyMileage(0);
+  finish(); await save;
+  assert.equal(vm.runInContext('editingMonthly.id', context), 20);
+  assert.equal(elements['save-monthly-btn'].disabled, false);
+  context.apiPut = async () => { throw new Error('404 deleted'); };
+  await context.saveMonthlyMileage();
+  assert.equal(elements['monthly-error'].textContent, '404 deleted');
+});
+
+test('panel rendering is lazy, reused, and invalidated by data or theme changes', () => {
+  const counts = {};
+  const hooks = ['renderCards', 'renderAlerts', 'renderCategorySummary', 'renderTable', 'renderRetiredTable',
+    'renderCharts', 'populateRunShoeSelects', 'renderRunLog', 'renderMonthlyTable', 'renderMonthlyCharts', 'renderSpendingCharts'];
+  let active = 'runs';
+  const context = vm.createContext({ document: { querySelector: () => ({ dataset: { panel: active } }) },
+    Chart() {}, localDateISO: () => '2026-10-19', selectedRunMonth: () => '2026-10',
+    ...Object.fromEntries(hooks.map(name => [name, () => { counts[name] = (counts[name] || 0) + 1; }])),
+  });
+  vm.runInContext(`let panelRevision = 0, stackedRunsRequestId = 0, currentTheme = 'light';
+    const renderedPanels = new Map();\n${extract('invalidatePanels')}\n${extract('renderActivePanel')}`, context);
+  context.renderActivePanel(); context.renderActivePanel();
+  assert.equal(counts.renderRunLog, 1);
+  assert.equal(counts.renderCharts, undefined);
+  assert.equal(counts.renderMonthlyCharts, undefined);
+  active = 'monthly'; context.renderActivePanel();
+  assert.equal(counts.renderMonthlyCharts, 1);
+  active = 'runs'; context.renderActivePanel();
+  assert.equal(counts.renderRunLog, 1);
+  context.invalidatePanels(); context.renderActivePanel();
+  assert.equal(counts.renderRunLog, 2);
+  assert.equal(counts.renderMonthlyCharts, 1, 'data changes do not redraw hidden panels');
+  vm.runInContext("currentTheme = 'dark'", context); context.renderActivePanel();
+  assert.equal(counts.renderRunLog, 3);
+});
+
+test('shoe retirement presentation uses only the backend date, including no forecast', () => {
+  const context = vm.createContext({});
+  vm.runInContext(extract('calc'), context);
+  const shoe = { price: 3000, mileage: 300, expected_mileage: 900, monthly_km: 60,
+    forecast_retirement_date: '2027-04-17', forecast_monthly_km: 101.46 };
+  const forecast = context.calc(shoe).retireDate;
+  assert.equal(forecast.getFullYear(), 2027); assert.equal(forecast.getMonth(), 3); assert.equal(forecast.getDate(), 17);
+  assert.equal(context.calc({ ...shoe, forecast_retirement_date: null }).retireDate, null);
+});
+
+test('table numeric headers and shared component geometry have explicit presentation contracts', () => {
+  for (const [id, expected] of Object.entries({ 'shoe-table': [3,4,5,6,7,8], 'retired-table': [3,4,5,6,7], 'run-table': [1], 'monthly-table': [0,1,2,3,4], 'spending-table': [4,5,6] })) {
+    const before = htmlSource.slice(0, htmlSource.indexOf(`<tbody id="${id}"`));
+    const heads = [...before.slice(before.lastIndexOf('<thead>')).matchAll(/<th\b([^>]*)>/g)];
+    assert.deepEqual(heads.flatMap((head, index) => head[1].includes('numeric') ? [index] : []), expected);
+  }
+  assert.match(styleSource, /--control-height:\s*44px/);
+  assert.match(styleSource, /--control-compact-height:\s*36px/);
+  assert.match(styleSource, /th\.numeric, td\.numeric \{ text-align: right/);
+  assert.match(htmlSource, /<label for="agent-model">今日免費模型/);
+  assert.doesNotMatch(htmlSource, /<span style="flex:1"><\/span>/);
+});
+
+test('shoe action groups show only relevant controls without overriding shared button layout', () => {
+  const definition = source.slice(source.indexOf('class ShoeModal {'), source.indexOf('// 初始化一次'));
+  const elements = { 'shoe-secondary-actions': { hidden: false }, 'f-monthly': {} };
+  const context = vm.createContext({ document: { getElementById: id => elements[id] } });
+  vm.runInContext(definition + '\nglobalThis.Modal = ShoeModal;', context);
+  const modal = Object.create(context.Modal.prototype);
+  Object.assign(modal, { titleEl: {}, btnDelete: { style: {} }, btnMove: { style: {} }, monthlyRow: { style: {} } });
+  modal._updateUI({ title: '新增', showDelete: false, showMove: false, monthly: 60, monthlyVisible: true });
+  assert.equal(elements['shoe-secondary-actions'].hidden, true);
+  assert.equal(modal.btnDelete.style.display, 'none');
+  modal._updateUI({ title: '編輯', showDelete: true, showMove: true, moveText: '移至退役', monthly: 80, monthlyVisible: true });
+  assert.equal(elements['shoe-secondary-actions'].hidden, false);
+  assert.equal(modal.btnDelete.style.display, ''); assert.equal(modal.btnMove.style.display, '');
+  assert.equal(modal.btnMove.textContent, '移至退役'); assert.equal(elements['f-monthly'].value, 80);
+});
+
+test('shoe purchase columns live only in spending details, with aligned table rows', () => {
+  const elements = { 'shoe-table': {}, 'retired-table': {} };
+  const shoe = { id: 7, brand: 'Test', model: 'Runner', date: '2026-01-02',
+    size: 'UNIQUE-SIZE', price: 2400, orig_price: 4000, mileage: 100,
+    discount_percent: 60, cost_per_km: 24, expected_cost_per_km: 3,
+    usage_percent: 12.5, remaining_mileage_km: 700,
+    expected_mileage: 800, monthly_km: 50, categories: ['Daily'] };
+  const context = vm.createContext({
+    document: { getElementById: id => elements[id] },
+    shoes: [shoe], retiredShoes: [{ ...shoe, id: 8, is_retired: true }],
+    brandColor: () => '#123456', progressColor: () => '#123456',
+    shoeCategories: s => s.categories,
+  });
+  vm.runInContext(['esc', 'calc', 'fmtPct', 'fmtCostPerKm', 'fmtDate',
+    'renderTable', 'renderRetiredTable'].map(extract).join('\n'), context);
+  context.renderTable();
+  context.renderRetiredTable();
+  for (const [id, count] of [['shoe-table', 12], ['retired-table', 10]]) {
+    const headers = tableHeaders(id);
+    assert.equal(headers.length, count);
+    assert.ok(['尺寸', '買價', '原價', '折數'].every(label => !headers.includes(label)));
+    assert.equal((elements[id].innerHTML.match(/<td\b/g) || []).length, count);
+    assert.doesNotMatch(elements[id].innerHTML, /UNIQUE-SIZE|\$2,400|\$4,000|60\.00%/);
+    assert.match(elements[id].innerHTML, /\$24\.00/); // Cost/km stays on shoes.
+    assert.match(elements[id].innerHTML, />分析<\/button>/);
+    assert.match(elements[id].innerHTML, />編輯<\/button>/);
+  }
+  assert.deepEqual(tableHeaders('spending-table'),
+    ['日期', '品牌', '鞋款', '尺寸', '買價', '原價', '折數', '類別', '狀態']);
+});
+
+test('spending details retain active and retired purchases, escape sizes and handle missing values', () => {
+  const tbody = {};
+  const shoe = { id: 1, brand: 'Test', model: 'Active', date: '2026-02-02',
+    size: '<img src=x onerror=alert(1)>', price: 2400, orig_price: 4000, discount_percent: 60, categories: ['Daily'] };
+  const shoes = [shoe];
+  const retiredShoes = [{ ...shoe, id: 2, model: 'Retired', date: '2026-01-01',
+    size: '', price: 0, orig_price: 0, discount_percent: null, is_retired: true }];
+  const context = vm.createContext({ document: { getElementById: () => tbody },
+    shoes, retiredShoes, shoeCategories: s => s.categories,
+    byDate: (a, b) => a.date.localeCompare(b.date),
+  });
+  vm.runInContext(['esc', 'fmtMoney', 'renderSpendingTable'].map(extract).join('\n'), context);
+  context.renderSpendingTable();
+  const rows = [...tbody.innerHTML.matchAll(/<tr>([\s\S]*?)<\/tr>/g)].map(match => match[1]);
+  assert.equal(rows.length, 2);
+  for (const row of rows) assert.equal((row.match(/<td\b/g) || []).length, 9);
+  assert.match(rows[0], /Retired[\s\S]*<td>—<\/td>[\s\S]*<td>已退役<\/td>/);
+  assert.match(rows[1], /&lt;img src=x onerror=alert\(1\)&gt;/);
+  assert.match(rows[1], /\$2,400[\s\S]*\$4,000[\s\S]*60\.0%[\s\S]*使用中/);
+  assert.doesNotMatch(tbody.innerHTML, /<img|—%|NaN|Infinity/);
+  assert.equal(shoes[0].size, shoe.size, 'rendering must not modify purchase data');
+  shoes.length = 0;
+  retiredShoes.length = 0;
+  context.renderSpendingTable();
+  assert.equal(tbody.innerHTML, '');
+});
+
+test('PWA metadata, local dependencies and service worker registration are present', () => {
+  assert.match(source, /rel="manifest" href="\/manifest\.webmanifest"/);
+  assert.match(source, /rel="apple-touch-icon" href="\/icons\/apple-touch-icon\.png"/);
+  assert.match(source, /navigator\.serviceWorker\.register\('\/service-worker\.js'\)/);
+  assert.match(source, /src="\/vendor\/chart\.umd\.min\.js"/);
+  assert.match(source, /src="\/vendor\/marked\.min\.js"/);
+  assert.doesNotMatch(source, /cdn\.jsdelivr\.net/);
+  const serviceWorker = fs.readFileSync('frontend/service-worker.js', 'utf8');
+  const assetVersion = serviceWorker.match(/APP_ASSET_VERSION = '([^']+)'/)?.[1];
+  assert.ok(assetVersion, 'service worker declares an application asset version');
+  assert.match(serviceWorker, /'\/vendor\/chart\.umd\.min\.js'/);
+  assert.match(serviceWorker, /'\/vendor\/marked\.min\.js'/);
+  const appAssets = scriptPaths.map(file => `/${path.basename(file)}`).concat('/styles.css');
+  for (const asset of appAssets) {
+    assert.ok(serviceWorker.includes(`versioned('${asset}')`), `${asset} is precached with a version`);
+    const attribute = asset.endsWith('.css') ? 'href' : 'src';
+    assert.ok(htmlSource.includes(`${attribute}="${asset}?v=${assetVersion}"`), `${asset} uses the service worker version`);
+  }
+  assert.match(serviceWorker, /event\.waitUntil\(installShell\(\)\)/);
+  assert.match(serviceWorker, /name\.startsWith\(CACHE_PREFIX\)/);
+  assert.doesNotMatch(serviceWorker.slice(serviceWorker.indexOf("self.addEventListener('fetch'")), /cache\.put\(/);
+  assert.ok(htmlSource.includes(`<meta name="app-asset-version" content="${assetVersion}">`));
+  const unversionedHtml = htmlSource.replaceAll(`?v=${assetVersion}`, '');
+  assert.match(unversionedHtml, /src="\/app-boot\.js"[\s\S]*src="\/app-state\.js"[\s\S]*src="\/app-api\.js"[\s\S]*src="\/app-auth\.js"[\s\S]*src="\/app-core\.js"[\s\S]*src="\/app-agent\.js"[\s\S]*src="\/app-reports\.js"[\s\S]*src="\/app-runs\.js"[\s\S]*src="\/app-strava\.js"[\s\S]*src="\/app-run-insights\.js"[\s\S]*src="\/app-shoes\.js"[\s\S]*src="\/app\.js"/);
+});
+
+test('every startup chooses the run-log home before authentication, ignoring legacy tabs', async () => {
+  for (const mode of ['online', 'offline', 'logged-out']) {
+    let active = 'agent', loads = 0, loginShown = false;
+    const elements = new Proxy({}, { get: (target, id) => target[id] ||= { value: '' } });
+    const context = vm.createContext({
+      document: { getElementById: id => elements[id] }, authToken: mode === 'logged-out' ? null : 'synthetic',
+      refreshDateLimits() {}, resetAppLayout() { active = 'runs'; }, populateAddSelects() {},
+      localDateISO: () => '2026-10-20', previousMonthValue: () => '2026-09',
+      captureAuthSession: () => ({}), isCurrentAuthSession: () => true,
+      API_BASE: '/api', authHeaders: () => ({}),
+      authenticatedFetch: async () => {
+        assert.equal(active, 'runs', 'home is selected before auth completes');
+        if (mode === 'offline') throw new TypeError('offline');
+        return { ok: true };
+      },
+      localStorage: { getItem() { assert.fail('startup must not read a saved tab'); } },
+      showAppView() { assert.equal(active, 'runs'); }, loadAgentModels() {},
+      loadData: async () => { loads++; }, hideAppBoot() {},
+      showLoginView() { loginShown = true; }, console: { warn() {} },
+    });
+    vm.runInContext(extract('init'), context);
+    await context.init();
+    assert.equal(active, 'runs');
+    assert.equal(loads, mode === 'logged-out' ? 0 : 1);
+    assert.equal(loginShown, mode === 'logged-out');
+  }
+  assert.doesNotMatch(extract('switchTab'), /localStorage/);
+  assert.match(extract('applyTheme'), /localStorage\.setItem\('theme', theme\)/);
+});
+
+test('persisted page restoration selects home without resetting ordinary visibility changes', () => {
+  const bootstrap = fs.readFileSync('frontend/app.js', 'utf8');
+  const listener = bootstrap.slice(bootstrap.indexOf('// Back/forward cache'), bootstrap.indexOf("if ('serviceWorker'"));
+  let onShow, resets = 0, renders = 0;
+  const context = vm.createContext({
+    window: { addEventListener(name, callback) { assert.equal(name, 'pageshow'); onShow = callback; } },
+    authToken: 'synthetic', resetAppLayout() { resets++; }, renderActivePanel() { renders++; },
+  });
+  vm.runInContext(listener, context);
+  onShow({ persisted: false });
+  assert.equal(resets, 0);
+  onShow({ persisted: true });
+  assert.equal(resets, 1); assert.equal(renders, 1);
+  context.authToken = null;
+  onShow({ persisted: true });
+  assert.equal(resets, 2); assert.equal(renders, 1);
+  assert.doesNotMatch(bootstrap, /visibilitychange/);
+});

@@ -45,8 +45,8 @@ def documented_counts() -> tuple[int, int]:
 
 
 def frontend_test_count() -> int:
-    source = (ROOT / "unit_tests" / "frontend_regressions.cjs").read_text(encoding="utf-8")
-    return len(re.findall(r"(?m)^test\(", source))
+    sources = (ROOT / "unit_tests" / "frontend").glob("*.test.cjs")
+    return sum(len(re.findall(r"(?m)^test\(", path.read_text(encoding="utf-8"))) for path in sources)
 
 
 def agent_tool_count() -> int:
@@ -81,6 +81,22 @@ def require_readme_number(pattern: str, actual: int, label: str) -> None:
 
 def main() -> None:
     required_paths = (
+        "docs/specs/017-consistent-statistics-and-feature-lifecycles.md",
+        "docs/adr/0003-shared-read-models-and-feature-lifecycles.md",
+        "scripts/build_frontend.py",
+        "frontend/assets.json",
+        "frontend/runtime/feature-lifecycle.mjs",
+        "frontend/app-lifecycle.js",
+        "frontend/app-dialogs.js",
+        "frontend/app-dates.js",
+        "frontend/app-updates.js",
+        "frontend/app-models.js",
+        "frontend/app-markdown.js",
+        "backend/read_models/shoes.py",
+        "backend/read_models/spending.py",
+        "backend/read_models/runs.py",
+        "backend/shoe_metrics.py",
+        "unit_tests/frontend_consistency.cjs",
         ".github/workflows/verify.yml",
         ".github/pull_request_template.md",
         ".claude/settings.json",
@@ -231,7 +247,7 @@ def main() -> None:
     if documented_frontend != actual_frontend:
         fail(
             f"frontend test baseline says {documented_frontend}, "
-            f"but frontend_regressions.cjs defines {actual_frontend}"
+            f"but frontend feature suites define {actual_frontend}"
         )
 
     require_readme_number(r"目前提供 (\d+) 個 Agent 工具", agent_tool_count(), "Agent tool")

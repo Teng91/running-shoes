@@ -2,6 +2,32 @@
 
 本專案的重要變更依 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.1.0/) 分類，版本號遵循 [Semantic Versioning](https://semver.org/lang/zh-TW/)。完整部署說明另見各版本的 GitHub Release。
 
+## [3.3.0] - 2026-10-21
+
+### Security
+
+- 發布稽核發現 CA bundle 漏洞，鎖定 certifi 2026.10.19 並重新生成正式／開發依賴雜湊，修補 [PYSEC-2026-4320／GHSA-6q48-6c7w-9gw2](https://github.com/certifi/python-certifi/security/advisories/GHSA-6q48-6c7w-9gw2)。
+
+### Fixed
+
+- 月跑量空白不再覆寫成零，目標頁與首頁／月報統一只計日誌；跨日更新日期限制且保留目前草稿。
+- 刪鞋後年度堆疊圖保留歷史日誌；同名鞋款須消歧義並可用 user-scoped ID 選定。
+- 平均月支出改由後端日曆年月計算，不受瀏覽器時區影響；新增跑步晚到回應不污染新帳號。
+- 彈窗補齊焦點、Tab／Shift+Tab、Escape 與 aria 語義，修正背景 inert 導致無法返回焦點。
+
+### Changed
+
+- 共用 read models 與 shoe metrics 統一 API／工具／月報／匯出規則；批次鞋款分析消除 N+1。
+- 新增日誌整月 summary、目標 progress、支出 summary API；明細每頁 200 筆，月曆／統計完整不截斷。
+- 支出按需載入及局部重試；Strava 解析領域錯誤由 router 映射 HTTP，月報不再解析 AI 工具 JSON。
+- 各功能註冊生命週期清理，原生 ES module runtime 由相容橋接載入；CSS、彈窗模板、模型、Markdown、工具 schema／parser 與 Node tests 依責任拆分。
+- HTML／單一 CSS／PWA 清單由 assets manifest 生成並由 harness 驗證；shell v23 包含 native module MIME 檢查與非強制更新提示。
+
+### Testing
+
+- SPEC-017／ADR-0003 與架構／測試圖更新，新增統計不變量、身份歧義、query budget、跨日、完整分頁及兩引擎鍵盤流程。
+- 架構檢查追蹤 transitive／relative imports，防止 service/read models 間接依賴 HTTP 或 AI adapters。
+
 ## [3.2.5] - 2026-10-20
 
 ### Fixed
@@ -139,6 +165,7 @@
 
 - 強化資料載入、API 邊界、工程 harness 與架構驗證。
 
+[3.3.0]: https://github.com/Teng91/running-shoes/releases/tag/v3.3.0
 [3.2.5]: https://github.com/Teng91/running-shoes/releases/tag/v3.2.5
 [3.2.4]: https://github.com/Teng91/running-shoes/releases/tag/v3.2.4
 [3.2.3]: https://github.com/Teng91/running-shoes/releases/tag/v3.2.3
