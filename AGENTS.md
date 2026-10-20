@@ -67,6 +67,7 @@ on Windows use `py -3` with the same script and task arguments:
 - Frontend logic change: `python3 scripts/task.py frontend-test`
 - Layout change: `python3 scripts/task.py frontend-layout`
 - Browser CRUD flow: `python3 scripts/task.py frontend-e2e`
+- PWA upgrade/offline change: `python3 scripts/task.py frontend-pwa`
 - README, harness command, test-count, tool-count, or layout-matrix change: `python3 scripts/task.py docs-check`
 - Router or module-boundary change: `python3 scripts/task.py architecture-check`
 - Security-sensitive change: `python3 scripts/task.py security-check`
@@ -74,7 +75,7 @@ on Windows use `py -3` with the same script and task arguments:
 - Everything at once before handing off a large change: `python3 scripts/task.py verify-all`
 
 `frontend-layout` is intentionally separate from `verify` because it requires Playwright browser binaries.
-`verify-all` includes it, but warns and skips instead of failing when those binaries are unavailable.
+`verify-all` includes layout, CRUD and PWA browser checks, but warns and skips instead of failing when those binaries are unavailable.
 
 Claude Code imports this file through `CLAUDE.md`. Its project Stop hook runs the deterministic
 repository checks after a changed worktree reaches a stopping point and returns failures to the

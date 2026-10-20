@@ -56,11 +56,17 @@ flowchart BT
 | API contract | method/path snapshot | endpoint 被意外新增、刪除或改名 |
 | Runtime module boundary | architecture check + frontend asset/order regressions | router/service 或 plain-script dependency 再次混合 |
 | 備份可恢復性 | backup/restore tests | checksum、integrity、retention、安全快照、殘留 WAL 還原或 busy 鎖失效 |
+| 異地備份與隔離演練 | mocked Fly CLI + temporary SQLite（SPEC-014） | 半份備份被發布、checksum 缺失／錯誤、schema／資料遺失、輸出落在 Git 或洩漏遠端內容 |
+| 真正 PWA 升級 | `frontend-pwa` local HTTP fixture / Chromium + WebKit | 舊 worker 線上遷移失敗、新版 HTTP／MIME 失敗污染舊 HTML、離線無法載入已安裝 shell、刪除其他 cache 或快取 API |
 | Coverage floor | branch coverage ≥ 92% | 測試保護範圍明顯退化 |
 | Secret hygiene | `security-check` | tracked files 包含明確 credential 特徵 |
 | 文件與實作一致 | `docs-check` | 測試數、命令、檔案或工具數過期 |
 
 ## 4. 開發流程
+
+PWA fixture 凍結 v3.2.2 worker 進行線上 migration，再測試完整新版 worker 的失敗升級／離線恢復；
+Chromium 使用 browser offline emulation，WebKit 使用 fixture transport 斷線（避免 emulation 同時阻止 cache navigation）。
+兩者都要求 API network failure、舊 shell 完整、新版恢復及實際 cache key／HTML revision 正確；不連正式站，亦不取代 iPhone 實機驗證。
 
 ```mermaid
 flowchart LR

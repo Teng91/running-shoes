@@ -11,6 +11,7 @@ def test_public_tasks_cover_the_documented_harness():
         "frontend-test",
         "frontend-layout",
         "frontend-e2e",
+        "frontend-pwa",
         "eval-agent",
         "audit-deps",
         "architecture-check",
@@ -49,10 +50,11 @@ def test_verify_all_reuses_verify_and_optionally_runs_browser_checks(monkeypatch
     monkeypatch.setattr(task, "run_verify", lambda: calls.append("verify"))
     monkeypatch.setattr(task, "run_frontend_layout", lambda *, optional=False: calls.append(optional))
     monkeypatch.setattr(task, "run_frontend_e2e", lambda *, optional=False: calls.append(("e2e", optional)))
+    monkeypatch.setattr(task, "run_frontend_pwa", lambda *, optional=False: calls.append(("pwa", optional)))
 
     task.run_task("verify-all")
 
-    assert calls == ["verify", True, ("e2e", True)]
+    assert calls == ["verify", True, ("e2e", True), ("pwa", True)]
 
 
 def test_ci_and_docs_use_the_cross_platform_runner():

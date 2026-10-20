@@ -2,6 +2,20 @@
 
 本專案的重要變更依 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.1.0/) 分類，版本號遵循 [Semantic Versioning](https://semver.org/lang/zh-TW/)。完整部署說明另見各版本的 GitHub Release。
 
+## [3.2.3] - 2026-10-20
+
+### Added
+
+- Fly 外部備份 CLI：下載一致 SQLite 快照與 checksum，private staging 驗證及隔離還原通過後才發布完整備份與 manifest；拒絕 Git 目錄，不自動刪除本地備份。
+- `database_backup.py drill`：隨機 OS 暫存目的地，比對完整 schema、ordered row digest、各表筆數與 schema version，不接受正式還原目的地。
+- `frontend-pwa`：以真正 Chromium／WebKit Service Worker 測試舊版線上 migration、HTTP／MIME 失敗更新、已安裝 shell 離線啟動、恢復更新、API 排除與 scoped cleanup，納入 verify-all／CI。
+
+### Fixed
+
+- PWA navigation 不再將新 HTML 寫入舊版 cache；完整資產安裝成功才接管，失敗保留舊 shell，僅清理本 app cache。
+- PWA 安裝逐一讀完資源 response body，避免有限連線池被未消耗的串流佔滿；驗證資源 MIME 與 HTML revision。
+- PWA asset revision `3.2.3`、shell v20，確保新版 HTML 與資產一起更新。
+
 ## [3.2.2] - 2026-10-20
 
 ### Fixed
@@ -102,6 +116,7 @@
 
 - 強化資料載入、API 邊界、工程 harness 與架構驗證。
 
+[3.2.3]: https://github.com/Teng91/running-shoes/releases/tag/v3.2.3
 [3.2.2]: https://github.com/Teng91/running-shoes/releases/tag/v3.2.2
 [3.2.1]: https://github.com/Teng91/running-shoes/releases/tag/v3.2.1
 [3.2.0]: https://github.com/Teng91/running-shoes/releases/tag/v3.2.0

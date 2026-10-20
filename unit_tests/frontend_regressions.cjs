@@ -389,8 +389,10 @@ test('PWA metadata, local dependencies and service worker registration are prese
     const attribute = asset.endsWith('.css') ? 'href' : 'src';
     assert.ok(htmlSource.includes(`${attribute}="${asset}?v=${assetVersion}"`), `${asset} uses the service worker version`);
   }
-  assert.match(serviceWorker, /event\.waitUntil\(networkResponse/);
-  assert.match(serviceWorker, /caches\.match\('\/'\)\.then\(cached => cached \|\| networkResponse\)/);
+  assert.match(serviceWorker, /event\.waitUntil\(installShell\(\)\)/);
+  assert.match(serviceWorker, /name\.startsWith\(CACHE_PREFIX\)/);
+  assert.doesNotMatch(serviceWorker.slice(serviceWorker.indexOf("self.addEventListener('fetch'")), /cache\.put\(/);
+  assert.ok(htmlSource.includes(`<meta name="app-asset-version" content="${assetVersion}">`));
   const unversionedHtml = htmlSource.replaceAll(`?v=${assetVersion}`, '');
   assert.match(unversionedHtml, /src="\/app-boot\.js"[\s\S]*src="\/app-state\.js"[\s\S]*src="\/app-api\.js"[\s\S]*src="\/app-auth\.js"[\s\S]*src="\/app-core\.js"[\s\S]*src="\/app-agent\.js"[\s\S]*src="\/app-reports\.js"[\s\S]*src="\/app-runs\.js"[\s\S]*src="\/app-strava\.js"[\s\S]*src="\/app-run-insights\.js"[\s\S]*src="\/app-shoes\.js"[\s\S]*src="\/app\.js"/);
 });
