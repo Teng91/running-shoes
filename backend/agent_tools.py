@@ -34,15 +34,21 @@ def execute_tool(
     if name == "compare_shoes":
         shoe_a = args.get("shoe_a", "")
         shoe_b = args.get("shoe_b", "")
+        identifiers = {key: value for key in ("shoe_a_id", "shoe_b_id")
+                       if isinstance(value := args.get(key), int) and not isinstance(value, bool) and value > 0}
         return fn(
             db, user_id,
             shoe_a=shoe_a if isinstance(shoe_a, str) else "",
             shoe_b=shoe_b if isinstance(shoe_b, str) else "",
+            **identifiers,
         )
     if name in {"shoe_category_status", "shoe_usage_analytics"}:
         shoe_name = args.get("shoe_name", "")
+        shoe_id = args.get("shoe_id")
+        identifiers = {"shoe_id": shoe_id} if isinstance(shoe_id, int) and not isinstance(shoe_id, bool) and shoe_id > 0 else {}
         return fn(
             db, user_id,
             shoe_name=shoe_name if isinstance(shoe_name, str) else "",
+            **identifiers,
         )
     return fn(db, user_id)

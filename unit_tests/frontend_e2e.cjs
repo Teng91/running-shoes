@@ -8,6 +8,7 @@ const path = require('node:path');
 const { spawn } = require('node:child_process');
 const checkSessionIsolation = require('./frontend_sessions.cjs');
 const checkFrontendSafety = require('./frontend_safety.cjs');
+const checkConsistency = require('./frontend_consistency.cjs');
 
 const projectRoot = path.resolve(__dirname, '..');
 
@@ -192,10 +193,12 @@ async function run() {
     console.log('PASS Chromium: registration, login, shoe CRUD, run CRUD, and persistence');
     await checkSessionIsolation(browser, baseUrl);
     await checkFrontendSafety(browser, baseUrl);
+    await checkConsistency(browser, baseUrl);
     const safari = await webkit.launch({ headless: true });
     try {
       await checkSessionIsolation(safari, baseUrl);
       await checkFrontendSafety(safari, baseUrl);
+      await checkConsistency(safari, baseUrl);
     } finally {
       await safari.close();
     }

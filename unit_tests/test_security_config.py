@@ -157,7 +157,9 @@ def test_run_log_frontend_keeps_calendar_actions_and_select_state_safe():
     assert "km.toFixed(2)} km" in source
     assert "formatDate(next) <= today" in source
     assert "nextStart ? today" in source
-    assert "apiGet('/runs/import/strava/history').catch" in source
+    assert "async function loadStravaHistory()" in source
+    assert "await apiGet('/runs/import/strava/history')" in source
+    assert "載入 Strava 匯入歷史失敗:" in source
     assert "id === 'edit-run-shoe' && selectedId !== null" in source
     assert "原鞋款已刪除，請重新選擇" in source
     assert "document.getElementById('run-date').value = today" in source

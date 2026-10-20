@@ -1,0 +1,53 @@
+/* Table */
+.table-section { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 28px; }
+.table-header { display: flex; justify-content: space-between; align-items: center; min-height: var(--control-height); margin-bottom: 16px; }
+.table-header h2 { font-size: 16px; font-weight: 600; }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: var(--control-height); padding: 10px 16px; border: 1px solid transparent; border-radius: 8px; cursor: pointer; font-size: 13px; line-height: var(--control-line-height); font-weight: 500; transition: background-color 0.2s, color 0.2s; }
+.btn:focus-visible { outline: 2px solid var(--accent-light); outline-offset: 2px; }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.btn:not(.btn-primary):not(.btn-edit):not(.btn-delete):not(.btn-cancel) { background: var(--btn-bg); color: var(--text); }
+.btn-primary { background: var(--accent); color: white; }
+.btn-primary:hover { background: var(--accent-light); }
+.btn-sm { min-height: var(--control-compact-height); padding: 6px 10px; font-size: 12px; }
+.table-header .btn { min-height: var(--control-height); font-size: 13px; }
+.btn-edit { background: var(--btn-bg); color: var(--text); border: 1px solid var(--border); }
+.btn-edit:hover { background: var(--btn-hover); }
+.btn-delete { background: #7f1d1d; color: #fca5a5; }
+.btn-delete:hover { background: #991b1b; }
+
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { text-align: left; padding: 10px 8px; color: var(--text-dim); font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+td { padding: 10px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+th.numeric, td.numeric { text-align: right; font-variant-numeric: tabular-nums; }
+td { vertical-align: middle; }
+td .btn + .btn { margin-left: 4px; }
+tr:hover td { background: rgba(99,102,241,0.05); }
+.brand { font-weight: 600; color: var(--accent-light); }
+
+/* Editable cell */
+.editable { cursor: pointer; border-radius: 4px; padding: 2px 4px; transition: background 0.2s; }
+td.editable { padding: 10px 8px; }
+.editable:hover { background: rgba(99,102,241,0.15); }
+
+/* Modal */
+.modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 100; align-items: center; justify-content: center; }
+.modal-overlay.active { display: flex; }
+.modal { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 28px; width: 480px; max-height: 90vh; overflow-y: auto; }
+.modal h2 { font-size: 18px; margin-bottom: 20px; }
+.form-group { margin-bottom: 14px; }
+.form-group label { display: block; font-size: 12px; line-height: 18px; color: var(--text-dim); margin-bottom: 4px; }
+.form-group input, .form-group select, .form-group textarea { width: 100%; padding: 8px 12px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px; }
+.form-group input:focus { outline: none; border-color: var(--accent); }
+.form-group textarea { min-height: 72px; resize: vertical; font-family: inherit; }
+.form-group textarea:focus, .form-group select:focus { outline: none; border-color: var(--accent); }
+.form-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px 12px; margin-bottom: 14px; }
+.form-row > .form-group, .run-entry-grid > .form-group { display: flex; flex-direction: column; margin-bottom: 0; }
+.form-row > .form-group > input, .form-row > .form-group > select,
+.run-entry-grid > .form-group > input, .run-entry-grid > .form-group > select { margin-top: auto; }
+.modal-actions { display: flex; gap: 10px; align-items: center; justify-content: flex-end; margin-top: 20px; }
+.modal-actions-secondary, .modal-actions-primary { display: flex; flex-wrap: wrap; gap: 10px; min-width: 0; }
+.modal-actions-secondary { margin-right: auto; }
+.modal-actions-secondary[hidden] { display: none; }
+.modal-actions .btn { min-height: var(--control-height); font-size: 13px; }
+.btn-cancel { background: var(--btn-bg); color: var(--text); border: 1px solid var(--border); }

@@ -1,11 +1,46 @@
+let spendingLoadRequestId = 0;
+let spendingLoadPending = false;
+
+registerFeatureReset('spending', () => {
+  spendingLoadRequestId += 1;
+  spendingLoadPending = false;
+  spendingSummary = null;
+  document.getElementById('spending-table').replaceChildren();
+  document.getElementById('spending-cards').replaceChildren();
+});
+
+async function loadSpendingData() {
+  if (spendingLoadPending) return;
+  const session = captureAuthSession();
+  const requestId = ++spendingLoadRequestId;
+  spendingLoadPending = true;
+  try {
+    const summary = await apiGet('/spending/summary');
+    if (!isCurrentAuthSession(session) || requestId !== spendingLoadRequestId) return;
+    if (!summary || !Array.isArray(summary.monthly)) throw new Error('支出資料格式不正確');
+    spendingSummary = summary;
+    monthlySpending = summary.monthly;
+    if (document.querySelector('.tab-panel.active')?.dataset.panel === 'spending') renderSpendingCharts();
+  } catch (error) {
+    if (error.name === 'AbortError' || !isCurrentAuthSession(session) || requestId !== spendingLoadRequestId) return;
+    document.getElementById('spending-cards').innerHTML = `<div class="card"><div class="card-sub">支出載入失敗：${esc(error.message)}</div><button class="btn btn-edit" onclick="loadSpendingData()">重試</button></div>`;
+  } finally {
+    if (requestId === spendingLoadRequestId) spendingLoadPending = false;
+  }
+}
+
 // Spending summaries, charts, and detail table.
 function renderSpendingCharts() {
+  if (!spendingSummary) {
+    document.getElementById('spending-cards').innerHTML = '<div class="card"><div class="card-sub">支出載入中…</div></div>';
+    loadSpendingData();
+    return;
+  }
   if (chartInstances.spending) { chartInstances.spending.destroy(); delete chartInstances.spending; }
   if (chartInstances.spendingYearly) { chartInstances.spendingYearly.destroy(); delete chartInstances.spendingYearly; }
   renderSpendingCards();
   populateSpendingYearSelect();
-  renderSpendingChart();
-  renderSpendingYearlyChart();
+  if (typeof Chart !== 'undefined') { renderSpendingChart(); renderSpendingYearlyChart(); }
   renderSpendingTable();
 }
 
@@ -30,50 +65,21 @@ function onSpendingYearChange() {
 }
 
 function renderSpendingCards() {
-  const allShoes = [...shoes, ...retiredShoes];
-  const totalPaid = allShoes.reduce((sum, s) => sum + (s.price || 0), 0);
-  const totalOrig = allShoes.reduce((sum, s) => sum + (s.orig_price || 0), 0);
-  const totalSavings = totalOrig - totalPaid;
-  const avgDiscount = totalOrig > 0 ? (totalPaid / totalOrig) * 100 : 100;
-
-  // Average monthly spend: from first purchase month through current month.
-  // Months with no purchases still count in the denominator (gives true
-  // monthly burn rate over your entire buying history).
-  const validDates = allShoes.filter(s => s.date).sort((a, b) => new Date(a.date) - new Date(b.date));
-  let avgMonthly = 0;
-  let monthSpan = 0;
-  let startDate = null;
-  if (validDates.length > 0) {
-    startDate = new Date(validDates[0].date);
-    const now = new Date();
-    monthSpan = (now.getFullYear() - startDate.getFullYear()) * 12 + (now.getMonth() - startDate.getMonth()) + 1;
-    avgMonthly = monthSpan > 0 ? totalPaid / monthSpan : 0;
-  }
-
-  // Find highest spend month
-  let highestMonth = '';
-  let highestAmount = 0;
-  monthlySpending.forEach(m => {
-    if (m.total_paid > highestAmount) {
-      highestAmount = m.total_paid;
-      highestMonth = `${m.year}/${String(m.month).padStart(2, '0')}`;
-    }
-  });
-
-  const spanLabel = monthSpan > 0 && startDate
-    ? `從 ${startDate.getFullYear()}/${String(startDate.getMonth()+1).padStart(2,'0')} 到今月，共 ${monthSpan} 個月`
-    : '無購買紀錄';
-
+  const summary = spendingSummary;
+  if (!summary) return;
+  const start = calendarMonthParts(summary.start_month);
+  const highest = summary.highest_month;
+  const spanLabel = start ? `從 ${start.year}/${String(start.month).padStart(2, '0')} 到今月，共 ${summary.month_span} 個月` : '無購買紀錄';
   const cards = [
-    { label: '總花費', value: '$' + Math.round(totalPaid).toLocaleString(), sub: '買價總和' },
-    { label: '原價總和', value: '$' + Math.round(totalOrig).toLocaleString(), sub: '原始價格' },
-    { label: '省下金額', value: '$' + Math.round(totalSavings).toLocaleString(), sub: '總折扣' },
-    { label: '平均折數', value: avgDiscount.toFixed(1) + '%', sub: '$' + Math.round(totalPaid) + ' / $' + Math.round(totalOrig) },
-    { label: '平均月支出', value: '$' + Math.round(avgMonthly).toLocaleString(), sub: spanLabel },
-    { label: '最高支出月', value: '$' + Math.round(highestAmount).toLocaleString(), sub: highestMonth || '無' },
+    { label: '總花費', value: fmtMoney(summary.total_paid), sub: '買價總和' },
+    { label: '原價總和', value: fmtMoney(summary.total_original), sub: '原始價格' },
+    { label: '省下金額', value: fmtMoney(summary.savings), sub: '總折扣' },
+    { label: '平均折數', value: summary.average_discount_percent === null ? '—' : Number(summary.average_discount_percent).toFixed(1) + '%', sub: `${fmtMoney(summary.total_paid)} / ${fmtMoney(summary.total_original)}` },
+    { label: '平均月支出', value: fmtMoney(summary.average_monthly_paid), sub: spanLabel },
+    { label: '最高支出月', value: fmtMoney(highest?.total_paid || 0), sub: highest ? `${highest.year}/${String(highest.month).padStart(2, '0')}` : '無' },
   ];
-  document.getElementById('spending-cards').innerHTML = cards.map(c =>
-    `<div class="card"><div class="card-label">${c.label}</div><div class="card-value">${c.value}</div><div class="card-sub">${c.sub}</div></div>`
+  document.getElementById('spending-cards').innerHTML = cards.map(card =>
+    `<div class="card"><div class="card-label">${card.label}</div><div class="card-value">${card.value}</div><div class="card-sub">${card.sub}</div></div>`
   ).join('');
 }
 
@@ -195,7 +201,7 @@ function renderSpendingTable() {
   const tbody = document.getElementById('spending-table');
   const allShoes = [...shoes, ...retiredShoes].sort(byDate);
   tbody.innerHTML = allShoes.map(s => {
-    const discount = s.orig_price > 0 ? (s.price / s.orig_price * 100).toFixed(1) + '%' : '—';
+    const discount = s.discount_percent === null || s.discount_percent === undefined ? '—' : s.discount_percent.toFixed(1) + '%';
     const status = s.is_retired ? '已退役' : '使用中';
     return `<tr>
       <td>${esc(s.date.replace(/-/g, '/'))}</td>

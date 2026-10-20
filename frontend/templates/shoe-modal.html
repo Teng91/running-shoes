@@ -1,0 +1,45 @@
+<!-- Add/Edit Modal -->
+<div class="modal-overlay" id="modal">
+  <div class="modal">
+    <h2 id="modal-title">新增跑鞋</h2>
+    <div class="form-row">
+      <div class="form-group"><label for="f-brand">品牌</label><input id="f-brand" placeholder="Mizuno"></div>
+      <div class="form-group"><label for="f-model">鞋款</label><input id="f-model" placeholder="Wave Sky 7"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label for="f-date">購買日期</label><input id="f-date" type="date"></div>
+      <div class="form-group"><label for="f-size">尺寸</label><input id="f-size" placeholder="us13/31cm"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label for="f-price">買價</label><input id="f-price" type="number" placeholder="2390"></div>
+      <div class="form-group"><label for="f-orig">原價</label><input id="f-orig" type="number" placeholder="4780"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label for="f-mileage">跑鞋里程 (km)</label><input id="f-mileage" type="number" placeholder="0"></div>
+      <div class="form-group"><label for="f-expected">預期里程 (km)</label><input id="f-expected" type="number" placeholder="800"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label for="f-monthly">月跑量 (km)</label><input id="f-monthly" type="number" placeholder="60"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group category-field"><label>用途類別 (可多選)</label>
+        <div id="f-category-group" class="category-checkboxes">
+          <label><input type="checkbox" value="Daily"> Daily</label>
+          <label><input type="checkbox" value="Speed"> Speed</label>
+          <label><input type="checkbox" value="Tempo"> Tempo</label>
+          <label><input type="checkbox" value="Race"> Race</label>
+        </div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <div class="modal-actions-secondary" id="shoe-secondary-actions" hidden>
+        <button class="btn btn-delete" id="btn-delete" style="display:none">刪除</button>
+        <button class="btn btn-edit" id="btn-move" style="display:none">移動</button>
+      </div>
+      <div class="modal-actions-primary">
+        <button class="btn btn-cancel" onclick="closeModal()">取消</button>
+        <button class="btn btn-primary" onclick="saveShoe()">儲存</button>
+      </div>
+    </div>
+  </div>
+</div>

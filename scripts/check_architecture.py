@@ -45,6 +45,79 @@ def imported_modules(path: Path) -> set[str]:
     return modules
 
 
+def project_dependencies(path: Path) -> set[str]:
+    """Resolve imported submodules as well as relative/from-package imports."""
+    tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    package = list(path.relative_to(ROOT).with_suffix("").parts[:-1])
+    modules: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            modules.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            base = node.module or ""
+            if node.level:
+                base = ".".join(package[:len(package) - node.level + 1] + ([base] if base else []))
+            if base:
+                modules.add(base)
+                for alias in node.names:
+                    candidate = base + "." + alias.name
+                    if module_path(candidate) is not None:
+                        modules.add(candidate)
+    return modules
+
+
+def module_path(name: str) -> Path | None:
+    if not name.startswith("backend"):
+        return None
+    relative = ROOT.joinpath(*name.split("."))
+    for path in (relative.with_suffix(".py"), relative / "__init__.py"):
+        if path.is_file():
+            return path
+    return None
+
+
+def forbidden_dependency_chain(start: Path, forbidden: tuple[str, ...]) -> list[str] | None:
+    """Find a direct or transitive forbidden dependency, retaining its explanation."""
+    queue = [(start, [start.relative_to(ROOT).as_posix()])]
+    visited: set[Path] = set()
+    while queue:
+        path, chain = queue.pop(0)
+        if path in visited:
+            continue
+        visited.add(path)
+        for name in sorted(project_dependencies(path)):
+            if any(name == prefix or name.startswith(prefix + ".") for prefix in forbidden):
+                return [*chain, name]
+            dependency = module_path(name)
+            if dependency is not None:
+                queue.append((dependency, [*chain, name]))
+    return None
+
+
+def check_feature_boundaries() -> None:
+    for directory in (SERVICES, ROOT / "backend" / "read_models"):
+        for path in sorted(directory.glob("*.py")):
+            chain = forbidden_dependency_chain(path, ("fastapi", "starlette", "backend.routers", "backend.main", "backend.tools"))
+            if chain:
+                fail("domain/service dependency violation: " + " -> ".join(chain))
+    report_chain = forbidden_dependency_chain(ROOT / "backend" / "reports.py", ("backend.tools", "backend.routers"))
+    if report_chain:
+        fail("reports must use read models: " + " -> ".join(report_chain))
+    frontend = ROOT / "frontend"
+    manifest = json.loads((frontend / "assets.json").read_text(encoding="utf-8"))
+    owners: dict[str, str] = {}
+    for filename in manifest["scripts"]:
+        source = (frontend / filename).read_text(encoding="utf-8")
+        for name in re.findall(r"registerFeatureReset\('([^']+)'", source):
+            if name in owners:
+                fail(f"duplicate frontend lifecycle owner {name}: {owners[name]}, {filename}")
+            owners[name] = filename
+    for filename in manifest["modules"]:
+        source = (frontend / filename).read_text(encoding="utf-8")
+        if re.search(r"\b(?:document|window|localStorage|fetch)\b", source):
+            fail(f"native runtime module must remain DOM/transport independent: {filename}")
+
+
 def iter_routes(routes):
     """Flatten FastAPI's deferred included-router entries."""
     for route in routes:
@@ -56,6 +129,7 @@ def iter_routes(routes):
 
 
 def main() -> None:
+    check_feature_boundaries()
     router_files = sorted(ROUTERS.glob("*.py"))
     if len(router_files) < 2:
         fail("backend/routers must contain a package and at least one route module")

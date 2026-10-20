@@ -80,39 +80,47 @@ function toggleTheme() {
 
 applyTheme(currentTheme);
 
+registerFeatureReset('panel-rendering', resetPanelRendering);
+
 async function loadData() {
   const generation = ++dataLoadGeneration;
   const token = authToken;
+  const runRequestId = ++runListRequestId;
   const requestedRunMonth = selectedRunMonth();
   const error = document.getElementById('data-load-error');
   try {
     const [runYear, runMonth] = requestedRunMonth.split('-').map(Number);
-    const [active, retired, monthly, spending, runData, importHistory, goal] = await Promise.all([
+    const [active, retired, monthly, page, summary, goal] = await Promise.all([
       apiGet('/shoes/active'),
       apiGet('/shoes/retired'),
       apiGet('/monthly-mileage'),
-      apiGet('/spending/monthly'),
-      fetchRunPages({ year: runYear, month: runMonth }),
-      apiGet('/runs/import/strava/history').catch(loadError => {
-        console.warn('載入 Strava 匯入歷史失敗:', loadError);
-        return [];
-      }),
+      fetchRunPage({ year: runYear, month: runMonth }),
+      apiGet(`/runs/summary?year=${runYear}&month=${runMonth}`),
       apiGet('/running-goal'),
     ]);
-    if (generation !== dataLoadGeneration || token !== authToken || requestedRunMonth !== selectedRunMonth()) return;
+    if (generation !== dataLoadGeneration || token !== authToken) return;
     error.hidden = true;
     shoes = active;
     retiredShoes = retired;
     monthlyMileages = monthly;
-    monthlySpending = spending;
-    runs = runData;
-    stravaImports = importHistory;
+    spendingSummary = null;
+    spendingLoadRequestId += 1;
+    spendingLoadPending = false;
+    goalProgressCache.clear();
+    goalProgressRequestId += 1;
+    if (runRequestId === runListRequestId && requestedRunMonth === selectedRunMonth()) {
+      runs = page.rows;
+      runSummary = summary;
+      runPageOffset = 0;
+      runPageHasMore = page.hasMore;
+      runDayFilter = null;
+    }
     runningGoal = goal;
     yearlyRunsCache.clear();
     if (typeof dashboardAnalyticsCache !== 'undefined') dashboardAnalyticsCache.clear();
   } catch (loadError) {
     console.error('載入資料失敗:', loadError);
-    if (generation !== dataLoadGeneration || token !== authToken || requestedRunMonth !== selectedRunMonth()) return;
+    if (generation !== dataLoadGeneration || token !== authToken) return;
     error.hidden = false;
     return;
   }
@@ -123,4 +131,5 @@ async function loadData() {
     selectedYear = new Date().getFullYear();
   }
   render();
+  loadStravaHistory();
 }

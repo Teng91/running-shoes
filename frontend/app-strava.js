@@ -1,5 +1,27 @@
 // Strava CSV preview, mapping, and import UI.
+registerFeatureReset('strava-import', () => {
+  stravaPreviewController?.abort();
+  stravaPreviewController = null;
+  stravaPreviewRequestId += 1;
+  stravaPreview = null;
+  stravaPreviewKey = '';
+  closeStravaModal();
+});
+async function loadStravaHistory() {
+  const session = captureAuthSession();
+  try {
+    const history = await apiGet('/runs/import/strava/history');
+    if (!isCurrentAuthSession(session)) return;
+    stravaImports = history;
+    renderStravaStatus();
+    if (document.getElementById('strava-modal').classList.contains('active')) renderStravaImportHistory();
+  } catch (error) {
+    if (error.name !== 'AbortError' && isCurrentAuthSession(session)) console.warn('載入 Strava 匯入歷史失敗:', error);
+  }
+}
+
 function openStravaModal() {
+  refreshDateLimits();
   if (stravaPreviewController) stravaPreviewController.abort();
   stravaPreviewRequestId += 1;
   stravaPreview = null;

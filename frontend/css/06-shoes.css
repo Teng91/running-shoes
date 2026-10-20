@@ -1,0 +1,64 @@
+/* Shoe alerts */
+.shoe-alerts { display: grid; gap: 8px; margin: -12px 0 28px; }
+.shoe-alert { border: 1px solid var(--border); border-left: 3px solid var(--orange); background: rgba(249,115,22,0.08); border-radius: 8px; padding: 10px 12px; font-size: 13px; }
+.shoe-alert.urgent { border-left-color: var(--red); background: rgba(239,68,68,0.10); }
+.shoe-alert strong { color: var(--text); }
+.shoe-alert span { color: var(--text-dim); }
+.category-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: -12px 0 28px; }
+.category-card { border: 1px solid var(--border); background: var(--card); border-radius: 8px; padding: 10px 12px; font-size: 13px; }
+.category-card.need { border-color: var(--red); background: rgba(239,68,68,0.10); }
+.category-card strong { display: block; margin-bottom: 4px; }
+.category-card span { color: var(--text-dim); }
+@media (max-width: 700px) { .category-grid { grid-template-columns: 1fr 1fr; } }
+
+.category-checkboxes {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 6px;
+}
+.category-checkboxes label {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: var(--control-height);
+  margin: 0;
+  padding: 8px 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+}
+.category-checkboxes label:has(input:checked) {
+  border-color: var(--accent);
+  background: rgba(99,102,241,0.12);
+}
+.category-checkboxes input[type="checkbox"] {
+  flex: 0 0 14px;
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+.form-row .category-field { grid-column: 1 / -1; }
+
+/* Inline edit */
+.inline-input { width: 90px; height: var(--control-compact-height); line-height: var(--control-line-height); padding: 6px 8px; background: var(--bg); border: 1px solid var(--accent); border-radius: 4px; color: var(--text); font-size: 13px; text-align: right; font-variant-numeric: tabular-nums; }
+
+/* Color dots for brands */
+.brand-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+
+@media (max-width: 900px) {
+  .charts { grid-template-columns: 1fr; }
+}
+.charts-3col { grid-template-columns: repeat(3, 1fr); }
+@media (max-width: 1100px) {
+  .charts-3col { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 700px) {
+  .charts-3col { grid-template-columns: 1fr; }
+}

@@ -73,16 +73,28 @@ running-shoes/
 │   ├── reports.py        # AI 月度跑步報告（後端算統計 + one-shot LLM 串流 + 報告留存）
 │   ├── goals.py          # 個人月／年跑量目標與達成率計算
 │   ├── forecasting.py    # 共用退役預估與 user-scoped 批次查詢
+│   ├── shoe_metrics.py   # 共用折數、成本與壽命算術
+│   ├── read_models/      # API／月報／AI 共用的 user-scoped native statistics
 │   ├── analytics.py      # 首頁洞察與單鞋使用分析
-│   ├── strava_import.py  # Strava CSV 解析、篩選、去重與預覽統計
+│   ├── strava_import.py  # 純 Strava CSV 解析、篩選與領域錯誤
 │   ├── exporting.py      # CSV／XLSX 安全匯出列與檔名
 │   ├── llm.py            # LLM 抽象層（OpenRouter）
 │   ├── tools/            # AI 助手工具
-│   │   ├── db_tools.py   # 讀取使用者跑鞋 / 跑量資料
+│   │   ├── db_tools.py   # JSON adapters 與受信任工具 registry
+│   │   ├── tool_definitions.py # 工具 schema，與查詢／派發分離
+│   │   ├── legacy_calls.py # 舊模型文字 tool calls 相容解析
 │   │   └── search_tool.py# 上網搜尋市售鞋款（DuckDuckGo）
 │   └── run.py            # 本機開發啟動入口
 ├── frontend/
-│   ├── index.html        # Dashboard HTML 結構
+│   ├── index.html        # 由 templates/ 產生的完整 Dashboard HTML
+│   ├── assets.json       # Script 順序、CSS 來源與 PWA revision 的單一清單
+│   ├── templates/        # Shell、六個彈窗與 worker 的可編輯來源
+│   ├── css/              # 依責任拆分的樣式來源，產生單一 styles.css
+│   ├── runtime/          # 無 DOM／transport 的原生 ES module lifecycle
+│   ├── app-lifecycle.js  # Legacy handler 與原生 runtime 的過渡橋接
+│   ├── app-dates.js      # 日曆日期與跨日限制／恢復
+│   ├── app-dialogs.js    # 共用焦點、Tab、Escape 與彈窗語義
+│   ├── app-updates.js    # 版本資訊與不強制重載的 PWA 更新提示
 │   ├── app.js            # Dashboard 初始化與全域 dialog wiring
 │   ├── app-boot.js       # 啟動 loading、逾時與 stylesheet readiness
 │   ├── app-state.js      # 共用記憶體 state 與 presentation constants
@@ -98,13 +110,15 @@ running-shoes/
 │   ├── app-shoe-charts.js # 跑鞋生命週期、成本、時間軸與分配
 │   ├── app-monthly-charts.js # 月份／年度選擇與跑量圖表
 │   ├── app-spending.js   # 支出摘要、圖表與表格
-│   ├── app-agent.js      # AI 助手對話、模型清單與安全 Markdown 顯示
+│   ├── app-agent.js      # AI 助手對話與串流呈現
+│   ├── app-models.js     # AI／月報共用模型選單
+│   ├── app-markdown.js   # 不可信 Markdown 的安全呈現
 │   ├── app-reports.js    # 月報讀取、產生與串流顯示
 │   ├── app-runs.js       # 跑步 CRUD、分頁與鞋款選擇
 │   ├── app-strava.js     # Strava 預覽、配對與匯入 UI
 │   ├── app-run-insights.js # 跑步月曆、洞察與單鞋分析 UI
 │   ├── app-shoes.js      # 跑鞋編輯與 modal 互動
-│   ├── styles.css        # Dashboard 亮／暗色與響應式版面
+│   ├── styles.css        # 自動產生的單一樣式資產，請修改 css/ 來源
 │   ├── manifest.webmanifest # PWA 名稱、顏色與圖示設定
 │   ├── service-worker.js # App shell 快取與離線 fallback
 │   ├── offline.html      # 無快取頁面可用時的離線提示
@@ -117,6 +131,7 @@ running-shoes/
 │   ├── specs/            # Feature spec 範本與 acceptance criteria
 │   └── adr/              # 重要架構決策與取捨紀錄
 ├── scripts/
+│   ├── build_frontend.py # 產生／驗證 HTML、CSS、PWA 清單，無 Node build 依賴
 │   ├── claude_stop_hook.py # Claude Code 本機驗證與失敗回饋
 │   ├── claude_stop_hook_launcher.cjs # 跨 Windows／Unix 尋找專案 Python
 │   ├── check_architecture.py # 阻止反向依賴與重複 API route
@@ -128,7 +143,8 @@ running-shoes/
 │   └── task.py           # 跨平台 setup、測試、eval 與完整驗證入口
 ├── unit_tests/           # Pytest、Agent eval、前端邏輯與版面回歸測試
 │   ├── agent_eval_cases.json # Agent 工具選擇與安全行為案例
-│   ├── frontend_regressions.cjs # Node.js 前端邏輯回歸測試
+│   ├── frontend_regressions.cjs # Node 回歸測試單一入口
+│   ├── frontend/         # 依責任拆分的 Node suite 與共享 helpers
 │   ├── frontend_layout.cjs # Playwright 跨瀏覽器版面測試
 │   └── frontend_e2e.cjs  # 真實 FastAPI + 暫存 SQLite 的瀏覽器 CRUD
 ├── AGENTS.md             # Coding Agent 專案規則與完成條件
@@ -263,7 +279,8 @@ LLM_MAX_OUTPUT_TOKENS=4096
 - 總里程、跑步次數與跑步天數
 - 平均每個跑步日的里程
 - 當月使用里程最高的主力鞋
-- 1 日到月底的互動月曆；空白日期可帶入新增表單，既有活動可直接開啟編輯
+- 1 日到月底的完整互動月曆；空白日期可帶入新增表單，鞋款活動可篩選當日明細再編輯
+- 跑步明細每頁 200 筆，月曆、總里程、跑步次數與鞋款分布不受目前明細頁影響
 - 依鞋款匯總的里程分布圓環圖，以及各鞋實際里程與使用比例明細
 - 每筆紀錄的來源標籤（手動或 Strava）
 - 當月截至今天與上月同期、前 7 天的趨勢比較，以及月目標與鞋款壽命提醒；已結束月份維持整月比較，未來月份不會混入前一月資料
@@ -275,6 +292,9 @@ LLM_MAX_OUTPUT_TOKENS=4096
 | API | 用途 |
 | --- | --- |
 | `GET /api/runs` | 取得目前帳號的跑步紀錄；可用 `year`、`month`、`limit`（最多 500）與 `offset` 篩選／分頁，不帶參數時維持完整列表相容性 |
+| `GET /api/runs/summary` | 指定 `year`、`month` 的完整月曆與鞋款／日誌彙總，不受明細分頁影響 |
+| `GET /api/running-goal/progress` | 指定 `year`、`month` 的日誌目標進度，與首頁／月報共用後端規則 |
+| `GET /api/spending/summary` | 後端計算的總支出、折數、平均月支出與月份明細 |
 | `POST /api/runs` | 新增日期、公里數與鞋款 |
 | `PUT /api/runs/{run_id}` | 編輯指定跑步紀錄 |
 | `DELETE /api/runs/{run_id}` | 刪除指定跑步紀錄 |
@@ -359,6 +379,30 @@ history 筆數與整段對話總字數，並套用每帳號、每 IP 與全站�
 
 ## 測試
 
+### 前端來源與產物
+
+編輯 `frontend/templates/`、`frontend/css/` 或 `frontend/assets.json` 後執行：
+
+```bash
+python3 scripts/build_frontend.py --write
+python3 scripts/build_frontend.py --check
+```
+
+產物是 `index.html`、`styles.css` 與 `service-worker.js`，一併納入 Git；不是手動維護的第二份來源。
+`verify` 與 `docs-check` 都會檢查來源／產物一致。CSS 保留原始 cascade 順序，瀏覽器仍只下載單一樣式檔。
+原生 `.mjs` runtime 也包含在 PWA 原子 shell，並檢查 JavaScript MIME。
+
+### 統計與操作規則（SPEC-017）
+
+- 月跑量空白或無效不會送出；清零必須明確輸入 `0`。歷史／手動調整與日誌里程分開保留。
+- 月跑量頁、首頁、月報目標皆只計逐筆日誌；鞋款成本／壽命指標由 `shoe_metrics.py` 統一計算。
+- 刪鞋不移除日誌或年度堆疊里程；圖表保留「歷史鞋款／已刪除」群組。
+- AI 遇到同名鞋回傳含購買日期及狀態的候選，必須詢問後以 ID 選定；批次使用分析不逐鞋查詢。
+- 支出平均依後端日曆月份計算，不受瀏覽器時區影響；按需載入，失敗可在該區重試，不阻擋首頁。
+- PWA 回到前景或跨日時更新日期上限，不改目前分頁／月份／草稿。登入換帳號則清除前帳號狀態與草稿。
+- 彈窗支援 Tab、Shift+Tab、Escape 及返回原按鈕；關閉不等於撤回已送出的交易。
+- 畫面顯示版本；新版完整安裝後提示更新，需使用者確認才重新載入，避免自動丟失尚未儲存內容。
+
 專案提供跨平台工程 harness，會自動選用 Windows `venv/Scripts/python.exe`、
 Unix `venv/bin/python` 或目前的 Python。Windows、macOS、Linux、Coding Agent 與 CI
 都使用相同的 `scripts/task.py`，不依賴特定 shell。以下使用 Unix 的 `python3`；Windows
@@ -432,7 +476,7 @@ Playwright／Chromium／WebKit 齊全時，也會執行版面測試。
 避免每次停止都重跑。Hook 不會呼叫其他模型、外部 API，或傳送提示、diff、原始碼與測試輸出。
 GitHub Actions 仍會在 push／pull request 執行 `verify`，並在獨立工作中安裝 Chromium／WebKit、跑完完整版面矩陣、真實 CRUD E2E 與 PWA 升級／離線測試；Dependabot 每週檢查 Python 與 GitHub Actions 更新。
 
-本次驗證基線為 Python **382 passed**、前端回歸測試 **58 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
+本次驗證基線為 Python **396 passed**、前端回歸測試 **71 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
 版面檢查涵蓋 WebKit／Chromium、亮／暗模式與 10 組直橫向尺寸，共 40 組設定，檢查六個功能分頁、三個認證表單、圖表、全部彈窗、行內編輯、停用／錯誤及空資料狀態。
 
 主要表單、工具列與彈窗操作統一為 44px 控制項；桌面表格內的緊湊操作為 36px，手機至少 44px。

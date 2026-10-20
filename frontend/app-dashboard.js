@@ -1,14 +1,12 @@
 // Dashboard calculations, cards, alerts, and shoe tables.
 function calc(shoe) {
-  const { price, orig_price, mileage, expected_mileage } = shoe;
-  const discount = orig_price > 0 ? price / orig_price : 0;
-  const costPerKm = mileage > 0 ? price / mileage : null;
-  const expectedCost = expected_mileage > 0 ? price / expected_mileage : 0;
-  const lifeProgress = expected_mileage > 0 ? mileage / expected_mileage : 0;
-  const remainingMileage = Math.max(0, expected_mileage - mileage);
-  const remainingMonths = shoe.forecast_monthly_km > 0 ? remainingMileage / shoe.forecast_monthly_km : null;
+  const discount = (shoe.discount_percent || 0) / 100;
+  const costPerKm = shoe.cost_per_km ?? null;
+  const expectedCost = shoe.expected_cost_per_km ?? 0;
+  const lifeProgress = (shoe.usage_percent || 0) / 100;
+  const remainingMileage = shoe.remaining_mileage_km || 0;
   const retireDate = shoe.forecast_retirement_date ? new Date(shoe.forecast_retirement_date + 'T00:00:00') : null;
-  return { discount, costPerKm, expectedCost, lifeProgress, remainingMileage, remainingMonths, retireDate };
+  return { discount, costPerKm, expectedCost, lifeProgress, remainingMileage, retireDate };
 }
 
 // ====== Formatting ======

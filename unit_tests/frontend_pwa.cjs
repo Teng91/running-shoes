@@ -11,7 +11,7 @@ const workerSource = fs.readFileSync(path.join(frontend, 'service-worker.js'), '
 const legacySource = fs.readFileSync(path.join(__dirname, 'fixtures/service-worker-v3.2.2.js'), 'utf8');
 const assetVersion = workerSource.match(/APP_ASSET_VERSION = '([^']+)'/)[1];
 const cacheName = workerSource.match(/const CACHE_NAME = '([^']+)'/)[1];
-const mime = { '.js': 'text/javascript', '.css': 'text/css', '.html': 'text/html',
+const mime = { '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'text/css', '.html': 'text/html',
   '.svg': 'image/svg+xml', '.png': 'image/png', '.webmanifest': 'application/manifest+json' };
 const debug = (...args) => { if (process.env.PWA_DEBUG) console.log(...args); };
 
@@ -64,7 +64,8 @@ async function run() {
       response.setHeader('Content-Type', 'application/json');
       response.end('{"synthetic_private_data":true}'); return;
     }
-    if (url.pathname === '/app-goals.js' && url.searchParams.get('v') === release && ['http', 'mime', 'disconnect'].includes(failure)) {
+    if ((url.pathname === '/app-goals.js' && ['http', 'mime', 'disconnect'].includes(failure) ||
+         url.pathname === '/runtime/feature-lifecycle.mjs' && failure === 'module-mime') && url.searchParams.get('v') === release) {
       failedAssets++;
       failedKinds.add(failure);
       if (failure === 'disconnect') {
@@ -152,7 +153,7 @@ async function run() {
         assert.equal(await page.evaluate(() => fetch('/api/test').then(() => false, () => true)), true, 'offline API must fail instead of using cache');
         await setOffline(false);
 
-        for (const [revision, problem] of [['fixture-b', 'http'], ['fixture-c', 'mime'], ['fixture-e', 'disconnect'], ['fixture-f', 'html-version']]) {
+        for (const [revision, problem] of [['fixture-b', 'http'], ['fixture-c', 'mime'], ['fixture-e', 'disconnect'], ['fixture-f', 'html-version'], ['fixture-g', 'module-mime']]) {
           debug(`PWA ${engine.name()}: reject ${problem} upgrade`);
           release = revision; failure = problem;
           assert.equal(await updateWorker(page), 'redundant', 'incomplete install must not activate');
@@ -166,12 +167,14 @@ async function run() {
           assert.ok(await page.evaluate(() => caches.has('unrelated-cache')));
           assert.equal(await page.evaluate(name => caches.has(name), 'running-shoes-shell-' + revision), false);
         }
-        assert.ok(failedAssets >= 4, 'fixture actually interrupted candidate installs');
-        assert.deepEqual([...failedKinds].sort(), ['disconnect', 'html-version', 'http', 'mime']);
+        assert.ok(failedAssets >= 5, 'fixture actually interrupted candidate installs');
+        assert.deepEqual([...failedKinds].sort(), ['disconnect', 'html-version', 'http', 'mime', 'module-mime']);
 
         release = 'fixture-d'; failure = null;
         debug(`PWA ${engine.name()}: reconnect and activate complete upgrade`);
         assert.equal(await updateWorker(page), 'activated');
+        await page.locator('#app-update-notice').waitFor({ state: 'visible' });
+        assert.equal(await page.evaluate(() => window.__pwaRelease), 'fixture-a-safe', 'upgrade does not reload a live draft');
         await page.reload({ waitUntil: 'networkidle' });
         await assertShell(page, 'fixture-d');
         const state = await page.evaluate(async () => {

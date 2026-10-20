@@ -1,24 +1,43 @@
 // Run dashboard cards, calendar, charts, and per-shoe analytics.
+registerFeatureReset('run-insights', () => {
+  dashboardAnalyticsCache.clear();
+  dashboardAnalyticsRequest += 1;
+  document.getElementById('dashboard-insights').replaceChildren();
+  closeShoeAnalytics();
+});
 function renderRunLog() {
   const month = selectedRunMonth();
   const filtered = monthRuns();
-  const total = filtered.reduce((sum, run) => sum + run.km, 0);
-  const days = new Set(filtered.map(run => run.date)).size;
+  const summary = runSummary && `${runSummary.year}-${String(runSummary.month).padStart(2, '0')}` === month ? runSummary : null;
+  const total = summary ? summary.total_km : filtered.reduce((sum, run) => sum + run.km, 0);
+  const days = summary ? summary.run_days : new Set(filtered.map(run => run.date)).size;
   const shoeStats = new Map();
   filtered.forEach(run => {
     const current = shoeStats.get(run.shoe_id) || { km: 0, count: 0 };
     shoeStats.set(run.shoe_id, { km: current.km + run.km, count: current.count + 1 });
   });
+  if (summary) {
+    shoeStats.clear();
+    summary.shoe_usage.forEach(row => shoeStats.set(row.shoe_id, { km: row.km, count: row.count }));
+  }
   const favoriteEntry = [...shoeStats.entries()].sort((a, b) => b[1].km - a[1].km)[0];
   const favorite = favoriteEntry ? runShoe(favoriteEntry[0]) : null;
   const monthLabel = `${parseInt(month.slice(5), 10)} 月`;
   document.getElementById('run-stats').innerHTML = [
-    { label: '本月總里程', value: `${total.toFixed(2)} km`, sub: `${filtered.length} 次跑步` },
+    { label: '本月總里程', value: `${total.toFixed(2)} km`, sub: `${summary ? summary.run_count : filtered.length} 次跑步` },
     { label: '跑步天數', value: `${days} 天`, sub: days ? `平均每天 ${(total / days).toFixed(2)} km` : '還沒有紀錄' },
     { label: '本月主力鞋', value: favorite ? esc(favorite.model) : '—', sub: favoriteEntry ? `${favoriteEntry[1].km.toFixed(2)} km` : '還沒有紀錄' },
   ].map(card => `<div class="card"><div class="card-label">${card.label}</div><div class="card-value">${card.value}</div><div class="card-sub">${card.sub}</div></div>`).join('');
   renderStravaStatus();
   document.getElementById('run-table-title').textContent = `${monthLabel}跑步紀錄`;
+  const paging = document.getElementById('run-paging');
+  if (paging) {
+    paging.hidden = !runPageOffset && !runPageHasMore && !runDayFilter;
+    document.getElementById('run-prev').disabled = runPageOffset === 0;
+    document.getElementById('run-next').disabled = !runPageHasMore;
+    document.getElementById('run-page-label').textContent = `${runDayFilter ? `${runDayFilter} 日 · ` : ''}第 ${Math.floor(runPageOffset / RUN_PAGE_SIZE) + 1} 頁`;
+    document.getElementById('run-clear-day').hidden = !runDayFilter;
+  }
   document.getElementById('run-table').innerHTML = filtered.length ? filtered.map(run => {
     const shoe = runShoe(run.shoe_id);
     const color = shoe ? brandColor(shoe.brand, 0) : '#64748b';
@@ -26,7 +45,7 @@ function renderRunLog() {
     const source = run.strava_id ? '<span class="run-source strava">Strava</span>' : '<span class="run-source">手動</span>';
     return `<tr><td>${esc(run.date.replace(/-/g, '/'))}</td><td class="numeric"><strong>${run.km.toFixed(2)} km</strong></td><td><span class="run-shoe-label"><span class="brand-dot" style="background:${color}"></span>${shoeName}</span></td><td>${source}</td><td><button class="btn btn-sm btn-edit" onclick="openRunModal(${run.id})">編輯</button></td></tr>`;
   }).join('') : '<tr><td colspan="5" class="empty-state">這個月還沒有跑步紀錄。點月曆日期或從右上角記下第一跑吧！</td></tr>';
-  renderRunCalendar(filtered, month);
+  renderRunCalendar(summary ? summary.calendar : filtered, month);
   renderRunShoeChart(shoeStats);
   loadDashboardAnalytics(month);
 }
@@ -134,6 +153,10 @@ function renderRunCalendar(filtered, month) {
     const total = dayRuns.reduce((sum, run) => sum + run.km, 0);
     const intensity = total ? Math.min(.18 + total / 25, .68) : 0;
     const items = dayRuns.map(run => {
+      if (run.shoes) return run.shoes.map(group => {
+        const shoe = runShoe(group.shoe_id);
+        return `<button class="calendar-run" onclick="event.stopPropagation();filterRunDay('${date}')">${esc(shoe?.model || '歷史鞋款')} · ${group.count} 次</button>`;
+      }).join('');
       const shoe = runShoe(run.shoe_id);
       return `<button class="calendar-run" onclick="event.stopPropagation();openRunModal(${run.id})">${esc(shoe?.model || '跑鞋')}</button>`;
     }).join('');

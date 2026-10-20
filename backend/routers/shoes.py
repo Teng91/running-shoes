@@ -11,6 +11,7 @@ from backend.auth import get_current_user
 from backend.database import get_db
 from backend.forecasting import forecasts_for_shoes
 from backend.settings import settings
+from backend.shoe_metrics import shoe_metrics
 
 router = APIRouter(tags=["shoes"])
 MAX_SHOES_PER_USER = settings.max_shoes_per_user
@@ -19,7 +20,8 @@ MAX_SHOES_PER_USER = settings.max_shoes_per_user
 def _shoe_outputs(db: Session, user_id: int, shoes: list[models.Shoe]) -> list[schemas.ShoeOut]:
     forecasts = forecasts_for_shoes(db, user_id, shoes)
     return [schemas.ShoeOut.model_validate(shoe).model_copy(update={
-        key: value for key, value in forecasts[shoe.id].items() if key.startswith("forecast_")
+        **shoe_metrics(shoe),
+        **{key: value for key, value in forecasts[shoe.id].items() if key.startswith("forecast_")},
     }) for shoe in shoes]
 
 

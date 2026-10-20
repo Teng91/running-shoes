@@ -107,6 +107,7 @@ def verification_commands() -> tuple[Command, ...]:
     """Return the canonical cross-platform verification command sequence."""
     python = project_python()
     return (
+        Command("Generated frontend assets", (python, "scripts/build_frontend.py", "--check")),
         Command("Ruff", (python, "-m", "ruff", "check", "backend", "scripts", "unit_tests")),
         Command("mypy", (python, "-m", "mypy", "backend")),
         Command(
@@ -251,6 +252,7 @@ def run_task(task: str) -> None:
     elif task == "security-check":
         run_checked(Command("Secret scan", (python, "scripts/check_secrets.py")))
     elif task == "docs-check":
+        run_checked(Command("Generated frontend assets", (python, "scripts/build_frontend.py", "--check")))
         run_checked(
             Command(
                 "README consistency",
