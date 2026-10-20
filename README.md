@@ -123,6 +123,7 @@ running-shoes/
 │   ├── check_secrets.py  # 掃描 tracked files 的明確 credential 特徵
 │   ├── check_docs.py     # 核對 README 測試數、工具數、版面矩陣與 harness 路徑
 │   ├── database_backup.py # SQLite backup／checksum／retention／restore
+│   ├── offsite_backup.py # Fly 外部下載、private staging 與隔離還原演練
 │   ├── smoke_test.py     # 部署後 health 與 OpenAPI smoke check
 │   └── task.py           # 跨平台 setup、測試、eval 與完整驗證入口
 ├── unit_tests/           # Pytest、Agent eval、前端邏輯與版面回歸測試
@@ -370,7 +371,7 @@ python3 scripts/task.py setup
 # 完整檢查：Ruff、mypy、架構邊界、依賴漏洞、pytest、前端 Node 回歸測試
 python3 scripts/task.py verify
 
-# 一次跑完 verify、frontend-layout 與 frontend-e2e（缺 Playwright 時警告並跳過瀏覽器檢查）
+# 一次跑完 verify、frontend-layout、frontend-e2e 與 frontend-pwa（缺 Playwright 時警告並跳過瀏覽器檢查）
 python3 scripts/task.py verify-all
 
 # 日常後端檢查，或只執行 Agent 行為 eval
@@ -413,6 +414,9 @@ python3 scripts/task.py frontend-layout
 
 # Chromium 真實 CRUD（暫存 SQLite）＋ Chromium/WebKit mock 帳號切換與串流競態
 python3 scripts/task.py frontend-e2e
+
+# 真正 Service Worker：舊版升級、資產 HTTP/MIME 失敗、離線與恢復
+python3 scripts/task.py frontend-pwa
 ```
 
 可設定 `LAYOUT_SCREENSHOT_DIR` 保存手機版截圖供人工檢查；Windows 若使用已安裝的 Edge，可設定 `PLAYWRIGHT_CHROMIUM_CHANNEL=msedge`。WebKit 模擬檢查不等同於 iPhone 實機驗證。
@@ -426,9 +430,9 @@ Playwright／Chromium／WebKit 齊全時，也會執行版面測試。
 
 驗證失敗會把指令輸出送回 Claude 繼續修正。同一個 session 的同一份 diff 會重用本機快取，
 避免每次停止都重跑。Hook 不會呼叫其他模型、外部 API，或傳送提示、diff、原始碼與測試輸出。
-GitHub Actions 仍會在 push／pull request 執行 `verify`，並在獨立工作中安裝 Chromium／WebKit、跑完完整版面矩陣與真實 CRUD E2E；Dependabot 每週檢查 Python 與 GitHub Actions 更新。
+GitHub Actions 仍會在 push／pull request 執行 `verify`，並在獨立工作中安裝 Chromium／WebKit、跑完完整版面矩陣、真實 CRUD E2E 與 PWA 升級／離線測試；Dependabot 每週檢查 Python 與 GitHub Actions 更新。
 
-本次驗證基線為 Python **366 passed**、前端回歸測試 **53 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
+本次驗證基線為 Python **382 passed**、前端回歸測試 **53 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
 版面檢查涵蓋 WebKit／Chromium、亮／暗模式與 7 組直橫向尺寸，共 28 組設定，檢查五個分頁、表單、圖表、彈窗及空資料狀態。
 
 `docs-check` 會從 pytest collection、前端測試檔、Agent tool registry、Playwright 測試矩陣與實際檔案系統核對上述數字及 harness 路徑。新增測試、工具或版面設定卻忘記同步 README 時，`verify` 和 GitHub Actions 會直接失敗。
@@ -584,6 +588,39 @@ venv/bin/python scripts/database_backup.py restore \
 Fly volume 裡的 `/data/backups` 仍和正式資料位於同一個基礎設施，不能當成唯一備份；重要版本
 應使用 `fly ssh sftp get` 下載到另一個裝置或受控儲存空間，下載後再執行 `verify`。未經停寫與
 還原演練，不要直接替換運行中的 `/data/shoes.db`。
+
+### Fly 外部備份與隔離還原演練
+
+已有 Fly CLI 登入且 Machine 啟動時，可用同一支跨平台 Python 工具建立一致快照、下載 DB／checksum、
+驗證並執行隔離還原演練；不覆蓋本機開發 DB，也不會對正式站進行還原：
+
+```bash
+python3 scripts/offsite_backup.py --app running-shoes \
+  --output-dir /home/joy-teng/.local/share/running-shoes/backups
+
+# 對既有快照重新演練，目的地只能是工具建立的 OS 暫存目錄
+python3 scripts/database_backup.py drill --backup /absolute/path/to/snapshot.db
+```
+
+Windows 使用 `py -3` 與自己的專用儲存路徑即可。多台 Fly Machine 時可加 `--machine <id>`；
+Machine 若已停止，先用 `fly machine start <id> -a running-shoes` 啟動。工具只使用既有的 Fly CLI
+認證，不要求把 token 加入命令、程式或備份 manifest。
+
+完成的備份目錄包含 `.db`、`.db.sha256` 與 `manifest.json`。只有 checksum、完整 SQLite integrity、
+資料表筆數／內容摘要、schema（含 index/view/trigger）與 schema version 都通過隔離還原比較，才發布完成目錄；
+下載或演練失敗只清理本次 private staging，既有本地備份不刪除。遠端 `/data/backups/offsite` 保留最近 14 份 managed snapshots。
+
+完整 SQLite **包含所有帳號與密碼 hash**，不同於帳號匯出 JSON。不得提交 Git 或上傳公開 artifacts；
+工具拒絕 Git 目錄，備份目錄 0700、檔案 0600，Windows 另需管理 ACL。建議啟用磁碟加密。
+本機副本可應付 Fly Volume 故障，但不能同時抵抗本機遺失；未另外設定排程／第二儲存位置前，不宣稱有自動或多地備援。
+
+### PWA 升級與離線邊界
+
+每次發布須一併更新 HTML 的 `app-asset-version`、資產 query revision 與 SW cache 名稱。
+安裝先檢查所有資源及 HTML revision，成功後才啟用；導覽不將新 HTML 塞入舊 cache。
+新版資產下載失敗時保留完整舊 shell，恢復網路後重新更新；清理只限本 app 的 cache，不快取 API。
+首次安裝必須連網；離線 app shell 不代表能離線查詢或寫入跑步資料。首次從舊 worker 遷移時亦應保持連線，
+讓新 worker 完整安裝後再重新開啟。`frontend-pwa` 使用本機 fixture、不連正式站，也不等同 iPhone 實機驗證。
 
 ### 同步雲端資料到本地
 
