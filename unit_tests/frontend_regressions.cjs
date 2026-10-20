@@ -397,6 +397,55 @@ test('PWA metadata, local dependencies and service worker registration are prese
   assert.match(unversionedHtml, /src="\/app-boot\.js"[\s\S]*src="\/app-state\.js"[\s\S]*src="\/app-api\.js"[\s\S]*src="\/app-auth\.js"[\s\S]*src="\/app-core\.js"[\s\S]*src="\/app-agent\.js"[\s\S]*src="\/app-reports\.js"[\s\S]*src="\/app-runs\.js"[\s\S]*src="\/app-strava\.js"[\s\S]*src="\/app-run-insights\.js"[\s\S]*src="\/app-shoes\.js"[\s\S]*src="\/app\.js"/);
 });
 
+test('every startup chooses the run-log home before authentication, ignoring legacy tabs', async () => {
+  for (const mode of ['online', 'offline', 'logged-out']) {
+    let active = 'agent', loads = 0, loginShown = false;
+    const elements = new Proxy({}, { get: (target, id) => target[id] ||= { value: '' } });
+    const context = vm.createContext({
+      document: { getElementById: id => elements[id] }, authToken: mode === 'logged-out' ? null : 'synthetic',
+      resetAppLayout() { active = 'runs'; }, populateAddSelects() {},
+      localDateISO: () => '2026-10-20', previousMonthValue: () => '2026-09',
+      captureAuthSession: () => ({}), isCurrentAuthSession: () => true,
+      API_BASE: '/api', authHeaders: () => ({}),
+      authenticatedFetch: async () => {
+        assert.equal(active, 'runs', 'home is selected before auth completes');
+        if (mode === 'offline') throw new TypeError('offline');
+        return { ok: true };
+      },
+      localStorage: { getItem() { assert.fail('startup must not read a saved tab'); } },
+      showAppView() { assert.equal(active, 'runs'); }, loadAgentModels() {},
+      loadData: async () => { loads++; }, hideAppBoot() {},
+      showLoginView() { loginShown = true; }, console: { warn() {} },
+    });
+    vm.runInContext(extract('init'), context);
+    await context.init();
+    assert.equal(active, 'runs');
+    assert.equal(loads, mode === 'logged-out' ? 0 : 1);
+    assert.equal(loginShown, mode === 'logged-out');
+  }
+  assert.doesNotMatch(extract('switchTab'), /localStorage/);
+  assert.match(extract('applyTheme'), /localStorage\.setItem\('theme', theme\)/);
+});
+
+test('persisted page restoration selects home without resetting ordinary visibility changes', () => {
+  const bootstrap = fs.readFileSync('frontend/app.js', 'utf8');
+  const listener = bootstrap.slice(bootstrap.indexOf('// Back/forward cache'), bootstrap.indexOf("if ('serviceWorker'"));
+  let onShow, resets = 0, renders = 0;
+  const context = vm.createContext({
+    window: { addEventListener(name, callback) { assert.equal(name, 'pageshow'); onShow = callback; } },
+    authToken: 'synthetic', resetAppLayout() { resets++; }, renderActivePanel() { renders++; },
+  });
+  vm.runInContext(listener, context);
+  onShow({ persisted: false });
+  assert.equal(resets, 0);
+  onShow({ persisted: true });
+  assert.equal(resets, 1); assert.equal(renders, 1);
+  context.authToken = null;
+  onShow({ persisted: true });
+  assert.equal(resets, 2); assert.equal(renders, 1);
+  assert.doesNotMatch(bootstrap, /visibilitychange/);
+});
+
 test('startup and login show progress until the application is ready', () => {
   assert.match(htmlSource, /id="app-boot"[^>]+role="status"[^>]+aria-live="polite"/);
   assert.match(htmlSource, /id="app-boot-message">正在準備應用程式/);

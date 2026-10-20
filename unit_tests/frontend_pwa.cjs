@@ -41,6 +41,8 @@ async function assertShell(page, release) {
   await page.locator('#app-boot').waitFor({ state: 'hidden' });
   assert.equal(await page.evaluate(() => window.__pwaRelease), release);
   assert.equal(await page.locator('meta[name="app-asset-version"]').getAttribute('content'), release);
+  assert.equal(await page.locator('.tab-panel.active').getAttribute('data-panel'), 'runs', 'cached document must start at home');
+  assert.equal(await page.locator('#mobile-page-label').textContent(), '跑步日誌');
 }
 
 async function run() {
@@ -141,6 +143,10 @@ async function run() {
           await fetch('/api/test');
         });
         await setOffline(true);
+        await page.evaluate(() => {
+          localStorage.setItem('activeTab', 'agent');
+          switchTab('agent');
+        });
         await page.reload({ waitUntil: 'networkidle' });
         await assertShell(page, 'fixture-a-safe');
         assert.equal(await page.evaluate(() => fetch('/api/test').then(() => false, () => true)), true, 'offline API must fail instead of using cache');
