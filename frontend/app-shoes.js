@@ -104,8 +104,9 @@ class ShoeModal {
 
   _updateUI({ title, showDelete, showMove, moveText, monthly, monthlyVisible }) {
     this.titleEl.textContent = title;
-    this.btnDelete.style.display = showDelete ? 'inline-block' : 'none';
-    this.btnMove.style.display = showMove ? 'inline-block' : 'none';
+    this.btnDelete.style.display = showDelete ? '' : 'none';
+    this.btnMove.style.display = showMove ? '' : 'none';
+    document.getElementById('shoe-secondary-actions').hidden = !showDelete && !showMove;
     this.btnMove.textContent = moveText || '';
     this.monthlyRow.style.display = monthlyVisible ? '' : 'none';
     document.getElementById('f-monthly').value = monthly;
