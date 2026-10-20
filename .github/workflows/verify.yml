@@ -49,3 +49,5 @@ jobs:
         run: python scripts/task.py frontend-layout
       - name: Run browser CRUD flow
         run: python scripts/task.py frontend-e2e
+      - name: Run PWA upgrade and offline flow
+        run: python scripts/task.py frontend-pwa

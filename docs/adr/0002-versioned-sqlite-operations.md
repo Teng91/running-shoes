@@ -16,10 +16,12 @@
 - restore 必須停止目標的 server／worker 連線、明確確認，並先保存 pre-restore snapshot。
 - SPEC-010 補強：restore 先讓 SQLite 處理殘留 WAL、退出 WAL 模式並持有獨占鎖；在同一連線以 backup API 還原，不直接替換主檔或手動刪除 WAL／SHM。目標 busy 時拒絕，完成後驗證目標。
 - volume 內 retention 只處理快速回滾，重要備份仍需下載到不同故障域。
+- SPEC-014 提供 operator CLI 下載 DB／checksum 到 Git 外的 private staging；驗證與隨機暫存還原演練通過才發布完整備份與 manifest。
+- 演練比較完整 schema（含 index/view/trigger）、ordered row digest、各表筆數與 schema version；不對正式 DB 執行 restore，也不把資料列或憑證寫進 manifest。
 
 ## Consequences
 
 - 啟動與部署失敗可以由 health check 立即識別。
 - 備份具可驗證結果，還原不會直接抹掉當前資料庫。
 - 現有 legacy migration 仍保留 idempotent 行為；未來 schema 變更必須提高版本並加入 regression test。
-- 本專案不內建外部物件儲存憑證；off-volume 備份仍由維運者執行。
+- 本專案不內建外部物件儲存憑證；off-volume 備份使用既有 Fly CLI，由維運者執行。未指定排程／目的地前不宣稱有自動備援。

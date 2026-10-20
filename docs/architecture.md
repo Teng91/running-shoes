@@ -241,8 +241,8 @@ sequenceDiagram
 ```mermaid
 flowchart TB
     Browser[Browser / installed PWA]
-    SW[Service Worker<br/>cache-first static assets<br/>network-first navigation refresh]
-    Shell[(App shell cache v19<br/>asset revision 3.2.2)]
+    SW[Service Worker<br/>immutable versioned shell<br/>complete install before activation]
+    Shell[(App shell cache v20<br/>asset revision 3.2.3)]
     FlyProxy[Fly Proxy / HTTPS]
     Machine[Fly Machine<br/>FastAPI container]
     Volume[(Fly Volume<br/>SQLite)]
@@ -250,7 +250,7 @@ flowchart TB
 
     Browser --> SW
     SW --> Shell
-    SW -->|navigation + uncached assets| FlyProxy
+    SW -->|install / uncached assets / cache-miss navigation| FlyProxy
     Browser -->|/api JSON / SSE| FlyProxy
     FlyProxy --> Machine
     Machine --> Volume
@@ -258,8 +258,29 @@ flowchart TB
 ```
 
 Service Worker 不攔截 `/api/`，因此資料與 SSE 永遠走網路；靜態 module、CSS、vendor assets 與離線頁面
-屬於 app shell。Navigation 可先回傳 cache 讓 loading 畫面立即出現，再背景刷新首頁；Fly Machine 喚醒
-期間使用者不會只看到空白頁。SQLite 永遠位於掛載 volume，不包含在 app shell 或 container image。
+屬於 app shell。[SPEC-014](specs/014-offsite-backup-and-pwa-upgrades.md) 將 navigation 改為本版 immutable HTML，
+不再用新版 network HTML 覆寫舊 cache。install 先下載、讀完 response body（避免有限連線池被未讀 body 佔住）、
+檢查 MIME 與 HTML revision，再保存完整 shell；成功才 skipWaiting，activate 只清理本 app 前綴的舊 cache。
+新版安裝失敗保留既有 shell。首次安裝與 v3.2.2 舊 worker 遷移需要連網；全新離線裝置無法憑空載入 app。
+SQLite 永遠位於掛載 volume，不包含在 app shell 或 container image。
+
+### 7.1 異地備份與 restore drill
+
+```mermaid
+flowchart LR
+    Live[(Fly SQLite)] -->|backup API| Snapshot[(Fly managed snapshot + checksum)]
+    Snapshot -->|SSH / SFTP| Staging[Operator private staging]
+    Staging --> Verify[checksum + SQLite verification]
+    Verify --> Drill[OS temporary restore<br/>integrity + schema + ordered row digest]
+    Drill -->|passed only / atomic rename| Offsite[(Private off-volume backup + manifest)]
+```
+
+`scripts/offsite_backup.py` 是 operator-only adapter，以參數陣列使用既有 Fly CLI 認證，不新增 SDK、token 設定或 HTTP endpoint。
+下載失敗不發布；演練只能還原至工具建立的隨機 OS 暫存目錄，沒有 production destination 參數。
+`database_backup.logical_summary` 比較所有資料表的 ordered row digest、schema objects、筆數與 schema version，
+manifest 只保存摘要，不包含資料列／密碼 hash。完成的 DB 副本仍含完整帳號資料，必須存於 Git 外 private directory。
+不自動刪除本地備份、不自動還原正式 DB；排程與其他異地供應商需另行設定。這台電腦與 Fly 分屬不同故障域，
+但不是多份獨立雲端備援，也不是新的一份同步開發 DB。
 
 ## 8. 不可破壞的品質屬性
 

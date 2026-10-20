@@ -3,6 +3,7 @@
 import argparse
 import hashlib
 import sqlite3
+import tempfile
 from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
@@ -137,6 +138,55 @@ def restore_backup(backup: Path, destination: Path, *, confirmation: str) -> Pat
     return safety_backup
 
 
+def logical_summary(path: Path) -> dict[str, object]:
+    """Hash schema and ordered row values without exposing any records."""
+    digest = hashlib.sha256()
+    counts: dict[str, int] = {}
+    with closing(sqlite3.connect(f"file:{path.resolve()}?mode=ro", uri=True)) as connection:
+        for definition in connection.execute(
+            "SELECT type,name,tbl_name,sql FROM sqlite_master ORDER BY type,name"
+        ):
+            digest.update(repr(tuple(definition)).encode())
+        tables = connection.execute(
+            "SELECT name, sql FROM sqlite_master WHERE type='table' ORDER BY name"
+        ).fetchall()
+        for name, schema in tables:
+            digest.update(repr((name, schema)).encode())
+            quoted = '"' + name.replace('"', '""') + '"'
+            columns = connection.execute(f"PRAGMA table_info({quoted})").fetchall()
+            order = ','.join(str(index + 1) for index in range(len(columns)))
+            count = 0
+            for row in connection.execute(f"SELECT * FROM {quoted} ORDER BY {order}"):
+                encoded = repr(tuple(row)).encode()
+                digest.update(len(encoded).to_bytes(8, "big"))
+                digest.update(encoded)
+                count += 1
+            counts[name] = count
+        version = 0
+        if "schema_metadata" in counts:
+            row = connection.execute(
+                "SELECT value FROM schema_metadata WHERE key='schema_version'"
+            ).fetchone()
+            version = int(row[0]) if row else 0
+    return {"logical_sha256": digest.hexdigest(), "row_counts": counts, "schema_version": version}
+
+
+def drill_backup(backup: Path) -> dict[str, object]:
+    """Restore only into a private temporary directory, never an operator-supplied DB."""
+    metadata = verify_backup(backup)
+    expected = logical_summary(backup)
+    with tempfile.TemporaryDirectory(prefix="running-shoes-restore-drill-") as directory:
+        restored = Path(directory) / "restored.db"
+        restore_backup(backup, restored, confirmation="RESTORE")
+        with closing(sqlite3.connect(f"file:{restored}?mode=ro", uri=True)) as connection:
+            if connection.execute("PRAGMA integrity_check").fetchone() != ("ok",):
+                raise ValueError("restored database failed full integrity check")
+        actual = logical_summary(restored)
+        if actual != expected:
+            raise ValueError("restored database content or schema does not match backup")
+    return {**metadata, **actual, "restore_drill": "passed"}
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -148,6 +198,9 @@ def main() -> None:
 
     verify = subparsers.add_parser("verify")
     verify.add_argument("--backup", type=Path, required=True)
+
+    drill = subparsers.add_parser("drill", help="restore and verify a disposable isolated copy")
+    drill.add_argument("--backup", type=Path, required=True)
 
     restore = subparsers.add_parser("restore")
     restore.add_argument("--backup", type=Path, required=True)
@@ -161,6 +214,9 @@ def main() -> None:
     elif args.command == "verify":
         metadata = verify_backup(args.backup)
         print(f"Backup verified: {metadata['path']} sha256={metadata['sha256']}")
+    elif args.command == "drill":
+        result = drill_backup(args.backup)
+        print(f"Isolated restore drill passed: {args.backup.resolve()} sha256={result['sha256']}")
     else:
         safety = restore_backup(args.backup, args.destination, confirmation=args.confirm)
         print(f"Backup restored to: {args.destination.resolve()}")

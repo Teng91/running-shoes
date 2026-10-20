@@ -27,6 +27,7 @@ PUBLIC_TASKS = (
     "frontend-test",
     "frontend-layout",
     "frontend-e2e",
+    "frontend-pwa",
     "eval-agent",
     "audit-deps",
     "architecture-check",
@@ -199,6 +200,16 @@ def run_frontend_e2e(*, optional: bool = False) -> None:
     ))
 
 
+def run_frontend_pwa(*, optional: bool = False) -> None:
+    if not layout_dependencies_available():
+        message = "Playwright Chromium/WebKit binaries are required for frontend-pwa."
+        if optional:
+            print(f"\n==> PWA upgrade tests\nWARNING: {message}\nWARNING: Skipped.")
+            return
+        raise TaskError(message)
+    run_checked(Command("PWA upgrade/offline tests", ("node", "unit_tests/frontend_pwa.cjs")))
+
+
 def run_task(task: str) -> None:
     python = project_python()
     if task == "setup":
@@ -212,6 +223,8 @@ def run_task(task: str) -> None:
         run_frontend_layout()
     elif task == "frontend-e2e":
         run_frontend_e2e()
+    elif task == "frontend-pwa":
+        run_frontend_pwa()
     elif task == "eval-agent":
         run_checked(
             Command(
@@ -251,6 +264,7 @@ def run_task(task: str) -> None:
         run_verify()
         run_frontend_layout(optional=True)
         run_frontend_e2e(optional=True)
+        run_frontend_pwa(optional=True)
     else:
         raise TaskError(f"Unknown task: {task}")
 
