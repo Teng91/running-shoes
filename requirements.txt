@@ -798,9 +798,9 @@ lxml==6.1.3 \
     --hash=sha256:febd35ef45f603c2d74b74655efdbf45e14f55fc0aef4ac82b663ca829b283e0 \
     --hash=sha256:ff88a92cafde90888511242d1c54afcc1a8adbb6dc0a88fa7f87e29e92400d4a
     # via ddgs
-openai==3.29.0 \
-    --hash=sha256:860d3bad424c5d38cd9ba0a0a2050d558b58ce027596a39f9ccbc0f51a2090b7 \
-    --hash=sha256:bc70a46d97b70ba64daedfcb3227f610a395f297ec68d39f735676190a92be94
+openai==3.35.0 \
+    --hash=sha256:c93c5dfd1f677241b8bac333b1d9dcad86527cd016d797320d0a74b7ddaf7eaa \
+    --hash=sha256:ca2250e8e213d4a4c5e48059bf159448519433d655a575f6dc0059aa0cf3e513
     # via -r requirements.in
 openpyxl==3.1.5 \
     --hash=sha256:5282c12b107bffeef825f4617dc029afaf41d0ea60823bbb665ef3079dc79de2 \
@@ -1145,13 +1145,11 @@ typing-extensions==4.16.0 \
     # via
     #   anyio
     #   fastapi
-    #   httpx2
     #   openai
     #   opentelemetry-api
     #   pydantic
     #   pydantic-core
     #   sqlalchemy
-    #   starlette
     #   typing-inspection
 typing-inspection==0.4.4 \
     --hash=sha256:547274fa6b0a561ccf549cc9524b999a578e737d015d8709d021f9d0d13bea47 \
