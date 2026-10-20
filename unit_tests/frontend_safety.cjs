@@ -1,7 +1,75 @@
 // Six SPEC-012 regressions against real application modules/DOM and mock I/O.
 const assert = require('node:assert/strict');
 
+async function checkRunLogHome(browser, baseUrl) {
+  const context = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 390, height: 844 } });
+  const errors = [], writes = [];
+  await context.addInitScript(() => {
+    if (localStorage.getItem('home-fixture-seeded')) return;
+    localStorage.setItem('home-fixture-seeded', 'true');
+    localStorage.setItem('token', 'synthetic-home');
+    localStorage.setItem('username', 'home-user');
+    localStorage.setItem('activeTab', 'agent');
+    localStorage.setItem('theme', 'light');
+  });
+  await context.route('**/api/**', route => {
+    const request = route.request();
+    if (request.method() !== 'GET') writes.push(request.method() + ' ' + request.url());
+    const pathname = new URL(request.url()).pathname;
+    const body = pathname === '/api/auth/me' ? { username: 'home-user' }
+      : pathname === '/api/running-goal' ? { version: 0, start_year: 2026, monthly_km: 125, yearly_km: 1500 }
+      : pathname === '/api/analytics/dashboard' ? {} : [];
+    return route.fulfill({ json: body });
+  });
+  const page = await context.newPage();
+  const trackErrors = target => target.on('pageerror', error => errors.push(error.message));
+  trackErrors(page);
+  const assertHome = async target => {
+    await target.locator('#app-view').waitFor({ state: 'visible' });
+    await target.locator('#app-boot').waitFor({ state: 'hidden' });
+    assert.deepEqual(await target.locator('.tab-panel.active').evaluateAll(nodes => nodes.map(node => node.dataset.panel)), ['runs']);
+    assert.equal(await target.locator('.tab.active').getAttribute('data-tab'), 'runs');
+    assert.equal(await target.locator('.tab[data-tab="runs"]').getAttribute('aria-selected'), 'true');
+    assert.equal(await target.locator('#mobile-page-label').textContent(), '跑步日誌');
+    assert.equal(await target.locator('#app-workspace').evaluate(node => node.classList.contains('agent-mode')), false);
+    assert.equal(await target.evaluate(() => localStorage.getItem('token')), 'synthetic-home');
+    assert.equal(await target.locator('body').evaluate(node => node.classList.contains('light-theme')), true);
+  };
+  try {
+    await page.goto(baseUrl, { waitUntil: 'networkidle' });
+    await assertHome(page);
+    await page.locator('.mobile-menu-toggle').click();
+    await page.locator('.tab[data-tab="agent"]').click();
+    assert.equal(await page.locator('.tab-panel.active').getAttribute('data-panel'), 'agent');
+    assert.equal(await page.locator('#sidebar-menu').evaluate(node => node.classList.contains('menu-open')), false);
+    await page.reload({ waitUntil: 'networkidle' });
+    await assertHome(page);
+    await page.evaluate(() => {
+      switchTab('monthly');
+      // A normal pageshow / foreground transition must leave the selected page alone.
+      window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: false }));
+    });
+    assert.equal(await page.locator('.tab-panel.active').getAttribute('data-panel'), 'monthly');
+    assert.equal(await page.evaluate(() => localStorage.getItem('activeTab')), 'agent', 'switching tabs leaves the legacy key untouched');
+    await page.evaluate(() => {
+      switchTab('agent');
+      window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }));
+    });
+    await assertHome(page);
+    await page.evaluate(() => switchTab('agent'));
+    const reopened = await context.newPage();
+    trackErrors(reopened);
+    await page.close();
+    await reopened.goto(baseUrl, { waitUntil: 'networkidle' });
+    await assertHome(reopened);
+    assert.deepEqual(writes, [], 'home navigation must never mutate data or send AI messages');
+    assert.deepEqual(errors, []);
+    console.log(`PASS ${browser.browserType().name()} SPEC-015: legacy tab ignored, reload/reopen home, restored-page lifecycle, mobile/ARIA and session/theme preservation`);
+  } finally { await context.close(); }
+}
+
 module.exports = async function checkFrontendSafety(browser, baseUrl) {
+  await checkRunLogHome(browser, baseUrl);
   const context = await browser.newContext({ serviceWorkers: 'block' });
   const page = await context.newPage();
   const errors = [];

@@ -2,6 +2,14 @@
 
 本專案的重要變更依 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.1.0/) 分類，版本號遵循 [Semantic Versioning](https://semver.org/lang/zh-TW/)。完整部署說明另見各版本的 GitHub Release。
 
+## [3.2.4] - 2026-10-20
+
+### Fixed
+
+- 跑步日誌固定為首頁：重新整理、重新開啟與瀏覽器快取還原不再回到上次的 AI 助手或其他分頁。
+- 移除分頁持久保存，保留本次使用的正常切換、登入狀態與主題偏好；一般前景／背景切換不強制切頁。
+- 更新 PWA asset revision 3.2.4／shell v21，新增啟動、手機標籤／ARIA、重開及 PWA 離線導航回歸測試與 SPEC-015。
+
 ## [3.2.3] - 2026-10-20
 
 ### Added
@@ -116,6 +124,7 @@
 
 - 強化資料載入、API 邊界、工程 harness 與架構驗證。
 
+[3.2.4]: https://github.com/Teng91/running-shoes/releases/tag/v3.2.4
 [3.2.3]: https://github.com/Teng91/running-shoes/releases/tag/v3.2.3
 [3.2.2]: https://github.com/Teng91/running-shoes/releases/tag/v3.2.2
 [3.2.1]: https://github.com/Teng91/running-shoes/releases/tag/v3.2.1

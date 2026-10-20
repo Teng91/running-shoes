@@ -52,7 +52,6 @@ function switchTab(name) {
     document.querySelector('.mobile-menu-toggle').focus({ preventScroll: true });
     window.scrollTo(0, 0);
   }
-  localStorage.setItem('activeTab', name);
   requestAnimationFrame(() => renderActivePanel());
   if (name === 'report' && authToken) {
     loadReportHistory();
