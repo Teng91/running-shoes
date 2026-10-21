@@ -2,6 +2,17 @@
 
 本專案的重要變更依 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.1.0/) 分類，版本號遵循 [Semantic Versioning](https://semver.org/lang/zh-TW/)。完整部署說明另見各版本的 GitHub Release。
 
+## [3.3.1] - 2026-10-21
+
+### Fixed
+
+- 修正正式站 CORS 的 `Vary: Origin` 造成原生模組離線載入失敗：僅公開同源 shell cache 查詢忽略 Vary，仍精確比對 URL／版本且排除 API。
+- 發布 PWA shell v24／asset revision 3.3.1，保留已發布 v3.3.0 tag，不重用有問題的舊快取名稱。
+
+### Testing
+
+- 先以正式站同樣的 CORS response headers 重現離線啟動失敗，再由 Chromium／WebKit PWA regression 驗證修正；新增 SPEC-018，保留失敗升級、版本隔離及 API 不快取測試。
+
 ## [3.3.0] - 2026-10-21
 
 ### Security
@@ -165,6 +176,7 @@
 
 - 強化資料載入、API 邊界、工程 harness 與架構驗證。
 
+[3.3.1]: https://github.com/Teng91/running-shoes/releases/tag/v3.3.1
 [3.3.0]: https://github.com/Teng91/running-shoes/releases/tag/v3.3.0
 [3.2.5]: https://github.com/Teng91/running-shoes/releases/tag/v3.2.5
 [3.2.4]: https://github.com/Teng91/running-shoes/releases/tag/v3.2.4
