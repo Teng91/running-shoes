@@ -47,12 +47,17 @@ async function assertShell(page, release) {
 
 async function run() {
   let release = 'fixture-a', failure = null, failedAssets = 0, networkDown = false, legacy = true;
+  let moduleOriginRequests = 0;
   const failedKinds = new Set();
   const server = http.createServer((request, response) => {
     if (networkDown) { request.socket.destroy(); return; }
     const url = new URL(request.url, 'http://127.0.0.1');
     if (process.env.PWA_DEBUG) console.log('PWA fixture request', url.pathname, url.search);
     response.setHeader('Cache-Control', 'no-store');
+    // Match production CORSMiddleware: module requests have Origin, precache requests do not.
+    response.setHeader('Vary', 'Origin');
+    if (request.headers.origin) response.setHeader('Access-Control-Allow-Origin', request.headers.origin);
+    if (url.pathname === '/runtime/feature-lifecycle.mjs' && request.headers.origin) moduleOriginRequests++;
     if (url.pathname === '/service-worker.js') {
       response.setHeader('Content-Type', 'text/javascript');
       response.end((legacy ? legacySource : workerSource).replaceAll(legacy ? '3.2.2' : assetVersion, release)
@@ -104,6 +109,7 @@ async function run() {
   try {
     for (const engine of [chromium, webkit]) {
       release = 'fixture-a'; failure = null; failedAssets = 0; networkDown = false; legacy = true;
+      moduleOriginRequests = 0;
       failedKinds.clear();
       const browser = await engine.launch({ headless: true });
       const context = await browser.newContext({ serviceWorkers: 'allow', locale: 'zh-TW' });
@@ -137,6 +143,12 @@ async function run() {
         assert.equal(await updateWorker(page), 'activated');
         await page.reload({ waitUntil: 'networkidle' });
         await assertShell(page, 'fixture-a-safe');
+        assert.ok(moduleOriginRequests > 0, 'native module actually requests an Origin variant');
+        assert.equal(await page.evaluate(async () => {
+          const cache = await caches.open('running-shoes-shell-fixture-a-safe');
+          const response = await cache.match('/runtime/feature-lifecycle.mjs?v=fixture-a-safe');
+          return response.headers.get('Vary');
+        }), 'Origin', 'precache retains the production Vary response header');
         debug(`PWA ${engine.name()}: installed shell ready`);
         await page.evaluate(async () => {
           const other = await caches.open('unrelated-cache');
@@ -193,7 +205,7 @@ async function run() {
         await page.reload({ waitUntil: 'networkidle' });
         await assertShell(page, 'fixture-d');
         assert.deepEqual(errors, []);
-        console.log(`PASS ${engine.name()} PWA: legacy migration, first/installed offline, HTTP/MIME/disconnect/revision failed upgrades, immutable shell, recovery, API exclusion and scoped cleanup`);
+        console.log(`PASS ${engine.name()} PWA: legacy migration, first/installed offline with CORS Vary/Origin module requests, HTTP/MIME/disconnect/revision failed upgrades, immutable shell, recovery, API exclusion and scoped cleanup`);
       } catch (error) {
         console.error(`PWA ${engine.name()} case failed:`, error);
         throw error;

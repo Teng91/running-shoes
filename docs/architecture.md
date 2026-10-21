@@ -307,7 +307,7 @@ sequenceDiagram
 flowchart TB
     Browser[Browser / installed PWA]
     SW[Service Worker<br/>immutable versioned shell<br/>complete install before activation]
-    Shell[(App shell cache v23<br/>asset revision from assets.json)]
+    Shell[(App shell cache v24<br/>asset revision from assets.json)]
     FlyProxy[Fly Proxy / HTTPS]
     Machine[Fly Machine<br/>FastAPI container]
     Volume[(Fly Volume<br/>SQLite)]
@@ -330,6 +330,8 @@ Service Worker 不攔截 `/api/`，因此資料與 SSE 永遠走網路；靜態 
 `app-updates.js` 透過 controllerchange/message 比較安裝的 shell revision；只有完整新版啟用後顯示通知，
 不強制重載。通知在認證區外，所以登入前也能看到；使用者確認後才 reload，可能丟棄未儲存的草稿。
 `.mjs` 與 `.js` 都必須通過 JavaScript MIME 檢查。載入順序、CSS sources 與 worker module list 由同一 manifest 生成。
+[SPEC-018](specs/018-pwa-origin-vary.md) 對公開同源 shell cache lookup 忽略 CORS 的 Vary variant，
+使預快取與 module 的 Origin 差異不影響離線載入；精確 URL／query、同源限制與 API 排除仍維持。
 SQLite 永遠位於掛載 volume，不包含在 app shell 或 container image。
 
 ### 7.1 異地備份與 restore drill

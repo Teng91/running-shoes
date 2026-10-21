@@ -1,6 +1,6 @@
 const CACHE_PREFIX = 'running-shoes-shell-';
-const CACHE_NAME = 'running-shoes-shell-v23';
-const APP_ASSET_VERSION = '3.3.0';
+const CACHE_NAME = 'running-shoes-shell-v24';
+const APP_ASSET_VERSION = '3.3.1';
 const versioned = path => `${path}?v=${APP_ASSET_VERSION}`;
 const APP_SHELL = [
   '/',
@@ -109,6 +109,11 @@ self.addEventListener('fetch', event => {
   }
 
   event.respondWith(
-    caches.open(CACHE_NAME).then(async cache => (await cache.match(request)) || fetch(request))
+    // This cache contains only public, same-origin APP_SHELL assets. Production
+    // CORS adds Vary: Origin, but module requests and precache fetches send
+    // different Origin headers. Ignore that transport variant, not URL/query.
+    caches.open(CACHE_NAME).then(async cache =>
+      (await cache.match(request, { ignoreVary: true })) || fetch(request)
+    )
   );
 });
