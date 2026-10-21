@@ -72,6 +72,11 @@ self.addEventListener('fetch', event => {
   }
 
   event.respondWith(
-    caches.open(CACHE_NAME).then(async cache => (await cache.match(request)) || fetch(request))
+    // This cache contains only public, same-origin APP_SHELL assets. Production
+    // CORS adds Vary: Origin, but module requests and precache fetches send
+    // different Origin headers. Ignore that transport variant, not URL/query.
+    caches.open(CACHE_NAME).then(async cache =>
+      (await cache.match(request, { ignoreVary: true })) || fetch(request)
+    )
   );
 });

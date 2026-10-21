@@ -391,6 +391,8 @@ python3 scripts/build_frontend.py --check
 產物是 `index.html`、`styles.css` 與 `service-worker.js`，一併納入 Git；不是手動維護的第二份來源。
 `verify` 與 `docs-check` 都會檢查來源／產物一致。CSS 保留原始 cascade 順序，瀏覽器仍只下載單一樣式檔。
 原生 `.mjs` runtime 也包含在 PWA 原子 shell，並檢查 JavaScript MIME。
+公開同源 shell cache 的查詢忽略 CORS `Vary: Origin`，避免預快取與原生模組的 Origin 差異
+讓離線啟動失敗；URL／版本仍須完整匹配，`/api/` 一律不快取（SPEC-018）。
 
 ### 統計與操作規則（SPEC-017）
 
