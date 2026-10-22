@@ -7,6 +7,18 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 FRONTEND = ROOT / "frontend"
+STATIC_SHELL_FILES = (
+    "offline.html", "manifest.webmanifest", "favicon.svg", "icons/icon-192.png",
+    "icons/icon-512.png", "icons/apple-touch-icon.png", "vendor/chart.umd.min.js",
+    "vendor/marked.min.js",
+)
+
+
+def shell_asset_paths(manifest: dict) -> list[tuple[str, str]]:
+    versioned = manifest["scripts"] + manifest["modules"] + ["styles.css"]
+    return [("/", "index.html"), *[
+        (f"/{name}?v={manifest['version']}", name) for name in versioned
+    ], *[(f"/{name}", name) for name in STATIC_SHELL_FILES]]
 
 
 def frontend_outputs() -> dict[Path, str]:
@@ -40,16 +52,7 @@ def frontend_outputs() -> dict[Path, str]:
     shell = ["  '/',"] + [f"  versioned('/{name}')," for name in scripts + modules + ["styles.css"]]
     shell += [
         f"  '/{name}',"
-        for name in (
-            "offline.html",
-            "manifest.webmanifest",
-            "favicon.svg",
-            "icons/icon-192.png",
-            "icons/icon-512.png",
-            "icons/apple-touch-icon.png",
-            "vendor/chart.umd.min.js",
-            "vendor/marked.min.js",
-        )
+        for name in STATIC_SHELL_FILES
     ]
     worker = (templates / "service-worker.js").read_text(encoding="utf-8")
     worker = worker.replace("{{shell_assets}}", "\n".join(shell))

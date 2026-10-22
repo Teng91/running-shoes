@@ -12,6 +12,7 @@
 - `backend/middleware.py`: request-level transport guards.
 - `backend/routers/`: feature-oriented HTTP routes; routers must never import `backend.main`.
 - `backend/services/`: framework-independent application services; services must not import FastAPI or routers.
+- `backend/services/run_requests.py`: user-scoped transactional run-creation receipts; operation keys never replace authentication.
 - `backend/migrations.py`: ordered SQLite schema upgrades and the current schema version.
 - `backend/rate_limits.py`: shared authentication and AI request throttling.
 - `docs/architecture.md`: current SDD, module boundaries, diagrams, and evolution sequence.
@@ -22,6 +23,7 @@
 - `frontend/css/`: ordered editable CSS sources; preserve cascade order.
 - `frontend/assets.json`: ordered scripts, native modules, style sources and shell revision.
 - `scripts/build_frontend.py`: deterministic frontend generation; use `--write` after source changes and `--check` to verify.
+- `scripts/release_check.py`, `release_browser.cjs`: anonymous, read-only asset/API/PWA deployment checks; never use real account credentials in traces.
 - `frontend/index.html`, `styles.css`, `service-worker.js`: generated static outputs; commit with their sources, do not edit directly.
 - `frontend/runtime/feature-lifecycle.mjs`: DOM-independent native module for feature lifecycle ownership.
 - `frontend/app-lifecycle.js`: compatibility bridge and reset registration.
@@ -85,6 +87,7 @@ on Windows use `py -3` with the same script and task arguments:
 - Router or module-boundary change: `python3 scripts/task.py architecture-check`
 - Security-sensitive change: `python3 scripts/task.py security-check`
 - Release-sensitive or cross-cutting change: `python3 scripts/task.py verify`
+- After deployment: `python3 scripts/task.py release-check --base-url https://running-shoes.fly.dev` (explicit origin, no authentication or writes, browser dependencies required).
 - Everything at once before handing off a large change: `python3 scripts/task.py verify-all`
 
 `frontend-layout` is intentionally separate from `verify` because it requires Playwright browser binaries.

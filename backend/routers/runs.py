@@ -3,13 +3,15 @@
 from calendar import monthrange
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from backend import models, schemas
 from backend.auth import get_current_user
 from backend.database import get_db
-from backend.read_models.runs import month_run_summary
+from backend.read_models.runs import month_run_summary, year_run_summary
+from backend.services import run_requests
 from backend.services.mileage import apply_run_mileage_deltas
 from backend.settings import settings
 
@@ -80,26 +82,67 @@ def create_run(
     payload: schemas.RunCreate,
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    idempotency_key: Annotated[str | None, Header(
+        alias="Idempotency-Key", min_length=16, max_length=128, pattern=r"^[A-Za-z0-9._:-]+$"
+    )] = None,
 ):
-    _user_shoe_or_404(db, current_user.id, payload.shoe_id)
-    run_count = db.query(models.Run).filter(models.Run.user_id == current_user.id).count()
-    if isinstance(run_count, int) and run_count >= MAX_RUNS_PER_USER:
-        raise HTTPException(status_code=409, detail="跑步紀錄已達上限")
-    run = models.Run(**payload.model_dump(), user_id=current_user.id)
-    db.add(run)
+    fingerprint = run_requests.payload_hash(payload.model_dump())
+    receipt = None
     try:
+        if idempotency_key:
+            previous = run_requests.replay(db, current_user.id, idempotency_key, fingerprint)
+            if previous is not None:
+                return previous
+            receipt = models.RunCreationRequest(
+                user_id=current_user.id, request_key=idempotency_key, payload_hash=fingerprint
+            )
+            db.add(receipt)
+            # Reserve the unique key before changing mileage. SQLite serializes
+            # competing writers; a loser rolls back and replays the winner.
+            db.flush()
+        _user_shoe_or_404(db, current_user.id, payload.shoe_id)
+        run_count = db.query(models.Run).filter(models.Run.user_id == current_user.id).count()
+        if isinstance(run_count, int) and run_count >= MAX_RUNS_PER_USER:
+            raise HTTPException(status_code=409, detail="跑步紀錄已達上限")
+        run = models.Run(**payload.model_dump(), user_id=current_user.id)
+        db.add(run)
         apply_run_mileage_deltas(
             db,
             current_user.id,
             [(payload.shoe_id, payload.date, payload.km)],
             1,
         )
+        if receipt is not None:
+            db.flush()
+            receipt.response_json = schemas.RunOut.model_validate(run).model_dump(mode="json")
         db.commit()
+    except run_requests.RequestConflictError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="此操作識別碼已用於不同內容，請修改後重新送出") from None
+    except IntegrityError:
+        db.rollback()
+        if idempotency_key:
+            try:
+                previous = run_requests.replay(db, current_user.id, idempotency_key, fingerprint)
+            except run_requests.RequestConflictError:
+                raise HTTPException(status_code=409, detail="此操作識別碼已用於不同內容") from None
+            if previous is not None:
+                return previous
+        raise
     except Exception:
         db.rollback()
         raise
     db.refresh(run)
     return run
+
+
+@router.get("/api/runs/year-summary")
+def annual_summary(
+    year: int = Query(ge=1900, le=2100),
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return year_run_summary(db, current_user.id, year)
 
 
 @router.put("/api/runs/{run_id}", response_model=schemas.RunOut)

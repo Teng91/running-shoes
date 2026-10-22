@@ -78,7 +78,7 @@
 .user-name::before { content: "登入帳號"; display: block; margin-bottom: 3px; color: var(--text-dim); font-size: 10px; font-weight: 500; letter-spacing: .06em; }
 .sidebar-actions { display: grid; grid-template-columns: 1fr auto; gap: 6px; }
 .sidebar-actions .btn { min-height: var(--control-compact-height); padding: 6px 10px; white-space: nowrap; }
-#data-load-error {
+#data-load-error, #run-load-error {
   margin-bottom: 20px;
   padding: 12px 14px;
   border: 1px solid rgba(249, 115, 22, .35);
@@ -87,4 +87,4 @@
   background: rgba(249, 115, 22, .08);
   font-size: 13px;
 }
-#data-load-error .btn { margin-left: 8px; }
+#data-load-error .btn, #run-load-error .btn { margin-left: 8px; }

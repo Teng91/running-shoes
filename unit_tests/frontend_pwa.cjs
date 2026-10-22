@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const http = require('node:http');
 const path = require('node:path');
+const { startArtifacts, saveFailure } = require('../scripts/browser_artifacts.cjs');
 
 const frontend = path.resolve(__dirname, '../frontend');
 const htmlSource = fs.readFileSync(path.join(frontend, 'index.html'), 'utf8');
@@ -113,6 +114,7 @@ async function run() {
       failedKinds.clear();
       const browser = await engine.launch({ headless: true });
       const context = await browser.newContext({ serviceWorkers: 'allow', locale: 'zh-TW' });
+      await startArtifacts(context);
       const page = await context.newPage();
       page.setDefaultTimeout(15000);
       page.setDefaultNavigationTimeout(15000);
@@ -207,6 +209,7 @@ async function run() {
         assert.deepEqual(errors, []);
         console.log(`PASS ${engine.name()} PWA: legacy migration, first/installed offline with CORS Vary/Origin module requests, HTTP/MIME/disconnect/revision failed upgrades, immutable shell, recovery, API exclusion and scoped cleanup`);
       } catch (error) {
+        await saveFailure(context, page, 'pwa-' + engine.name(), error);
         console.error(`PWA ${engine.name()} case failed:`, error);
         throw error;
       } finally { await context.close(); await browser.close(); }

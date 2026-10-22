@@ -178,3 +178,16 @@ class StravaImport(Base):
     invalid_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
     owner: Mapped["User"] = relationship(back_populates="strava_imports")
+
+
+class RunCreationRequest(Base):
+    """Committed, user-scoped receipts; never used as authentication credentials."""
+
+    __tablename__ = "run_creation_requests"
+    __table_args__ = (UniqueConstraint("user_id", "request_key", name="uq_run_request_user_key"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
+    request_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    payload_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    response_json: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)

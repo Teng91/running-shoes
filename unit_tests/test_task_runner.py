@@ -19,6 +19,7 @@ def test_public_tasks_cover_the_documented_harness():
         "docs-check",
         "verify",
         "verify-all",
+        "release-check",
     )
 
 
