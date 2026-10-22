@@ -29,7 +29,8 @@ async function init() {
   if (authToken) {
     const session = captureAuthSession();
     try {
-      const response = await authenticatedFetch(API_BASE + '/auth/me', { headers: authHeaders() });
+      const response = await withRequestDeadline(signal =>
+        authenticatedFetch(API_BASE + '/auth/me', { headers: authHeaders(), signal }));
       if (!response.ok) throw new Error('驗證服務暫時無法使用');
       showAppView({ keepBoot: true });
       loadAgentModels();
@@ -51,6 +52,7 @@ async function init() {
 
 initializeFeatureLifecycle().then(() => {
   initializeDialogs();
+  initializeAuthSync();
   initializeAppUpdates();
   return init();
 }).catch(error => {

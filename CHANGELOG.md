@@ -2,6 +2,30 @@
 
 本專案的重要變更依 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.1.0/) 分類，版本號遵循 [Semantic Versioning](https://semver.org/lang/zh-TW/)。完整部署說明另見各版本的 GitHub Release。
 
+## [3.4.0] - 2026-10-22
+
+### Fixed
+
+- 跑步月份／分頁載入失敗後成功重試會清除自己的錯誤，不掩蓋全域資料載入失敗。
+- 同源跨分頁登入／登出／換帳號立即清理舊資料與 pending JSON requests，不刪除其他分頁的新憑證。
+
+### Added
+
+- JSON CRUD／登入 deadline 與 GET 一次有限重試；新增日誌 Idempotency-Key 使用持久化、user-scoped transaction receipt，人工重試／並行重送只累計一次里程，內容衝突回 409。
+- 年度每月／每鞋彙總 API，年度圖表不再分頁下載逐筆日誌。
+- `release-check --base-url` 固定檢查完整 API、schema、39 個資產 hash／MIME、匿名雙引擎 boot/runtime/cache 與 Chromium 離線重開；E2E 先在真實 ASGI/CORS／暫存 SQLite 執行。
+
+### Changed
+
+- Schema 2 只新增 run_creation_requests，附備份與舊版 rollback marker 相容步驟；舊 API 無 key 仍相容。
+- Playwright 1.63.0／npm lockfile 與 npm ci；失敗截圖、trace、錯誤輸出由 CI 保存；Docker context 排除本機 secrets／診斷／npm dependencies。
+- PWA shell v25／asset revision 3.4.0；更新 SPEC-019、ADR-0004、SDD、TDD、README 及 harness。
+
+### Testing
+
+- 424 Python／78 Node／10 Agent eval、94.63% branch coverage；40 組排版、兩引擎 CRUD／session／跨分頁／PWA 與真實 ASGI/CORS release gate 通過，沒有跳過瀏覽器。
+- 並行相同／衝突 key、quota replay、失敗 transaction、user isolation、schema 1→2，以及錯版本／hash／MIME／schema／API／匿名授權／browser failure 負面測試。
+
 ## [3.3.1] - 2026-10-21
 
 ### Fixed
@@ -176,6 +200,7 @@
 
 - 強化資料載入、API 邊界、工程 harness 與架構驗證。
 
+[3.4.0]: https://github.com/Teng91/running-shoes/releases/tag/v3.4.0
 [3.3.1]: https://github.com/Teng91/running-shoes/releases/tag/v3.3.1
 [3.3.0]: https://github.com/Teng91/running-shoes/releases/tag/v3.3.0
 [3.2.5]: https://github.com/Teng91/running-shoes/releases/tag/v3.2.5

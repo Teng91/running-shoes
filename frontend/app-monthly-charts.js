@@ -65,7 +65,8 @@ async function renderShoeStackedChart() {
   let yearRuns = yearlyRunsCache.get(year);
   if (!yearRuns) {
     try {
-      yearRuns = await fetchRunPages({ year });
+      yearRuns = await apiGet(`/runs/year-summary?year=${year}`);
+      if (!Array.isArray(yearRuns.shoes)) throw new Error('年度彙總資料格式錯誤');
     } catch (error) {
       console.error('載入年度跑步紀錄失敗:', error);
       if (requestId === stackedRunsRequestId) renderedPanels.delete('monthly');
@@ -84,19 +85,8 @@ async function renderShoeStackedChart() {
   const labels = Array.from({length: 12}, (_, i) => (i + 1) + '月');
   const allShoes = [...shoes, ...retiredShoes];
 
-  // Build matrix: shoeId -> array of 12 month values
-  const shoeMonthlyMap = new Map();
-  yearRuns.forEach(r => {
-    if (!r.date || !r.shoe_id) return;
-    const rYear = parseInt(r.date.slice(0, 4), 10);
-    const rMonth = parseInt(r.date.slice(5, 7), 10);
-    if (rYear === year && rMonth >= 1 && rMonth <= 12) {
-      if (!shoeMonthlyMap.has(r.shoe_id)) {
-        shoeMonthlyMap.set(r.shoe_id, Array(12).fill(0));
-      }
-      shoeMonthlyMap.get(r.shoe_id)[rMonth - 1] += r.km;
-    }
-  });
+  // Backend owns the aggregation; the browser only builds chart datasets.
+  const shoeMonthlyMap = new Map(yearRuns.shoes.map(row => [row.shoe_id, row.monthly_km]));
 
   // Filter to shoes that actually have runs in this selected year
   const activeShoeIds = [...shoeMonthlyMap.keys()];

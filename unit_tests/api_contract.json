@@ -15,6 +15,7 @@
   "GET /api/runs",
   "GET /api/runs/import/strava/history",
   "GET /api/runs/summary",
+  "GET /api/runs/year-summary",
   "GET /api/shoes/active",
   "GET /api/shoes/retired",
   "GET /api/shoes/{shoe_id}/analytics",

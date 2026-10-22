@@ -6,3 +6,7 @@ __pycache__/
 *.log
 unit_tests/
 .claude/
+node_modules/
+.artifacts/
+.env
+.env.*

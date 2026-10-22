@@ -13,6 +13,43 @@ HTTP endpoint 全部位於 feature router。
 - 外部 LLM 與搜尋是可失敗的 adapter，不可成為跑鞋、跑量和支出計算的資料來源。
 - 架構規則、測試與文件可由 CI 重複驗證。
 
+### SPEC-019：請求、資料庫與發布的可靠性邊界
+
+[ADR-0004](adr/0004-request-reliability-and-release-gates.md) 增加持久化回執，而不是靠前端的 disabled 按鈕推論是否寫入成功。
+schema 2 只新增 receipt 表；舊 run／shoe／monthly 欄位與總量保持不變。相同 key、不同內容為 409，原始回應重播不代表復活已刪除資料。
+
+```mermaid
+sequenceDiagram
+    participant UI as 同一份新增表單
+    participant API as Run router
+    participant DB as SQLite transaction
+    UI->>API: payload + Idempotency-Key + 認證
+    API->>DB: user/key lookup 或 unique reservation
+    alt 已完成的相同內容
+        DB-->>UI: 原始回應（不重複寫入）
+    else 首次請求
+        API->>DB: run + mileage deltas + receipt snapshot
+        DB->>DB: 一次 commit
+        DB-->>UI: 原始回應
+    end
+```
+
+`withRequestDeadline` 涵蓋 JSON headers/body，GET 可一次有限重試；`authenticatedFetch` 保留 SSE adapter 語義，串流由 feature controller 管理。
+`http-requests` lifecycle owner 在 session teardown 取消普通請求，storage 同步清理其他分頁但不刪除它們剛寫入的新憑證。
+月份錯誤使用 `run-load-error`，不與 aggregate error 互相覆蓋。年度圖表使用 `/api/runs/year-summary` 的後端矩陣，不再取得逐筆年度日誌。
+
+```mermaid
+flowchart LR
+    Lock[package-lock + npm ci] --> E2E[Temp SQLite + real ASGI/CORS]
+    E2E --> Gate[task.py release-check]
+    Manifest[assets.json + generated shell] --> Gate
+    Gate --> Hash[Health / schema / API / hash / MIME]
+    Gate --> Browser[Anonymous runtime/cache + Chromium offline]
+    Browser --> Evidence[Failure screenshot / trace outside Git]
+```
+
+此 gate 不含部署權限；正式部署在檢查後依明確授權執行，部署後再次對正式 origin 執行。Rollback 的 schema marker 相容步驟見 README 與 SPEC-019，不能直接切回 schema 1 image。
+
 ## 2. 系統脈絡
 
 ```mermaid
@@ -307,7 +344,7 @@ sequenceDiagram
 flowchart TB
     Browser[Browser / installed PWA]
     SW[Service Worker<br/>immutable versioned shell<br/>complete install before activation]
-    Shell[(App shell cache v24<br/>asset revision from assets.json)]
+    Shell[(App shell cache v25<br/>asset revision from assets.json)]
     FlyProxy[Fly Proxy / HTTPS]
     Machine[Fly Machine<br/>FastAPI container]
     Volume[(Fly Volume<br/>SQLite)]

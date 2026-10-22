@@ -5,10 +5,13 @@ const fs = require('node:fs');
 const net = require('node:net');
 const os = require('node:os');
 const path = require('node:path');
-const { spawn } = require('node:child_process');
+const { spawn, execFile } = require('node:child_process');
+const { promisify } = require('node:util');
+const { startArtifacts, saveFailure } = require('../scripts/browser_artifacts.cjs');
 const checkSessionIsolation = require('./frontend_sessions.cjs');
 const checkFrontendSafety = require('./frontend_safety.cjs');
 const checkConsistency = require('./frontend_consistency.cjs');
+const checkReliability = require('./frontend_reliability.cjs');
 
 const projectRoot = path.resolve(__dirname, '..');
 
@@ -82,12 +85,13 @@ async function run() {
   });
   server.stdout.on('data', chunk => logs.push(chunk.toString()));
   server.stderr.on('data', chunk => logs.push(chunk.toString()));
-  let browser;
+  let browser, page;
   try {
     assert.equal(path.dirname(databasePath), tempRoot, 'E2E database must be inside its temp directory');
     await waitForServer(baseUrl, server, logs);
     browser = await chromium.launch({ headless: true });
-    const page = await browser.newPage({ locale: 'zh-TW' });
+    page = await browser.newPage({ locale: 'zh-TW' });
+    await startArtifacts(page.context());
     const pageErrors = [];
     page.on('pageerror', error => pageErrors.push(error.message));
     page.on('dialog', dialog => dialog.accept());
@@ -194,15 +198,27 @@ async function run() {
     await checkSessionIsolation(browser, baseUrl);
     await checkFrontendSafety(browser, baseUrl);
     await checkConsistency(browser, baseUrl);
+    await checkReliability(browser, baseUrl);
     const safari = await webkit.launch({ headless: true });
     try {
       await checkSessionIsolation(safari, baseUrl);
       await checkFrontendSafety(safari, baseUrl);
       await checkConsistency(safari, baseUrl);
+      await checkReliability(safari, baseUrl);
     } finally {
       await safari.close();
     }
+    // The same fail-closed command used after deployment runs against this real
+    // FastAPI/CORS server first, with an isolated DB and anonymous browsers.
+    // Keep the event loop draining Uvicorn's log pipes while the gate fetches
+    // the full shell; a synchronous child can deadlock a small OS pipe buffer.
+    const releaseResult = await promisify(execFile)(python, ['scripts/task.py', 'release-check', '--base-url', baseUrl], {
+      cwd: projectRoot, env: process.env, timeout: 180_000, maxBuffer: 4 * 1024 * 1024,
+    });
+    process.stdout.write(releaseResult.stdout);
+    process.stderr.write(releaseResult.stderr);
   } catch (error) {
+    await saveFailure(page?.context(), page, 'crud', error);
     error.message += `\nFastAPI log:\n${logs.join('')}`;
     throw error;
   } finally {

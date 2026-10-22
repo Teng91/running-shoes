@@ -11,7 +11,7 @@ from backend import models
 from backend.auth import get_password_hash
 from backend.database import Base
 
-CURRENT_SCHEMA_VERSION = 1
+CURRENT_SCHEMA_VERSION = 2
 
 
 def schema_version(engine: Engine) -> int:
@@ -87,7 +87,9 @@ def run_startup_migrations(
         finally:
             db.close()
 
-    Base.metadata.create_all(bind=engine)
+    Base.metadata.create_all(bind=engine, tables=[
+        table for table in Base.metadata.sorted_tables if table.name != "run_creation_requests"
+    ])
 
     # Add concurrency/session versions to existing databases without changing data.
     for table, column in (
@@ -183,6 +185,11 @@ def run_startup_migrations(
                 WHERE value IN ('Other', 'Walk', 'Trail')
             )
         """))
+
+    # Schema 2 is additive: receipts share the run transaction, with no changes
+    # to existing run/shoe/monthly tables or mileage values.
+    if applied_version < 2:
+        cast(Table, models.RunCreationRequest.__table__).create(bind=engine, checkfirst=True)
 
     with engine.begin() as connection:
         connection.execute(text(

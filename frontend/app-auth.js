@@ -65,15 +65,29 @@ function setAuth(token, username) {
   localStorage.setItem('username', username);
 }
 
-function clearAuth() {
+function clearAuth({ persist = true } = {}) {
   cancelAuthOperation();
   authGeneration += 1;
   resetFeatureLifecycles();
   authToken = null;
   currentUser = null;
-  localStorage.removeItem('token');
-  localStorage.removeItem('username');
+  if (persist) {
+    localStorage.removeItem('token');
+    localStorage.removeItem('username');
+  }
   resetAuthInputs();
+}
+
+function initializeAuthSync() {
+  const invalidate = () => {
+    clearAuth({ persist: false });
+    showLoginView();
+    showAuthError('其他分頁已變更登入狀態，請重新登入。');
+  };
+  window.addEventListener('storage', event => {
+    if (event.storageArea === localStorage && [null, 'token', 'username'].includes(event.key)) invalidate();
+  });
+  if (localStorage.getItem('token') !== authToken || localStorage.getItem('username') !== currentUser) invalidate();
 }
 
 function showLoginView() {
@@ -153,7 +167,7 @@ async function handleLogin() {
   let authenticatedSession = null;
   showAppBoot('正在登入並載入資料…');
   try {
-    const res = await fetch(API_BASE + '/auth/login', {
+    const res = await authRequest(API_BASE + '/auth/login', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password }),
       signal: operation.controller.signal,
@@ -200,7 +214,7 @@ async function handleRegister() {
   let authenticatedSession = null;
   showAppBoot('正在建立帳號並載入資料…');
   try {
-    const regRes = await fetch(API_BASE + '/auth/register', {
+    const regRes = await authRequest(API_BASE + '/auth/register', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password }),
       signal: operation.controller.signal,
@@ -213,7 +227,7 @@ async function handleRegister() {
       if (regRes.status === 500) msg = '伺服器錯誤，請稍後再試';
       throw new Error(msg);
     }
-    const loginRes = await fetch(API_BASE + '/auth/login', {
+    const loginRes = await authRequest(API_BASE + '/auth/login', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password }),
       signal: operation.controller.signal,
@@ -257,7 +271,7 @@ async function handleChangePassword() {
   if (password !== password2) { showChangeError('兩次密碼不一致'); return; }
   const operation = beginAuthOperation();
   try {
-    const res = await fetch(API_BASE + '/auth/change-password', {
+    const res = await authRequest(API_BASE + '/auth/change-password', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, old_password: oldPassword, new_password: password }),
       signal: operation.controller.signal,

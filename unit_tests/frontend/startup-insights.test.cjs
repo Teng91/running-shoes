@@ -58,7 +58,7 @@ test('double submit writes one run and unlocks after completion or failure', asy
     refreshDateLimits() {}, loadData: async () => {},
     captureAuthSession: () => ({}), isCurrentAuthSession: () => true,
   });
-  vm.runInContext('let runSaving = false;\n' + extract('addRun'), context);
+  vm.runInContext('let runSaving = false, runCreationDraft = null;\n' + extract('addRun'), context);
   const first = context.addRun();
   await context.addRun();
   assert.equal(calls, 1);

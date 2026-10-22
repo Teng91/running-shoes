@@ -1,8 +1,10 @@
 // SPEC-017 real DOM/engines with isolated API fixtures. Never contacts production.
 const assert = require('node:assert/strict');
+const { startArtifacts, saveFailure } = require('../scripts/browser_artifacts.cjs');
 
 module.exports = async function checkConsistency(browser, baseUrl) {
   const context = await browser.newContext({ serviceWorkers: 'block', timezoneId: 'America/Los_Angeles' });
+  await startArtifacts(context);
   await context.addInitScript(() => {
     localStorage.setItem('token', 'synthetic-consistency');
     localStorage.setItem('username', 'consistency-user');
@@ -25,6 +27,7 @@ module.exports = async function checkConsistency(browser, baseUrl) {
     else if (name === '/api/monthly-mileage') body = [{ id: 1, year: 2026, month: 8, km: 150, adjustment_km: 100, version: 0 }];
     else if (name === '/api/running-goal') body = goal;
     else if (name === '/api/running-goal/progress') body = progress;
+    else if (name === '/api/runs/year-summary') body = { shoes: [] };
     else if (name === '/api/analytics/dashboard') body = { goal: progress };
     else if (name === '/api/runs') {
       const rows = url.searchParams.get('month') === '8' || !url.searchParams.has('month') ? runs : [];
@@ -36,7 +39,7 @@ module.exports = async function checkConsistency(browser, baseUrl) {
         run_days: month === 8 ? 1 : 0, shoe_usage: month === 8 ? [{ shoe_id: 1, km: 205, count: 205 }] : [],
         calendar: month === 8 ? [{ date: '2026-08-05', km: 205, count: 205, shoes: [{ shoe_id: 1, km: 205, count: 205 }] }] : [] };
     } else if (name === '/api/spending/summary') {
-      if (++spendingCalls === 1) return route.fulfill({ status: 503, json: { detail: 'synthetic-unavailable' } });
+      if (++spendingCalls <= 2) return route.fulfill({ status: 503, json: { detail: 'synthetic-unavailable' } });
       body = { total_paid: 800, total_original: 1000, savings: 200, average_discount_percent: 80,
         average_monthly_paid: 100, start_month: '2026-03', month_span: 8,
         highest_month: { year: 2026, month: 3, total_paid: 800 },
@@ -91,11 +94,14 @@ module.exports = async function checkConsistency(browser, baseUrl) {
     assert.equal(await page.locator('#data-load-error').isVisible(), false);
     await page.locator('#spending-cards').getByRole('button', { name: '重試' }).click();
     await page.locator('#spending-cards').getByText('從 2026/03 到今月，共 8 個月').waitFor();
-    assert.equal(spendingCalls, 2);
+    assert.equal(spendingCalls, 3, 'GET retries once before showing a local retry action');
     await page.evaluate(() => setAuth('synthetic-replacement', 'replacement'));
     assert.equal(await page.locator('#spending-table tr').count(), 0, 'logout clears old hidden purchases');
     assert.equal(await page.evaluate(() => featureLifecycle.names().length >= 10), true);
     assert.deepEqual(errors, []);
     console.log(`PASS ${browser.browserType().name()} SPEC-017: complete paged stats/calendar, cross-day drafts, goals, modal keyboard/focus, lazy spending retry/timezone, lifecycle privacy`);
+  } catch (error) {
+    await saveFailure(context, page, 'consistency-' + browser.browserType().name(), error);
+    throw error;
   } finally { await context.close(); }
 };

@@ -113,6 +113,13 @@ runner 會自行尋找 Windows 或 Unix 的專案虛擬環境。
 
 ## 6. Definition of Done
 
+SPEC-019 的 traceability：`test_request_reliability.py` 驗證 transaction／並行相同與衝突 payload、quota replay、user scope、schema 1→2 與年度單一 grouped query；
+`frontend/reliability.test.cjs` 驗證 timeout headers/body、GET 有限重試、401／寫入不重試、人工重送 key 與年度 endpoint。
+`frontend_reliability.cjs` 在 Chromium／WebKit 的真實 storage event 下驗證跨分頁登出／換帳號與未完成請求取消，另驗證獨立錯誤恢復。
+`test_release_check.py` 負面 fixture 拒絕錯版本／hash／MIME／schema／API／匿名授權與失敗 browser subprocess。
+`frontend-e2e` 會對自己的真實 ASGI／CORS server 執行 `python3 scripts/task.py release-check --base-url ...`；正式部署後再以相同命令唯讀檢查。
+Playwright 使用 `npm ci` 鎖版；失敗保留 `.artifacts/browser/` 的 screenshot／trace／error，CI 上傳 7 天，不包含正式帳號內容。
+
 - Acceptance criteria 與不變條件已寫清楚。
 - 新行為或 bug 有 regression test；純重構由既有 contract tests 覆蓋。
 - 測試不讀寫正式 `shoes.db`，也不呼叫真實 LLM／搜尋服務。

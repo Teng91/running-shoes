@@ -92,7 +92,7 @@ test('SPEC-017 deleted shoes remain in annual stacked mileage totals', async () 
   const nodes = elements(); nodes['stacked-year-select'].value = '2026';
   const context = vm.createContext({ document: { getElementById: id => nodes[id], querySelector: () => ({ dataset: { panel: 'monthly' } }) },
     chartInstances: {}, shoes: [{ id: 2, brand: 'A', model: 'Visible' }], retiredShoes: [],
-    yearlyRunsCache: new Map([[2026, [{ shoe_id: 1, date: '2026-08-01', km: 10 }, { shoe_id: 2, date: '2026-08-01', km: 20 }]]]),
+    yearlyRunsCache: new Map([[2026, { shoes: [{ shoe_id: 1, monthly_km: [10] }, { shoe_id: 2, monthly_km: [20] }] }]]),
     brandColor: () => '#000', getThemeColor: () => '#000', stackedRunsRequestId: 0,
     Chart: function(_, config) { this.config = config; },
   });
@@ -199,7 +199,7 @@ test('SPEC-017 old run creation cannot overwrite or unlock a replacement account
     localDateISO: () => '2026-10-20', loadData: async () => {},
     apiPost: () => { calls++; return new Promise((resolve, fail) => { finish = resolve; reject = fail; }); },
   });
-  vm.runInContext('let runSaving = false, runSaveOperation = null;\n' + extract('addRun'), context);
+  vm.runInContext('let runSaving = false, runSaveOperation = null, runCreationDraft = null;\n' + extract('addRun'), context);
   nodes['run-date'].value = '2026-10-20'; nodes['run-km'].value = '5'; nodes['run-shoe'].value = '1';
   const old = context.addRun(), rejectOld = reject;
   session = {}; vm.runInContext('runSaving = false; runSaveOperation = null;', context);

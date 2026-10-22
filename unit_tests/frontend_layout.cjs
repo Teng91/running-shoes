@@ -5,6 +5,7 @@ const { chromium, webkit } = require('playwright');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const { startArtifacts, saveFailure } = require('../scripts/browser_artifacts.cjs');
 
 async function selectTab(page, name) {
   const toggle = page.locator('.mobile-menu-toggle');
@@ -223,8 +224,10 @@ function alignmentIssues() {
 async function run(engine, name) {
   const browser = await engine.launch({ headless: true,
     ...(name === 'chromium' && process.env.PLAYWRIGHT_CHROMIUM_CHANNEL ? { channel: process.env.PLAYWRIGHT_CHROMIUM_CHANNEL } : {}) });
+  let page;
   try {
-    const page = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, locale: 'zh-TW' });
+    page = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, locale: 'zh-TW' });
+    await startArtifacts(page.context());
     const errors = [];
     let allowBootScript;
     const bootScriptGate = new Promise(resolve => { allowBootScript = resolve; });
@@ -242,6 +245,7 @@ async function run(engine, name) {
         month_km: 50, ytd_km: 150, month_achievement_percent: 40, year_achievement_percent: 10,
         month_state: 'past', month_remaining_km: 75, year_remaining_km: 1350,
       } });
+      if (url.pathname === '/api/runs/year-summary') return route.fulfill({ json: { shoes: [] } });
       const contentTypes = { '.html': 'text/html', '.js': 'application/javascript', '.mjs': 'application/javascript', '.css': 'text/css',
         '.json': 'application/json', '.webmanifest': 'application/manifest+json',
         '.svg': 'image/svg+xml', '.png': 'image/png' };
@@ -271,7 +275,7 @@ async function run(engine, name) {
         forecast_retirement_date: '2027-06-01', forecast_source: 'recent_90_days', forecast_monthly_km: 80 }));
       retiredShoes = [{ ...shoes[0], id: 20, is_retired: true }];
       runs = shoes.map((shoe, i) => ({ id: i + 1, shoe_id: shoe.id, date: `2026-09-${String(i + 1).padStart(2, '0')}`, km: 18.67, source: 'manual' }));
-      yearlyRunsCache.set(2026, runs);
+      yearlyRunsCache.set(2026, { shoes: runs.map(run => ({ shoe_id: run.shoe_id, monthly_km: Array.from({length: 12}, (_, i) => i === 8 ? run.km : 0) })) });
       monthlyMileages = Array.from({ length: 12 }, (_, i) => ({ id: i + 1, year: 2026, month: i + 1, km: 120 + i }));
       monthlySpending = Array.from({ length: 12 }, (_, i) => ({ year: 2026, month: i + 1, total_paid: 4000, total_orig: 5000 }));
       spendingSummary = { total_paid: 48000, total_original: 60000, savings: 12000,
@@ -430,6 +434,9 @@ async function run(engine, name) {
       await assertLayout(page, `${name} ${action}`);
     }
     assert.deepEqual(errors, [], 'browser JavaScript errors');
+  } catch (error) {
+    await saveFailure(page?.context(), page, 'layout-' + name, error);
+    throw error;
   } finally { await browser.close(); }
 }
 (async () => { await run(webkit, 'webkit'); await run(chromium, 'chromium'); })().catch(error => { console.error(error); process.exitCode = 1; });
