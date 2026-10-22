@@ -80,6 +80,12 @@ def require_readme_number(pattern: str, actual: int, label: str) -> None:
 
 
 def main() -> None:
+    from scripts.document_contracts import document_errors
+
+    errors = document_errors(ROOT)
+    if errors:
+        fail("\n" + "\n".join(errors))
+
     required_paths = (
         "docs/specs/019-reliable-requests-and-release-gates.md",
         "docs/adr/0004-request-reliability-and-release-gates.md",

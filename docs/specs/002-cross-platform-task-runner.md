@@ -23,6 +23,18 @@
 - 不將正式部署或資料庫操作加入一般 verification task。
 - 不要求使用者啟用 virtual environment 才能呼叫 runner。
 
+## Proposed design
+
+`scripts/task.py` 提供跨平台子命令，集中定義 verification sequence，既有 CI 與本機 hook 都呼叫相同 runner。
+
+## Security and data isolation
+
+一般驗證僅使用暫存資料庫與合成認證，不新增正式部署權限，也不傳送原始碼至外部模型。
+
+## Migration, rollout, and rollback
+
+無資料 migration；同步 README／CI／hook 後驗證 task matrix，回滾時一併回復呼叫端與 runner。
+
 ## Acceptance criteria
 
 - [x] `python3 scripts/task.py verify-all` 可在 Unix 環境完整執行，Windows 使用相同腳本。

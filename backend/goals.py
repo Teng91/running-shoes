@@ -3,10 +3,10 @@
 from calendar import monthrange
 from datetime import date, datetime, timedelta, timezone
 
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from backend import models
+from backend.read_models.run_statistics import period_distances, run_period
 
 DEFAULT_GOAL_START_YEAR = 2026
 DEFAULT_MONTHLY_GOAL_KM = 125.0
@@ -36,6 +36,7 @@ def goal_progress(
     month: int,
     *,
     as_of: date | None = None,
+    distances: dict[str, float] | None = None,
 ) -> dict:
     """Return goal progress through the requested report month."""
     goal = goal_values(db, user_id)
@@ -43,35 +44,11 @@ def goal_progress(
     today = as_of or datetime.now(timezone(timedelta(hours=8))).date()
     selected = (year, month)
     current = (today.year, today.month)
-    month_prefix = f"{year:04d}-{month:02d}-"
-    month_query = (
-        db.query(func.sum(models.Run.km))
-        .filter(
-            models.Run.user_id == user_id,
-            models.Run.date.like(month_prefix + "%"),
-        )
+    totals = distances if distances is not None else period_distances(
+        db, user_id, run_period(year, month, today)
     )
-    if selected == current:
-        month_query = month_query.filter(models.Run.date <= today.isoformat())
-    elif selected > current:
-        month_query = month_query.filter(models.Run.id < 0)
-    month_km = round(float(month_query.scalar() or 0), 2)
-
-    ytd_end = (
-        today.isoformat()
-        if selected >= current
-        else f"{year:04d}-{month:02d}-{monthrange(year, month)[1]:02d}"
-    )
-    ytd_value = (
-        db.query(func.sum(models.Run.km))
-        .filter(
-            models.Run.user_id == user_id,
-            models.Run.date >= f"{year:04d}-01-01",
-            models.Run.date <= ytd_end,
-        )
-        .scalar()
-    )
-    ytd_km = round(float(ytd_value or 0), 2)
+    month_km = totals["month_km"]
+    ytd_km = totals["ytd_km"]
     monthly_goal = goal["monthly_km"]
     yearly_goal = goal["yearly_km"]
     days_in_month = monthrange(year, month)[1]

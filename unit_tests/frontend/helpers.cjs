@@ -4,6 +4,26 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+let createRunController;
+require('node:test').before(async () => {
+  ({ createRunController } = await import('../../frontend/runtime/run-controller.mjs'));
+});
+
+function runContext(globals) {
+  const context = vm.createContext(globals);
+  let nextKey = 0;
+  context.runController = createRunController({
+    transport: { post: (...args) => context.apiPost(...args), put: (...args) => context.apiPut(...args), delete: (...args) => context.apiDelete(...args) },
+    session: { capture: () => context.captureAuthSession?.() || {}, current: value => context.isCurrentAuthSession?.(value) ?? true },
+    newKey: () => 'synthetic-operation-' + (++nextKey),
+  });
+  const names = { runs: 'rows', runSummary: 'summary', runPageOffset: 'offset', runPageHasMore: 'hasMore',
+    runDayFilter: 'day', yearlyRunsCache: 'annualCache', runListRequestId: 'listRequest', stackedRunsRequestId: 'annualRequest' };
+  for (const [legacy, owned] of Object.entries(names)) {
+    if (legacy in globals) context.runController.state[owned] = globals[legacy];
+  }
+  return context;
+}
 const htmlSource = fs.readFileSync('frontend/index.html', 'utf8');
 const scriptPaths = JSON.parse(fs.readFileSync('frontend/assets.json', 'utf8')).scripts.map(file => 'frontend/' + file);
 const scriptSource = scriptPaths.map(path => fs.readFileSync(path, 'utf8')).join('\n');
@@ -51,14 +71,14 @@ function editContext() {
   const elements = new Proxy({}, { get: (target, id) => target[id] ||= {
     value: '', style: {}, classList: { add() {}, remove() {} },
   } });
-  const context = vm.createContext({ document: { getElementById: id => elements[id] },
+  const context = runContext({ document: { getElementById: id => elements[id] },
     captureAuthSession: () => ({ current: true }), isCurrentAuthSession: session => session.current,
     refreshDateLimits() {}, populateRunShoeSelects() {}, populateMonthlyEditSelects(year, month) {
       elements['m-year'].value = year; elements['m-month'].value = month;
     }, localDateISO: () => '2026-10-19', loadData: async () => {},
     translateError: value => value, confirm: () => true, alert() {},
   });
-  vm.runInContext(`let editingRun = null, editingMonthly = null;\n` +
+  vm.runInContext(`let editingMonthly = null;\n` +
     ['openRunModal', 'closeRunModal', 'saveRun', 'deleteEditingRun',
       'editMonthlyMileage', 'closeMonthlyModal', 'saveMonthlyMileage'].map(extract).join('\n'), context);
   return { context, elements };
@@ -93,4 +113,4 @@ function transportContext() {
   return context;
 }
 
-module.exports = { test, assert, fs, path, vm, htmlSource, scriptPaths, scriptSource, styleSource, source, authOperationContext, streamContext, editContext, tableHeaders, extract, transportContext };
+module.exports = { runContext, test, assert, fs, path, vm, htmlSource, scriptPaths, scriptSource, styleSource, source, authOperationContext, streamContext, editContext, tableHeaders, extract, transportContext };

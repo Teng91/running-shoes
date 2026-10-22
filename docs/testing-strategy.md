@@ -69,7 +69,11 @@ flowchart BT
 | SPEC-017 生成與依賴方向 | `build_frontend.py --check` + transitive import tests | CSS／HTML／worker 清單漂移，service 間接依賴 FastAPI 或月報反向解析工具 JSON |
 | SPEC-017 PWA 更新 | 實際 worker message／controllerchange + `.mjs` MIME failure | 新版未通知、未確認即重載、錯誤 module MIME 污染離線 shell |
 | Secret hygiene | `security-check` | tracked files 包含明確 credential 特徵 |
-| 文件與實作一致 | `docs-check` | 測試數、命令、檔案或工具數過期 |
+| 文件與實作一致 | `docs-check` + document contract negative fixtures | 測試數／命令過期、壞連結／anchor、缺 spec sections／Owner、Implemented 未勾選 AC 或測試路徑不存在 |
+| SPEC-020 配額與注入 | `unit_tests/test_transactional_features.py` | 不同 app 共用錯誤配額、thread/process 競態突破上限、Strava 與手動上限不一致、upload 設定外洩 |
+| SPEC-020 草稿與 state | `unit_tests/frontend/run-controller.test.cjs` + `unit_tests/frontend_reliability.cjs` | 舊成功清除新草稿／月份、controller reset 失效、編輯／重送 key 污染新 session |
+| SPEC-020 聚合邊界與效能 | `unit_tests/test_run_statistics.py` | 閏年／跨年／未來／空資料／user scope 錯誤，或月報 YTD 查詢數隨月份增長 |
+| SPEC-020 寫入邊界 | architecture constraints + 既有 CRUD／衝突／rollback tests | router 重新擁有 mutation，或 services 穿透 HTTP |
 
 ## 4. 開發流程
 
@@ -110,6 +114,11 @@ runner 會自行尋找 Windows 或 Unix 的專案虛擬環境。
 | Secret／credential 風險 | `python3 scripts/task.py security-check` |
 | 文件／harness | `python3 scripts/task.py docs-check` |
 | 跨模組或 release | `python3 scripts/task.py verify`；大改動使用 `verify-all` |
+
+SPEC-020 的明確 traceability 見 `docs/specs/020-transactional-features-and-document-contracts.md`。
+並行 quota 測試同時使用獨立 SQLite connections 的 thread 與 spawn process，不能由 Python lock 假裝通過。
+原生 controller 的 Node 測試直接 import production module；DOM adapter 與兩引擎延遲 POST 驗證新草稿保留。
+新增文件檢查的負面 fixture 覆蓋壞本地連結／anchor、合法 encoded/reference links、缺 sections、未完成 AC 與不存在測試檔。
 
 ## 6. Definition of Done
 

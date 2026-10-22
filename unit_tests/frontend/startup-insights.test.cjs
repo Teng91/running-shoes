@@ -1,4 +1,4 @@
-const { test, assert, fs, path, vm, htmlSource, scriptPaths, scriptSource, styleSource, source, authOperationContext, streamContext, editContext, tableHeaders, extract, transportContext } = require('./helpers.cjs');
+const { runContext, test, assert, fs, path, vm, htmlSource, scriptPaths, scriptSource, styleSource, source, authOperationContext, streamContext, editContext, tableHeaders, extract, transportContext } = require('./helpers.cjs');
 
 test('replacement alerts require backup for every purpose and handle unclassified shoes', () => {
   const container = {};
@@ -51,14 +51,14 @@ test('double submit writes one run and unlocks after completion or failure', asy
     'run-km': { value: '10' }, 'run-shoe': { value: '1' },
     'run-month': {}, 'add-run-btn': {},
   };
-  const context = vm.createContext({
+  const context = runContext({
     document: { getElementById: id => elements[id] },
     apiPost: () => { calls++; return new Promise(r => { resolve = r; }); },
     localDateISO: () => '2026-10-13',
     refreshDateLimits() {}, loadData: async () => {},
     captureAuthSession: () => ({}), isCurrentAuthSession: () => true,
   });
-  vm.runInContext('let runSaving = false, runCreationDraft = null;\n' + extract('addRun'), context);
+  vm.runInContext(extract('addRun'), context);
   const first = context.addRun();
   await context.addRun();
   assert.equal(calls, 1);
@@ -75,7 +75,7 @@ test('double submit writes one run and unlocks after completion or failure', asy
 
 test('failed reload retains previous data and exposes a retry; recovery hides error', async () => {
   const error = { hidden: true };
-  const context = vm.createContext({
+  const context = runContext({
     document: { getElementById: () => error }, console: { error() {}, warn() {} },
     apiGet: async () => { throw new Error('offline'); }, render() {},
     selectedRunMonth: () => '2026-10', fetchRunPage: async () => { throw new Error('offline'); },
@@ -114,7 +114,7 @@ test('long conversations fit the backend aggregate history and content limits', 
 test('run edits send an optimistic concurrency version', () => {
   const save = extract('saveRun');
   assert.match(save, /expected_version: snapshot\.version \|\| 0/);
-  assert.match(extract('deleteEditingRun'), /expected_version=' \+ \(run\.version \|\| 0\)/);
+  assert.match(fs.readFileSync('frontend/runtime/run-controller.mjs', 'utf8'), /expected_version=' \+ \(snapshot\.version \|\| 0\)/);
 });
 
 test('monthly inline edits commit once and include the loaded version', async () => {

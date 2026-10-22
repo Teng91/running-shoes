@@ -5,6 +5,7 @@ import builtins
 import csv
 import io
 import re
+from dataclasses import replace
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -20,7 +21,6 @@ from backend.database import get_db
 from backend.main import app
 from backend.models import MonthlyMileage, Shoe
 from backend.rate_limits import _enforce_agent_rate_limit
-from backend.routers import auth as auth_routes
 from backend.routers.exports import export_shoes
 from backend.routers.monthly import (
     create_monthly_mileage,
@@ -296,7 +296,7 @@ def test_model_refresh_has_global_limit_across_users(
 
 
 def test_registration_capacity_is_enforced(client, db, monkeypatch):
-    monkeypatch.setattr(auth_routes, "MAX_REGISTERED_USERS", 1)
+    monkeypatch.setattr(app.state, "settings", replace(app.state.settings, max_registered_users=1))
     db.add(models.User(
         username="existing",
         hashed_password=get_password_hash("pass1234"),
@@ -360,7 +360,7 @@ def test_auth_global_limit_rejects_before_creating_new_ip_bucket(
 
 def test_shoe_record_quota_is_enforced(client, db, user_with_token, monkeypatch):
     user, token = user_with_token
-    monkeypatch.setattr("backend.routers.shoes.MAX_SHOES_PER_USER", 1)
+    monkeypatch.setattr(app.state, "settings", replace(app.state.settings, max_shoes_per_user=1))
     db.add(Shoe(user_id=user.id, brand="A", model="One", date="2026-01-01"))
     db.commit()
     response = client.post("/api/shoes", headers=_auth(token), json={
@@ -573,6 +573,7 @@ def test_create_routes_roll_back_failed_commits():
             schemas.ShoeCreate(brand="A", model="B", date="2026-01-01"),
             current_user=user,
             db=shoe_db,
+            config=app.state.settings,
         )
     shoe_db.rollback.assert_called_once_with()
 
@@ -596,6 +597,7 @@ def test_create_routes_roll_back_failed_commits():
             schemas.RunCreate(date="2026-08-01", km=5, shoe_id=3),
             current_user=user,
             db=run_db,
+            config=app.state.settings,
         )
     run_db.rollback.assert_called_once_with()
 
@@ -686,7 +688,7 @@ def test_static_asset_and_non404_http_errors(client):
 
     service_worker = client.get("/service-worker.js")
     assert service_worker.status_code == 200
-    assert "running-shoes-shell-v25" in service_worker.text
+    assert "running-shoes-shell-v26" in service_worker.text
 
     agent_script = client.get("/app-agent.js")
     assert agent_script.status_code == 200

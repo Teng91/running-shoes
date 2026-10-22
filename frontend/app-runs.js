@@ -1,13 +1,19 @@
 // Run CRUD, paging, and shoe selection.
-let editingRun = null;
-let runLoadRetryOptions = {};
+let runController = null;
+
+async function initializeRunFeature() {
+  const version = document.querySelector('meta[name="app-asset-version"]').content;
+  const { createRunController } = await import('./runtime/run-controller.mjs?v=' + encodeURIComponent(version));
+  runController = createRunController({
+    transport: { post: apiPost, put: apiPut, delete: apiDelete },
+    session: { capture: captureAuthSession, current: isCurrentAuthSession },
+    newKey: () => globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}-${Math.random()}`,
+  });
+}
 
 registerFeatureReset('run-editor', () => {
   closeRunModal();
-  runSaveOperation = null;
-  runCreationDraft = null;
-  runLoadRetryOptions = {};
-  runSaving = false;
+  runController.reset();
   document.getElementById('add-run-btn').disabled = false;
   document.getElementById('run-km').value = '';
   document.getElementById('run-error').textContent = '';
@@ -73,32 +79,32 @@ async function fetchRunPages({ year, month = null }) {
 }
 
 async function loadRunsForSelectedMonth({ offset = 0, day = null } = {}) {
-  const requestId = ++runListRequestId;
-  runLoadRetryOptions = { offset, day };
+  const requestId = ++runController.state.listRequest;
+  runController.state.retryOptions = { offset, day };
   const [year, month] = selectedRunMonth().split('-').map(Number);
   try {
     const [page, summary] = await Promise.all([
       fetchRunPage({ year, month, offset, day }),
       apiGet(`/runs/summary?year=${year}&month=${month}`),
     ]);
-    if (requestId !== runListRequestId) return;
-    runs = page.rows;
-    runSummary = summary;
-    runPageOffset = offset;
-    runPageHasMore = page.hasMore;
-    runDayFilter = day;
+    if (requestId !== runController.state.listRequest) return;
+    runController.state.rows = page.rows;
+    runController.state.summary = summary;
+    runController.state.offset = offset;
+    runController.state.hasMore = page.hasMore;
+    runController.state.day = day;
     document.getElementById('run-load-error').hidden = true;
     renderedPanels.delete('runs');
     renderActivePanel();
   } catch (error) {
-    if (requestId !== runListRequestId) return;
+    if (requestId !== runController.state.listRequest) return;
     console.error('載入跑步紀錄失敗:', error);
     document.getElementById('run-load-error').hidden = false;
   }
 }
 
 function changeRunPage(direction) {
-  return loadRunsForSelectedMonth({ offset: Math.max(0, runPageOffset + direction * RUN_PAGE_SIZE), day: runDayFilter });
+  return loadRunsForSelectedMonth({ offset: Math.max(0, runController.state.offset + direction * RUN_PAGE_SIZE), day: runController.state.day });
 }
 
 function filterRunDay(date) {
@@ -107,15 +113,12 @@ function filterRunDay(date) {
 
 function monthRuns() {
   const month = selectedRunMonth();
-  return runs.filter(run => run.date.slice(0, 7) === month);
+  return runController.state.rows.filter(run => run.date.slice(0, 7) === month);
 }
 
-let runSaving = false;
-let runSaveOperation = null;
-let runCreationDraft = null;
 async function addRun() {
   refreshDateLimits();
-  if (runSaving) return;
+  if (runController.saving) return;
   const error = document.getElementById('run-error');
   error.textContent = '';
   const date = document.getElementById('run-date').value;
@@ -130,31 +133,29 @@ async function addRun() {
     return;
   }
   const payload = { date, km, shoe_id: shoeId };
-  const fingerprint = JSON.stringify(payload);
-  if (!runCreationDraft || runCreationDraft.fingerprint !== fingerprint) {
-    runCreationDraft = {
-      fingerprint,
-      key: globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}-${Math.random()}`,
-    };
-  }
-  const operation = { session: captureAuthSession(), draft: runCreationDraft };
-  runSaveOperation = operation;
+  const form = {
+    date: document.getElementById('run-date').value,
+    km: document.getElementById('run-km').value,
+    shoe: document.getElementById('run-shoe').value,
+    month: document.getElementById('run-month').value,
+  };
+  const operation = runController.beginCreate(payload, form);
+  if (!operation) return;
   try {
-    runSaving = true;
     document.getElementById('add-run-btn').disabled = true;
-    await apiPost('/runs', payload, { idempotencyKey: operation.draft.key });
-    if (runSaveOperation !== operation || !isCurrentAuthSession(operation.session)) return;
-    runCreationDraft = null;
-    document.getElementById('run-km').value = '';
-    document.getElementById('run-month').value = date.slice(0, 7);
+    if (!await runController.submitCreate(operation, payload)) return;
+    const unchanged = ['date', 'km', 'shoe'].every(key =>
+      document.getElementById('run-' + key).value === form[key]);
+    if (unchanged) document.getElementById('run-km').value = '';
+    if (unchanged && document.getElementById('run-month').value === form.month) {
+      document.getElementById('run-month').value = date.slice(0, 7);
+    }
     await loadData();
   } catch (errorMessage) {
-    if (errorMessage.name === 'AbortError' || runSaveOperation !== operation || !isCurrentAuthSession(operation.session)) return;
+    if (errorMessage.name === 'AbortError' || !runController.isCurrentCreate(operation)) return;
     error.textContent = errorMessage.message || '新增失敗，請稍後再試。';
   } finally {
-    if (runSaveOperation === operation) {
-      runSaveOperation = null;
-      runSaving = false;
+    if (runController.finishCreate(operation)) {
       document.getElementById('add-run-btn').disabled = false;
     }
   }
@@ -162,9 +163,9 @@ async function addRun() {
 
 function openRunModal(runId) {
   refreshDateLimits();
-  const run = runs.find(item => item.id === runId);
+  const run = runController.state.rows.find(item => item.id === runId);
   if (!run) return;
-  editingRun = { ...run, session: captureAuthSession() };
+  runController.openEditor(run);
   document.getElementById('edit-run-date').value = run.date;
   document.getElementById('edit-run-km').value = run.km;
   populateRunShoeSelects(run.shoe_id);
@@ -173,13 +174,13 @@ function openRunModal(runId) {
 }
 
 function closeRunModal() {
-  editingRun = null;
+  runController.closeEditor();
   document.getElementById('run-modal').classList.remove('active');
 }
 
 async function saveRun() {
-  if (!editingRun || editingRun.saving) return;
-  const snapshot = editingRun;
+  if (!runController.editor || runController.editor.saving) return;
+  const snapshot = runController.editor;
   const error = document.getElementById('edit-run-error');
   if (!isCurrentAuthSession(snapshot.session)) return;
   const payload = {
@@ -196,15 +197,14 @@ async function saveRun() {
   }
   try {
     snapshot.saving = true;
-    await apiPut('/runs/' + snapshot.id, payload);
-    if (!isCurrentAuthSession(snapshot.session)) return;
-    if (editingRun === snapshot) {
+    if (!await runController.saveEditor(snapshot, payload)) return;
+    if (runController.editor === snapshot) {
       closeRunModal();
       document.getElementById('run-month').value = payload.date.slice(0, 7);
     }
     await loadData();
   } catch (saveError) {
-    if (editingRun !== snapshot || !isCurrentAuthSession(snapshot.session) || saveError.name === 'AbortError') return;
+    if (runController.editor !== snapshot || !isCurrentAuthSession(snapshot.session) || saveError.name === 'AbortError') return;
     error.textContent = saveError.message || '儲存失敗。';
     error.style.display = 'block';
   } finally {
@@ -213,16 +213,15 @@ async function saveRun() {
 }
 
 async function deleteEditingRun() {
-  const run = editingRun;
+  const run = runController.editor;
   if (run?.saving || (run && !isCurrentAuthSession(run.session))) return;
   if (!run || !confirm(`確定刪除 ${run.date.replace(/-/g, '/')} 的 ${run.km} km 紀錄？`)) return;
   try {
     run.saving = true;
-    await apiDelete('/runs/' + run.id + '?expected_version=' + (run.version || 0));
-    if (!isCurrentAuthSession(run.session)) return;
-    if (editingRun === run) closeRunModal();
+    if (!await runController.deleteEditor(run)) return;
+    if (runController.editor === run) closeRunModal();
     await loadData();
   } catch (error) {
-    if (editingRun === run && isCurrentAuthSession(run.session) && error.name !== 'AbortError') alert(error.message || '刪除失敗');
+    if (runController.editor === run && isCurrentAuthSession(run.session) && error.name !== 'AbortError') alert(error.message || '刪除失敗');
   } finally { run.saving = false; }
 }

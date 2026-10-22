@@ -207,3 +207,13 @@ def test_strava_frontend_discards_stale_preview_responses():
     assert "requestId !== stravaPreviewRequestId" in source
     assert "stravaPreviewKey !== stravaInputKey" in source
     assert "file.size > 10 * 1024 * 1024" in source
+
+
+def test_docker_context_excludes_sqlite_sidecars_and_database_backups():
+    from fnmatch import fnmatchcase
+    from pathlib import Path
+
+    patterns = (Path(__file__).resolve().parents[1] / ".dockerignore").read_text().splitlines()
+    for artifact in ("shoes.db", "shoes.db-wal", "shoes.db-shm", "shoes.db.local-snapshot.bak"):
+        assert any(fnmatchcase(artifact, pattern) for pattern in patterns), artifact
+    assert "backups/" in patterns

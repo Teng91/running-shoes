@@ -1,3 +1,6 @@
+
+from dataclasses import replace
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -268,7 +271,7 @@ def test_run_log_supports_month_filters_and_pagination(client, db, user_with_tok
 
 def test_run_log_limit(client, db, user_with_token, monkeypatch):
 
-    monkeypatch.setattr("backend.routers.runs.MAX_RUNS_PER_USER", 1)
+    monkeypatch.setattr(app.state, "settings", replace(app.state.settings, max_runs_per_user=1))
     user, token = user_with_token
     shoe = Shoe(user_id=user.id, brand="Mizuno", model="Rider", date="2026-01-01")
     db.add(shoe)
