@@ -205,7 +205,7 @@ def test_schema_two_adds_receipts_without_changing_business_rows(tmp_path):
         connection.execute(text("INSERT INTO schema_metadata VALUES ('schema_version', '1')"))
     for _ in range(2):
         run_startup_migrations(engine, sessions)
-        assert schema_version(engine) == 2
+        assert schema_version(engine) == 3
     assert "run_creation_requests" in inspect(engine).get_table_names()
     with sessions() as db:
         assert db.query(models.User).one().username == "preserved"

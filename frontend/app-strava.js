@@ -118,7 +118,7 @@ async function previewStravaFile() {
       `其中 ${stravaPreview.importable_count} 筆（${Number(stravaPreview.importable_km).toFixed(2)} km）可匯入，` +
       `已有 ${stravaPreview.duplicate_count} 筆重複。` +
       (unknown ? `有 ${unknown} 個鞋款需要手動配對或略過。` : '待匯入鞋款已全部自動配對。');
-    const shoeOptions = allRunShoes().map(shoe => `<option value="${shoe.id}">${esc(shoe.brand)} ${esc(shoe.model)} · ${esc(shoe.date)}${shoe.is_retired ? ' · 已退役' : ''}</option>`).join('');
+    const shoeOptions = allRunShoes().map(shoe => `<option value="${shoe.id}">${esc(shoeLabel(shoe))}</option>`).join('');
     mapping.innerHTML = stravaPreview.gear_groups.map((group, index) => `
       <div class="strava-group"><div><strong>${esc(group.gear || '未指定鞋款')}</strong><small>${group.count} 次 · ${Number(group.km).toFixed(2)} km</small></div>
         <select id="strava-map-${index}"><option value="">不匯入此鞋款</option>${shoeOptions}</select></div>`).join('');
@@ -163,7 +163,7 @@ async function importStrava() {
     });
     closeStravaModal();
     alert(`已匯入 ${result.imported} 筆跑步紀錄${result.skipped_unmapped ? `，略過 ${result.skipped_unmapped} 筆未配對鞋款` : ''}${result.synced_mileage ? `，並同步 ${result.synced_mileage.toFixed(2)} km 至跑鞋與月跑量` : ''}。`);
-    await loadData();
+    await loadData({ mutation: 'strava' });
   } catch (e) {
     error.textContent = e.message || '匯入失敗';
     error.style.display = 'block';

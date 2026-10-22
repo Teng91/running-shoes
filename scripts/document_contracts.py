@@ -1,5 +1,6 @@
 """Static Markdown links and feature-spec structure/traceability contracts."""
 
+import ast
 import re
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
@@ -71,6 +72,35 @@ def link_errors(root: Path, path: Path, source: str) -> list[str]:
     return errors
 
 
+def named_test_exists(root: Path, reference: str) -> bool:
+    """Resolve explicit Python nodes or literal Node test titles without executing tests."""
+    filename, separator, test_name = reference.partition("::")
+    path = (root / filename).resolve()
+    if not separator or not path.is_relative_to(root.resolve()) or not path.is_file():
+        return False
+    source = path.read_text(encoding="utf-8")
+    if path.suffix == ".py":
+        try:
+            tree = ast.parse(source)
+        except SyntaxError:
+            return False
+        names = set()
+        for node in tree.body:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name.startswith("test_"):
+                names.add(node.name)
+            if isinstance(node, ast.ClassDef) and node.name.startswith("Test"):
+                names.update(node.name + "::" + child.name for child in node.body
+                             if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef))
+                             and child.name.startswith("test_"))
+        return test_name.split("[", 1)[0] in names
+    if path.suffix in {".cjs", ".mjs"}:
+        titles = {match[1] for match in re.findall(
+            r"(?m)^test\(\s*(['\"])(.*?)\1\s*,", source
+        )}
+        return test_name in titles
+    return False
+
+
 def spec_errors(root: Path, path: Path, source: str) -> list[str]:
     errors = []
     label = path.relative_to(root)
@@ -120,6 +150,16 @@ def spec_errors(root: Path, path: Path, source: str) -> list[str]:
                 errors.append(
                     f"{label}: traceability row needs a test path or repository command: {row}"
                 )
+    if int(path.name[:3]) >= 23:
+        for row in trace.splitlines():
+            if not row.startswith("|") or "AC-" not in row:
+                continue
+            named = re.findall(r"`(unit_tests/[^`]+::[^`]+)`", row)
+            if not named:
+                errors.append(f"{label}: acceptance row needs a named test: {row}")
+            for reference in named:
+                if not named_test_exists(root, reference):
+                    errors.append(f"{label}: missing named test {reference}")
     return errors
 
 

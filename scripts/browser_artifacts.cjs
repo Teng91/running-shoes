@@ -15,6 +15,7 @@ async function saveFailure(context, page, label, error) {
     await context?.tracing.stop({ path: path.join(directory, stem + '.zip') }).catch(() => {});
     fs.writeFileSync(path.join(directory, stem + '.txt'), String(error.stack || error));
     console.error('Browser failure artifacts:', directory, stem);
+    return { directory, stem };
   } catch { console.error('Could not save browser failure artifacts.'); }
 }
 

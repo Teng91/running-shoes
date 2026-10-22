@@ -82,3 +82,32 @@ def test_spec_contract_rejects_missing_sections_unchecked_criteria_and_missing_t
 def test_current_document_contracts_are_valid():
     from scripts.document_contracts import document_errors
     assert document_errors(check_docs.ROOT) == []
+
+
+def test_named_traceability_resolves_python_classes_parameters_and_node_titles(tmp_path):
+    from scripts.document_contracts import named_test_exists
+
+    tests = tmp_path / 'unit_tests'
+    tests.mkdir()
+    (tests / 'test_named.py').write_text('def test_one(): pass\nclass TestGroup:\n    def test_method(self): pass\n')
+    (tests / 'named.test.cjs').write_text("test('SPEC-023 keeps a new draft', async () => {});\n")
+    assert named_test_exists(tmp_path, 'unit_tests/test_named.py::test_one[case]')
+    assert named_test_exists(tmp_path, 'unit_tests/test_named.py::TestGroup::test_method')
+    assert named_test_exists(tmp_path, 'unit_tests/named.test.cjs::SPEC-023 keeps a new draft')
+    assert not named_test_exists(tmp_path, 'unit_tests/test_named.py::test_deleted')
+    assert not named_test_exists(tmp_path, 'unit_tests/named.test.cjs::renamed title')
+    assert not named_test_exists(tmp_path, '../outside.py::test_one')
+
+
+def test_new_spec_traceability_rejects_file_only_and_missing_named_cases(tmp_path):
+    from scripts.document_contracts import SPEC_SECTIONS, spec_errors
+
+    tests = tmp_path / 'unit_tests'
+    tests.mkdir()
+    (tests / 'test_case.py').write_text('def test_real(): pass\n')
+    path = tmp_path / 'docs/specs/023-test.md'
+    source = '- 狀態：Implemented\n- Owner：Tests\n' + '\n'.join('## ' + section + '\n' for section in SPEC_SECTIONS[:-2])
+    source += '## Acceptance criteria\n- [x] AC-1：Done\n## Test traceability\n| AC | Test |\n| --- | --- |\n| AC-1 | `unit_tests/test_case.py::test_real` |\n'
+    assert spec_errors(tmp_path, path, source) == []
+    assert any('named test' in error for error in spec_errors(tmp_path, path, source.replace('::test_real', '')))
+    assert any('missing named test' in error for error in spec_errors(tmp_path, path, source.replace('::test_real', '::test_missing')))

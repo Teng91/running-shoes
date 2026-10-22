@@ -167,6 +167,7 @@ class UserChangePassword(BaseModel):
 # ── Shoe Schemas ──────────────────────────────────────────────
 
 class ShoeBase(BaseModel):
+    nickname: str = Field(default="", max_length=80)
     brand: ShoeName
     model: ShoeName
     date: str
@@ -241,6 +242,7 @@ class ShoeCreate(ShoeBase):
 
 class ShoeUpdate(BaseModel):
     expected_version: int | None = Field(default=None, ge=0)
+    nickname: str | None = Field(default=None, max_length=80)
     brand: ShoeName | None = None
     model: ShoeName | None = None
     date: str | None = None

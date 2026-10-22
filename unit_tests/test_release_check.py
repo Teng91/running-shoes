@@ -25,7 +25,7 @@ def fixture_fetcher():
             kind = mimetypes.guess_type(name)[0] or "application/octet-stream"
             return 200, {"Content-Type": kind}, (FRONTEND / name).read_bytes()
         if path in ("/health/live", "/health/ready"):
-            return 200, {}, json.dumps({"status": "ok", "schema_version": 2}).encode()
+            return 200, {}, json.dumps({"status": "ok", "schema_version": 3}).encode()
         if path == "/openapi.json":
             return 200, {}, json.dumps({"paths": contract}).encode()
         return 401, {}, b""
@@ -34,8 +34,8 @@ def fixture_fetcher():
 
 def test_release_check_accepts_only_matching_complete_public_shell():
     result = release_check.check_release(fixture_fetcher())
-    assert result["version"] == "3.5.1"
-    assert result["assets"] == 40
+    assert result["version"] == "3.6.0"
+    assert result["assets"] == 41
 
 
 @pytest.mark.parametrize("failure", ["hash", "mime", "http", "schema", "api", "auth", "version", "module-mime"])
@@ -58,7 +58,7 @@ def test_release_check_fails_closed_on_broken_deployments(failure):
         if failure == "auth" and path.startswith("/api/runs/year-summary"):
             status = 200
         if failure == "version" and path == "/":
-            body = body.replace(b'content="3.5.1"', b'content="0.0.0"')
+            body = body.replace(b'content="3.6.0"', b'content="0.0.0"')
         if failure == "module-mime" and path.startswith("/runtime/feature-lifecycle.mjs"):
             headers = {"Content-Type": "text/html"}
         return status, headers, body
@@ -90,7 +90,7 @@ def test_browser_gate_failure_makes_the_release_command_fail(monkeypatch):
     import subprocess
 
     monkeypatch.setattr("sys.argv", ["release_check", "--base-url", "http://127.0.0.1:8000"])
-    monkeypatch.setattr(release_check, "check_release", lambda fetcher: {"version": "3.5.1", "cache": "test", "assets": 40})
+    monkeypatch.setattr(release_check, "check_release", lambda fetcher: {"version": "3.6.0", "cache": "test", "assets": 41})
     run = Mock(side_effect=subprocess.CalledProcessError(1, ["node", "release_browser.cjs"]))
     monkeypatch.setattr(release_check.subprocess, "run", run)
     assert release_check.main() == 1

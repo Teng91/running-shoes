@@ -15,3 +15,11 @@ class Invalid(DomainError):
 
 class Conflict(DomainError):
     pass
+
+
+class Unauthorized(DomainError):
+    pass
+
+
+class CapacityExceeded(DomainError):
+    pass

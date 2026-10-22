@@ -57,7 +57,7 @@ router 只處理輸入、認證與 domain error 的 HTTP mapping，不能 commit
 `services/transactions.py` 在任何業務讀取前，以 user-scoped no-op UPDATE 取得 SQLite writer reservation，
 清除可能已載入的 ORM 快照，再驗證 quota／version、寫入與 commit；失敗一律 rollback。
 這個 UPDATE 不改變 token_version，且適用不同 session／process，不依賴 process lock。
-Strava 匯入使用同一交易邊界；無 schema migration，維持 schema 2。
+Strava 匯入使用同一交易邊界；SPEC-020 當時無 schema migration，維持 schema 2。SPEC-023 新增 nickname 的 schema 3，詳見第 10 節。
 
 `dependencies.get_settings` 從 `app.state.settings` 提供 CRUD 與匯入配額；註冊容量與 middleware upload budget
 也由 app instance 決定。外部 provider discovery／LLM 設定與既有 rate-limit module 保留 process runtime policy。
@@ -460,3 +460,29 @@ manifest 只保存摘要，不包含資料列／密碼 hash。完成的 DB 副�
 改變 endpoint contract 與模組邊界。
 
 7. **已完成（SPEC-020）**：寫入服務擁有交易、quota／upload 設定按 app 注入，跑步 native controller 收斂 state，日期區間聚合與文件契約共用。
+
+
+## 10. SPEC-023：操作身分、部分讀取與帳號服務
+
+[ADR-0006](adr/0006-form-operations-and-account-services.md) 定義這批新增邊界：
+
+```mermaid
+flowchart LR
+    HTTP[Auth / goal routers] --> Services[Accounts / goals services]
+    HTTP --> Guard[HTTP auth adapter]
+    Services --> Credentials[Pure bcrypt / JWT]
+    Services --> DB[(User-scoped SQL transactions)]
+    Guard --> Credentials
+    DOM[Run / monthly / shoe adapters] --> Ops[Native form operations]
+    DOM --> Refresh[Resource tickets + mutation policy]
+    Refresh --> API[Only affected API resources]
+```
+
+`credentials.py` 不讀 runtime settings、不依賴 FastAPI。`auth.py` 的 token wrapper 保留既有預設設定相容性；
+router 注入 app secret／capacity，services 不可直接或間接依賴 HTTP。認證 CAS、註冊 writer reservation 與 token revocation 行為不變。
+目標寫入服務保留 SQLite upsert／版本衝突與 rollback。Architecture check 對五個寫入 router 禁止 transaction／mutation 呼叫。
+
+Form operations 的 session／epoch／identity 與 snapshot 不依賴 DOM；classic bridge 管理輸入值，run controller 管理 run state。
+Native transitive imports 帶相同 revision，以符合 worker 精確 URL cache。每個資料來源的 ticket 只取消該來源的舊結果；
+部分刷新不會丟棄完整讀取中仍有效的其他來源。Mutation policy 與快取範圍詳見 SPEC-023／README。
+Schema 3 只新增 nickname；品牌／型號統計分組和里程計算仍由原有 backend 模組擁有。

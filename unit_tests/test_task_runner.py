@@ -20,6 +20,8 @@ def test_public_tasks_cover_the_documented_harness():
         "verify",
         "verify-all",
         "release-check",
+        "diagnostics-generate",
+        "diagnostics-verify",
     )
 
 
@@ -94,3 +96,44 @@ def test_browser_ci_pins_runtime_and_preserves_failure_diagnostics():
         assert f"python scripts/task.py {gate}" in browser_job
     assert "path: .artifacts/browser/" in browser_job
     assert "include-hidden-files: true" in browser_job
+
+
+def test_diagnostics_roundtrip_requires_capture_upload_download_and_content_verification():
+    source = (Path(__file__).resolve().parents[1] / '.github/workflows/verify.yml').read_text()
+    capture = source.split('  frontend-layout:', 1)[1].split('  diagnostics-roundtrip:', 1)[0]
+    download = source.split('  diagnostics-roundtrip:', 1)[1]
+    assert 'python scripts/task.py diagnostics-generate' in capture
+    assert 'name: browser-diagnostics-roundtrip' in capture
+    assert 'if-no-files-found: error' in capture
+    assert 'needs: frontend-layout' in download
+    assert 'actions/download-artifact@v8' in download
+    assert 'name: browser-diagnostics-roundtrip' in download
+    assert 'python scripts/task.py diagnostics-verify' in download
+
+
+def test_downloaded_diagnostics_validate_checksums_trace_contents_and_safe_paths(tmp_path):
+    import hashlib
+    import json
+    from zipfile import ZipFile
+
+    import pytest
+
+    from scripts.verify_diagnostics import MARKER, verify
+
+    (tmp_path / 'synthetic.png').write_bytes(b'\x89PNG\r\n\x1a\nsynthetic')
+    (tmp_path / 'synthetic.txt').write_text(MARKER)
+    with ZipFile(tmp_path / 'synthetic.zip', 'w') as archive:
+        archive.writestr('trace.trace', '{"synthetic": "' + MARKER + '"}')
+    entries = [{'name': path.name, 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()}
+               for path in sorted(tmp_path.iterdir())]
+    manifest = {'format': 'synthetic-browser-diagnostics-v1', 'marker': MARKER, 'files': entries}
+    target = tmp_path / 'manifest.json'
+    target.write_text(json.dumps(manifest))
+    assert len(verify(tmp_path)) == 3
+    (tmp_path / 'synthetic.txt').write_text('tampered')
+    with pytest.raises(ValueError, match='checksum'):
+        verify(tmp_path)
+    manifest['files'][0]['name'] = '../synthetic.png'
+    target.write_text(json.dumps(manifest))
+    with pytest.raises(ValueError, match='unsafe'):
+        verify(tmp_path)
