@@ -41,4 +41,3 @@ def update_goal(db: Session, user_id: int, payload: schemas.RunningGoalUpdate):
         db.rollback()
         raise
     return goal_service.goal_values(db, user_id)
-

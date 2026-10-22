@@ -47,7 +47,6 @@ let reportLoadController = null;
 let reportGenerationRequestId = 0;
 let reportGenerationController = null;
 let currentTheme = localStorage.getItem('theme') || 'dark';
-let dataLoadGeneration = 0;
 
 registerFeatureReset('dashboard-data', () => {
   shoes = []; retiredShoes = []; monthlyMileages = [];
@@ -55,5 +54,4 @@ registerFeatureReset('dashboard-data', () => {
   stravaImports = [];
   selectedYear = null; selectedGoalMonth = null; selectedSpendingYear = null;
   runningGoal = { version: 0, start_year: 2026, monthly_km: 125, yearly_km: 1500 };
-  dataLoadGeneration += 1;
 });
