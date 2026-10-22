@@ -516,7 +516,7 @@ WebKit 離線由 `frontend-pwa` 的 fixture transport 中斷驗證，不把引�
 - 跑步、月跑量與鞋款共用原生表單操作模組。等待期間改過的編輯草稿會保留，成功回應的版本用於下一次儲存。
 - 新增／編輯鞋款可設定最多 80 字的暱稱（留空表示沒有暱稱）。跑步與 Strava 選單顯示暱稱、品牌型號、購買日期和 #ID，區分同款鞋；鞋款表、CSV／XLSX 與帳號備份保留暱稱。
 - 月跑量異動只重讀月跑量；鞋款異動重讀現役與退役清單；跑步異動重讀鞋款、月跑量、明細與摘要。首次登入及手動重試仍完整讀取，匯入另更新 Strava 歷史。
-- 購鞋支出快取只因鞋款異動失效；逐筆目標與年度統計因日誌異動失效。不同資源分別檢查請求身分及登入 session，舊完整讀取不會蓋掉新的部分刷新。
+- 購鞋支出快取只因鞋款異動失效；逐筆目標與年度統計因日誌異動失效。不同資源分別檢查請求身分及登入 session，舊完整讀取不會蓋掉新的部分刷新，其他來源成功也不會掩蓋尚未恢復的載入錯誤。
 - 認證與目標寫入位於 `backend/services/accounts.py`／`goals.py`，密碼與 token primitives 位於 `backend/credentials.py`；router 保留輸入、rate limits 及 HTTP 轉換。
 - 工作來源的 asset revision 為 3.6.0／shell v28，尚未建立此版本 release 或部署。Schema 3 新增 `shoes.nickname`，舊鞋預設空字串，保留原始里程與版本；新舊資料庫均提供 server default。
 

@@ -14,7 +14,7 @@
 - `runtime/form-operations.mjs` 注入 session，管理 epoch、操作身分、pending ownership 和獨立草稿快照。
   Run controller 與 monthly／shoe adapters 共用，DOM 值比較留在 bridge。Reset 後舊 finally 無權解鎖新操作。
 - 只有表單與送出快照相同才清理或關閉；保留編輯草稿時，更新成功回應的版本供下次 CAS 儲存。
-- 每個資料來源有自己的 request ticket 與 session；完整讀取和部分刷新交錯時，只接受仍擁有該來源的回應。
+- 每個資料來源有自己的 request ticket 與 session；完整讀取和部分刷新交錯時，只接受仍擁有該來源的回應。各來源保留自己的載入錯誤，其他來源成功不能掩蓋未恢復的錯誤。
   跑步異動重讀鞋款、月跑量及日誌；手動月跑量只重讀月份；鞋款異動只重讀鞋款；Strava 另讀歷史。
   支出只因鞋款異動失效，目標與年度統計只因逐筆日誌異動失效；完整讀取保留全部刷新語義。
 - `credentials.py` 只依賴 bcrypt／JWT，不依賴 HTTP、runtime settings；`auth.py` 保留 HTTP 認證與舊呼叫相容 exports。
