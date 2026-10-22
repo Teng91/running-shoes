@@ -114,6 +114,7 @@ async function loadData() {
       runPageOffset = 0;
       runPageHasMore = page.hasMore;
       runDayFilter = null;
+      document.getElementById('run-load-error').hidden = true;
     }
     runningGoal = goal;
     yearlyRunsCache.clear();

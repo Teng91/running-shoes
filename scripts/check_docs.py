@@ -81,6 +81,15 @@ def require_readme_number(pattern: str, actual: int, label: str) -> None:
 
 def main() -> None:
     required_paths = (
+        "docs/specs/019-reliable-requests-and-release-gates.md",
+        "docs/adr/0004-request-reliability-and-release-gates.md",
+        "scripts/release_check.py",
+        "scripts/release_browser.cjs",
+        "scripts/browser_artifacts.cjs",
+        "package.json",
+        "package-lock.json",
+        "backend/services/run_requests.py",
+        "unit_tests/frontend_reliability.cjs",
         "docs/specs/017-consistent-statistics-and-feature-lifecycles.md",
         "docs/adr/0003-shared-read-models-and-feature-lifecycles.md",
         "scripts/build_frontend.py",
@@ -218,6 +227,7 @@ def main() -> None:
         "docs-check",
         "verify",
         "verify-all",
+        "release-check",
     )
     for task in required_tasks:
         command = f"python3 scripts/task.py {task}"

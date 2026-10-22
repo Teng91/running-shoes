@@ -23,6 +23,7 @@ function authOperationContext() {
     showChangeError: text => state.writes.push(text), showAppBoot() {}, hideAppBoot: () => state.hides++,
     resetAuthInputs() {}, resetAgentChat() {}, resetAppLayout() {}, showAppView() {}, showLoginView() {},
     loadAgentModels() {}, loadData: async () => {},
+    authRequest: (...args) => context.fetch(...args),
   });
   vm.runInContext('let authGeneration = 0, authOperation = null;\n' + [
     'setAuthControlsDisabled', 'cancelAuthOperation', 'beginAuthOperation', 'isCurrentAuthOperation',
@@ -77,7 +78,7 @@ function extract(name) {
 function transportContext() {
   const context = vm.createContext({
     window: { location: { origin: 'http://test.local' } },
-    DOMException, FormData, Blob,
+    DOMException, FormData, Blob, AbortController, setTimeout, clearTimeout, registerFeatureReset() {},
     clearCalls: 0, loginCalls: 0,
   });
   vm.runInContext(`let authToken = 'A', authGeneration = 1;

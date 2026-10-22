@@ -1,6 +1,50 @@
 // Authenticated HTTP helpers shared by feature modules.
 const API_BASE = window.location.origin + '/api';
 const authenticatedResponses = new WeakMap();
+const JSON_TIMEOUT_MS = 20_000;
+const activeHttpRequests = new Set();
+registerFeatureReset('http-requests', () => {
+  for (const controller of activeHttpRequests) controller.abort();
+});
+
+async function withRequestDeadline(job, { signal, timeoutMs = JSON_TIMEOUT_MS } = {}) {
+  const controller = new AbortController();
+  activeHttpRequests.add(controller);
+  let timer, abort;
+  const cancelled = new Promise((_, reject) => {
+    abort = () => reject(controller.signal.reason || new DOMException('請求已取消', 'AbortError'));
+    controller.signal.addEventListener('abort', abort, { once: true });
+  });
+  const forward = () => controller.abort(signal.reason);
+  signal?.addEventListener('abort', forward, { once: true });
+  if (signal?.aborted) forward();
+  timer = setTimeout(() => {
+    const error = new Error('連線逾時，請重試。若剛才正在儲存，請沿用原表單重試以確認結果。');
+    error.name = 'TimeoutError';
+    controller.abort(error);
+  }, timeoutMs);
+  try {
+    const pending = controller.signal.aborted ? Promise.reject(controller.signal.reason) : job(controller.signal);
+    return await Promise.race([cancelled, pending]);
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener('abort', forward);
+    controller.signal.removeEventListener('abort', abort);
+    activeHttpRequests.delete(controller);
+  }
+}
+
+async function authRequest(url, options) {
+  return withRequestDeadline(async signal => {
+    const response = await fetch(url, { ...options, signal });
+    let body = {};
+    try { body = await response.json(); } catch (error) {
+      if (signal.aborted) throw signal.reason;
+      if (response.ok) throw new Error('登入服務回傳格式錯誤，請稍後重試。');
+    }
+    return { ok: response.ok, status: response.status, json: async () => body };
+  }, { signal: options.signal });
+}
 
 async function authenticatedFetch(url, options = {}) {
   const session = captureAuthSession();
@@ -13,9 +57,16 @@ async function authenticatedFetch(url, options = {}) {
   }
   requireAuthSession(session);
   if (response.status === 401) {
+    // This response is already complete; let its explicit 401 error win over
+    // session teardown, which cancels all other pending requests.
+    for (const controller of activeHttpRequests) {
+      if (controller.signal === options.signal) activeHttpRequests.delete(controller);
+    }
     clearAuth();
     showLoginView();
-    throw new Error('登入已過期，請重新登入。');
+    const error = new Error('登入已過期，請重新登入。');
+    error.status = 401;
+    throw error;
   }
   authenticatedResponses.set(response, session);
   return response;
@@ -50,41 +101,48 @@ function authHeaders() {
   return headers;
 }
 
-async function apiGet(url) {
-  const res = await authenticatedFetch(API_BASE + url, { headers: authHeaders() });
-  if (!res.ok) throw new Error('GET ' + url + ' failed: ' + res.status);
-  return readAuthenticatedBody(res);
+async function jsonRequest(url, options = {}, deadline = {}) {
+  const session = captureAuthSession();
+  const method = options.method || 'GET';
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await withRequestDeadline(async signal => {
+        const res = await authenticatedFetch(API_BASE + url, { ...options, signal });
+        if (!res.ok) {
+          const body = await readAuthenticatedError(res);
+          const detail = Array.isArray(body.detail) ? body.detail.map(item => item.msg).join('；') : body.detail;
+          const error = new Error(typeof detail === 'string' ? detail : `請求失敗（HTTP ${res.status}）`);
+          error.status = res.status;
+          throw error;
+        }
+        return readAuthenticatedBody(res);
+      }, { ...deadline, signal: options.signal });
+    } catch (error) {
+      if (error.status === 401) throw error;
+      requireAuthSession(session);
+      if (method === 'GET' && attempt === 0 && !options.signal?.aborted &&
+          (error.name === 'TimeoutError' || error.name === 'TypeError' || [502, 503, 504].includes(error.status))) continue;
+      throw error;
+    }
+  }
 }
 
-async function apiPost(url, body) {
-  const res = await authenticatedFetch(API_BASE + url, {
-    method: 'POST', headers: authHeaders(), body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    const err = await readAuthenticatedError(res);
-    throw new Error(err.detail || ('POST ' + url + ' failed: ' + res.status));
-  }
-  return readAuthenticatedBody(res);
+async function apiGet(url, options = {}) {
+  return jsonRequest(url, { headers: authHeaders(), signal: options.signal }, options);
+}
+
+async function apiPost(url, body, options = {}) {
+  const headers = authHeaders();
+  if (options.idempotencyKey) headers['Idempotency-Key'] = options.idempotencyKey;
+  return jsonRequest(url, { method: 'POST', headers, body: JSON.stringify(body), signal: options.signal }, options);
 }
 
 async function apiPut(url, body) {
-  const res = await authenticatedFetch(API_BASE + url, {
-    method: 'PUT', headers: authHeaders(), body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    const error = await readAuthenticatedError(res);
-    throw new Error(typeof error.detail === 'string' ? error.detail : '儲存失敗：' + res.status);
-  }
-  return readAuthenticatedBody(res);
+  return jsonRequest(url, { method: 'PUT', headers: authHeaders(), body: JSON.stringify(body) });
 }
 
 async function apiDelete(url) {
-  const res = await authenticatedFetch(API_BASE + url, { method: 'DELETE', headers: authHeaders() });
-  if (!res.ok) {
-    const err = await readAuthenticatedError(res);
-    throw new Error(err.detail || ('DELETE ' + url + ' failed: ' + res.status));
-  }
-  return readAuthenticatedBody(res);
+  return jsonRequest(url, { method: 'DELETE', headers: authHeaders() });
 }
 
 async function apiUpload(url, file, fields = {}, signal = undefined) {
@@ -93,13 +151,5 @@ async function apiUpload(url, file, fields = {}, signal = undefined) {
   Object.entries(fields).forEach(([key, value]) => form.append(key, value));
   const headers = {};
   if (authToken) headers['Authorization'] = 'Bearer ' + authToken;
-  const res = await authenticatedFetch(API_BASE + url, { method: 'POST', headers, body: form, signal });
-  if (!res.ok) {
-    const err = await readAuthenticatedError(res);
-    const detail = Array.isArray(err.detail)
-      ? err.detail.map(item => item.msg || JSON.stringify(item)).join('；')
-      : (typeof err.detail === 'string' ? err.detail : '');
-    throw new Error(detail || ('POST ' + url + ' failed: ' + res.status));
-  }
-  return readAuthenticatedBody(res);
+  return jsonRequest(url, { method: 'POST', headers, body: form, signal }, { timeoutMs: 90_000 });
 }

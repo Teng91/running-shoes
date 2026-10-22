@@ -43,3 +43,30 @@ def month_run_summary(db: Session, user_id: int, year: int, month: int) -> dict:
         "calendar": list(calendar.values()),
         "shoe_usage": sorted(shoes.values(), key=lambda row: (-row["km"], row["shoe_id"])),
     }
+
+
+def year_run_summary(db: Session, user_id: int, year: int) -> dict:
+    """Return a compact annual matrix without materializing individual runs."""
+    month = func.substr(models.Run.date, 6, 2)
+    rows = db.query(
+        month, models.Run.shoe_id, func.sum(models.Run.km), func.count(models.Run.id)
+    ).filter(
+        models.Run.user_id == user_id,
+        models.Run.date >= f"{year:04d}-01-01",
+        models.Run.date <= f"{year:04d}-12-31",
+    ).group_by(month, models.Run.shoe_id).order_by(month, models.Run.shoe_id).all()
+    matrix: dict[int, list[float]] = {}
+    totals = [0.0] * 12
+    count = 0
+    for number, shoe_id, km, run_count in rows:
+        index = int(number) - 1
+        matrix.setdefault(shoe_id, [0.0] * 12)[index] = round(km, 2)
+        totals[index] += km
+        count += run_count
+    return {
+        "year": year,
+        "total_km": round(sum(totals), 2),
+        "run_count": count,
+        "monthly_km": [round(km, 2) for km in totals],
+        "shoes": [{"shoe_id": shoe_id, "monthly_km": kms} for shoe_id, kms in matrix.items()],
+    }

@@ -35,6 +35,7 @@ PUBLIC_TASKS = (
     "docs-check",
     "verify",
     "verify-all",
+    "release-check",
 )
 
 
@@ -173,7 +174,7 @@ def run_frontend_layout(*, optional: bool = False) -> None:
     if not layout_dependencies_available():
         message = (
             "Playwright or its Chromium/WebKit binaries are unavailable. Install them with "
-            "'npm install --no-save --package-lock=false playwright' and "
+            "'npm ci' and "
             "'npx playwright install chromium webkit'."
         )
         if optional:
@@ -187,7 +188,7 @@ def run_frontend_e2e(*, optional: bool = False) -> None:
     if not layout_dependencies_available():
         message = (
             "Playwright browser binaries are unavailable. Install them with "
-            "'npm install --no-save --package-lock=false playwright' and "
+            "'npm ci' and "
             "'npx playwright install chromium webkit'."
         )
         if optional:
@@ -211,7 +212,7 @@ def run_frontend_pwa(*, optional: bool = False) -> None:
     run_checked(Command("PWA upgrade/offline tests", ("node", "unit_tests/frontend_pwa.cjs")))
 
 
-def run_task(task: str) -> None:
+def run_task(task: str, *, base_url: str | None = None) -> None:
     python = project_python()
     if task == "setup":
         run_setup()
@@ -267,6 +268,13 @@ def run_task(task: str) -> None:
         run_frontend_layout(optional=True)
         run_frontend_e2e(optional=True)
         run_frontend_pwa(optional=True)
+    elif task == "release-check":
+        if not base_url:
+            raise TaskError("release-check requires --base-url (HTTPS or a loopback fixture)")
+        if not layout_dependencies_available():
+            raise TaskError("release-check requires the pinned Playwright browsers; run npm ci and npx playwright install chromium webkit")
+        run_checked(Command("Generated frontend assets", (python, "scripts/build_frontend.py", "--check")))
+        run_checked(Command("Read-only release verification", (python, "scripts/release_check.py", "--base-url", base_url)))
     else:
         raise TaskError(f"Unknown task: {task}")
 
@@ -274,13 +282,14 @@ def run_task(task: str) -> None:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("task", nargs="?", default="verify", choices=PUBLIC_TASKS)
+    parser.add_argument("--base-url", help="explicit origin for read-only release-check")
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     arguments = build_parser().parse_args(argv)
     try:
-        run_task(arguments.task)
+        run_task(arguments.task, base_url=arguments.base_url)
     except TaskError as error:
         print(f"Task '{arguments.task}' failed: {error}", file=sys.stderr)
         return 1

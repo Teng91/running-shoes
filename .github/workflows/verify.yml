@@ -42,7 +42,7 @@ jobs:
       - name: Install Python dependencies
         run: python -m pip install --require-hashes -r requirements-dev.txt
       - name: Install Playwright
-        run: npm install --no-save --package-lock=false playwright
+        run: npm ci
       - name: Install browser dependencies
         run: npx playwright install --with-deps chromium webkit
       - name: Run layout matrix
@@ -51,3 +51,11 @@ jobs:
         run: python scripts/task.py frontend-e2e
       - name: Run PWA upgrade and offline flow
         run: python scripts/task.py frontend-pwa
+      - name: Save browser failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: browser-failure-diagnostics
+          path: .artifacts/
+          if-no-files-found: ignore
+          retention-days: 7

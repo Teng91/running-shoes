@@ -6,3 +6,4 @@ require('./frontend/startup-insights.test.cjs');
 require('./frontend/crud-reports.test.cjs');
 require('./frontend/goals-transport.test.cjs');
 require('./frontend/statistics-lifecycle.test.cjs');
+require('./frontend/reliability.test.cjs');

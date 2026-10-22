@@ -34,3 +34,4 @@ Thumbs.db
 
 # Frontend tooling (Playwright layout checks, installed per README)
 node_modules/
+.artifacts/

@@ -1,13 +1,17 @@
 // Run CRUD, paging, and shoe selection.
 let editingRun = null;
+let runLoadRetryOptions = {};
 
 registerFeatureReset('run-editor', () => {
   closeRunModal();
   runSaveOperation = null;
+  runCreationDraft = null;
+  runLoadRetryOptions = {};
   runSaving = false;
   document.getElementById('add-run-btn').disabled = false;
   document.getElementById('run-km').value = '';
   document.getElementById('run-error').textContent = '';
+  document.getElementById('run-load-error').hidden = true;
   document.getElementById('run-month').value = localDateISO().slice(0, 7);
   document.getElementById('run-date').value = localDateISO();
 });
@@ -70,6 +74,7 @@ async function fetchRunPages({ year, month = null }) {
 
 async function loadRunsForSelectedMonth({ offset = 0, day = null } = {}) {
   const requestId = ++runListRequestId;
+  runLoadRetryOptions = { offset, day };
   const [year, month] = selectedRunMonth().split('-').map(Number);
   try {
     const [page, summary] = await Promise.all([
@@ -82,12 +87,13 @@ async function loadRunsForSelectedMonth({ offset = 0, day = null } = {}) {
     runPageOffset = offset;
     runPageHasMore = page.hasMore;
     runDayFilter = day;
+    document.getElementById('run-load-error').hidden = true;
     renderedPanels.delete('runs');
     renderActivePanel();
   } catch (error) {
     if (requestId !== runListRequestId) return;
     console.error('載入跑步紀錄失敗:', error);
-    document.getElementById('data-load-error').hidden = false;
+    document.getElementById('run-load-error').hidden = false;
   }
 }
 
@@ -106,6 +112,7 @@ function monthRuns() {
 
 let runSaving = false;
 let runSaveOperation = null;
+let runCreationDraft = null;
 async function addRun() {
   refreshDateLimits();
   if (runSaving) return;
@@ -122,13 +129,22 @@ async function addRun() {
     error.textContent = '跑步日期不可晚於今天。';
     return;
   }
-  const operation = { session: captureAuthSession() };
+  const payload = { date, km, shoe_id: shoeId };
+  const fingerprint = JSON.stringify(payload);
+  if (!runCreationDraft || runCreationDraft.fingerprint !== fingerprint) {
+    runCreationDraft = {
+      fingerprint,
+      key: globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}-${Math.random()}`,
+    };
+  }
+  const operation = { session: captureAuthSession(), draft: runCreationDraft };
   runSaveOperation = operation;
   try {
     runSaving = true;
     document.getElementById('add-run-btn').disabled = true;
-    await apiPost('/runs', { date, km, shoe_id: shoeId });
+    await apiPost('/runs', payload, { idempotencyKey: operation.draft.key });
     if (runSaveOperation !== operation || !isCurrentAuthSession(operation.session)) return;
+    runCreationDraft = null;
     document.getElementById('run-km').value = '';
     document.getElementById('run-month').value = date.slice(0, 7);
     await loadData();

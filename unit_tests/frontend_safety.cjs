@@ -1,8 +1,10 @@
 // Six SPEC-012 regressions against real application modules/DOM and mock I/O.
 const assert = require('node:assert/strict');
+const { startArtifacts, saveFailure } = require('../scripts/browser_artifacts.cjs');
 
 async function checkRunLogHome(browser, baseUrl) {
   const context = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 390, height: 844 } });
+  await startArtifacts(context);
   const errors = [], writes = [];
   await context.addInitScript(() => {
     if (localStorage.getItem('home-fixture-seeded')) return;
@@ -18,6 +20,7 @@ async function checkRunLogHome(browser, baseUrl) {
     const pathname = new URL(request.url()).pathname;
     const body = pathname === '/api/auth/me' ? { username: 'home-user' }
       : pathname === '/api/running-goal' ? { version: 0, start_year: 2026, monthly_km: 125, yearly_km: 1500 }
+      : pathname === '/api/runs/year-summary' ? { shoes: [] }
       : pathname === '/api/analytics/dashboard' ? {} : [];
     return route.fulfill({ json: body });
   });
@@ -65,12 +68,16 @@ async function checkRunLogHome(browser, baseUrl) {
     assert.deepEqual(writes, [], 'home navigation must never mutate data or send AI messages');
     assert.deepEqual(errors, []);
     console.log(`PASS ${browser.browserType().name()} SPEC-015: legacy tab ignored, reload/reopen home, restored-page lifecycle, mobile/ARIA and session/theme preservation`);
+  } catch (error) {
+    await saveFailure(context, context.pages().at(-1), 'home-' + browser.browserType().name(), error);
+    throw error;
   } finally { await context.close(); }
 }
 
 module.exports = async function checkFrontendSafety(browser, baseUrl) {
   await checkRunLogHome(browser, baseUrl);
   const context = await browser.newContext({ serviceWorkers: 'block' });
+  await startArtifacts(context);
   const page = await context.newPage();
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
@@ -94,7 +101,7 @@ module.exports = async function checkFrontendSafety(browser, baseUrl) {
       Chart.defaults.animation = false;
       let annualReads = 0;
       window.fetch = async url => {
-        if (String(url).includes('/runs?')) { annualReads++; return json([]); }
+        if (String(url).includes('/runs/year-summary?')) { annualReads++; return json({ shoes: [] }); }
         return json({});
       };
       shoes = [{ id: 1, brand: 'Test', model: 'Safety', date: '2026-01-01', size: 'US 9',
@@ -121,12 +128,12 @@ module.exports = async function checkFrontendSafety(browser, baseUrl) {
       switchTab('monthly'); await frame();
       yearlyRunsCache.clear();
       let finishAnnual;
-      window.fetch = url => String(url).includes('/runs?')
+      window.fetch = url => String(url).includes('/runs/year-summary?')
         ? new Promise(resolve => { finishAnnual = resolve; }) : Promise.resolve(json({}));
       const pending = renderShoeStackedChart();
       switchTab('runs'); await frame();
       const beforeFinish = created.length;
-      finishAnnual(json([])); await pending;
+      finishAnnual(json({ shoes: [] })); await pending;
       check(created.length === beforeFinish, 'late monthly response cannot paint hidden panel');
       switchTab('monthly'); await frame();
       check(created.includes('chart-shoe-stacked') && yearlyRunsCache.has(2026), 'return to monthly recovers from cached result');
@@ -241,5 +248,8 @@ module.exports = async function checkFrontendSafety(browser, baseUrl) {
     assert.deepEqual(errors, [], 'safety browser JavaScript errors');
     console.log(`PASS ${browser.browserType().name()} SPEC-012: lazy charts, stale reads, modal identity, AI/report stream completion/retry/errors`);
     console.log(`PASS ${browser.browserType().name()} SPEC-013: login races, shoe mutations, report timestamps and split modules`);
+  } catch (error) {
+    await saveFailure(context, page, 'safety-' + browser.browserType().name(), error);
+    throw error;
   } finally { await context.close(); }
 };

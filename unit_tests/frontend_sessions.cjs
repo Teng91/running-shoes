@@ -1,9 +1,11 @@
 // Real DOM and application code, synthetic sessions and deterministic fetch/SSE.
 // Never authenticates against, writes to, or calls an external account/model.
 const assert = require('node:assert/strict');
+const { startArtifacts, saveFailure } = require('../scripts/browser_artifacts.cjs');
 
 module.exports = async function checkSessionIsolation(browser, baseUrl) {
   const context = await browser.newContext({ serviceWorkers: 'block' });
+  await startArtifacts(context);
   const page = await context.newPage();
   const pageErrors = [];
   page.on('pageerror', error => pageErrors.push(error.message));
@@ -105,6 +107,9 @@ module.exports = async function checkSessionIsolation(browser, baseUrl) {
     assert.deepEqual(result, { dashboard: true, streaming: true, authentication: true });
     assert.deepEqual(pageErrors, [], 'session isolation browser JavaScript errors');
     console.log(`PASS ${browser.browserType().name()} session isolation: stale analytics, failed account load, aborted/late chat, stale/current 401`);
+  } catch (error) {
+    await saveFailure(context, page, 'sessions-' + browser.browserType().name(), error);
+    throw error;
   } finally {
     await context.close();
   }

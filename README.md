@@ -293,6 +293,7 @@ LLM_MAX_OUTPUT_TOKENS=4096
 | --- | --- |
 | `GET /api/runs` | 取得目前帳號的跑步紀錄；可用 `year`、`month`、`limit`（最多 500）與 `offset` 篩選／分頁，不帶參數時維持完整列表相容性 |
 | `GET /api/runs/summary` | 指定 `year`、`month` 的完整月曆與鞋款／日誌彙總，不受明細分頁影響 |
+| `GET /api/runs/year-summary` | 指定 `year` 的完整年度每月／每鞋里程矩陣；一次聚合查詢，不下載逐筆日誌 |
 | `GET /api/running-goal/progress` | 指定 `year`、`month` 的日誌目標進度，與首頁／月報共用後端規則 |
 | `GET /api/spending/summary` | 後端計算的總支出、折數、平均月支出與月份明細 |
 | `POST /api/runs` | 新增日期、公里數與鞋款 |
@@ -435,6 +436,9 @@ python3 scripts/task.py security-check
 
 # 核對 README 與實際測試數、工具數、版面矩陣及 harness 路徑
 python3 scripts/task.py docs-check
+
+# 部署後唯讀檢查（也可指定本機 fixture origin；缺瀏覽器會失敗，不跳過）
+python3 scripts/task.py release-check --base-url https://running-shoes.fly.dev
 ```
 
 Agent eval 案例位於 `unit_tests/agent_eval_cases.json`，用來固定私人資料、即時搜尋、
@@ -454,7 +458,7 @@ python3 scripts/task.py frontend-test
 手機版面回歸檢查另外使用 Playwright（WebKit 與 Chromium），包含亮暗模式、長鞋名、多筆資料、空資料、表單欄位重疊、分頁完整顯示、圖表繪圖區及彈出視窗：
 
 ```bash
-npm install --no-save --package-lock=false playwright
+npm ci
 npx playwright install chromium webkit
 python3 scripts/task.py frontend-layout
 
@@ -467,6 +471,33 @@ python3 scripts/task.py frontend-pwa
 
 可設定 `LAYOUT_SCREENSHOT_DIR` 保存手機版截圖供人工檢查；Windows 若使用已安裝的 Edge，可設定 `PLAYWRIGHT_CHROMIUM_CHANNEL=msedge`。WebKit 模擬檢查不等同於 iPhone 實機驗證。
 
+Playwright 版本由 `package.json`／`package-lock.json` 鎖定，使用 `npm ci` 重現本機與 CI 的套件版本，
+瀏覽器 harness 使用 Node.js 22+（CI 固定 Node 22），
+再由該版 Playwright 安裝匹配的 Chromium／WebKit。瀏覽器失敗時在 `.artifacts/browser/` 保存截圖、trace 與錯誤輸出，
+CI 上傳保留 7 天；可用 `npx playwright show-trace /path/to/trace.zip` 開啟。Artifacts 可能包含測試畫面，只記錄合成帳號或匿名 smoke，不對真實登入工作階段錄製。
+
+`frontend-e2e` 會對真實 FastAPI／CORS 與暫存 SQLite 執行同一個 `release-check`：檢查 readiness／schema、
+完整 API contract、manifest 對應的 39 個 shell／worker 資產雜湊與 MIME、四個統計 API 的匿名拒絕存取，
+再驗證 Chromium／WebKit 匿名手機啟動與 native runtime cache，以及 Chromium 離線重開。
+WebKit 離線由 `frontend-pwa` 的 fixture transport 中斷驗證，不把引擎的離線模擬開關當成實機結果。
+這個 task 不登入、不送出資料、不發布或回滾；正式 origin 必須是 HTTPS，HTTP 只允許 loopback。
+
+### 請求、重試與跨分頁（SPEC-019）
+
+- 月份／分頁載入錯誤有自己的提示，重試成功不掩蓋其他區塊的載入錯誤。
+- 同源其他分頁登入、登出或換帳號時，本頁立即清理舊資料及取消未完成普通請求，回登入畫面；不刪除其他分頁的新憑證。這不是登出所有裝置。
+- JSON CRUD／登入讀取有 20 秒 deadline（涵蓋 headers 與 body）；CSV upload 為 90 秒。GET 在 timeout／network／502–504 最多重試一次；寫入不自動重試。SSE 維持原串流取消流程，不套用 JSON deadline。
+- `POST /api/runs` 支援可選 `Idempotency-Key`（16–128 字元，英數及 `._:-`），同帳號、同 key／內容會重播原始回應，不重複寫入日誌及里程；內容不一致回 409。無 key 的舊客戶端維持相容。
+- 前端保留失敗新增表單的 key；原表單人工重試沿用，修改內容、成功或換帳號即建立新操作。同日同距離的兩次真實跑步不會被誤判重複。刪除後重播舊 key 不會復活日誌。
+
+### Schema 2 上線與回滾
+
+v3.4.0 只新增 `run_creation_requests` 表與 user/key 唯一約束，沒有改寫既有鞋款、日誌或里程。
+部署前必須用下方異地備份工具下載快照並完成 checksum 與隔離還原演練；舊 v3.3.1 不接受 schema 2 marker，不能直接切回舊 image。
+優先 forward fix。若確實回滾，停止所有 app writes、另做 schema 2 備份，確認 schema 2 只有新增 receipt 表後，
+在停止的資料庫上執行 `UPDATE schema_metadata SET value='1' WHERE key='schema_version' AND value='2';`，保留 receipt 表與業務資料，再部署已驗證的 v3.3.1 image。
+重新發布舊程式仍須新的 shell revision。不要以舊快照覆蓋已新增的正式資料；完整還原只用於確認可接受資料回溯的災難復原。
+
 ### AI 開發規範與自動驗證
 
 `AGENTS.md` 是 Codex 等 Coding Agent 共用的專案規範；`CLAUDE.md` 會把同一份規範匯入
@@ -478,7 +509,7 @@ Playwright／Chromium／WebKit 齊全時，也會執行版面測試。
 避免每次停止都重跑。Hook 不會呼叫其他模型、外部 API，或傳送提示、diff、原始碼與測試輸出。
 GitHub Actions 仍會在 push／pull request 執行 `verify`，並在獨立工作中安裝 Chromium／WebKit、跑完完整版面矩陣、真實 CRUD E2E 與 PWA 升級／離線測試；Dependabot 每週檢查 Python 與 GitHub Actions 更新。
 
-本次驗證基線為 Python **396 passed**、前端回歸測試 **71 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
+本次驗證基線為 Python **424 passed**、前端回歸測試 **78 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
 版面檢查涵蓋 WebKit／Chromium、亮／暗模式與 10 組直橫向尺寸，共 40 組設定，檢查六個功能分頁、三個認證表單、圖表、全部彈窗、行內編輯、停用／錯誤及空資料狀態。
 
 主要表單、工具列與彈窗操作統一為 44px 控制項；桌面表格內的緊湊操作為 36px，手機至少 44px。
