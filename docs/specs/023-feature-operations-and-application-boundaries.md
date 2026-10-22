@@ -21,7 +21,7 @@
 ## Non-goals
 
 - 不新增日誌備註、搜尋、目標歷史或帳號還原。
-- 不改公開 API method/path、不使用正式帳號進行測試、不自動部署 schema migration。
+- 不改公開 API method/path、不使用正式帳號進行測試、不在驗證流程中部署 schema migration；正式上線依明確授權執行。
 
 ## Proposed design
 
@@ -41,7 +41,7 @@
 ## Migration, rollout, and rollback
 
 - Schema／資料 migration：schema 3 新增 shoes.nickname，預設空字串，不更改既有 ID／里程／版本。
-- 上線與 smoke test：verify-all、eval-agent、architecture/security/docs gates 與 CI artifact round trip；本次先完成可檢視實作，不自動上線 migration。
+- 上線與 smoke test：verify-all、eval-agent、architecture/security/docs gates 與 CI artifact round trip；使用者於 2026-10-23 明確授權發布 v3.6.0；正式 migration 前完成異地備份與隔離還原演練，部署後執行匿名唯讀 release-check。
 - 回滾方式與資料相容性：正式 migration 前先建立並驗證異地備份；回滾 schema 2 image 需依既有 marker 相容流程，保留 nickname 欄位與新資料，不以舊快照覆蓋正式業務資料。
 
 ## Acceptance criteria
