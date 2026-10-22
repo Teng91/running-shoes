@@ -86,6 +86,10 @@ def test_browser_ci_pins_runtime_and_preserves_failure_diagnostics():
     assert f"image: mcr.microsoft.com/playwright:v{version}-noble" in browser_job
     assert "options: --ipc=host" in browser_job
     assert "--with-deps" not in browser_job
+    # setup-python cache invokes a host-shebang pip executable in /__t;
+    # python -m pip remains valid inside the job container.
+    assert "cache: pip" not in browser_job
+    assert "python -m pip install --require-hashes" in browser_job
     for gate in ("frontend-layout", "frontend-e2e", "frontend-pwa"):
         assert f"python scripts/task.py {gate}" in browser_job
     assert "path: .artifacts/browser/" in browser_job
