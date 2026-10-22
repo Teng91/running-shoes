@@ -160,10 +160,10 @@ test('shared SSE reader cancels pending reads and ignores stale sessions', async
 
 test('run modal keeps its original version and does not close a newer modal after saving', async () => {
   const { context, elements } = editContext();
-  context.runs = [{ id: 1, shoe_id: 3, km: 5, version: 6, date: '2026-01-01' }];
+  context.runController.state.rows = [{ id: 1, shoe_id: 3, km: 5, version: 6, date: '2026-01-01' }];
   context.openRunModal(1);
   elements['edit-run-shoe'].value = '3';
-  context.runs = [{ ...context.runs[0], km: 10, version: 7 }, { ...context.runs[0], id: 2 }];
+  context.runController.state.rows = [{ ...context.runController.state.rows[0], km: 10, version: 7 }, { ...context.runController.state.rows[0], id: 2 }];
   let finish, calls = 0;
   context.apiPut = (url, payload) => {
     calls++; assert.equal(url, '/runs/1'); assert.equal(payload.expected_version, 6);
@@ -174,8 +174,8 @@ test('run modal keeps its original version and does not close a newer modal afte
   assert.equal(calls, 1);
   context.closeRunModal(); context.openRunModal(2);
   finish(); await save;
-  assert.equal(vm.runInContext('editingRun.id', context), 2);
-  assert.equal(context.runs[0].km, 10);
+  assert.equal(context.runController.editor.id, 2);
+  assert.equal(context.runController.state.rows[0].km, 10);
   context.apiPut = async () => { throw new Error('409 conflict'); };
   await context.saveRun();
   assert.equal(elements['edit-run-error'].textContent, '409 conflict');

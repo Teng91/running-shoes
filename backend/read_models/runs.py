@@ -1,16 +1,15 @@
 """Complete calendar/summary read model independent of detail pagination."""
 
-from calendar import monthrange
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from backend import models
+from backend.read_models.run_statistics import month_bounds
 
 
 def month_run_summary(db: Session, user_id: int, year: int, month: int) -> dict:
-    start = f"{year:04d}-{month:02d}-01"
-    end = f"{year:04d}-{month:02d}-{monthrange(year, month)[1]:02d}"
+    start, end = month_bounds(year, month)
     rows = (
         db.query(
             models.Run.date, models.Run.shoe_id, func.sum(models.Run.km), func.count(models.Run.id)

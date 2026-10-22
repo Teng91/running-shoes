@@ -1,6 +1,8 @@
+
 import asyncio
 import io
 import threading
+from dataclasses import replace
 from datetime import timedelta
 from types import SimpleNamespace
 
@@ -31,7 +33,7 @@ def test_strava_worker_keeps_event_loop_responsive(monkeypatch, action):
     worker_threads = []
     session = object()
 
-    def parse(raw):
+    def parse(raw, max_rows):
         worker_threads.append(threading.get_ident())
         assert threading.get_ident() != loop_thread
         assert raw == b"mock csv"
@@ -51,7 +53,7 @@ def test_strava_worker_keeps_event_loop_responsive(monkeypatch, action):
 
     async def scenario():
         file = UploadFile(io.BytesIO(b"mock csv"), filename="test.csv")
-        kwargs = dict(file=file, start_date="", end_date="", current_user=SimpleNamespace(id=7), db=session)
+        kwargs = dict(config=app.state.settings, file=file, start_date="", end_date="", current_user=SimpleNamespace(id=7), db=session)
         if action == "import":
             kwargs["mapping"] = "{}"
         route = strava_routes.preview_strava_import if action == "preview" else strava_routes.import_strava_runs
@@ -220,7 +222,7 @@ def test_strava_import_history_is_bounded(client, db, user_with_token, monkeypat
     shoe = Shoe(user_id=user.id, brand="Mizuno", model="Wave Sky 7", date="2026-01-01")
     db.add(shoe)
     db.commit()
-    monkeypatch.setattr("backend.routers.strava.MAX_STRAVA_IMPORT_HISTORY_PER_USER", 2)
+    monkeypatch.setattr(app.state, "settings", replace(app.state.settings, max_strava_import_history_per_user=2))
     mapping = f'{{"Mizuno Wave Sky 7": {shoe.id}, "": null}}'
     for _ in range(3):
         assert upload(client, "/api/runs/import/strava", token, mapping).status_code == 200
@@ -369,14 +371,13 @@ def test_strava_upload_size_limit_is_bounded_before_full_read(
 ):
 
     _user, token = user_with_token
-    monkeypatch.setattr("backend.routers.strava.MAX_STRAVA_CSV_BYTES", 10)
+    monkeypatch.setattr(app.state, "settings", replace(app.state.settings, max_strava_csv_bytes=10))
     response = upload(client, "/api/runs/import/strava/preview", token)
     assert response.status_code == 413
 
 
 def test_strava_parser_rejects_excess_rows_without_materializing_all(monkeypatch):
 
-    monkeypatch.setattr("backend.routers.strava.MAX_STRAVA_CSV_ROWS", 2)
     csv_content = (
         "活動 ID,活動日期,活動類型,活動裝備,距離\n"
         "1,2026年1月1日,步行,Shoe,1000\n"
@@ -384,7 +385,7 @@ def test_strava_parser_rejects_excess_rows_without_materializing_all(monkeypatch
         "3,2026年1月3日,步行,Shoe,1000\n"
     )
     with pytest.raises(HTTPException) as error:
-        _parse_strava_csv(csv_content.encode("utf-8"))
+        _parse_strava_csv(csv_content.encode("utf-8"), max_rows=2)
     assert error.value.status_code == 413
     assert "2" in str(error.value.detail)
 
@@ -392,17 +393,19 @@ def test_strava_parser_rejects_excess_rows_without_materializing_all(monkeypatch
 def test_strava_request_limit_rejects_before_endpoint_parsing(
     client, user_with_token, monkeypatch
 ):
-    from backend import middleware
 
     _user, token = user_with_token
     endpoint_called = False
 
-    async def fail_if_endpoint_reads(_file):
+    async def fail_if_endpoint_reads(_file, _max_bytes):
         nonlocal endpoint_called
         endpoint_called = True
         raise AssertionError("endpoint should not parse an oversized multipart body")
 
-    monkeypatch.setattr(middleware, "MAX_STRAVA_REQUEST_BYTES", 10)
+    guard = app.middleware_stack
+    while not isinstance(guard, StravaUploadLimitMiddleware):
+        guard = guard.app
+    monkeypatch.setattr(guard, "max_bytes", 10)
     monkeypatch.setattr("backend.routers.strava._read_strava_upload", fail_if_endpoint_reads)
     response = upload(client, "/api/runs/import/strava/preview", token)
     assert response.status_code == 413
@@ -411,9 +414,7 @@ def test_strava_request_limit_rejects_before_endpoint_parsing(
 
 
 def test_strava_request_limit_counts_chunked_body_without_content_length(monkeypatch):
-    from backend import middleware
 
-    monkeypatch.setattr(middleware, "MAX_STRAVA_REQUEST_BYTES", 10)
     messages = iter([
         {"type": "http.request", "body": b"123456", "more_body": True},
         {"type": "http.request", "body": b"789012", "more_body": False},
@@ -438,7 +439,7 @@ def test_strava_request_limit_counts_chunked_body_without_content_length(monkeyp
         "path": "/api/runs/import/strava/preview",
         "headers": [],
     }
-    middleware = StravaUploadLimitMiddleware(downstream)
+    middleware = StravaUploadLimitMiddleware(downstream, max_bytes=10)
     asyncio.run(middleware(scope, receive, send))
     assert sent[0]["type"] == "http.response.start"
     assert sent[0]["status"] == 413

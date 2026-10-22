@@ -1,4 +1,4 @@
-const { test, assert, fs, path, vm, htmlSource, scriptPaths, scriptSource, styleSource, source, authOperationContext, streamContext, editContext, tableHeaders, extract, transportContext } = require('./helpers.cjs');
+const { runContext, test, assert, fs, path, vm, htmlSource, scriptPaths, scriptSource, styleSource, source, authOperationContext, streamContext, editContext, tableHeaders, extract, transportContext } = require('./helpers.cjs');
 
 test('monthly modal keeps its original ID/version after reorder or deletion and guards old callbacks', async () => {
   const { context, elements } = editContext();
@@ -27,7 +27,7 @@ test('panel rendering is lazy, reused, and invalidated by data or theme changes'
   const hooks = ['renderCards', 'renderAlerts', 'renderCategorySummary', 'renderTable', 'renderRetiredTable',
     'renderCharts', 'populateRunShoeSelects', 'renderRunLog', 'renderMonthlyTable', 'renderMonthlyCharts', 'renderSpendingCharts'];
   let active = 'runs';
-  const context = vm.createContext({ document: { querySelector: () => ({ dataset: { panel: active } }) },
+  const context = runContext({ document: { querySelector: () => ({ dataset: { panel: active } }) },
     Chart() {}, localDateISO: () => '2026-10-19', selectedRunMonth: () => '2026-10',
     ...Object.fromEntries(hooks.map(name => [name, () => { counts[name] = (counts[name] || 0) + 1; }])),
   });

@@ -9,10 +9,8 @@ from backend import models, schemas
 from backend.auth import create_access_token, get_current_user, get_password_hash, verify_password
 from backend.database import get_db
 from backend.rate_limits import enforce_auth_rate_limit
-from backend.settings import settings
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
-MAX_REGISTERED_USERS = settings.max_registered_users
 _registration_lock = Lock()
 
 
@@ -29,7 +27,7 @@ def register(request: Request, payload: schemas.UserCreate, db: Session = Depend
     with _registration_lock:
         if db.query(models.User).filter(models.User.username == username).first():
             raise HTTPException(status_code=400, detail="Username already registered")
-        if db.query(models.User).count() >= MAX_REGISTERED_USERS:
+        if db.query(models.User).count() >= request.app.state.settings.max_registered_users:
             raise HTTPException(status_code=403, detail="Registration capacity has been reached")
         user = models.User(username=username, hashed_password=get_password_hash(payload.password))
         db.add(user)

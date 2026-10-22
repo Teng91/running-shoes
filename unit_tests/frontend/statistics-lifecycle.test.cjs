@@ -1,4 +1,4 @@
-const { test, assert, fs, vm, extract } = require('./helpers.cjs');
+const { runContext, test, assert, fs, vm, extract } = require('./helpers.cjs');
 
 function elements() {
   return new Proxy({}, { get: (target, id) => target[id] ||= {
@@ -90,7 +90,7 @@ test('SPEC-017 cross-day limits advance without resetting drafts, month, or tab'
 
 test('SPEC-017 deleted shoes remain in annual stacked mileage totals', async () => {
   const nodes = elements(); nodes['stacked-year-select'].value = '2026';
-  const context = vm.createContext({ document: { getElementById: id => nodes[id], querySelector: () => ({ dataset: { panel: 'monthly' } }) },
+  const context = runContext({ document: { getElementById: id => nodes[id], querySelector: () => ({ dataset: { panel: 'monthly' } }) },
     chartInstances: {}, shoes: [{ id: 2, brand: 'A', model: 'Visible' }], retiredShoes: [],
     yearlyRunsCache: new Map([[2026, { shoes: [{ shoe_id: 1, monthly_km: [10] }, { shoe_id: 2, monthly_km: [20] }] }]]),
     brandColor: () => '#000', getThemeColor: () => '#000', stackedRunsRequestId: 0,
@@ -160,7 +160,7 @@ test('SPEC-017 PWA update notification never refreshes a draft without confirmat
 
 test('SPEC-017 paged run cards and calendar use the complete backend summary', () => {
   const nodes = elements(); let calendar;
-  const context = vm.createContext({ document: { getElementById: id => nodes[id] },
+  const context = runContext({ document: { getElementById: id => nodes[id] },
     selectedRunMonth: () => '2026-08', monthRuns: () => [{ id: 201, shoe_id: 1, date: '2026-08-05', km: 1 }],
     runSummary: { year: 2026, month: 8, total_km: 205, run_count: 205, run_days: 1,
       shoe_usage: [{ shoe_id: 1, km: 205, count: 205 }], calendar: [{ date: '2026-08-05', km: 205, shoes: [] }] },
@@ -194,15 +194,15 @@ test('SPEC-017 spending failures retry locally and late account responses are di
 
 test('SPEC-017 old run creation cannot overwrite or unlock a replacement account operation', async () => {
   const nodes = elements(); let session = {}, finish, reject, calls = 0;
-  const context = vm.createContext({ document: { getElementById: id => nodes[id] }, refreshDateLimits() {},
+  const context = runContext({ document: { getElementById: id => nodes[id] }, refreshDateLimits() {},
     captureAuthSession: () => session, isCurrentAuthSession: value => value === session,
     localDateISO: () => '2026-10-20', loadData: async () => {},
     apiPost: () => { calls++; return new Promise((resolve, fail) => { finish = resolve; reject = fail; }); },
   });
-  vm.runInContext('let runSaving = false, runSaveOperation = null, runCreationDraft = null;\n' + extract('addRun'), context);
+  vm.runInContext(extract('addRun'), context);
   nodes['run-date'].value = '2026-10-20'; nodes['run-km'].value = '5'; nodes['run-shoe'].value = '1';
   const old = context.addRun(), rejectOld = reject;
-  session = {}; vm.runInContext('runSaving = false; runSaveOperation = null;', context);
+  session = {}; context.runController.reset();
   const current = context.addRun();
   rejectOld(new Error('old failure')); await old;
   assert.equal(nodes['add-run-btn'].disabled, true); assert.equal(nodes['run-error'].textContent, '');

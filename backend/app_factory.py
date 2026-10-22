@@ -104,7 +104,7 @@ def create_app(
             db.close()
 
     app.dependency_overrides[get_db] = app_database_session
-    app.add_middleware(StravaUploadLimitMiddleware)
+    app.add_middleware(StravaUploadLimitMiddleware, max_bytes=selected_settings.max_strava_request_bytes)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],

@@ -79,7 +79,7 @@ Frontend 仍採 plain scripts，透過固定載入順序提供共享 global API�
 | --- | --- |
 | 前端 module 與 global contract | `node --test unit_tests/frontend_regressions.cjs` |
 | Strava parser、import、quota、isolation | `unit_tests/test_strava_import.py`, `unit_tests/test_review_regressions.py` |
-| Analytics／export／spending endpoints | `unit_tests/test_api_extra.py`, `unit_tests/test_api_isolation.py` |
+| Analytics／export／spending endpoints | `unit_tests/test_api_extra.py`, `unit_tests/test_data_integrity.py` |
 | Agent planner／tools／SSE | `unit_tests/test_agent.py`, `unit_tests/test_agent_evals.py`, `unit_tests/test_tools.py` |
 | Static asset／security contract | `unit_tests/test_security_config.py` |
 | Module boundaries and docs | `python3 scripts/task.py architecture-check`, `python3 scripts/task.py docs-check` |

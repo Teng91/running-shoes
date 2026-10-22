@@ -61,21 +61,21 @@ async function renderShoeStackedChart() {
   const sel = document.getElementById('stacked-year-select');
   const year = parseInt(sel ? sel.value : selectedStackedYear, 10);
   if (!year) return;
-  const requestId = ++stackedRunsRequestId;
-  let yearRuns = yearlyRunsCache.get(year);
+  const requestId = ++runController.state.annualRequest;
+  let yearRuns = runController.state.annualCache.get(year);
   if (!yearRuns) {
     try {
       yearRuns = await apiGet(`/runs/year-summary?year=${year}`);
       if (!Array.isArray(yearRuns.shoes)) throw new Error('年度彙總資料格式錯誤');
     } catch (error) {
       console.error('載入年度跑步紀錄失敗:', error);
-      if (requestId === stackedRunsRequestId) renderedPanels.delete('monthly');
+      if (requestId === runController.state.annualRequest) renderedPanels.delete('monthly');
       return;
     }
-    if (requestId !== stackedRunsRequestId) return;
-    yearlyRunsCache.set(year, yearRuns);
+    if (requestId !== runController.state.annualRequest) return;
+    runController.state.annualCache.set(year, yearRuns);
   }
-  if (requestId !== stackedRunsRequestId) return;
+  if (requestId !== runController.state.annualRequest) return;
 
   if (document.querySelector('.tab-panel.active')?.dataset.panel !== 'monthly') {
     renderedPanels.delete('monthly');

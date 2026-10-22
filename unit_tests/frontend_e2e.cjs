@@ -149,7 +149,7 @@ async function run() {
     await runRow.getByRole('button', { name: '編輯' }).click();
     await page.locator('#edit-run-km').fill('7.25');
     await page.evaluate(async () => {
-      const run = runs.find(item => item.id === editingRun.id);
+      const run = runController.state.rows.find(item => item.id === runController.editor.id);
       await apiPut('/runs/' + run.id, { km: 6.25, expected_version: run.version });
       await loadData();
     });

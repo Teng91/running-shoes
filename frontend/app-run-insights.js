@@ -8,7 +8,7 @@ registerFeatureReset('run-insights', () => {
 function renderRunLog() {
   const month = selectedRunMonth();
   const filtered = monthRuns();
-  const summary = runSummary && `${runSummary.year}-${String(runSummary.month).padStart(2, '0')}` === month ? runSummary : null;
+  const summary = runController.state.summary && `${runController.state.summary.year}-${String(runController.state.summary.month).padStart(2, '0')}` === month ? runController.state.summary : null;
   const total = summary ? summary.total_km : filtered.reduce((sum, run) => sum + run.km, 0);
   const days = summary ? summary.run_days : new Set(filtered.map(run => run.date)).size;
   const shoeStats = new Map();
@@ -32,11 +32,11 @@ function renderRunLog() {
   document.getElementById('run-table-title').textContent = `${monthLabel}跑步紀錄`;
   const paging = document.getElementById('run-paging');
   if (paging) {
-    paging.hidden = !runPageOffset && !runPageHasMore && !runDayFilter;
-    document.getElementById('run-prev').disabled = runPageOffset === 0;
-    document.getElementById('run-next').disabled = !runPageHasMore;
-    document.getElementById('run-page-label').textContent = `${runDayFilter ? `${runDayFilter} 日 · ` : ''}第 ${Math.floor(runPageOffset / RUN_PAGE_SIZE) + 1} 頁`;
-    document.getElementById('run-clear-day').hidden = !runDayFilter;
+    paging.hidden = !runController.state.offset && !runController.state.hasMore && !runController.state.day;
+    document.getElementById('run-prev').disabled = runController.state.offset === 0;
+    document.getElementById('run-next').disabled = !runController.state.hasMore;
+    document.getElementById('run-page-label').textContent = `${runController.state.day ? `${runController.state.day} 日 · ` : ''}第 ${Math.floor(runController.state.offset / RUN_PAGE_SIZE) + 1} 頁`;
+    document.getElementById('run-clear-day').hidden = !runController.state.day;
   }
   document.getElementById('run-table').innerHTML = filtered.length ? filtered.map(run => {
     const shoe = runShoe(run.shoe_id);

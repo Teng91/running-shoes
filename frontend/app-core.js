@@ -4,7 +4,7 @@ const renderedPanels = new Map();
 
 function invalidatePanels() {
   panelRevision += 1;
-  stackedRunsRequestId += 1;
+  runController.state.annualRequest += 1;
 }
 
 function resetPanelRendering() {
@@ -85,7 +85,7 @@ registerFeatureReset('panel-rendering', resetPanelRendering);
 async function loadData() {
   const generation = ++dataLoadGeneration;
   const token = authToken;
-  const runRequestId = ++runListRequestId;
+  const runRequestId = ++runController.state.listRequest;
   const requestedRunMonth = selectedRunMonth();
   const error = document.getElementById('data-load-error');
   try {
@@ -108,16 +108,16 @@ async function loadData() {
     spendingLoadPending = false;
     goalProgressCache.clear();
     goalProgressRequestId += 1;
-    if (runRequestId === runListRequestId && requestedRunMonth === selectedRunMonth()) {
-      runs = page.rows;
-      runSummary = summary;
-      runPageOffset = 0;
-      runPageHasMore = page.hasMore;
-      runDayFilter = null;
+    if (runRequestId === runController.state.listRequest && requestedRunMonth === selectedRunMonth()) {
+      runController.state.rows = page.rows;
+      runController.state.summary = summary;
+      runController.state.offset = 0;
+      runController.state.hasMore = page.hasMore;
+      runController.state.day = null;
       document.getElementById('run-load-error').hidden = true;
     }
     runningGoal = goal;
-    yearlyRunsCache.clear();
+    runController.state.annualCache.clear();
     if (typeof dashboardAnalyticsCache !== 'undefined') dashboardAnalyticsCache.clear();
   } catch (loadError) {
     console.error('載入資料失敗:', loadError);

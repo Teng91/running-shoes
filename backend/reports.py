@@ -7,27 +7,22 @@
 """
 
 import json
-from calendar import monthrange
 from collections.abc import Generator
 from datetime import UTC, date, datetime, timedelta, timezone
 
-from sqlalchemy import func
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
 from backend import goals, llm, models, schemas
 from backend.read_models import mileage as mileage_stats
 from backend.read_models import shoes as shoe_stats
+from backend.read_models.run_statistics import month_bounds, period_distances, run_period
 
 REPORT_SECTIONS = ["本月總覽", "趨勢解讀", "鞋款壽命與退役提醒", "下月建議"]
 
 
 def _sse(event: dict) -> str:
     return f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
-
-
-def _prev_month(year: int, month: int) -> tuple[int, int]:
-    return (year - 1, 12) if month == 1 else (year, month - 1)
 
 
 def _round(value: float | None, digits: int = 2) -> float:
@@ -43,10 +38,10 @@ def _month_run_stats(
     through_date: str | None = None,
 ) -> dict:
     """以跑步日誌（runs）為準計算單月統計；0 跑量月份也要回傳合法結構。"""
-    prefix = f"{year:04d}-{month:02d}-%"
+    start, end = month_bounds(year, month)
     query = (
         db.query(models.Run)
-        .filter(models.Run.user_id == user_id, models.Run.date.like(prefix))
+        .filter(models.Run.user_id == user_id, models.Run.date >= start, models.Run.date <= end)
     )
     if through_date is not None:
         query = query.filter(models.Run.date <= through_date)
@@ -93,23 +88,6 @@ def _month_run_stats(
     }
 
 
-def _sum_runs_prefix(
-    db: Session,
-    user_id: int,
-    prefix: str,
-    *,
-    through_date: str | None = None,
-) -> float:
-    query = (
-        db.query(func.sum(models.Run.km))
-        .filter(models.Run.user_id == user_id, models.Run.date.like(prefix))
-    )
-    if through_date is not None:
-        query = query.filter(models.Run.date <= through_date)
-    row = query.first()
-    return _round(row[0] if row and row[0] is not None else 0)
-
-
 def _shoe_context(shoe: dict) -> dict:
     keys = (
         "brand",
@@ -143,38 +121,13 @@ def build_report_stats(
 ) -> dict:
     """組出餵給 LLM 與存入 stats_json 的精簡統計快照。"""
     as_of = today or datetime.now(timezone(timedelta(hours=8))).date()
-    selected = (year, month)
-    current = (as_of.year, as_of.month)
-    prev_year, prev_month = _prev_month(year, month)
-    if selected == current:
-        month_through = as_of.isoformat()
-        previous_day = min(as_of.day, monthrange(prev_year, prev_month)[1])
-        previous_through = f"{prev_year:04d}-{prev_month:02d}-{previous_day:02d}"
-        comparison_label = "較上月同期"
-        comparison_through_day = as_of.day
-    else:
-        month_through = None
-        previous_through = None
-        comparison_label = "與上月比較"
-        comparison_through_day = monthrange(year, month)[1]
-    month_stats = _month_run_stats(
-        db, user_id, year, month, through_date=month_through
-    )
-    prev_km = _sum_runs_prefix(
-        db,
-        user_id,
-        f"{prev_year:04d}-{prev_month:02d}-%",
-        through_date=previous_through,
-    )
-    ytd_km = _round(sum(
-        _sum_runs_prefix(
-            db,
-            user_id,
-            f"{year:04d}-{item:02d}-%",
-            through_date=month_through if item == month else None,
-        )
-        for item in range(1, month + 1)
-    ))
+    period = run_period(year, month, as_of)
+    distances = period_distances(db, user_id, period)
+    month_stats = _month_run_stats(db, user_id, year, month, through_date=period.month_end)
+    prev_km = distances["previous_km"]
+    ytd_km = distances["ytd_km"]
+    comparison_label = period.comparison_label
+    comparison_through_day = period.comparison_day
 
     mileage_payload = mileage_stats.monthly_mileage_stats(db, user_id)
     mileage_keys = (
@@ -208,7 +161,7 @@ def build_report_stats(
         "comparison_label": comparison_label,
         "comparison_through_day": comparison_through_day,
         "ytd_run_km": ytd_km,
-        "running_goal": goals.goal_progress(db, user_id, year, month, as_of=as_of),
+        "running_goal": goals.goal_progress(db, user_id, year, month, as_of=as_of, distances=distances),
         "overall_monthly_stats": overall,
         "shoes": shoes_context,
         "nearing_end_of_life": end_of_life,

@@ -10,19 +10,16 @@ from starlette.concurrency import run_in_threadpool
 from backend import models, schemas, strava_import
 from backend.auth import get_current_user
 from backend.database import get_db
+from backend.dependencies import get_settings
 from backend.services import strava_imports
-from backend.settings import settings
+from backend.settings import Settings, settings
 
 router = APIRouter(tags=["strava"])
-MAX_RUNS_PER_USER = settings.max_runs_per_user
-MAX_STRAVA_CSV_BYTES = settings.max_strava_csv_bytes
-MAX_STRAVA_CSV_ROWS = settings.max_strava_csv_rows
-MAX_STRAVA_IMPORT_HISTORY_PER_USER = settings.max_strava_import_history_per_user
 
 
-def _parse_strava_csv(raw: bytes) -> tuple[list[dict[str, object]], int, list[str]]:
+def _parse_strava_csv(raw: bytes, max_rows: int = settings.max_strava_csv_rows) -> tuple[list[dict[str, object]], int, list[str]]:
     try:
-        return strava_import.parse_csv(raw, max_rows=MAX_STRAVA_CSV_ROWS)
+        return strava_import.parse_csv(raw, max_rows=max_rows)
     except strava_import.InvalidCSVError as exc:
         raise HTTPException(status_code=413 if exc.row_limit else 400, detail=str(exc)) from exc
 
@@ -36,9 +33,9 @@ def _filter_strava_rows(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-async def _read_strava_upload(file: UploadFile) -> bytes:
-    raw = await file.read(MAX_STRAVA_CSV_BYTES + 1)
-    if len(raw) > MAX_STRAVA_CSV_BYTES:
+async def _read_strava_upload(file: UploadFile, max_bytes: int) -> bytes:
+    raw = await file.read(max_bytes + 1)
+    if len(raw) > max_bytes:
         raise HTTPException(status_code=413, detail="CSV 檔案不可超過 10 MB")
     return raw
 
@@ -53,18 +50,18 @@ def _parsed_mapping(raw_mapping: str) -> dict[str, Any]:
     return parsed
 
 
-def _preview_upload(db: Session, user_id: int, raw: bytes, start_date: str, end_date: str):
+def _preview_upload(db: Session, user_id: int, raw: bytes, start_date: str, end_date: str, config: Settings):
     """One sequential worker owns CSV parsing and all request-session DB work."""
-    rows, invalid, warnings = _parse_strava_csv(raw)
+    rows, invalid, warnings = _parse_strava_csv(raw, config.max_strava_csv_rows)
     rows, filtered_out = _filter_strava_rows(rows, start_date, end_date)
     result = strava_imports.preview(db, user_id, rows, invalid, warnings)
     result["filtered_out"] = filtered_out
     return result
 
 
-def _import_upload(db: Session, user_id: int, raw: bytes, mapping: str, start_date: str, end_date: str):
+def _import_upload(db: Session, user_id: int, raw: bytes, mapping: str, start_date: str, end_date: str, config: Settings):
     parsed_mapping = _parsed_mapping(mapping)
-    rows, invalid, _ = _parse_strava_csv(raw)
+    rows, invalid, _ = _parse_strava_csv(raw, config.max_strava_csv_rows)
     rows, filtered_out = _filter_strava_rows(rows, start_date, end_date)
     try:
         result = strava_imports.import_runs(
@@ -76,8 +73,8 @@ def _import_upload(db: Session, user_id: int, raw: bytes, mapping: str, start_da
             end_date=end_date,
             invalid=invalid,
             filtered_out=filtered_out,
-            max_runs=MAX_RUNS_PER_USER,
-            history_limit=MAX_STRAVA_IMPORT_HISTORY_PER_USER,
+            max_runs=config.max_runs_per_user,
+            history_limit=config.max_strava_import_history_per_user,
         )
     except strava_imports.InvalidShoeMappingError as exc:
         if str(exc) == "ownership":
@@ -99,12 +96,13 @@ async def preview_strava_import(
     file: UploadFile = File(...),
     start_date: str = Form(""),
     end_date: str = Form(""),
+    config: Settings = Depends(get_settings),
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     user_id = current_user.id
-    raw = await _read_strava_upload(file)
-    return await run_in_threadpool(_preview_upload, db, user_id, raw, start_date, end_date)
+    raw = await _read_strava_upload(file, config.max_strava_csv_bytes)
+    return await run_in_threadpool(_preview_upload, db, user_id, raw, start_date, end_date, config)
 
 
 @router.post("/api/runs/import/strava")
@@ -113,12 +111,13 @@ async def import_strava_runs(
     mapping: str = Form("{}"),
     start_date: str = Form(""),
     end_date: str = Form(""),
+    config: Settings = Depends(get_settings),
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     user_id = current_user.id
-    raw = await _read_strava_upload(file)
-    return await run_in_threadpool(_import_upload, db, user_id, raw, mapping, start_date, end_date)
+    raw = await _read_strava_upload(file, config.max_strava_csv_bytes)
+    return await run_in_threadpool(_import_upload, db, user_id, raw, mapping, start_date, end_date, config)
 
 
 @router.get("/api/runs/import/strava/history", response_model=list[schemas.StravaImportOut])
