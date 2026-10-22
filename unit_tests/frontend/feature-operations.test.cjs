@@ -148,4 +148,14 @@ test('SPEC-023 overlapping full and mutation reloads reject stale resources and 
   const pending = context.loadData({ mutation: 'monthly' }); session.current = false;
   stale.resolve([{ year: 2026, km: 999 }]); await pending;
   assert.equal(vm.runInContext('monthlyMileages[0].km', context), 180);
+  const failed = refreshContext().context;
+  failed.console.error = () => {};
+  failed.apiGet = async url => { if (url === '/monthly-mileage') throw new Error('offline'); return []; };
+  await failed.loadData({ mutation: 'monthly' });
+  assert.equal(failed.document.getElementById('data-load-error').hidden, false);
+  await failed.loadData({ mutation: 'shoe' });
+  assert.equal(failed.document.getElementById('data-load-error').hidden, false, 'unrelated success cannot hide monthly failure');
+  failed.apiGet = async () => [];
+  await failed.loadData({ mutation: 'monthly' });
+  assert.equal(failed.document.getElementById('data-load-error').hidden, true);
 });
