@@ -29,6 +29,9 @@ jobs:
   frontend-layout:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    container:
+      image: mcr.microsoft.com/playwright:v1.63.0-noble
+      options: --ipc=host
 
     steps:
       - uses: actions/checkout@v7
@@ -43,8 +46,6 @@ jobs:
         run: python -m pip install --require-hashes -r requirements-dev.txt
       - name: Install Playwright
         run: npm ci
-      - name: Install browser dependencies
-        run: npx playwright install --with-deps chromium webkit
       - name: Run layout matrix
         run: python scripts/task.py frontend-layout
       - name: Run browser CRUD flow
@@ -56,6 +57,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: browser-failure-diagnostics
-          path: .artifacts/
+          path: .artifacts/browser/
+          include-hidden-files: true
           if-no-files-found: ignore
           retention-days: 7
