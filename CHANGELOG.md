@@ -2,6 +2,14 @@
 
 本專案的重要變更依 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.1.0/) 分類，版本號遵循 [Semantic Versioning](https://semver.org/lang/zh-TW/)。完整部署說明另見各版本的 GitHub Release。
 
+## [Unreleased]
+
+### CI
+
+- Browser job 使用與 lockfile 相符的 Playwright noble container，避免 Ubuntu mirror 下載拖過 job timeout；完整 layout／CRUD／PWA gates 保留。
+- 失敗診斷明確包含 hidden files，上傳範圍限制在 .artifacts/browser/。
+- 新增 SPEC-022、CI runtime／診斷契約回歸；此變更不修改 v3.5.1 app image 或 tag。
+
 ## [3.5.1] - 2026-10-22
 
 ### Fixed
