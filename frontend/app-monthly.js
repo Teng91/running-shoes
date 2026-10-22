@@ -1,5 +1,11 @@
 // Monthly mileage table, inline forms, and edit snapshot.
-registerFeatureReset('monthly-editor', closeMonthlyModal);
+registerFeatureReset('monthly-editor', () => {
+  closeMonthlyModal();
+  monthlySaving = false;
+  document.getElementById('add-monthly-btn').disabled = false;
+  document.getElementById('add-km').value = '';
+  document.getElementById('add-error').style.display = 'none';
+});
 function renderMonthlyTable() {
   const tbody = document.getElementById('monthly-table');
   if (monthlyMileages.length === 0) {
@@ -22,6 +28,8 @@ function renderMonthlyTable() {
 }
 
 async function inlineEditMonthly(idx, field, el) {
+  const operations = getFormOperations('monthly');
+  const operation = operations.capture();
   const entry = { ...monthlyMileages[idx] };
   const current = entry[field];
   const input = document.createElement('input');
@@ -32,20 +40,20 @@ async function inlineEditMonthly(idx, field, el) {
   input.value = current;
   let committed = false;
   const commit = async () => {
-    if (committed) return;
+    if (committed || !operations.current(operation)) return;
     committed = true;
     const val = parseFloat(input.value);
-    if (!isNaN(val) && val >= 0) {
+    if (Number.isFinite(val) && val >= 0) {
       try {
         await apiPut('/monthly-mileage/' + entry.id, {
           km: val,
           expected_version: entry.version || 0,
         });
       } catch (e) {
-        alert(e.message || '更新失敗');
+        if (operations.current(operation) && e.name !== 'AbortError') alert(e.message || '更新失敗');
       }
     }
-    await loadData();
+    if (operations.current(operation)) await loadData({ mutation: 'monthly' });
   };
   input.addEventListener('blur', commit);
   input.addEventListener('keydown', e => {
@@ -58,16 +66,19 @@ async function inlineEditMonthly(idx, field, el) {
 }
 
 async function deleteMonthlyMileage(idx) {
-  const m = monthlyMileages[idx];
+  const operations = getFormOperations('monthly');
+  const operation = operations.capture();
+  const m = { ...monthlyMileages[idx] };
   if (!confirm(`確定要刪除 ${m.year} 年 ${m.month} 月的紀錄？`)) return;
   try {
     await apiDelete('/monthly-mileage/' + m.id + '?expected_version=' + (m.version || 0));
   } catch (e) {
+    if (!operations.current(operation) || e.name === 'AbortError') return;
     console.error('刪除失敗:', e);
     alert(e.message || '刪除失敗');
     return;
   }
-  await loadData();
+  if (operations.current(operation)) await loadData({ mutation: 'monthly' });
 }
 
 // ====== Monthly Mileage: inline add form ======
@@ -97,34 +108,38 @@ function populateAddSelects() {
 
 let monthlySaving = false;
 async function addMonthlyMileage() {
+  const operations = getFormOperations('monthly');
   if (monthlySaving) return;
-  const year = parseInt(document.getElementById('add-year').value, 10);
-  const month = parseInt(document.getElementById('add-month').value, 10);
-  const rawKm = parseFloat(document.getElementById('add-km').value);
+  const form = readForm(['add-year', 'add-month', 'add-km']);
+  const year = Number(form['add-year']), month = Number(form['add-month']);
+  const km = parseFloat(form['add-km']);
   const errEl = document.getElementById('add-error');
   errEl.style.display = 'none';
-  if (!Number.isFinite(rawKm) || rawKm < 0) {
+  if (!Number.isFinite(km) || km < 0) {
     errEl.textContent = '請輸入有效的非負跑量；若要記錄零，請明確輸入 0。';
     errEl.style.display = 'block';
     return;
   }
-  const km = rawKm;
-
+  const operation = operations.begin('create', form);
+  if (!operation) return;
   const button = document.getElementById('add-monthly-btn');
   try {
     monthlySaving = true;
     button.disabled = true;
     await apiPost('/monthly-mileage', { year, month, km });
+    if (!operations.owns('create', operation)) return;
+    if (matchesForm(operation.form)) document.getElementById('add-km').value = '';
+    await loadData({ mutation: 'monthly' });
   } catch (e) {
+    if (!operations.owns('create', operation) || e.name === 'AbortError' || !matchesForm(operation.form)) return;
     errEl.textContent = translateError(e.message) || '儲存失敗';
-    errEl.style.display = '';
-    return;
+    errEl.style.display = 'block';
   } finally {
-    monthlySaving = false;
-    button.disabled = false;
+    if (operations.finish('create', operation)) {
+      monthlySaving = false;
+      button.disabled = false;
+    }
   }
-  document.getElementById('add-km').value = '';
-  await loadData();
 }
 
 // ====== Monthly Mileage: edit modal ======
@@ -133,7 +148,7 @@ let editingMonthly = null;
 function editMonthlyMileage(idx) {
   const m = monthlyMileages[idx];
   if (!m) return;
-  editingMonthly = { ...m, session: captureAuthSession() };
+  editingMonthly = { ...m, ...getFormOperations('monthly').capture() };
   document.getElementById('save-monthly-btn').disabled = false;
   populateMonthlyEditSelects(m.year, m.month);
   document.getElementById('monthly-modal-title').textContent = '編輯月份';
@@ -182,6 +197,7 @@ async function saveMonthlyMileage() {
   if (!editingMonthly || editingMonthly.saving) return;
   const snapshot = editingMonthly;
   if (!isCurrentAuthSession(snapshot.session)) return;
+  const draft = readForm(['m-year', 'm-month', 'm-km']);
   const year = parseInt(document.getElementById('m-year').value, 10);
   const month = parseInt(document.getElementById('m-month').value, 10);
   const rawKm = parseFloat(document.getElementById('m-km').value);
@@ -198,9 +214,10 @@ async function saveMonthlyMileage() {
   try {
     snapshot.saving = true;
     button.disabled = true;
-    await apiPut('/monthly-mileage/' + snapshot.id, {
+    const saved = await apiPut('/monthly-mileage/' + snapshot.id, {
       year, month, km, expected_version: snapshot.version || 0,
     });
+    if (editingMonthly === snapshot && isCurrentAuthSession(snapshot.session) && saved?.version !== undefined) snapshot.version = saved.version;
   } catch (e) {
     if (editingMonthly !== snapshot || !isCurrentAuthSession(snapshot.session) || e.name === 'AbortError') return;
     errEl.textContent = translateError(e.message) || '儲存失敗';
@@ -211,7 +228,7 @@ async function saveMonthlyMileage() {
     if (editingMonthly === snapshot) button.disabled = false;
   }
   if (!isCurrentAuthSession(snapshot.session)) return;
-  if (editingMonthly === snapshot) closeMonthlyModal();
-  await loadData();
+  if (editingMonthly === snapshot && matchesForm(draft)) closeMonthlyModal();
+  await loadData({ mutation: 'monthly' });
 }
 

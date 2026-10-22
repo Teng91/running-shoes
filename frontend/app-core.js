@@ -82,55 +82,87 @@ applyTheme(currentTheme);
 
 registerFeatureReset('panel-rendering', resetPanelRendering);
 
-async function loadData() {
-  const generation = ++dataLoadGeneration;
-  const token = authToken;
-  const runRequestId = ++runController.state.listRequest;
+function dataRefreshPolicy(mutation) {
+  const policies = {
+    monthly: ['monthly'], shoe: ['shoes'],
+    run: ['shoes', 'monthly', 'runs'], strava: ['shoes', 'monthly', 'runs'],
+  };
+  if (mutation && !policies[mutation]) throw new Error('Unknown mutation: ' + mutation);
+  return { resources: policies[mutation] || ['shoes', 'monthly', 'runs', 'goal'],
+    history: !mutation || mutation === 'strava' };
+}
+
+const dataResourceRequests = new Map();
+registerFeatureReset('data-resources', () => dataResourceRequests.clear());
+
+function invalidateDataResources(resources) {
+  for (const resource of resources) dataResourceRequests.delete(resource);
+}
+
+async function loadData({ mutation = null } = {}) {
+  const policy = dataRefreshPolicy(mutation);
+  const session = captureAuthSession();
+  const tickets = new Map(policy.resources.map(resource => [resource, { session }]));
+  for (const [resource, ticket] of tickets) dataResourceRequests.set(resource, ticket);
+  const current = resource => dataResourceRequests.get(resource) === tickets.get(resource)
+    && isCurrentAuthSession(session);
   const requestedRunMonth = selectedRunMonth();
+  const [runYear, runMonth] = requestedRunMonth.split('-').map(Number);
+  const runRequestId = policy.resources.includes('runs') ? ++runController.state.listRequest : null;
   const error = document.getElementById('data-load-error');
+  const readers = {
+    shoes: () => Promise.all([apiGet('/shoes/active'), apiGet('/shoes/retired')]),
+    monthly: () => apiGet('/monthly-mileage'),
+    runs: () => Promise.all([fetchRunPage({ year: runYear, month: runMonth }),
+      apiGet(`/runs/summary?year=${runYear}&month=${runMonth}`)]),
+    goal: () => apiGet('/running-goal'),
+  };
+  let results;
   try {
-    const [runYear, runMonth] = requestedRunMonth.split('-').map(Number);
-    const [active, retired, monthly, page, summary, goal] = await Promise.all([
-      apiGet('/shoes/active'),
-      apiGet('/shoes/retired'),
-      apiGet('/monthly-mileage'),
-      fetchRunPage({ year: runYear, month: runMonth }),
-      apiGet(`/runs/summary?year=${runYear}&month=${runMonth}`),
-      apiGet('/running-goal'),
-    ]);
-    if (generation !== dataLoadGeneration || token !== authToken) return;
-    error.hidden = true;
-    shoes = active;
-    retiredShoes = retired;
-    monthlyMileages = monthly;
-    spendingSummary = null;
-    spendingLoadRequestId += 1;
-    spendingLoadPending = false;
-    goalProgressCache.clear();
-    goalProgressRequestId += 1;
-    if (runRequestId === runController.state.listRequest && requestedRunMonth === selectedRunMonth()) {
-      runController.state.rows = page.rows;
-      runController.state.summary = summary;
-      runController.state.offset = 0;
-      runController.state.hasMore = page.hasMore;
-      runController.state.day = null;
-      document.getElementById('run-load-error').hidden = true;
-    }
-    runningGoal = goal;
-    runController.state.annualCache.clear();
-    if (typeof dashboardAnalyticsCache !== 'undefined') dashboardAnalyticsCache.clear();
+    results = await Promise.all(policy.resources.map(resource => readers[resource]()));
   } catch (loadError) {
-    console.error('載入資料失敗:', loadError);
-    if (generation !== dataLoadGeneration || token !== authToken) return;
-    error.hidden = false;
+    if (policy.resources.some(current)) {
+      console.error('載入資料失敗:', loadError);
+      error.hidden = false;
+    }
     return;
   }
-  if (monthlyMileages.length > 0) {
+  const accepted = new Set();
+  policy.resources.forEach((resource, index) => {
+    if (!current(resource)) return;
+    accepted.add(resource);
+    const value = results[index];
+    if (resource === 'shoes') [shoes, retiredShoes] = value;
+    if (resource === 'monthly') monthlyMileages = value;
+    if (resource === 'goal') runningGoal = value;
+    if (resource === 'runs' && runRequestId === runController.state.listRequest
+        && requestedRunMonth === selectedRunMonth()) {
+      const [page, summary] = value;
+      Object.assign(runController.state, { rows: page.rows, summary, offset: 0, hasMore: page.hasMore, day: null });
+      document.getElementById('run-load-error').hidden = true;
+    }
+  });
+  if (!accepted.size) return;
+  error.hidden = true;
+  // Run mileage does not affect purchase spending; manual totals do not affect run-only goals.
+  if (accepted.has('shoes') && (!mutation || mutation === 'shoe')) {
+    spendingSummary = null;
+    spendingLoadRequestId++;
+    spendingLoadPending = false;
+  }
+  if (accepted.has('runs') || accepted.has('goal')) {
+    goalProgressCache.clear();
+    goalProgressRequestId++;
+  }
+  if (accepted.has('runs')) runController.state.annualCache.clear();
+  if (accepted.has('runs') || accepted.has('shoes') || accepted.has('goal')) {
+    dashboardAnalyticsCache.clear();
+    dashboardAnalyticsRequest++;
+  }
+  if (accepted.has('monthly')) {
     const years = [...new Set(monthlyMileages.map(item => item.year))].sort((a, b) => b - a);
-    if (!selectedYear || !years.includes(selectedYear)) selectedYear = years[0];
-  } else {
-    selectedYear = new Date().getFullYear();
+    if (!selectedYear || !years.includes(selectedYear)) selectedYear = years[0] || new Date().getFullYear();
   }
   render();
-  loadStravaHistory();
+  if (policy.history && isCurrentAuthSession(session)) loadStravaHistory();
 }

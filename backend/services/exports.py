@@ -152,7 +152,7 @@ def _build_xlsx(rows: list[dict[str, Any]], filename: str) -> ExportFile:
 
 def _serialize_shoe(shoe: models.Shoe) -> dict[str, Any]:
     return {
-        "id": shoe.id, "brand": shoe.brand, "model": shoe.model, "date": shoe.date,
+        "id": shoe.id, "nickname": shoe.nickname, "brand": shoe.brand, "model": shoe.model, "date": shoe.date,
         "size": shoe.size, "price": shoe.price, "orig_price": shoe.orig_price,
         "mileage": shoe.mileage, "baseline_mileage": shoe.baseline_mileage,
         "expected_mileage": shoe.expected_mileage, "monthly_km": shoe.monthly_km,

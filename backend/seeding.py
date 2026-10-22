@@ -5,7 +5,7 @@ from collections.abc import Callable
 from sqlalchemy.orm import Session
 
 from backend import models
-from backend.auth import get_password_hash
+from backend.credentials import get_password_hash
 from backend.settings import Settings
 
 

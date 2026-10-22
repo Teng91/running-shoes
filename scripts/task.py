@@ -36,6 +36,8 @@ PUBLIC_TASKS = (
     "verify",
     "verify-all",
     "release-check",
+    "diagnostics-generate",
+    "diagnostics-verify",
 )
 
 
@@ -268,6 +270,13 @@ def run_task(task: str, *, base_url: str | None = None) -> None:
         run_frontend_layout(optional=True)
         run_frontend_e2e(optional=True)
         run_frontend_pwa(optional=True)
+    elif task == "diagnostics-generate":
+        if not layout_dependencies_available():
+            raise TaskError("diagnostics-generate requires the pinned Playwright browsers")
+        run_checked(Command("Capture synthetic browser failure", ("node", "scripts/diagnostics_drill.cjs")))
+        run_checked(Command("Verify captured diagnostics", (python, "scripts/verify_diagnostics.py")))
+    elif task == "diagnostics-verify":
+        run_checked(Command("Verify downloaded diagnostics", (python, "scripts/verify_diagnostics.py")))
     elif task == "release-check":
         if not base_url:
             raise TaskError("release-check requires --base-url (HTTPS or a loopback fixture)")

@@ -51,6 +51,16 @@ jobs:
         run: python scripts/task.py frontend-e2e
       - name: Run PWA upgrade and offline flow
         run: python scripts/task.py frontend-pwa
+      - name: Exercise synthetic failure capture
+        run: python scripts/task.py diagnostics-generate
+      - name: Upload synthetic diagnostics for roundtrip verification
+        uses: actions/upload-artifact@v7
+        with:
+          name: browser-diagnostics-roundtrip
+          path: .artifacts/browser/roundtrip/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7
       - name: Save browser failure diagnostics
         if: failure()
         uses: actions/upload-artifact@v7
@@ -60,3 +70,20 @@ jobs:
           include-hidden-files: true
           if-no-files-found: ignore
           retention-days: 7
+
+  diagnostics-roundtrip:
+    needs: frontend-layout
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+      - name: Download synthetic diagnostics
+        uses: actions/download-artifact@v8
+        with:
+          name: browser-diagnostics-roundtrip
+          path: .artifacts/browser/roundtrip/
+      - name: Verify downloaded trace, screenshot and error contents
+        run: python scripts/task.py diagnostics-verify

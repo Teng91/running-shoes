@@ -12,7 +12,7 @@ from sqlalchemy.orm import sessionmaker
 from backend import models
 from backend.app_factory import create_app
 from backend.database import configure_sqlite_connection
-from backend.routers import auth
+from backend.services import accounts as auth
 from backend.settings import settings
 
 

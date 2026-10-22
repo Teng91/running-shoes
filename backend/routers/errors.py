@@ -5,7 +5,14 @@ from contextlib import contextmanager
 
 from fastapi import HTTPException
 
-from backend.services.errors import Conflict, DomainError, Invalid, NotFound
+from backend.services.errors import (
+    CapacityExceeded,
+    Conflict,
+    DomainError,
+    Invalid,
+    NotFound,
+    Unauthorized,
+)
 
 
 @contextmanager
@@ -13,5 +20,5 @@ def service_errors() -> Iterator[None]:
     try:
         yield
     except DomainError as error:
-        status = {NotFound: 404, Invalid: 400, Conflict: 409}[type(error)]
+        status = {NotFound: 404, Invalid: 400, Conflict: 409, Unauthorized: 401, CapacityExceeded: 403}[type(error)]
         raise HTTPException(status_code=status, detail=str(error)) from error

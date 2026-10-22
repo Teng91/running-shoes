@@ -77,7 +77,7 @@ test('shoe action groups show only relevant controls without overriding shared b
   const context = vm.createContext({ document: { getElementById: id => elements[id] } });
   vm.runInContext(definition + '\nglobalThis.Modal = ShoeModal;', context);
   const modal = Object.create(context.Modal.prototype);
-  Object.assign(modal, { titleEl: {}, btnDelete: { style: {} }, btnMove: { style: {} }, monthlyRow: { style: {} } });
+  Object.assign(modal, { formIds: {}, titleEl: {}, btnDelete: { style: {} }, btnMove: { style: {} }, monthlyRow: { style: {} } });
   modal._updateUI({ title: '新增', showDelete: false, showMove: false, monthly: 60, monthlyVisible: true });
   assert.equal(elements['shoe-secondary-actions'].hidden, true);
   assert.equal(modal.btnDelete.style.display, 'none');

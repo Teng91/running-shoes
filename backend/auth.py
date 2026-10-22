@@ -1,21 +1,21 @@
 import sys
 import warnings
-from datetime import UTC, datetime, timedelta
 
-import bcrypt
-import jwt
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jwt import InvalidTokenError
 from sqlalchemy.orm import Session
 
+from backend import credentials as credential_codec
+from backend.credentials import ACCESS_TOKEN_EXPIRE_MINUTES as ACCESS_TOKEN_EXPIRE_MINUTES
+from backend.credentials import ALGORITHM as ALGORITHM
+from backend.credentials import get_password_hash as get_password_hash
+from backend.credentials import verify_password as verify_password
 from backend.database import get_db
 from backend.models import User
 from backend.settings import settings
 
 SECRET_KEY = settings.secret_key
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
 
 # Detect production-like environments (not local dev)
 IS_PRODUCTION = settings.is_production
@@ -33,34 +33,13 @@ if not SECRET_KEY:
 security = HTTPBearer()
 
 
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    try:
-        return bcrypt.checkpw(
-            plain_password.encode("utf-8"),
-            hashed_password.encode("utf-8") if isinstance(hashed_password, str) else hashed_password,
-        )
-    except (TypeError, ValueError):
-        return False
-
-
-def get_password_hash(password: str) -> str:
-    encoded = password.encode("utf-8")
-    if len(encoded) > 72:
-        raise ValueError("password must be at most 72 UTF-8 bytes")
-    return bcrypt.hashpw(encoded, bcrypt.gensalt()).decode("utf-8")
-
-
 def create_access_token(data: dict, *, secret_key: str | None = None) -> str:
-    to_encode = data.copy()
-    expire = datetime.now(UTC) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, secret_key or SECRET_KEY, algorithm=ALGORITHM)
+    return credential_codec.create_access_token(data, secret_key=secret_key or SECRET_KEY)
 
 
 def decode_access_token(token: str, *, secret_key: str | None = None) -> dict:
     try:
-        payload = jwt.decode(token, secret_key or SECRET_KEY, algorithms=[ALGORITHM])
-        return payload
+        return credential_codec.decode_access_token(token, secret_key=secret_key or SECRET_KEY)
     except InvalidTokenError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
