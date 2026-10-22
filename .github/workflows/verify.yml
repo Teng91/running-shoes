@@ -41,7 +41,6 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
-          cache: pip
       - name: Install Python dependencies
         run: python -m pip install --require-hashes -r requirements-dev.txt
       - name: Install Playwright
