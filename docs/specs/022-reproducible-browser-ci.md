@@ -24,6 +24,7 @@ v3.5.1 main CI 重跑時，Ubuntu Azure mirror 下載瀏覽器系統依賴超過
 
 - frontend-layout job 使用與 package-lock 相同 Playwright 1.63.0 的官方 noble container，配置 --ipc=host。
 - 仍由 npm ci 安裝套件；container 已有 browsers／OS dependencies，移除 install --with-deps。
+- container job 不啟用 setup-python 的 pip cache（其 host shebang 在 /__t mount 下失效）；依賴一律以 python -m pip 安裝，host verify job 保留 cache。
 - upload-artifact 明確 include-hidden-files，path 縮小至 .artifacts/browser/，保留 7 天。
 - regression 檢查 workflow image 與 package／lockfile 版本一致，以及診斷上傳的 scope／hidden 設定。
 
