@@ -27,3 +27,11 @@ classic scripts 分檔後仍共享操作狀態，晚到成功回應會清除新�
 - Services 可直接測試 rollback／並行與 user isolation，router 不再擁有 commit／rollback。
 - 前端仍保留相容 DOM handler 名稱，逐步將功能 state 移入 native modules，PWA manifest 明列新 module。
 - schema 2 與 v3.4.0 相容，回滾不需修改 marker；發布仍需新 asset revision 與正式資料備份。
+
+## SPEC-021 addendum
+
+- 註冊沒有既有 user id，改用 `write_transaction(db)`：NULL primary-key predicate 的 no-op UPDATE
+  在空資料庫同樣取得 SQLite writer reservation，保護全域註冊容量及同名檢查，不新增鎖表。
+- 密碼雜湊在 writer reservation 外計算。改密碼使用原 hash／token_version 的條件 UPDATE，
+  由 SQL 原子遞增版本；過期請求回 409。這讓 bcrypt 不阻塞其他 writer，且避免舊快照覆寫密碼。
+- docs-check 從與 release-check 相同的 manifest helper 推導資產數，文件數量漂移成為可重現的失敗。
