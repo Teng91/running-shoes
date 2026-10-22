@@ -71,3 +71,22 @@ def test_ci_and_docs_use_the_cross_platform_runner():
     assert "scripts/task.py" in combined
     assert "task.ps1" not in combined
     assert "pwsh" not in combined.casefold()
+
+
+def test_browser_ci_pins_runtime_and_preserves_failure_diagnostics():
+    import json
+
+    root = Path(__file__).resolve().parents[1]
+    package = json.loads((root / "package.json").read_text())
+    lock = json.loads((root / "package-lock.json").read_text())
+    version = package["devDependencies"]["playwright"]
+    assert lock["packages"]["node_modules/playwright"]["version"] == version
+    workflow = (root / ".github/workflows/verify.yml").read_text()
+    browser_job = workflow.split("  frontend-layout:", 1)[1]
+    assert f"image: mcr.microsoft.com/playwright:v{version}-noble" in browser_job
+    assert "options: --ipc=host" in browser_job
+    assert "--with-deps" not in browser_job
+    for gate in ("frontend-layout", "frontend-e2e", "frontend-pwa"):
+        assert f"python scripts/task.py {gate}" in browser_job
+    assert "path: .artifacts/browser/" in browser_job
+    assert "include-hidden-files: true" in browser_job
