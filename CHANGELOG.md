@@ -2,6 +2,20 @@
 
 本專案的重要變更依 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.1.0/) 分類，版本號遵循 [Semantic Versioning](https://semver.org/lang/zh-TW/)。完整部署說明另見各版本的 GitHub Release。
 
+## [3.5.1] - 2026-10-22
+
+### Fixed
+
+- 改密碼以原 hash／登入版本作條件原子更新，過期並行請求回 409，避免覆寫新密碼與漏撤銷憑證。
+- 註冊改以 SQLite writer reservation 保護同名／容量檢查與新增，空資料庫及跨程序均適用。
+- README 的 shell／worker 資產數量更新為 40；docs-check 以 manifest 推導數量，阻擋後續漂移。
+
+### Documentation and testing
+
+- 新增 SPEC-021 並更新 SDD／ADR／TDD；新增重疊改密碼、spawn process 註冊容量／同名及文件數量負例。
+- 核心修正 verify-all 通過：449 Python、81 Node、95.21% backend coverage；40 組版面及雙引擎 E2E／PWA 無跳過。
+- 修補版使用 asset revision 3.5.1／shell v27，schema 維持 2。
+
 ## [3.5.0] - 2026-10-22
 
 ### Fixed

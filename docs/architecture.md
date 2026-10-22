@@ -81,6 +81,16 @@ flowchart LR
 controller.state 整合，不再共享各自的 run state globals。Boot 等待 native modules 完成後才初始化登入。
 成功回應清理前比對原始表單值，保留等待期間的新草稿與查看月份；reset 作廢舊帳號操作。
 
+### SPEC-021：認證寫入與文件數量契約
+
+註冊的 bcrypt hash 在 writer reservation 外計算，之後以 `write_transaction(db)` 的無 user 模式
+執行 `UPDATE users ... WHERE id IS NULL`；即使沒有任何帳號，SQLite 仍在容量／同名查詢前保留 writer。
+沒有符合資料，不更改使用者欄位；檢查與新增一起 commit／rollback，不依賴程序內 Lock。
+改密碼以驗證時的 user id、hash 與 token_version 作條件 UPDATE，SQL 原子遞增版本；
+過期請求回 409，不覆寫新密碼。昂貴 hash 工作不持有資料庫寫入保留。
+`docs-check` 與 release-check 共用 `shell_asset_paths(manifest)` 推導 shell 加 worker 數量，阻擋 README 過期數字。
+詳見 [SPEC-021](specs/021-auth-concurrency-and-release-asset-count.md)。
+
 ## 2. 系統脈絡
 
 ```mermaid
