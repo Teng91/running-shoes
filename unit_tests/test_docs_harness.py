@@ -1,3 +1,7 @@
+import json
+
+import pytest
+
 from scripts import check_docs
 
 
@@ -12,6 +16,34 @@ def test_docs_harness_reads_agent_tool_count():
 
 def test_docs_harness_reads_layout_matrix_count():
     assert check_docs.layout_matrix_count() == 40
+
+
+def test_docs_harness_rejects_stale_release_asset_count(monkeypatch, capsys):
+    actual = check_docs.release_asset_count()
+    documented_python, _frontend = check_docs.documented_counts()
+    stale = check_docs.README.replace(
+        f"manifest 對應的 {actual} 個 shell／worker 資產",
+        f"manifest 對應的 {actual - 1} 個 shell／worker 資產",
+    )
+    assert stale != check_docs.README
+    monkeypatch.setattr(check_docs, "README", stale)
+    # Exercise the real docs-check entry point without recursively collecting
+    # this running pytest suite. All other repository facts remain real.
+    monkeypatch.setattr(check_docs, "collected_pytest_count", lambda: documented_python)
+    with pytest.raises(SystemExit):
+        check_docs.main()
+    assert f"release asset says {actual - 1}, but the repository has {actual}" in capsys.readouterr().err
+
+
+def test_docs_harness_counts_new_manifest_modules(monkeypatch):
+    manifest = json.loads((check_docs.ROOT / "frontend" / "assets.json").read_text(encoding="utf-8"))
+    previous = check_docs.release_asset_count(manifest)
+    manifest["modules"].append("runtime/new-feature.mjs")
+    actual = check_docs.release_asset_count(manifest)
+    assert actual == previous + 1
+    monkeypatch.setattr(check_docs, "README", f"manifest 對應的 {previous} 個 shell／worker 資產")
+    with pytest.raises(SystemExit):
+        check_docs.require_readme_number(r"manifest 對應的 (\d+) 個 shell／worker 資產", actual, "release asset")
 
 
 def test_document_links_reject_missing_files_and_anchors_but_ignore_examples(tmp_path):

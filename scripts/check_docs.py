@@ -1,5 +1,6 @@
 """Fail when README harness facts drift from the repository."""
 
+import json
 import re
 import subprocess
 import sys
@@ -77,6 +78,15 @@ def require_readme_number(pattern: str, actual: int, label: str) -> None:
     documented = int(match.group(1))
     if documented != actual:
         fail(f"{label} says {documented}, but the repository has {actual}")
+
+
+def release_asset_count(manifest: dict | None = None) -> int:
+    from scripts.build_frontend import shell_asset_paths
+
+    if manifest is None:
+        manifest = json.loads((ROOT / "frontend" / "assets.json").read_text(encoding="utf-8"))
+    # release-check verifies the generated worker as well as the shell.
+    return len(shell_asset_paths(manifest)) + 1
 
 
 def main() -> None:
@@ -268,10 +278,14 @@ def main() -> None:
 
     require_readme_number(r"目前提供 (\d+) 個 Agent 工具", agent_tool_count(), "Agent tool")
     require_readme_number(r"共 (\d+) 組設定", layout_matrix_count(), "layout matrix")
+    require_readme_number(
+        r"manifest 對應的 (\d+) 個 shell／worker 資產", release_asset_count(), "release asset"
+    )
     print(
         "README consistency passed: "
         f"{actual_python} Python tests, {actual_frontend} frontend tests, "
-        f"{agent_tool_count()} Agent tools, {layout_matrix_count()} layout configurations."
+        f"{agent_tool_count()} Agent tools, {layout_matrix_count()} layout configurations, "
+        f"{release_asset_count()} release assets."
     )
 
 
