@@ -82,7 +82,7 @@ test('failed reload retains previous data and exposes a retry; recovery hides er
     goalProgressCache: new Map(), loadStravaHistory() {},
     yearlyRunsCache: new Map(),
   });
-  vm.runInContext(`let dataLoadGeneration = 0, authToken = 'test', selectedYear;
+  vm.runInContext(`let authToken = 'test', selectedYear;
     let shoes = [{id: 1}], retiredShoes = [], monthlyMileages = [],
     monthlySpending = [], runs = [], stravaImports = [], spendingSummary, spendingLoadRequestId = 0,
     spendingLoadPending = false, goalProgressRequestId = 0, runSummary, runPageOffset, runPageHasMore, runDayFilter, runListRequestId = 0;
