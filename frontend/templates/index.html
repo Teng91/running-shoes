@@ -187,7 +187,7 @@ window.__appBootLegacyPoll = window.setInterval(function () {
   <main class="app-workspace" id="app-workspace">
     <div class="app-version" id="app-version" aria-label="目前應用程式版本"></div>
     <div id="data-load-error" role="alert" hidden>載入資料失敗，目前顯示上次載入的資料。<button class="btn" onclick="loadData()">重新載入</button></div>
-    <div id="run-load-error" role="alert" hidden>跑步紀錄載入失敗，目前保留上次資料。<button class="btn" onclick="loadRunsForSelectedMonth(runLoadRetryOptions)">重試跑步紀錄</button></div>
+    <div id="run-load-error" role="alert" hidden>跑步紀錄載入失敗，目前保留上次資料。<button class="btn" onclick="loadRunsForSelectedMonth(runController.state.retryOptions)">重試跑步紀錄</button></div>
 
   <div class="tab-panel" id="panel-shoes" role="tabpanel" data-panel="shoes">
 

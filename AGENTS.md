@@ -12,6 +12,11 @@
 - `backend/middleware.py`: request-level transport guards.
 - `backend/routers/`: feature-oriented HTTP routes; routers must never import `backend.main`.
 - `backend/services/`: framework-independent application services; services must not import FastAPI or routers.
+- `backend/services/transactions.py`: SQLite writer reservation and commit/rollback ownership; validate quotas and versions only after acquiring the reservation.
+- `backend/services/runs.py`, `shoes.py`, `monthly.py`: user-scoped CRUD application use cases; HTTP routers must not own mutations or commits.
+- `backend/dependencies.py`: request-scoped app settings; CRUD/import quotas must not use import-time globals.
+- `backend/read_models/run_statistics.py`: shared calendar ranges and bounded distance aggregates for goals, dashboard and reports.
+- `scripts/document_contracts.py`: Markdown links, feature-spec structure, AC completion and traceability path validation.
 - `backend/services/run_requests.py`: user-scoped transactional run-creation receipts; operation keys never replace authentication.
 - `backend/migrations.py`: ordered SQLite schema upgrades and the current schema version.
 - `backend/rate_limits.py`: shared authentication and AI request throttling.
@@ -26,6 +31,7 @@
 - `scripts/release_check.py`, `release_browser.cjs`: anonymous, read-only asset/API/PWA deployment checks; never use real account credentials in traces.
 - `frontend/index.html`, `styles.css`, `service-worker.js`: generated static outputs; commit with their sources, do not edit directly.
 - `frontend/runtime/feature-lifecycle.mjs`: DOM-independent native module for feature lifecycle ownership.
+- `frontend/runtime/run-controller.mjs`: native run state/operation owner with injected transport, session and key factory; DOM remains in the bridge.
 - `frontend/app-lifecycle.js`: compatibility bridge and reset registration.
 - `frontend/app-dates.js`: calendar parsing, cross-day limits and draft-safe foreground refresh.
 - `frontend/app-dialogs.js`: modal semantics and keyboard/focus lifecycle.

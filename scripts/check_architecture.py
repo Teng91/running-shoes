@@ -95,6 +95,19 @@ def forbidden_dependency_chain(start: Path, forbidden: tuple[str, ...]) -> list[
 
 
 def check_feature_boundaries() -> None:
+    for filename in ("runs.py", "shoes.py", "monthly.py"):
+        path = ROUTERS / filename
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if (
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Attribute)
+                and node.func.attr in {"commit", "rollback", "add", "add_all", "flush", "execute", "update", "delete"}
+                and not (
+                    isinstance(node.func.value, ast.Name) and node.func.value.id == "router"
+                )
+            ):
+                fail(f"{path.relative_to(ROOT)} must delegate mutations to application services")
     for directory in (SERVICES, ROOT / "backend" / "read_models"):
         for path in sorted(directory.glob("*.py")):
             chain = forbidden_dependency_chain(path, ("fastapi", "starlette", "backend.routers", "backend.main", "backend.tools"))

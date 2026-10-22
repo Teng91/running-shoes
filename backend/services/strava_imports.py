@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from backend import models
 from backend.read_models.strava_preview import build_preview
 from backend.services.mileage import apply_run_mileage_deltas
+from backend.services.transactions import write_transaction
 
 
 class InvalidShoeMappingError(Exception):
@@ -69,68 +70,70 @@ def import_runs(
     history_limit: int,
 ) -> ImportResult:
     """Validate, persist, and mileage-sync a user-scoped Strava import."""
-    normalized_mapping = _normalize_mapping(db, user_id, mapping)
-    existing_ids = {
-        value[0]
-        for value in db.query(models.Run.strava_id).filter(
-            models.Run.user_id == user_id,
-            models.Run.strava_id.isnot(None),
-        ).all()
-    }
-    runs, duplicate_count, unmapped_count = _prepare_runs(
-        rows, user_id, normalized_mapping, existing_ids
-    )
-    current_count = db.query(models.Run).filter(models.Run.user_id == user_id).count()
-    if current_count + len(runs) > max_runs:
-        raise RunQuotaExceededError
+    with write_transaction(db, user_id):
+        normalized_mapping = _normalize_mapping(db, user_id, mapping)
+        existing_ids = {
+            value[0]
+            for value in db.query(models.Run.strava_id)
+            .filter(
+                models.Run.user_id == user_id,
+                models.Run.strava_id.isnot(None),
+            )
+            .all()
+        }
+        runs, duplicate_count, unmapped_count = _prepare_runs(
+            rows, user_id, normalized_mapping, existing_ids
+        )
+        current_count = db.query(models.Run).filter(models.Run.user_id == user_id).count()
+        if current_count + len(runs) > max_runs:
+            raise RunQuotaExceededError
 
-    synced_mileage = apply_run_mileage_deltas(
-        db,
-        user_id,
-        [(run.shoe_id, run.date, run.km) for run in runs],
-        1,
-    )
-    db.add_all(runs)
-    db.add(models.StravaImport(
-        user_id=user_id,
-        start_date=start_date,
-        end_date=end_date,
-        imported_count=len(runs),
-        imported_km=synced_mileage,
-        duplicate_count=duplicate_count,
-        unmapped_count=unmapped_count,
-        invalid_count=invalid,
-    ))
-    try:
-        db.flush()
-        _trim_history(db, user_id, history_limit)
-        db.commit()
-    except IntegrityError as exc:
-        db.rollback()
-        raise DuplicateImportError from exc
-    except Exception:
-        db.rollback()
-        raise
-    return ImportResult(
-        imported=len(runs),
-        skipped_duplicate=duplicate_count,
-        skipped_unmapped=unmapped_count,
-        skipped_invalid=invalid,
-        filtered_out=filtered_out,
-        synced_mileage=synced_mileage,
-        total_run_rows=len(rows),
-    )
+        synced_mileage = apply_run_mileage_deltas(
+            db,
+            user_id,
+            [(run.shoe_id, run.date, run.km) for run in runs],
+            1,
+        )
+        db.add_all(runs)
+        db.add(
+            models.StravaImport(
+                user_id=user_id,
+                start_date=start_date,
+                end_date=end_date,
+                imported_count=len(runs),
+                imported_km=synced_mileage,
+                duplicate_count=duplicate_count,
+                unmapped_count=unmapped_count,
+                invalid_count=invalid,
+            )
+        )
+        try:
+            db.flush()
+            _trim_history(db, user_id, history_limit)
+        except IntegrityError as exc:
+            raise DuplicateImportError from exc
+        except Exception:
+            raise
+        return ImportResult(
+            imported=len(runs),
+            skipped_duplicate=duplicate_count,
+            skipped_unmapped=unmapped_count,
+            skipped_invalid=invalid,
+            filtered_out=filtered_out,
+            synced_mileage=synced_mileage,
+            total_run_rows=len(rows),
+        )
 
 
-def _normalize_mapping(
-    db: Session, user_id: int, mapping: dict[str, Any]
-) -> dict[str, int | None]:
+def _normalize_mapping(db: Session, user_id: int, mapping: dict[str, Any]) -> dict[str, int | None]:
     shoe_ids = {
         shoe_id
-        for (shoe_id,) in db.query(models.Shoe.id).filter(
+        for (shoe_id,) in db.query(models.Shoe.id)
+        .filter(
             models.Shoe.user_id == user_id,
             models.Shoe.is_deleted.is_(False),
-        ).all()
+        )
+        .all()
     }
     normalized: dict[str, int | None] = {}
     for gear, shoe_id in mapping.items():
@@ -167,25 +170,31 @@ def _prepare_runs(
         if shoe_id is None:
             unmapped_count += 1
             continue
-        runs.append(models.Run(
-            user_id=user_id,
-            shoe_id=shoe_id,
-            date=str(row["date"]),
-            km=float(cast(float | str, row["km"])),
-            strava_id=strava_id,
-        ))
+        runs.append(
+            models.Run(
+                user_id=user_id,
+                shoe_id=shoe_id,
+                date=str(row["date"]),
+                km=float(cast(float | str, row["km"])),
+                strava_id=strava_id,
+            )
+        )
     return runs, duplicate_count, unmapped_count
 
 
 def _trim_history(db: Session, user_id: int, history_limit: int) -> None:
     stale_ids = [
         value[0]
-        for value in db.query(models.StravaImport.id).filter(
+        for value in db.query(models.StravaImport.id)
+        .filter(
             models.StravaImport.user_id == user_id,
-        ).order_by(
+        )
+        .order_by(
             models.StravaImport.imported_at.desc(),
             models.StravaImport.id.desc(),
-        ).offset(history_limit).all()
+        )
+        .offset(history_limit)
+        .all()
     ]
     if stale_ids:
         db.query(models.StravaImport).filter(

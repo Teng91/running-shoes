@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from backend import goals, models
 from backend.forecasting import retirement_forecast
+from backend.read_models.run_statistics import month_bounds, run_period
 from backend.shoe_metrics import shoe_metrics
 
 
@@ -149,12 +150,12 @@ def dashboard_analytics(
     as_of = today or datetime.now(timezone(timedelta(hours=8))).date()
     selected = (year, month)
     current = (as_of.year, as_of.month)
-    prefix = f"{year:04d}-{month:02d}-"
+    period = run_period(year, month, as_of)
     prev_year, prev_month = _shift_month(year, month, -1)
-    prev_prefix = f"{prev_year:04d}-{prev_month:02d}-"
+    prev_start, prev_end = month_bounds(prev_year, prev_month)
     month_runs = db.query(models.Run).filter(
         models.Run.user_id == user_id,
-        models.Run.date.like(prefix + "%"),
+        models.Run.date >= period.month_start, models.Run.date <= period.month_end,
     ).all()
     if selected == current:
         month_runs = [run for run in month_runs if run.date <= as_of.isoformat()]
@@ -162,28 +163,15 @@ def dashboard_analytics(
         month_runs = []
     prev_runs = db.query(models.Run).filter(
         models.Run.user_id == user_id,
-        models.Run.date.like(prev_prefix + "%"),
+        models.Run.date >= prev_start, models.Run.date <= prev_end,
     ).all()
     month_metrics = _run_metrics(month_runs)
     prev_metrics = _run_metrics(prev_runs)
 
-    # An in-progress month must be compared with the same number of calendar
-    # days in the previous month.  Finished months retain full-month semantics.
-    if selected == current:
-        comparison_day = min(as_of.day, monthrange(prev_year, prev_month)[1])
-        comparison_month_runs = [run for run in month_runs if int(run.date[8:10]) <= as_of.day]
-        comparison_prev_runs = [run for run in prev_runs if int(run.date[8:10]) <= comparison_day]
-        comparison_label = "較上月同期"
-    elif selected < current:
-        comparison_day = monthrange(year, month)[1]
-        comparison_month_runs = month_runs
-        comparison_prev_runs = prev_runs
-        comparison_label = "與上月比較"
-    else:
-        comparison_day = 0
-        comparison_month_runs = []
-        comparison_prev_runs = []
-        comparison_label = "尚未開始"
+    comparison_day = period.comparison_day
+    comparison_label = period.comparison_label
+    comparison_month_runs = month_runs
+    comparison_prev_runs = [run for run in prev_runs if run.date <= period.previous_end]
     comparison_current = _run_metrics(comparison_month_runs)
     comparison_previous = _run_metrics(comparison_prev_runs)
 

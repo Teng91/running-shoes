@@ -5,10 +5,6 @@ from typing import ClassVar
 from fastapi.responses import JSONResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from backend.settings import settings
-
-MAX_STRAVA_REQUEST_BYTES = settings.max_strava_request_bytes
-
 
 class StravaUploadLimitMiddleware:
     """Reject oversized Strava multipart bodies before form parsing/spooling."""
@@ -18,8 +14,9 @@ class StravaUploadLimitMiddleware:
         "/api/runs/import/strava/preview",
     })
 
-    def __init__(self, app: ASGIApp):
+    def __init__(self, app: ASGIApp, max_bytes: int):
         self.app = app
+        self.max_bytes = max_bytes
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if (
@@ -35,7 +32,7 @@ class StravaUploadLimitMiddleware:
             declared_size = int(content_length) if content_length else None
         except ValueError:
             declared_size = None
-        if declared_size is not None and declared_size > MAX_STRAVA_REQUEST_BYTES:
+        if declared_size is not None and declared_size > self.max_bytes:
             await JSONResponse(
                 {"detail": "Strava 上傳請求不可超過 11 MB"}, status_code=413
             )(scope, receive, send)
@@ -48,7 +45,7 @@ class StravaUploadLimitMiddleware:
             if message["type"] != "http.request":
                 continue
             body.extend(message.get("body", b""))
-            if len(body) > MAX_STRAVA_REQUEST_BYTES:
+            if len(body) > self.max_bytes:
                 await JSONResponse(
                     {"detail": "Strava 上傳請求不可超過 11 MB"}, status_code=413
                 )(scope, receive, send)

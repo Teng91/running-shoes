@@ -24,6 +24,10 @@
 - 不導入微服務、外部監控 SaaS 或前端框架。
 - 不改變既有 API payload、帳號資料或使用方式。
 
+## Proposed design
+
+保留單一 FastAPI／SQLite 部署，抽離 feature routers 與 mileage service；備份與唯讀 smoke 由 operator scripts 執行。
+
 ## Security and data isolation
 
 - 備份檔權限設為 owner-only，工具不輸出資料內容。

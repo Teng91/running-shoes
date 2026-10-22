@@ -90,17 +90,17 @@ def test_failed_run_transaction_does_not_poison_its_request_key(db, request_clie
     from backend.routers import runs
 
     client, headers, payload = request_client
-    original = runs.apply_run_mileage_deltas
+    original = runs.runs_service.apply_run_mileage_deltas
 
     def fail(*args):
         raise RuntimeError("synthetic transaction failure")
 
-    monkeypatch.setattr(runs, "apply_run_mileage_deltas", fail)
+    monkeypatch.setattr(runs.runs_service, "apply_run_mileage_deltas", fail)
     with pytest.raises(RuntimeError, match="synthetic"):
         client.post("/api/runs", json=payload, headers=headers)
     assert db.query(models.RunCreationRequest).count() == 0
     assert db.query(models.Run).count() == 0
-    monkeypatch.setattr(runs, "apply_run_mileage_deltas", original)
+    monkeypatch.setattr(runs.runs_service, "apply_run_mileage_deltas", original)
     assert client.post("/api/runs", json=payload, headers=headers).status_code == 200
 
 
@@ -139,11 +139,10 @@ def test_concurrent_requests_share_one_committed_receipt(tmp_path, conflicting):
 
 
 def test_receipt_replay_succeeds_even_after_quota_reached(db, request_client, monkeypatch):
-    from backend.routers import runs
 
     client, headers, payload = request_client
     original = client.post("/api/runs", json=payload, headers=headers).json()
-    monkeypatch.setattr(runs, "MAX_RUNS_PER_USER", 1)
+    monkeypatch.setattr(app.state, "settings", replace(app.state.settings, max_runs_per_user=1))
     assert client.post("/api/runs", json=payload, headers=headers).json() == original
     assert client.post("/api/runs", json=payload, headers={**headers, "Idempotency-Key": "a-new-operation-0001"}).status_code == 409
     assert db.query(models.RunCreationRequest).count() == 1

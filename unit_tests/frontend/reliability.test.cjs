@@ -1,9 +1,9 @@
-const { test, assert, fs, vm, extract, transportContext } = require('./helpers.cjs');
+const { runContext, test, assert, fs, vm, extract, transportContext } = require('./helpers.cjs');
 
 test('SPEC-019 run retry clears only its own error and keeps aggregate failures visible', async () => {
   const nodes = { 'run-load-error': { hidden: true }, 'data-load-error': { hidden: false } };
   let fail = true;
-  const context = vm.createContext({ document: { getElementById: id => nodes[id] }, console: { error() {} },
+  const context = runContext({ document: { getElementById: id => nodes[id] }, console: { error() {} },
     selectedRunMonth: () => '2026-10', renderedPanels: new Map(), renderActivePanel() {},
     fetchRunPage: async () => { if (fail) throw new Error('synthetic'); return { rows: [], hasMore: false }; },
     apiGet: async () => ({ total_km: 0 }),
@@ -69,12 +69,12 @@ test('SPEC-019 creation retries retain a key, but changed input or success start
   const nodes = { 'run-date': { value: '2026-01-05' }, 'run-km': { value: '5' }, 'run-shoe': { value: '1' },
     'run-error': {}, 'run-month': {}, 'add-run-btn': {} };
   const keys = []; let fail = true;
-  const context = vm.createContext({ document: { getElementById: id => nodes[id] },
+  const context = runContext({ document: { getElementById: id => nodes[id] },
     localDateISO: () => '2026-10-22', refreshDateLimits() {},
     captureAuthSession: () => ({}), isCurrentAuthSession: () => true, loadData: async () => {},
     apiPost: async (_, body, options) => { keys.push(options.idempotencyKey); if (fail) throw new Error('lost response'); },
   });
-  vm.runInContext('let runSaving = false, runSaveOperation = null, runCreationDraft = null;\n' + extract('addRun'), context);
+  vm.runInContext(extract('addRun'), context);
   await context.addRun(); await context.addRun(); assert.equal(keys[0], keys[1]);
   nodes['run-km'].value = '6'; await context.addRun(); assert.notEqual(keys[1], keys[2]);
   fail = false; await context.addRun(); assert.equal(keys[2], keys[3]);
@@ -83,7 +83,7 @@ test('SPEC-019 creation retries retain a key, but changed input or success start
 
 test('SPEC-019 annual charts use one summary request rather than downloading individual runs', async () => {
   const nodes = { 'stacked-year-select': { value: '2026' }, 'chart-shoe-stacked': {} }; const calls = [];
-  const context = vm.createContext({ document: { getElementById: id => nodes[id], querySelector: () => ({ dataset: { panel: 'monthly' } }) },
+  const context = runContext({ document: { getElementById: id => nodes[id], querySelector: () => ({ dataset: { panel: 'monthly' } }) },
     apiGet: async url => { calls.push(url); return { shoes: [{ shoe_id: 99, monthly_km: [5, ...Array(11).fill(0)] }] }; },
     chartInstances: {}, shoes: [], retiredShoes: [], yearlyRunsCache: new Map(), renderedPanels: new Map(),
     stackedRunsRequestId: 0, getThemeColor: () => '#000', brandColor: () => '#000',

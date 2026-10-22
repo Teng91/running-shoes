@@ -2,6 +2,32 @@
 
 本專案的重要變更依 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.1.0/) 分類，版本號遵循 [Semantic Versioning](https://semver.org/lang/zh-TW/)。完整部署說明另見各版本的 GitHub Release。
 
+## [3.5.0] - 2026-10-22
+
+### Fixed
+
+- 延遲的新增跑步成功回應保留等待期間的新日期、里程、鞋款與查看月份；同內容失敗重試沿用 key。
+- 鞋款／日誌配額在 SQLite writer reservation 後驗證，跨 thread／process 並行不再突破上限。
+- App factory 的 CRUD／註冊／Strava 配額與 upload guard 使用注入設定，不再由 router import-time 常數決定。
+
+### Changed
+
+- 跑步、鞋款、月跑量的 transaction／quota／version／mileage 移入 application services；HTTP adapter 統一轉換 domain errors。
+- 原生 run controller 收斂明細、分頁、年度 cache、editor 與新增操作 state，明確注入 transport／session／key factory，boot 與 PWA manifest 整合。
+- 日期區間統計共用 read model；月報月份、上月同期、YTD 一次 SQL conditional aggregate，重用於目標進度。
+- Schema 維持 2；PWA shell v26／asset revision 3.5.0，與 v3.4.0 資料相容。
+
+### Security
+
+- Docker context 排除 SQLite WAL／SHM、DB 備份與 backups 目錄，防止遠端建置帶入工作區資料。
+
+### Documentation and testing
+
+- README 更正年度彙總說明，新增 SPEC-020／ADR-0005，更新 SDD／TDD／harness map。
+- docs-check 驗證本地連結／anchor、spec sections／Owner／狀態、Implemented AC completion 與 traceability 測試檔；補齊早期規格章節並修正不存在的測試引用。
+- 新增 thread／spawn process quota、app settings isolation、共享統計 query budget、native controller／DOM 草稿及雙引擎延遲 POST 回歸。
+- 本機 verify-all／最終 verify：444 Python、81 Node、95.14% backend coverage；Agent eval 10 passed，40 組版面、雙引擎整合／PWA 均實際執行。
+
 ## [3.4.0] - 2026-10-22
 
 ### Fixed
@@ -214,3 +240,5 @@
 [2.13.1]: https://github.com/Teng91/running-shoes/releases/tag/v2.13.1
 [2.13.0]: https://github.com/Teng91/running-shoes/releases/tag/v2.13.0
 [2.12.0]: https://github.com/Teng91/running-shoes/releases/tag/v2.12.0
+
+[3.5.0]: https://github.com/Teng91/running-shoes/releases/tag/v3.5.0

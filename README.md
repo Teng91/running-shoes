@@ -40,6 +40,7 @@ running-shoes/
 │   ├── main.py           # 最小 ASGI 入口
 │   ├── app_factory.py    # 可注入的 FastAPI 組裝、lifecycle 與 SPA fallback
 │   ├── settings.py       # Immutable typed runtime configuration
+│   ├── dependencies.py   # Request-scoped app settings dependency
 │   ├── seeding.py        # 使用注入 session factory 的可選預設資料
 │   ├── middleware.py     # Strava request body transport guard
 │   ├── routers/
@@ -56,6 +57,10 @@ running-shoes/
 │   │   ├── runs.py       # 跑步日誌 CRUD routes
 │   │   └── shoes.py      # 跑鞋 CRUD HTTP routes
 │   ├── services/
+│   │   ├── transactions.py # SQLite writer reservation 與交易生命週期
+│   │   ├── runs.py       # 日誌寫入、重送、版本與里程交易
+│   │   ├── shoes.py      # 鞋款配額、編輯與刪除交易
+│   │   ├── monthly.py    # 月跑量與歷史調整交易
 │   │   ├── exports.py    # Framework-independent 匯出內容生成
 │   │   ├── strava_imports.py # Strava 匯入 transaction 與配對驗證
 │   │   └── mileage.py    # 跑步、鞋款、月份彙總的交易式里程同步
@@ -90,7 +95,7 @@ running-shoes/
 │   ├── assets.json       # Script 順序、CSS 來源與 PWA revision 的單一清單
 │   ├── templates/        # Shell、六個彈窗與 worker 的可編輯來源
 │   ├── css/              # 依責任拆分的樣式來源，產生單一 styles.css
-│   ├── runtime/          # 無 DOM／transport 的原生 ES module lifecycle
+│   ├── runtime/          # 原生 lifecycle 與可注入 transport/session 的跑步控制器
 │   ├── app-lifecycle.js  # Legacy handler 與原生 runtime 的過渡橋接
 │   ├── app-dates.js      # 日曆日期與跨日限制／恢復
 │   ├── app-dialogs.js    # 共用焦點、Tab、Escape 與彈窗語義
@@ -136,7 +141,8 @@ running-shoes/
 │   ├── claude_stop_hook_launcher.cjs # 跨 Windows／Unix 尋找專案 Python
 │   ├── check_architecture.py # 阻止反向依賴與重複 API route
 │   ├── check_secrets.py  # 掃描 tracked files 的明確 credential 特徵
-│   ├── check_docs.py     # 核對 README 測試數、工具數、版面矩陣與 harness 路徑
+│   ├── check_docs.py     # 核對 README 數字、命令與文件契約
+│   ├── document_contracts.py # 本地連結、spec 結構、AC 狀態與測試路徑
 │   ├── database_backup.py # SQLite backup／checksum／retention／restore
 │   ├── offsite_backup.py # Fly 外部下載、private staging 與隔離還原演練
 │   ├── smoke_test.py     # 部署後 health 與 OpenAPI smoke check
@@ -287,7 +293,7 @@ LLM_MAX_OUTPUT_TOKENS=4096
 - 依目前節奏預測月底總里程，並顯示達標所需的每日里程
 - 每雙鞋在所選月份的里程、穿著次數及占比
 
-跑步紀錄儲存在 SQLite `runs` 資料表，每筆資料都會綁定帳號與該帳號擁有的鞋款。後端會驗證鞋款擁有權，並啟用 SQLite 外鍵約束，避免無效或跨帳號的鞋款關聯。編輯時會檢查紀錄版本；同一筆紀錄若已在其他分頁被修改，較舊的畫面會收到衝突提示，避免重複套用里程差額。刪除已有跑步紀錄的鞋款時，鞋款會從鞋櫃與未來選項中移除，但歷史跑步紀錄與月跑量仍會保留。每個帳號預設最多儲存 5,000 筆跑步紀錄，可用 `MAX_RUNS_PER_USER` 調整。前端只分頁載入目前查看月份；鞋款年度堆疊圖切換年份時才按需載入該年紀錄，避免每次操作都下載完整歷史。
+跑步紀錄儲存在 SQLite `runs` 資料表，每筆資料都會綁定帳號與該帳號擁有的鞋款。後端會驗證鞋款擁有權，並啟用 SQLite 外鍵約束，避免無效或跨帳號的鞋款關聯。編輯時會檢查紀錄版本；同一筆紀錄若已在其他分頁被修改，較舊的畫面會收到衝突提示，避免重複套用里程差額。刪除已有跑步紀錄的鞋款時，鞋款會從鞋櫃與未來選項中移除，但歷史跑步紀錄與月跑量仍會保留。每個帳號預設最多儲存 5,000 筆跑步紀錄，可用 `MAX_RUNS_PER_USER` 調整。前端只分頁載入目前查看月份；鞋款年度堆疊圖切換年份時才按需載入該年的後端彙總矩陣，避免每次操作都下載完整歷史。
 
 | API | 用途 |
 | --- | --- |
@@ -490,6 +496,15 @@ WebKit 離線由 `frontend-pwa` 的 fixture transport 中斷驗證，不把引�
 - `POST /api/runs` 支援可選 `Idempotency-Key`（16–128 字元，英數及 `._:-`），同帳號、同 key／內容會重播原始回應，不重複寫入日誌及里程；內容不一致回 409。無 key 的舊客戶端維持相容。
 - 前端保留失敗新增表單的 key；原表單人工重試沿用，修改內容、成功或換帳號即建立新操作。同日同距離的兩次真實跑步不會被誤判重複。刪除後重播舊 key 不會復活日誌。
 
+### 交易與草稿安全（SPEC-020，v3.5.0）
+
+- 新增日誌等待回應期間，可繼續修改下一筆草稿；成功只清除仍符合送出快照的輸入，不覆蓋新日期、里程、鞋款或查看月份。
+- 跑步、鞋款與月跑量的寫入由 application services 統一管理；取得 SQLite writer reservation 後才讀取配額與業務版本。並行新增不會突破鞋款／日誌上限，里程與重送回執維持同一交易。
+- `create_app(config=...)` 的鞋款、日誌、註冊、Strava 配額及上傳限制由該 app instance 注入；測試不必改 router 全域常數。
+- `runtime/run-controller.mjs` 擁有跑步明細／分頁／年度 cache、編輯快照與新增操作，明確注入 transport、session 與 key factory。DOM bridge 保留既有 handler，帳號切換統一清理 controller。
+- 首頁、目標與月報共用日期區間邊界；月報的月份／上月同期／年度累積以一次 SQL 聚合取得，不再每月各查一次，仍不把手動歷史調整算成逐筆日誌目標。
+- v3.5.0 維持 schema 2，不需資料 migration。回滾至 v3.4.0 image 可讀寫相同資料；重新發布舊來源仍需新 shell revision，不以舊備份覆蓋正式資料。
+
 ### Schema 2 上線與回滾
 
 v3.4.0 只新增 `run_creation_requests` 表與 user/key 唯一約束，沒有改寫既有鞋款、日誌或里程。
@@ -509,14 +524,14 @@ Playwright／Chromium／WebKit 齊全時，也會執行版面測試。
 避免每次停止都重跑。Hook 不會呼叫其他模型、外部 API，或傳送提示、diff、原始碼與測試輸出。
 GitHub Actions 仍會在 push／pull request 執行 `verify`，並在獨立工作中安裝 Chromium／WebKit、跑完完整版面矩陣、真實 CRUD E2E 與 PWA 升級／離線測試；Dependabot 每週檢查 Python 與 GitHub Actions 更新。
 
-本次驗證基線為 Python **424 passed**、前端回歸測試 **78 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
+本次驗證基線為 Python **444 passed**、前端回歸測試 **81 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
 版面檢查涵蓋 WebKit／Chromium、亮／暗模式與 10 組直橫向尺寸，共 40 組設定，檢查六個功能分頁、三個認證表單、圖表、全部彈窗、行內編輯、停用／錯誤及空資料狀態。
 
 主要表單、工具列與彈窗操作統一為 44px 控制項；桌面表格內的緊湊操作為 36px，手機至少 44px。
 日期／月份欄位與一般輸入框等高，模型工具列及彈窗按鈕依可用空間換行；表格數字與表頭統一右對齊。
 `frontend-layout` 同時驗證幾何對齊、同列邊界、圖表起點與無溢出，設定 `LAYOUT_SCREENSHOT_DIR` 可保存桌面／手機、認證及彈窗截圖人工覆核。
 
-`docs-check` 會從 pytest collection、前端測試檔、Agent tool registry、Playwright 測試矩陣與實際檔案系統核對上述數字及 harness 路徑。新增測試、工具或版面設定卻忘記同步 README 時，`verify` 和 GitHub Actions 會直接失敗。
+`docs-check` 會從 pytest collection、前端測試檔、Agent tool registry、Playwright 測試矩陣與實際檔案系統核對上述數字及 harness 路徑。新增測試、工具或版面設定卻忘記同步 README 時，`verify` 和 GitHub Actions 會直接失敗。另檢查 Markdown 本地連結／標題 anchor、spec 必要章節／Owner／狀態、Implemented 規格的 AC 勾選及 traceability 測試檔路徑；SPEC-020 起每個 AC 都要連結明確測試路徑或 repository command。這些是靜態檢查，行為正確性仍由回歸測試與 review 確認。
 
 專案的規格不是只存在對話裡：[`docs/architecture.md`](docs/architecture.md) 是目前的
 Software Design Description（含 Mermaid 架構圖與拆分順序），
@@ -561,6 +576,8 @@ Software Design Description（含 Mermaid 架構圖與拆分順序），
 
 ## Docker 部署
 
+Docker build context 排除 SQLite 主檔、WAL／SHM、DB 備份、backups 目錄與 `.env`；正式資料只保留在掛載 volume。
+
 ```bash
 # 1. Build image
 docker build -t running-shoes .
@@ -599,14 +616,14 @@ unset MIGRATION_PASSWORD_VALUE
 之後每次部署只要：
 
 ```bash
-# 先對正式資料建立並驗證快照；指令會保留最近 14 份
-fly ssh console -a running-shoes -C \
-  "python scripts/database_backup.py create --source /data/shoes.db --output-dir /data/backups --keep 14"
+# 先建立異地快照，驗證 checksum 與隔離還原；備份目錄必須位於 Git 外
+python3 scripts/offsite_backup.py --app running-shoes \
+  --output-dir /home/joy-teng/.local/share/running-shoes/backups
 
 fly deploy
 
-# 部署完成後確認 process、資料庫 schema 與公開 API contract
-venv/bin/python scripts/smoke_test.py https://running-shoes.fly.dev
+# 部署後匿名唯讀檢查 schema、API、資產 hash/MIME、boot 與離線 shell
+python3 scripts/task.py release-check --base-url https://running-shoes.fly.dev
 ```
 
 Fly 與 Docker 會呼叫 `/health/ready`；只有 SQLite 可讀且 schema version 正確才會回 200。

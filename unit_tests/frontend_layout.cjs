@@ -274,8 +274,8 @@ async function run(engine, name) {
         usage_percent: 15 + i * 1.25, remaining_mileage_km: 680 - i * 10,
         forecast_retirement_date: '2027-06-01', forecast_source: 'recent_90_days', forecast_monthly_km: 80 }));
       retiredShoes = [{ ...shoes[0], id: 20, is_retired: true }];
-      runs = shoes.map((shoe, i) => ({ id: i + 1, shoe_id: shoe.id, date: `2026-09-${String(i + 1).padStart(2, '0')}`, km: 18.67, source: 'manual' }));
-      yearlyRunsCache.set(2026, { shoes: runs.map(run => ({ shoe_id: run.shoe_id, monthly_km: Array.from({length: 12}, (_, i) => i === 8 ? run.km : 0) })) });
+      runController.state.rows = shoes.map((shoe, i) => ({ id: i + 1, shoe_id: shoe.id, date: `2026-09-${String(i + 1).padStart(2, '0')}`, km: 18.67, source: 'manual' }));
+      runController.state.annualCache.set(2026, { shoes: runController.state.rows.map(run => ({ shoe_id: run.shoe_id, monthly_km: Array.from({length: 12}, (_, i) => i === 8 ? run.km : 0) })) });
       monthlyMileages = Array.from({ length: 12 }, (_, i) => ({ id: i + 1, year: 2026, month: i + 1, km: 120 + i }));
       monthlySpending = Array.from({ length: 12 }, (_, i) => ({ year: 2026, month: i + 1, total_paid: 4000, total_orig: 5000 }));
       spendingSummary = { total_paid: 48000, total_original: 60000, savings: 12000,
@@ -356,13 +356,13 @@ async function run(engine, name) {
         assert.ok(Math.abs(pairedHeights[0] - pairedHeights[1]) <= 1, 'retirement and monthly share cards have equal heights');
         for (const id of await page.locator('.modal-overlay').evaluateAll(es => es.map(e => e.id))) {
           if (id === 'modal') await page.evaluate(() => shoeModal.openForCreate());
-          if (id === 'run-modal') await page.evaluate(() => openRunModal(runs[0].id));
+          if (id === 'run-modal') await page.evaluate(() => openRunModal(runController.state.rows[0].id));
           if (id === 'monthly-modal') await page.evaluate(() => editMonthlyMileage(0));
           if (id === 'shoe-analysis-modal') await page.evaluate(() => renderShoeAnalytics({
             shoe: { brand: 'Mizuno', model: 'Wave Rider 29 非常長的鞋款名稱', categories: ['Daily'], purchase_date: '2026-01-01', is_retired: false },
             lifecycle: { total_mileage_km: 627.62, usage_percent: 78.5, remaining_mileage_km: 172.38, forecast_retirement_date: '2027-06-01', forecast_source: 'recent_90_days', forecast_monthly_km: 80 },
             usage: { count: 87, km_30_days: 61.9, km_90_days: 222.7, actual_monthly_km_90_days: 74.2, first_run_date: '2026-01-01', last_run_date: '2026-10-01' },
-            recent_runs: runs.slice(0, 2), monthly_history: Array.from({ length: 12 }, (_, i) => ({ year: 2026, month: i + 1, km: 60, count: 4 })),
+            recent_runs: runController.state.rows.slice(0, 2), monthly_history: Array.from({ length: 12 }, (_, i) => ({ year: 2026, month: i + 1, km: 60, count: 4 })),
           }));
           await page.evaluate(id => document.getElementById(id).classList.add('active'), id);
           await assertLayout(page, `${name} ${theme} ${width} ${id}`);
@@ -421,7 +421,7 @@ async function run(engine, name) {
     }
     await page.evaluate(() => renderDashboardInsights(window.layoutAnalytics));
     await assertLayout(page, `${name} analytics recovery`);
-    await page.evaluate(() => { shoes = []; retiredShoes = []; runs = []; monthlyMileages = []; monthlySpending = []; render(); });
+    await page.evaluate(() => { shoes = []; retiredShoes = []; runController.state.rows = []; monthlyMileages = []; monthlySpending = []; render(); });
     for (const tab of ['runs', 'shoes', 'monthly', 'spending', 'report']) {
       await selectTab(page, tab);
       await page.waitForTimeout(100);

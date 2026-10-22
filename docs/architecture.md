@@ -50,6 +50,37 @@ flowchart LR
 
 此 gate 不含部署權限；正式部署在檢查後依明確授權執行，部署後再次對正式 origin 執行。Rollback 的 schema marker 相容步驟見 README 與 SPEC-019，不能直接切回 schema 1 image。
 
+### SPEC-020：交易、配置與功能 state 的 owner
+
+[ADR-0005](adr/0005-transactional-services-and-run-controller.md) 定義 `services/runs.py`、`shoes.py`、`monthly.py` 為寫入 owner；
+router 只處理輸入、認證與 domain error 的 HTTP mapping，不能 commit／rollback 或執行 mutation。
+`services/transactions.py` 在任何業務讀取前，以 user-scoped no-op UPDATE 取得 SQLite writer reservation，
+清除可能已載入的 ORM 快照，再驗證 quota／version、寫入與 commit；失敗一律 rollback。
+這個 UPDATE 不改變 token_version，且適用不同 session／process，不依賴 process lock。
+Strava 匯入使用同一交易邊界；無 schema migration，維持 schema 2。
+
+`dependencies.get_settings` 從 `app.state.settings` 提供 CRUD 與匯入配額；註冊容量與 middleware upload budget
+也由 app instance 決定。外部 provider discovery／LLM 設定與既有 rate-limit module 保留 process runtime policy。
+`read_models/run_statistics.py` 提供共用月／上月同期／YTD calendar bounds 與單一 conditional aggregate；
+reports 將同一份 totals 傳給 goal progress，避免重複計算；歷史手動月跑量仍是另一種資料來源。
+
+```mermaid
+flowchart LR
+    Request[HTTP / injected app settings] --> Router[feature router / error mapping]
+    Router --> Service[runs / shoes / monthly / Strava services]
+    Service --> Reservation[SQLite writer reservation]
+    Reservation --> Validate[scope / quota / version / mileage]
+    Validate --> Commit[commit or rollback]
+    Goal[goals / dashboard / reports] --> Stats[run_statistics calendar / aggregate]
+    Bridge[run DOM bridge] --> Controller[native run controller]
+    Controller --> Dependencies[injected transport / session / key factory]
+```
+
+`runtime/run-controller.mjs` 擁有日誌明細、summary、分頁、年度 cache、request identity、editor、retry key。
+`app-runs.js` 注入 JSON transport 與 auth session，負責表單／DOM；`app-core.js`、insights 與年度圖表透過
+controller.state 整合，不再共享各自的 run state globals。Boot 等待 native modules 完成後才初始化登入。
+成功回應清理前比對原始表單值，保留等待期間的新草稿與查看月份；reset 作廢舊帳號操作。
+
 ## 2. 系統脈絡
 
 ```mermaid
@@ -82,7 +113,14 @@ flowchart TB
     Factory --> Health[routers/health.py]
     Factory --> Middleware[middleware.py]
     Factory --> Seed[seeding.py]
-    Runs --> Mileage[services/mileage.py]
+    Runs --> RunService[services/runs.py]
+    Shoes --> ShoeService[services/shoes.py]
+    MonthlyRoutes --> MonthlyService[services/monthly.py]
+    RunService --> Mileage[services/mileage.py]
+    RunService --> Transactions[services/transactions.py]
+    ShoeService --> Transactions
+    MonthlyService --> Transactions
+    StravaService --> Transactions
     StravaService --> Mileage
     StravaRoutes --> Worker[worker thread<br/>parse / filter / service transaction]
     Worker --> StravaService[services/strava_imports.py]
@@ -296,10 +334,11 @@ ARIA 與 `agent-mode` 狀態，不以 inline style 決定 shell 幾何，因此�
 | `backend/main.py` | 最小 ASGI entry point | `app_factory` | routers、database、業務邏輯 |
 | `backend/app_factory.py` | app 組裝、lifecycle、router/middleware 與 SPA fallback | settings、routers、database | domain 計算 |
 | `backend/settings.py` | typed environment configuration | Python stdlib | routers、database、FastAPI |
+| `backend/dependencies.py`、`routers/errors.py` | app settings dependency 與 domain error 的 HTTP mapping | FastAPI、settings、service errors | 業務 transaction |
 | `backend/seeding.py`、`middleware.py` | 可選 seed 與 request body guard | settings、models／ASGI | `backend.main` |
 | `backend/rate_limits.py` | auth／AI 的 process 與 SQLite shared limits | models、database session | routers、`backend.main` |
 | `backend/routers/` | HTTP 參數、認證 dependency、response | auth、domain/service、models | `backend.main` |
-| `backend/services/` | 跨 route 的交易與 application use case | models、persistence | FastAPI、routers、`backend.main` |
+| `backend/services/` | 配額、版本、里程與 application transaction owner | models、schemas、read models、persistence | FastAPI、routers、`backend.main` |
 | `backend/read_models/` | user-scoped native statistics／身份消歧義 | models、純 domain、SQLAlchemy | HTTP frameworks、routers、tools |
 | `backend/shoe_metrics.py` | 折數、成本、壽命共同算術 | models | HTTP、AI、UI |
 | `backend/migrations.py` | ordered/idempotent schema upgrade 與版本 | models、database | routers、frontend |
@@ -316,7 +355,7 @@ ARIA 與 `agent-mode` 狀態，不以 inline style 決定 shell 幾何，因此�
 `architecture-check` 會阻止 router 反向 import `backend.main`、service 穿透 HTTP layer，並檢查
 API method/path 重複、OpenAPI path contract、`main.py` route 數與最小 entry-point imports。
 SPEC-017 同時追蹤 transitive/relative imports，禁止 service/read model 間接穿透 HTTP 或 tool adapters，
-檢查 native runtime 無 DOM／I/O 與 lifecycle ownership 不重複；來源生成漂移由 verify／docs-check 阻擋。
+檢查 native runtime 不直接存取 DOM／fetch 與 lifecycle ownership 不重複；run controller 的 transport 由 adapter 注入；來源生成漂移由 verify／docs-check 阻擋。
 
 ## 6. 關鍵流程：跑鞋匯出
 
@@ -409,3 +448,5 @@ manifest 只保存摘要，不包含資料列／密碼 hash。完成的 DB 副�
 
 每一階段都先以既有 API regression tests 鎖住行為，再移動程式碼；不在同一個 commit 同時
 改變 endpoint contract 與模組邊界。
+
+7. **已完成（SPEC-020）**：寫入服務擁有交易、quota／upload 設定按 app 注入，跑步 native controller 收斂 state，日期區間聚合與文件契約共用。
