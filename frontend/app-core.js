@@ -110,6 +110,10 @@ async function loadData({ mutation = null } = {}) {
   const [runYear, runMonth] = requestedRunMonth.split('-').map(Number);
   const runRequestId = policy.resources.includes('runs') ? ++runController.state.listRequest : null;
   const error = document.getElementById('data-load-error');
+  const updateError = () => {
+    error.hidden = ![...dataResourceRequests.values()].some(ticket =>
+      ticket.failed && isCurrentAuthSession(ticket.session));
+  };
   const readers = {
     shoes: () => Promise.all([apiGet('/shoes/active'), apiGet('/shoes/retired')]),
     monthly: () => apiGet('/monthly-mileage'),
@@ -123,7 +127,10 @@ async function loadData({ mutation = null } = {}) {
   } catch (loadError) {
     if (policy.resources.some(current)) {
       console.error('載入資料失敗:', loadError);
-      error.hidden = false;
+      for (const resource of policy.resources) {
+        if (current(resource)) tickets.get(resource).failed = true;
+      }
+      updateError();
     }
     return;
   }
@@ -143,7 +150,7 @@ async function loadData({ mutation = null } = {}) {
     }
   });
   if (!accepted.size) return;
-  error.hidden = true;
+  updateError();
   // Run mileage does not affect purchase spending; manual totals do not affect run-only goals.
   if (accepted.has('shoes') && (!mutation || mutation === 'shoe')) {
     spendingSummary = null;
