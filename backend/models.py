@@ -56,6 +56,7 @@ class Shoe(Base):
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
 
     version: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    nickname: Mapped[str] = mapped_column(String(80), default="", server_default="", nullable=False)
     brand: Mapped[str] = mapped_column(String, nullable=False)
     model: Mapped[str] = mapped_column(String, nullable=False)
     date: Mapped[str] = mapped_column(String, nullable=False)           # YYYY-MM-DD

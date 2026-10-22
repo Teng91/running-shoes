@@ -4,6 +4,20 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- 月跑量新增比對完整年月／里程草稿與操作身分；舊回應不清除新草稿或解鎖替換操作。
+- 跑步／月跑量／鞋款編輯保留等待期間的新草稿，成功後更新可重用的 CAS 版本。
+- 同款鞋選單改用暱稱、購買日期及 ID 辨識；暱稱持久化、輸出 escaping，CSV／XLSX 及帳號備份保留。
+
+### Changed
+
+- 原生 form operations 共用 session、epoch、ownership 與快照；依 mutation 精準重讀資源、清除相關快取並拒絕過期結果。
+- 認證與目標寫入移入 services，純 credentials primitives 不依賴 HTTP；architecture gate 納入 auth／goals routers。
+- 新增 schema 3 nickname additive migration；asset revision 3.6.0／shell v28 為工作來源版本，尚未發布或部署。
+- 新增 SPEC-023／ADR-0006、具名測試追蹤、CI 合成 diagnostics 產生→上傳→下載驗證，README／SDD／測試策略同步。
+- 本機 verify-all：458 Python、88 Node、95.26% backend branch coverage；40 組版面及雙引擎 E2E／PWA 無跳過，Agent evals 10 個通過。
+
 ### CI
 
 - Browser job 使用與 lockfile 相符的 Playwright noble container，避免 Ubuntu mirror 下載拖過 job timeout；完整 layout／CRUD／PWA gates 保留。

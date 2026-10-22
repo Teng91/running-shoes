@@ -27,6 +27,7 @@ def generate_shoe_rows(
         row = {
             "品牌": spreadsheet_safe(shoe.brand),
             "鞋款": spreadsheet_safe(shoe.model),
+            "暱稱": spreadsheet_safe(shoe.nickname),
             "購買日期": spreadsheet_safe(shoe.date),
             "尺寸": spreadsheet_safe(shoe.size),
             "買價": round(float(shoe.price), 2),

@@ -113,6 +113,7 @@ async function run() {
 
     await page.locator('.tab[data-tab="shoes"]').click();
     await page.getByRole('button', { name: '+ 新增跑鞋' }).click();
+    await page.locator('#f-nickname').fill('Morning pair');
     await page.locator('#f-brand').fill('E2E Brand');
     await page.locator('#f-model').fill('Browser Runner');
     await page.locator('#f-date').fill(today);
@@ -138,10 +139,34 @@ async function run() {
     assert.equal(await page.locator('#shoe-table').getByText('US 9.5/27.5cm', { exact: true }).count(), 0);
     await assertPurchaseDetails(page, '使用中');
 
+    // SPEC-023: delay a real persisted monthly response while editing the next draft.
+    await page.locator('.tab[data-tab="monthly"]').click();
+    await page.locator('#add-year').selectOption(today.slice(0, 4));
+    await page.locator('#add-month').selectOption('1');
+    await page.locator('#add-km').fill('100');
+    let releaseMonthly, monthlyStarted;
+    const monthlyGate = new Promise(resolve => { releaseMonthly = resolve; });
+    const startedMonthly = new Promise(resolve => { monthlyStarted = resolve; });
+    const holdMonthly = async route => {
+      if (route.request().method() !== 'POST') return route.continue();
+      const response = await route.fetch();
+      monthlyStarted(); await monthlyGate; await route.fulfill({ response });
+    };
+    await page.route('**/api/monthly-mileage', holdMonthly);
+    await page.locator('#add-monthly-btn').click(); await startedMonthly;
+    await page.locator('#add-month').selectOption('2'); await page.locator('#add-km').fill('180');
+    releaseMonthly();
+    await page.waitForFunction(() => !document.getElementById('add-monthly-btn').disabled);
+    assert.equal(await page.locator('#add-km').inputValue(), '180');
+    assert.equal(await page.locator('#add-month').inputValue(), '2');
+    await page.unroute('**/api/monthly-mileage', holdMonthly);
+
     await page.locator('.tab[data-tab="runs"]').click();
     await page.locator('#run-date').fill(today);
     await page.locator('#run-km').fill('5.5');
-    await page.locator('#run-shoe').selectOption({ label: 'E2E Brand Browser Runner v2' });
+    const shoeOption = page.locator('#run-shoe option').filter({ hasText: 'Morning pair' });
+    assert.match(await shoeOption.textContent(), new RegExp(`Morning pair · E2E Brand Browser Runner v2 · ${today} · #\\d+`));
+    await page.locator('#run-shoe').selectOption(await shoeOption.getAttribute('value'));
     await page.locator('#add-run-btn').click();
     await page.locator('#run-table').getByText('5.50 km', { exact: true }).waitFor();
 

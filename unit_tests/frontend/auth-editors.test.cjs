@@ -57,7 +57,7 @@ test('all shoe mutations lock their snapshot and leave replacement drafts and se
       });
       vm.runInContext(definition + '\nglobalThis.Modal = ShoeModal;', context);
       const button = {}, modal = Object.create(context.Modal.prototype);
-      Object.assign(modal, { btnDelete: {}, btnMove: {}, el: { querySelector: () => button,
+      Object.assign(modal, { formIds: {}, btnDelete: {}, btnMove: {}, el: { querySelector: () => button,
         classList: { add() {}, remove() {} } }, _fillForm() {}, _updateUI() {},
         _payload: () => ({ brand: 'A', model: 'draft', date: '2026-01-01' }),
       });

@@ -1,6 +1,8 @@
 // ====== Inline Edit (double-click) ======
 // 現役與退役共用的表格內即時編輯：差別只在操作哪個陣列（arr）
 async function inlineEditRow(arr, idx, field, el) {
+  const operations = getFormOperations('shoes');
+  const operation = operations.capture();
   const input = document.createElement('input');
   input.type = 'number';
   input.className = 'inline-input';
@@ -8,18 +10,18 @@ async function inlineEditRow(arr, idx, field, el) {
   const shoe = { ...arr[idx] };
   let committed = false;
   const commit = async () => {
-    if (committed) return;
+    if (committed || !operations.current(operation)) return;
     committed = true;
     const val = parseFloat(input.value);
     if (Number.isFinite(val) && val >= 0) {
       try {
         await apiPut('/shoes/' + shoe.id, { [field]: val, expected_version: shoe.version });
-        await loadData();
+        if (operations.current(operation)) await loadData({ mutation: 'shoe' });
       } catch (e) {
-        alert(e.message || '更新失敗');
+        if (operations.current(operation) && e.name !== 'AbortError') alert(e.message || '更新失敗');
       }
     }
-    render();
+    if (operations.current(operation)) render();
   };
   input.addEventListener('blur', commit);
   input.addEventListener('keydown', e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') { committed = true; render(); } });
@@ -39,7 +41,7 @@ class ShoeModal {
   constructor() {
     this.el = document.getElementById('modal');
     this.formIds = {
-      brand: 'f-brand', model: 'f-model', date: 'f-date', size: 'f-size',
+      nickname: 'f-nickname', brand: 'f-brand', model: 'f-model', date: 'f-date', size: 'f-size',
       price: 'f-price', orig: 'f-orig', mileage: 'f-mileage',
       expected: 'f-expected', monthly: 'f-monthly'
     };
@@ -127,27 +129,39 @@ class ShoeModal {
   }
 
   async _mutate(context, request, errorMessage) {
+    const operations = getFormOperations('shoes');
+    const operation = operations.begin(context, this._formSnapshot());
+    if (!operation) return;
     context.saving = true;
     this._setBusy(true);
     try {
-      await request();
-      if (!isCurrentAuthSession(context.session)) return;
-      if (this.context === context) this.close();
-      await loadData();
+      const saved = await request();
+      if (!operations.owns(context, operation)) return;
+      if (this.context === context && matchesForm(operation.form.fields)
+          && JSON.stringify(getSelectedCategories()) === operation.form.categories) this.close();
+      if (this.context === context && saved?.version !== undefined) {
+        context.shoe = this.shoe = { ...saved };
+      }
+      await loadData({ mutation: 'shoe' });
     } catch (error) {
-      if (this.context === context && isCurrentAuthSession(context.session) && error.name !== 'AbortError') {
+      if (this.context === context && operations.owns(context, operation) && error.name !== 'AbortError') {
         alert(error.message || errorMessage);
       }
     } finally {
       context.saving = false;
-      if (this.context === context) this._setBusy(false);
+      if (operations.finish(context, operation) && this.context === context) this._setBusy(false);
     }
+  }
+
+  _formSnapshot() {
+    return { fields: readForm(Object.values(this.formIds)), categories: JSON.stringify(getSelectedCategories()) };
   }
 
   _payload() {
     const get = id => document.getElementById(id).value;
     const num = id => parseFloat(get(id)) || 0;
     return {
+      nickname: get('f-nickname').trim(),
       brand: get('f-brand').trim(),
       model: get('f-model').trim(),
       date: get('f-date'),

@@ -139,7 +139,7 @@ function renderTable() {
     brandSeq[s.brand]++;
     return `<tr>
       <td><span class="brand-dot" style="background:${bc}"></span><span class="brand">${esc(s.brand)}</span></td>
-      <td>${esc(s.model)}</td>
+      <td><span>${esc(s.model)}</span>${s.nickname ? `<br><small>${esc(s.nickname)}</small>` : ''}</td>
       <td>${esc(s.date.replace(/-/g,'/'))}</td>
       <td class="editable numeric" ondblclick="inlineEditRow(shoes, ${i}, 'mileage', this)">${s.mileage}</td>
       <td class="numeric">${fmtCostPerKm(c.costPerKm)}</td>
@@ -168,7 +168,7 @@ function renderRetiredTable() {
     brandSeq[s.brand]++;
     return `<tr>
       <td><span class="brand-dot" style="background:${bc}"></span><span class="brand">${esc(s.brand)}</span></td>
-      <td>${esc(s.model)}</td>
+      <td><span>${esc(s.model)}</span>${s.nickname ? `<br><small>${esc(s.nickname)}</small>` : ''}</td>
       <td>${esc(s.date.replace(/-/g,'/'))}</td>
       <td class="editable numeric" ondblclick="inlineEditRow(retiredShoes, ${i}, 'mileage', this)">${s.mileage}</td>
       <td class="numeric">${fmtCostPerKm(c.costPerKm)}</td>

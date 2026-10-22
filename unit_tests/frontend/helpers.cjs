@@ -4,13 +4,30 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-let createRunController;
+let createRunController, createFormOperations, matchesSnapshot;
 require('node:test').before(async () => {
   ({ createRunController } = await import('../../frontend/runtime/run-controller.mjs'));
+  ({ createFormOperations, matchesSnapshot } = await import('../../frontend/runtime/form-operations.mjs'));
 });
 
+function featureContext(globals = {}) {
+  const context = vm.createContext({ structuredClone, formSnapshotMatches: matchesSnapshot, dataResourceRequests: new Map(),
+    dashboardAnalyticsCache: new Map(), dashboardAnalyticsRequest: 0,
+    captureAuthSession: () => ({}), isCurrentAuthSession: () => true,
+    getSelectedCategories: () => [], ...globals });
+  const owners = new Map();
+  context.getFormOperations = name => {
+    if (!owners.has(name)) owners.set(name, createFormOperations({
+      capture: () => context.captureAuthSession(), current: value => context.isCurrentAuthSession(value),
+    }));
+    return owners.get(name);
+  };
+  vm.runInContext(['readForm', 'matchesForm', 'shoeLabel', 'dataRefreshPolicy', 'invalidateDataResources'].map(extract).join('\n'), context);
+  return context;
+}
+
 function runContext(globals) {
-  const context = vm.createContext(globals);
+  const context = featureContext(globals);
   let nextKey = 0;
   context.runController = createRunController({
     transport: { post: (...args) => context.apiPost(...args), put: (...args) => context.apiPut(...args), delete: (...args) => context.apiDelete(...args) },
@@ -113,4 +130,4 @@ function transportContext() {
   return context;
 }
 
-module.exports = { runContext, test, assert, fs, path, vm, htmlSource, scriptPaths, scriptSource, styleSource, source, authOperationContext, streamContext, editContext, tableHeaders, extract, transportContext };
+module.exports = { runContext, test, assert, fs, path, vm: { ...vm, createContext: featureContext }, htmlSource, scriptPaths, scriptSource, styleSource, source, authOperationContext, streamContext, editContext, tableHeaders, extract, transportContext };

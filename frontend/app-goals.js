@@ -93,8 +93,10 @@ async function saveRunningGoal() {
   try {
     const goal = await apiPut('/running-goal', payload);
     if (goalSaveOperation !== operation || !isCurrentAuthSession(operation.session)) return;
+    invalidateDataResources(['goal']);
     runningGoal = goal;
     dashboardAnalyticsCache.clear();
+    dashboardAnalyticsRequest++;
     goalProgressCache.clear();
     goalProgressRequestId += 1;
     status.textContent = '目標已儲存。';

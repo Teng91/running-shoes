@@ -32,7 +32,7 @@ function runShoe(shoeId) { return allRunShoes().find(shoe => shoe.id === shoeId)
 function populateRunShoeSelects(selectedId = null) {
   const shoeList = allRunShoes();
   const options = shoeList.map(shoe =>
-    `<option value="${shoe.id}">${esc(shoe.brand)} ${esc(shoe.model)}${shoe.is_retired ? ' · 已退役' : ''}</option>`
+    `<option value="${shoe.id}">${esc(shoeLabel(shoe))}</option>`
   ).join('');
   ['run-shoe', 'edit-run-shoe'].forEach(id => {
     const select = document.getElementById(id);
@@ -144,13 +144,13 @@ async function addRun() {
   try {
     document.getElementById('add-run-btn').disabled = true;
     if (!await runController.submitCreate(operation, payload)) return;
-    const unchanged = ['date', 'km', 'shoe'].every(key =>
-      document.getElementById('run-' + key).value === form[key]);
+    const unchanged = matchesForm(Object.fromEntries(
+      ['date', 'km', 'shoe'].map(key => ['run-' + key, form[key]])));
     if (unchanged) document.getElementById('run-km').value = '';
     if (unchanged && document.getElementById('run-month').value === form.month) {
       document.getElementById('run-month').value = date.slice(0, 7);
     }
-    await loadData();
+    await loadData({ mutation: 'run' });
   } catch (errorMessage) {
     if (errorMessage.name === 'AbortError' || !runController.isCurrentCreate(operation)) return;
     error.textContent = errorMessage.message || '新增失敗，請稍後再試。';
@@ -183,6 +183,7 @@ async function saveRun() {
   const snapshot = runController.editor;
   const error = document.getElementById('edit-run-error');
   if (!isCurrentAuthSession(snapshot.session)) return;
+  const draft = readForm(['edit-run-date', 'edit-run-km', 'edit-run-shoe']);
   const payload = {
     date: document.getElementById('edit-run-date').value,
     km: parseFloat(document.getElementById('edit-run-km').value),
@@ -198,11 +199,11 @@ async function saveRun() {
   try {
     snapshot.saving = true;
     if (!await runController.saveEditor(snapshot, payload)) return;
-    if (runController.editor === snapshot) {
+    if (runController.editor === snapshot && matchesForm(draft)) {
       closeRunModal();
       document.getElementById('run-month').value = payload.date.slice(0, 7);
     }
-    await loadData();
+    await loadData({ mutation: 'run' });
   } catch (saveError) {
     if (runController.editor !== snapshot || !isCurrentAuthSession(snapshot.session) || saveError.name === 'AbortError') return;
     error.textContent = saveError.message || '儲存失敗。';
@@ -220,7 +221,7 @@ async function deleteEditingRun() {
     run.saving = true;
     if (!await runController.deleteEditor(run)) return;
     if (runController.editor === run) closeRunModal();
-    await loadData();
+    await loadData({ mutation: 'run' });
   } catch (error) {
     if (runController.editor === run && isCurrentAuthSession(run.session) && error.name !== 'AbortError') alert(error.message || '刪除失敗');
   } finally { run.saving = false; }

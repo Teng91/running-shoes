@@ -33,12 +33,16 @@
 
 ## Acceptance criteria
 
-- [ ] Given／When／Then 格式的可觀察行為。
-- [ ] 錯誤、空資料與並行操作行為。
+- [ ] AC-1：Given／When／Then 格式的可觀察行為。
+- [ ] AC-2：錯誤、空資料與並行操作行為。
 
 ## Test traceability
 
-| Acceptance criterion | Test file / command |
+| Acceptance criterion | Named test / command |
 | --- | --- |
-| AC-1 | `unit_tests/...` |
+| AC-1 | `unit_tests/test_feature.py::test_observable_behavior` |
+| AC-2 | `unit_tests/frontend/feature.test.cjs::named regression title` |
+
+SPEC-023 起，每個 AC 至少一個實際存在的具名測試；command 可補充 browser／CI gate，不能取代具名案例。
+Python 可用 `file.py::TestClass::test_method` 或參數化節點，Node 使用 literal test title。
 

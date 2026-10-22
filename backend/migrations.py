@@ -8,10 +8,10 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
 from backend import models
-from backend.auth import get_password_hash
+from backend.credentials import get_password_hash
 from backend.database import Base
 
-CURRENT_SCHEMA_VERSION = 2
+CURRENT_SCHEMA_VERSION = 3
 
 
 def schema_version(engine: Engine) -> int:
@@ -190,6 +190,15 @@ def run_startup_migrations(
     # to existing run/shoe/monthly tables or mileage values.
     if applied_version < 2:
         cast(Table, models.RunCreationRequest.__table__).create(bind=engine, checkfirst=True)
+
+    # Schema 3 adds display-only nicknames without rewriting mileage or versions.
+    if applied_version < 3 and "nickname" not in {
+        column["name"] for column in inspect(engine).get_columns("shoes")
+    }:
+        with engine.begin() as connection:
+            connection.execute(text(
+                "ALTER TABLE shoes ADD COLUMN nickname VARCHAR(80) NOT NULL DEFAULT ''"
+            ))
 
     with engine.begin() as connection:
         connection.execute(text(

@@ -17,6 +17,8 @@
 - `backend/dependencies.py`: request-scoped app settings; CRUD/import quotas must not use import-time globals.
 - `backend/read_models/run_statistics.py`: shared calendar ranges and bounded distance aggregates for goals, dashboard and reports.
 - `scripts/document_contracts.py`: Markdown links, feature-spec structure, AC completion and traceability path validation.
+- `backend/credentials.py`: HTTP-independent bcrypt/JWT primitives; runtime secrets are injected.
+- `backend/services/accounts.py`, `goals.py`: account and goal writes, domain errors, and transactions.
 - `backend/services/run_requests.py`: user-scoped transactional run-creation receipts; operation keys never replace authentication.
 - `backend/migrations.py`: ordered SQLite schema upgrades and the current schema version.
 - `backend/rate_limits.py`: shared authentication and AI request throttling.
@@ -30,6 +32,7 @@
 - `scripts/build_frontend.py`: deterministic frontend generation; use `--write` after source changes and `--check` to verify.
 - `scripts/release_check.py`, `release_browser.cjs`: anonymous, read-only asset/API/PWA deployment checks; never use real account credentials in traces.
 - `frontend/index.html`, `styles.css`, `service-worker.js`: generated static outputs; commit with their sources, do not edit directly.
+- `frontend/runtime/form-operations.mjs`: session/epoch/operation ownership and draft snapshots shared by run/monthly/shoe adapters.
 - `frontend/runtime/feature-lifecycle.mjs`: DOM-independent native module for feature lifecycle ownership.
 - `frontend/runtime/run-controller.mjs`: native run state/operation owner with injected transport, session and key factory; DOM remains in the bridge.
 - `frontend/app-lifecycle.js`: compatibility bridge and reset registration.
@@ -94,6 +97,8 @@ on Windows use `py -3` with the same script and task arguments:
 - Security-sensitive change: `python3 scripts/task.py security-check`
 - Release-sensitive or cross-cutting change: `python3 scripts/task.py verify`
 - After deployment: `python3 scripts/task.py release-check --base-url https://running-shoes.fly.dev` (explicit origin, no authentication or writes, browser dependencies required).
+- Synthetic browser diagnostics capture: `python3 scripts/task.py diagnostics-generate`
+- Downloaded synthetic diagnostic validation (standard library): `python3 scripts/task.py diagnostics-verify`
 - Everything at once before handing off a large change: `python3 scripts/task.py verify-all`
 
 `frontend-layout` is intentionally separate from `verify` because it requires Playwright browser binaries.

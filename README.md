@@ -67,7 +67,8 @@ running-shoes/
 │   ├── migrations.py     # 有版本的 SQLite schema upgrade
 │   ├── observability.py  # Request ID 與不含敏感內容的結構化 HTTP log
 │   ├── rate_limits.py    # Auth／AI process 與 SQLite shared rate limits
-│   ├── auth.py           # JWT 認證 + 密碼雜湊
+│   ├── auth.py           # HTTP JWT 認證 adapter
+│   ├── credentials.py    # 不依賴 HTTP 的 bcrypt／JWT primitives
 │   ├── database.py       # SQLite 資料庫連線
 │   ├── models.py         # 資料表定義
 │   ├── schemas.py        # Pydantic schema
@@ -482,8 +483,12 @@ Playwright 版本由 `package.json`／`package-lock.json` 鎖定，使用 `npm c
 本機由該版 Playwright 安裝匹配的 Chromium／WebKit；CI 使用同版本官方 noble container，已包含瀏覽器與系統依賴，避免每次下載 apt 套件。映像版本必須和 lockfile 同步（[官方容器說明](https://playwright.dev/docs/docker)）。瀏覽器失敗時在 `.artifacts/browser/` 保存截圖、trace 與錯誤輸出，
 CI 明確允許上傳這個隱藏目錄並保留 7 天，範圍只限 browser diagnostics；可用 `npx playwright show-trace /path/to/trace.zip` 開啟。Artifacts 可能包含測試畫面，只記錄合成帳號或匿名 smoke，不對真實登入工作階段錄製。
 
+診斷演練使用 `python3 scripts/task.py diagnostics-generate` 產生刻意失敗的合成 browser screenshot／trace／error，並驗證 checksum 與內容；
+`python3 scripts/task.py diagnostics-verify` 可在只有 Python 標準函式庫的環境驗證 `.artifacts/browser/roundtrip/`。
+CI 上傳獨立 `browser-diagnostics-roundtrip` artifact，另一個 job 下載並驗證 PNG、trace ZIP 與合成錯誤標記，缺檔／損毀會讓 pipeline 失敗。
+
 `frontend-e2e` 會對真實 FastAPI／CORS 與暫存 SQLite 執行同一個 `release-check`：檢查 readiness／schema、
-完整 API contract、manifest 對應的 40 個 shell／worker 資產雜湊與 MIME、四個統計 API 的匿名拒絕存取，
+完整 API contract、manifest 對應的 41 個 shell／worker 資產雜湊與 MIME、四個統計 API 的匿名拒絕存取，
 再驗證 Chromium／WebKit 匿名手機啟動與 native runtime cache，以及 Chromium 離線重開。
 WebKit 離線由 `frontend-pwa` 的 fixture transport 中斷驗證，不把引擎的離線模擬開關當成實機結果。
 這個 task 不登入、不送出資料、不發布或回滾；正式 origin 必須是 HTTPS，HTTP 只允許 loopback。
@@ -505,6 +510,20 @@ WebKit 離線由 `frontend-pwa` 的 fixture transport 中斷驗證，不把引�
 - 首頁、目標與月報共用日期區間邊界；月報的月份／上月同期／年度累積以一次 SQL 聚合取得，不再每月各查一次，仍不把手動歷史調整算成逐筆日誌目標。
 - v3.5.0 維持 schema 2，不需資料 migration。回滾至 v3.4.0 image 可讀寫相同資料；重新發布舊來源仍需新 shell revision，不以舊備份覆蓋正式資料。
 
+### 表單保護、暱稱與部分刷新（SPEC-023，開發中版本）
+
+- 月跑量新增成功只清除與送出時相同的年月及里程草稿；舊回應不會解鎖新操作、覆蓋新帳號錯誤或關閉重開的視窗。
+- 跑步、月跑量與鞋款共用原生表單操作模組。等待期間改過的編輯草稿會保留，成功回應的版本用於下一次儲存。
+- 新增／編輯鞋款可設定最多 80 字的暱稱（留空表示沒有暱稱）。跑步與 Strava 選單顯示暱稱、品牌型號、購買日期和 #ID，區分同款鞋；鞋款表、CSV／XLSX 與帳號備份保留暱稱。
+- 月跑量異動只重讀月跑量；鞋款異動重讀現役與退役清單；跑步異動重讀鞋款、月跑量、明細與摘要。首次登入及手動重試仍完整讀取，匯入另更新 Strava 歷史。
+- 購鞋支出快取只因鞋款異動失效；逐筆目標與年度統計因日誌異動失效。不同資源分別檢查請求身分及登入 session，舊完整讀取不會蓋掉新的部分刷新。
+- 認證與目標寫入位於 `backend/services/accounts.py`／`goals.py`，密碼與 token primitives 位於 `backend/credentials.py`；router 保留輸入、rate limits 及 HTTP 轉換。
+- 工作來源的 asset revision 為 3.6.0／shell v28，尚未建立此版本 release 或部署。Schema 3 新增 `shoes.nickname`，舊鞋預設空字串，保留原始里程與版本；新舊資料庫均提供 server default。
+
+Schema 3 正式上線前，必須執行異地備份、checksum 與隔離還原演練。優先 forward fix；若要回滾 v3.5.1，先停止所有 writes、另做 schema 3 備份並確認只有新增 nickname 欄位，
+再於停止的資料庫執行 `UPDATE schema_metadata SET value='2' WHERE key='schema_version' AND value='3';`，保留 nickname 欄位和新業務資料，部署已驗證的 schema 2 image。
+不要以舊快照覆蓋新資料。重新發布舊來源仍須新 shell revision。
+
 ### Schema 2 上線與回滾
 
 v3.4.0 只新增 `run_creation_requests` 表與 user/key 唯一約束，沒有改寫既有鞋款、日誌或里程。
@@ -524,14 +543,14 @@ Playwright／Chromium／WebKit 齊全時，也會執行版面測試。
 避免每次停止都重跑。Hook 不會呼叫其他模型、外部 API，或傳送提示、diff、原始碼與測試輸出。
 GitHub Actions 仍會在 push／pull request 執行 `verify`，並在獨立工作中安裝 Chromium／WebKit、跑完完整版面矩陣、真實 CRUD E2E 與 PWA 升級／離線測試；Dependabot 每週檢查 Python 與 GitHub Actions 更新。
 
-本次驗證基線為 Python **450 passed**、前端回歸測試 **81 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
+本次驗證基線為 Python **458 passed**、前端回歸測試 **88 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
 版面檢查涵蓋 WebKit／Chromium、亮／暗模式與 10 組直橫向尺寸，共 40 組設定，檢查六個功能分頁、三個認證表單、圖表、全部彈窗、行內編輯、停用／錯誤及空資料狀態。
 
 主要表單、工具列與彈窗操作統一為 44px 控制項；桌面表格內的緊湊操作為 36px，手機至少 44px。
 日期／月份欄位與一般輸入框等高，模型工具列及彈窗按鈕依可用空間換行；表格數字與表頭統一右對齊。
 `frontend-layout` 同時驗證幾何對齊、同列邊界、圖表起點與無溢出，設定 `LAYOUT_SCREENSHOT_DIR` 可保存桌面／手機、認證及彈窗截圖人工覆核。
 
-`docs-check` 會從 pytest collection、前端測試檔、Agent tool registry、Playwright 測試矩陣與實際檔案系統核對上述數字及 harness 路徑；release-check 的 shell／worker 資產數量也由同一 manifest 推導。新增測試、工具、版面設定或 native module 卻忘記同步 README 時，`verify` 和 GitHub Actions 會直接失敗。另檢查 Markdown 本地連結／標題 anchor、spec 必要章節／Owner／狀態、Implemented 規格的 AC 勾選及 traceability 測試檔路徑；SPEC-020 起每個 AC 都要連結明確測試路徑或 repository command。這些是靜態檢查，行為正確性仍由回歸測試與 review 確認。
+`docs-check` 會從 pytest collection、前端測試檔、Agent tool registry、Playwright 測試矩陣與實際檔案系統核對上述數字及 harness 路徑；release-check 的 shell／worker 資產數量也由同一 manifest 推導。新增測試、工具、版面設定或 native module 卻忘記同步 README 時，`verify` 和 GitHub Actions 會直接失敗。另檢查 Markdown 本地連結／標題 anchor、spec 必要章節／Owner／狀態、Implemented 規格的 AC 勾選及 traceability 測試檔路徑；SPEC-020 起每個 AC 都要連結明確測試路徑或 repository command。SPEC-023 起每個 AC 必須引用實際存在的 `unit_tests/file.py::test_name` 或 `unit_tests/frontend/feature.test.cjs::test title`；Python 支援 class 與參數化節點，Node 使用具名 literal test title。這些是靜態檢查，行為正確性仍由回歸測試與 review 確認。
 
 專案的規格不是只存在對話裡：[`docs/architecture.md`](docs/architecture.md) 是目前的
 Software Design Description（含 Mermaid 架構圖與拆分順序），

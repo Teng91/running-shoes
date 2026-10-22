@@ -25,7 +25,7 @@ test('shoe save ignores duplicate submissions and unlocks after errors', async (
   vm.runInContext(definition + '\nglobalThis.Modal = ShoeModal;', context);
   const modal = Object.create(context.Modal.prototype);
   const button = {};
-  Object.assign(modal, { mode: 'create', context: { mode: 'create', session: { current: true } },
+  Object.assign(modal, { formIds: {}, mode: 'create', context: { mode: 'create', session: { current: true } },
     btnDelete: {}, btnMove: {}, el: { querySelector: () => button },
     _payload: () => ({ brand: 'A', model: 'B', date: '2026-09-06' }), close() {} });
   let resolve, calls = 0;
