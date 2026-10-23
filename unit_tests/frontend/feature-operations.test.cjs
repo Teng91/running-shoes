@@ -79,6 +79,7 @@ test('SPEC-023 shoe save preserves an edited draft and rebases its optimistic ve
   Object.assign(modal, { formIds: { model: 'f-model' }, mode: 'editActive',
     context: { mode: 'editActive', shoe: original, session: {} }, btnDelete: {}, btnMove: {},
     el: { querySelector: () => button }, close() { closed++; }, _payload: () => original,
+    _fillForm(saved) { elements['f-model'].value = saved.model; }, _updateUI() {},
   });
   elements['f-model'].value = 'submitted'; const saving = modal.submit();
   elements['f-model'].value = 'new draft'; pending.resolve({ ...original, version: 4 }); await saving;

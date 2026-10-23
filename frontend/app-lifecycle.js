@@ -14,6 +14,7 @@ async function initializeFeatureLifecycle() {
   const forms = await import('./runtime/form-operations.mjs?v=' + encodeURIComponent(version));
   formOperationFactory = forms.createFormOperations;
   formSnapshotMatches = forms.matchesSnapshot;
+  formDraftFactory = forms.createFormDraft;
   featureLifecycle = createLifecycle(name => console.error('功能清理失敗：', name));
   for (const [name, reset] of featureResetters) featureLifecycle.register(name, reset);
 }
@@ -25,6 +26,8 @@ function resetFeatureLifecycles() {
 
 let formOperationFactory = null;
 let formSnapshotMatches = null;
+let formDraftFactory = null;
+const formDrafts = new Map();
 const formOperationOwners = new Map();
 function getFormOperations(name) {
   if (!formOperationOwners.has(name)) {
@@ -47,4 +50,13 @@ function matchesForm(snapshot) {
 function shoeLabel(shoe) {
   const name = [shoe.brand, shoe.model].join(' ');
   return `${shoe.nickname ? shoe.nickname + ' · ' : ''}${name} · ${shoe.date} · #${shoe.id}${shoe.is_retired ? ' · 已退役' : ''}`;
+}
+
+function getFormDraft(name) {
+  if (!formDrafts.has(name)) {
+    const draft = formDraftFactory();
+    formDrafts.set(name, draft);
+    registerFeatureReset('draft-' + name, () => draft.reset());
+  }
+  return formDrafts.get(name);
 }

@@ -1,7 +1,7 @@
 // Real DOM and application code, synthetic sessions and deterministic fetch/SSE.
 // Never authenticates against, writes to, or calls an external account/model.
 const assert = require('node:assert/strict');
-const { startArtifacts, saveFailure } = require('../scripts/browser_artifacts.cjs');
+const { startArtifacts, saveFailure, closeBrowser } = require('../scripts/browser_artifacts.cjs');
 
 module.exports = async function checkSessionIsolation(browser, baseUrl) {
   const context = await browser.newContext({ serviceWorkers: 'block' });
@@ -111,6 +111,6 @@ module.exports = async function checkSessionIsolation(browser, baseUrl) {
     await saveFailure(context, page, 'sessions-' + browser.browserType().name(), error);
     throw error;
   } finally {
-    await context.close();
+    await closeBrowser(context);
   }
 };

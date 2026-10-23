@@ -1,6 +1,6 @@
 // SPEC-019: real same-origin tabs; isolated mock APIs, no external account writes.
 const assert = require('node:assert/strict');
-const { startArtifacts, saveFailure } = require('../scripts/browser_artifacts.cjs');
+const { startArtifacts, saveFailure, closeBrowser } = require('../scripts/browser_artifacts.cjs');
 
 module.exports = async function checkReliability(browser, baseUrl) {
   const context = await browser.newContext({ serviceWorkers: 'block' });
@@ -79,5 +79,5 @@ module.exports = async function checkReliability(browser, baseUrl) {
   } catch (error) {
     await saveFailure(context, a, 'reliability-' + browser.browserType().name(), error);
     throw error;
-  } finally { await context.close(); }
+  } finally { await closeBrowser(context); }
 };

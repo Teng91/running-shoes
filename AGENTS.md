@@ -32,7 +32,10 @@
 - `scripts/build_frontend.py`: deterministic frontend generation; use `--write` after source changes and `--check` to verify.
 - `scripts/release_check.py`, `release_browser.cjs`: anonymous, read-only asset/API/PWA deployment checks; never use real account credentials in traces.
 - `frontend/index.html`, `styles.css`, `service-worker.js`: generated static outputs; commit with their sources, do not edit directly.
-- `frontend/runtime/form-operations.mjs`: session/epoch/operation ownership and draft snapshots shared by run/monthly/shoe adapters.
+- `frontend/runtime/form-operations.mjs`: session/epoch/operation ownership and draft snapshots/reconciliation shared by feature adapters.
+- `frontend/runtime/resource-store.mjs`: DOM-independent resource/session ownership, pending read coalescing and cache invalidation policy.
+- `frontend/app-resources.js`: native resource bridge and legacy cache adapters.
+- `scripts/browser_runner.py`: outer browser deadlines and bounded process-tree cleanup.
 - `frontend/runtime/feature-lifecycle.mjs`: DOM-independent native module for feature lifecycle ownership.
 - `frontend/runtime/run-controller.mjs`: native run state/operation owner with injected transport, session and key factory; DOM remains in the bridge.
 - `frontend/app-lifecycle.js`: compatibility bridge and reset registration.

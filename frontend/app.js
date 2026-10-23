@@ -53,6 +53,8 @@ async function init() {
 initializeFeatureLifecycle().then(() => {
   return initializeRunFeature();
 }).then(() => {
+  return initializeDataResources();
+}).then(() => {
   initializeDialogs();
   initializeAuthSync();
   initializeAppUpdates();

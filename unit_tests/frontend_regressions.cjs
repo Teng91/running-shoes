@@ -9,3 +9,5 @@ require('./frontend/statistics-lifecycle.test.cjs');
 require('./frontend/reliability.test.cjs');
 require('./frontend/run-controller.test.cjs');
 require('./frontend/feature-operations.test.cjs');
+require('./frontend/draft-resources.test.cjs');
+require('./frontend/browser-deadlines.test.cjs');

@@ -486,3 +486,29 @@ Form operations 的 session／epoch／identity 與 snapshot 不依賴 DOM；clas
 Native transitive imports 帶相同 revision，以符合 worker 精確 URL cache。每個資料來源的 ticket 只取消該來源的舊結果；
 部分刷新不會丟棄完整讀取中仍有效的其他來源。Mutation policy 與快取範圍詳見 SPEC-023／README。
 Schema 3 只新增 nickname；品牌／型號統計分組和里程計算仍由原有 backend 模組擁有。
+
+## 11. SPEC-024：草稿基準與資源所有權
+
+[ADR-0007](adr/0007-draft-rebase-resource-store-and-browser-deadlines.md) 延伸表單與資源邊界：
+
+```mermaid
+flowchart LR
+    DOM[Shoe / goal DOM adapters] --> Draft[Native form operations / draft baseline]
+    Core[Core readers / apply / render] --> Store[Native resource store]
+    Bridge[Resource bridge] --> Store
+    Bridge --> Caches[Feature cache adapters]
+    Store --> Session[Injected session / ownership]
+    CI[Independent layout / CRUD / PWA jobs] --> Watchdog[Python process watchdog]
+    Watchdog --> Stage[Engine / stage deadlines]
+    Stage --> Capture[Error first / bounded capture and close]
+```
+
+鞋款成功回應更新 snapshot、mode、UI 與 form baseline，再還原操作期間的新修改；後續只提交 dirty fields。
+Goal 以 baseline 比較 draft，reconcile 處理背景重繪，acknowledge 處理儲存回應，session reset 清理狀態。
+`resource-store.mjs` 管理 resource/key、session/epoch、pending read 合併、成功值與獨立錯誤；失效後拒絕舊回應，接受結果只消費一次。
+`app-resources.js` 注入 session 並註冊快取 hooks，core 保留 readers／結果套用與 render；不同來源成功／失敗各自處理。
+Native module 不讀 DOM、認證 storage 或 HTTP，architecture-check 同樣限制新 module。
+
+Browser capture 的錯誤文字先保存，截圖／trace 及 teardown 分別限時。Python watchdog 處理 IPC 完全卡住的程序樹，
+三個 CI jobs 以 composite setup 共用鎖定依賴，沒有彼此的成功依賴；diagnostics roundtrip 只依賴 PWA job。
+細部期限與可保留產物的限制見 README 及測試策略；驗證一律使用暫存 DB／合成 context。

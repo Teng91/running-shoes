@@ -172,6 +172,11 @@ def run_verify() -> None:
         run_checked(command)
 
 
+def browser_command(label: str, script: str, timeout: int, *, environment=()) -> Command:
+    return Command(label, (project_python(), "scripts/browser_runner.py", "--timeout", str(timeout),
+                           "--label", Path(script).stem, "--", "node", script), environment=environment)
+
+
 def run_frontend_layout(*, optional: bool = False) -> None:
     if not layout_dependencies_available():
         message = (
@@ -183,7 +188,7 @@ def run_frontend_layout(*, optional: bool = False) -> None:
             print(f"\n==> Frontend layout tests\nWARNING: {message}\nWARNING: Skipped.")
             return
         raise TaskError(message)
-    run_checked(Command("Frontend layout tests", ("node", "unit_tests/frontend_layout.cjs")))
+    run_checked(browser_command("Frontend layout tests", "unit_tests/frontend_layout.cjs", 660))
 
 
 def run_frontend_e2e(*, optional: bool = False) -> None:
@@ -197,9 +202,8 @@ def run_frontend_e2e(*, optional: bool = False) -> None:
             print(f"\n==> Frontend browser E2E\nWARNING: {message}\nWARNING: Skipped.")
             return
         raise TaskError(message)
-    run_checked(Command(
-        "Frontend browser E2E",
-        ("node", "unit_tests/frontend_e2e.cjs"),
+    run_checked(browser_command(
+        "Frontend browser E2E", "unit_tests/frontend_e2e.cjs", 420,
         environment=(("PROJECT_PYTHON", project_python()),),
     ))
 
@@ -211,7 +215,7 @@ def run_frontend_pwa(*, optional: bool = False) -> None:
             print(f"\n==> PWA upgrade tests\nWARNING: {message}\nWARNING: Skipped.")
             return
         raise TaskError(message)
-    run_checked(Command("PWA upgrade/offline tests", ("node", "unit_tests/frontend_pwa.cjs")))
+    run_checked(browser_command("PWA upgrade/offline tests", "unit_tests/frontend_pwa.cjs", 300))
 
 
 def run_task(task: str, *, base_url: str | None = None) -> None:
@@ -273,7 +277,7 @@ def run_task(task: str, *, base_url: str | None = None) -> None:
     elif task == "diagnostics-generate":
         if not layout_dependencies_available():
             raise TaskError("diagnostics-generate requires the pinned Playwright browsers")
-        run_checked(Command("Capture synthetic browser failure", ("node", "scripts/diagnostics_drill.cjs")))
+        run_checked(browser_command("Capture synthetic browser failure", "scripts/diagnostics_drill.cjs", 60))
         run_checked(Command("Verify captured diagnostics", (python, "scripts/verify_diagnostics.py")))
     elif task == "diagnostics-verify":
         run_checked(Command("Verify downloaded diagnostics", (python, "scripts/verify_diagnostics.py")))

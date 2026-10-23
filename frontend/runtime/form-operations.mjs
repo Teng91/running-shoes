@@ -28,3 +28,19 @@ export function createFormOperations(session) {
     reset() { epoch++; pending.clear(); latest.clear(); },
   });
 }
+
+// Baselines describe acknowledged server values; current values belong to the user.
+export function createFormDraft() {
+  let baseline = null;
+  const merge = (server, current, previous) => {
+    const values = Object.fromEntries(Object.entries(server).map(([key, value]) =>
+      [key, previous && current[key] !== previous[key] ? current[key] : value]));
+    baseline = { ...server };
+    return values;
+  };
+  return Object.freeze({
+    reconcile: (server, current) => merge(server, current, baseline),
+    acknowledge: (server, sent, current) => merge(server, current, sent),
+    reset() { baseline = null; },
+  });
+}
