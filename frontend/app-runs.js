@@ -20,6 +20,9 @@ registerFeatureReset('run-editor', () => {
   document.getElementById('run-load-error').hidden = true;
   document.getElementById('run-month').value = localDateISO().slice(0, 7);
   document.getElementById('run-date').value = localDateISO();
+  const select = document.getElementById('run-shoe');
+  select.value = '';
+  delete select.dataset.requiresSelection;
 });
 
 function localDateISO(date = new Date()) {
@@ -39,10 +42,13 @@ function populateRunShoeSelects(selectedId = null) {
     if (!select) return;
     const previous = id === 'edit-run-shoe' && selectedId !== null
       ? selectedId : parseInt(select.value, 10);
+    const requiresSelection = select.dataset.requiresSelection === 'true';
     select.innerHTML = options || '<option value="">請先新增跑鞋</option>';
     if (previous && shoeList.some(shoe => shoe.id === previous)) {
       select.value = String(previous);
-    } else if (id === 'edit-run-shoe') {
+      delete select.dataset.requiresSelection;
+    } else if (id === 'edit-run-shoe' || previous || requiresSelection) {
+      select.dataset.requiresSelection = 'true';
       select.insertAdjacentHTML(
         'afterbegin',
         '<option value="" selected disabled>原鞋款已刪除，請重新選擇</option>',

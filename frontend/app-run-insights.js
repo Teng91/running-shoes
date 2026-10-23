@@ -56,18 +56,15 @@ async function loadDashboardAnalytics(month) {
   const session = captureAuthSession();
   const cachePrefix = `${session.generation}|${localDateISO()}|`;
   const cacheKey = `${cachePrefix}${month}`;
-  for (const key of dashboardAnalyticsCache.keys()) {
-    if (!key.startsWith(cachePrefix)) dashboardAnalyticsCache.delete(key);
-  }
-  if (dashboardAnalyticsCache.has(cacheKey)) {
-    renderDashboardInsights(dashboardAnalyticsCache.get(cacheKey));
-    return;
-  }
   const requestId = ++dashboardAnalyticsRequest;
   target.innerHTML = '<div class="insight-card"><div class="insight-card-sub">分析載入中…</div></div>';
   try {
     const [year, monthNumber] = month.split('-').map(Number);
-    const data = await apiGet(`/analytics/dashboard?year=${year}&month=${monthNumber}`);
+    const result = await resourceStore.read('dashboard-analytics', { key: cacheKey, refresh: false,
+      loader: () => apiGet(`/analytics/dashboard?year=${year}&month=${monthNumber}`) });
+    if (!resourceStore.current(result)) return;
+    if (result.status === 'rejected') throw result.error;
+    const data = result.value;
     if (!isCurrentAuthSession(session) || requestId !== dashboardAnalyticsRequest || selectedRunMonth() !== month) return;
     dashboardAnalyticsCache.set(cacheKey, data);
     renderDashboardInsights(data);

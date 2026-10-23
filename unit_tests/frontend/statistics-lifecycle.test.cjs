@@ -61,13 +61,14 @@ test('SPEC-017 stale goal requests cannot replace a newer month or session', asy
   });
   vm.runInContext('const goalProgressCache = new Map(); let goalProgressRequestId = 0;\n' + extract('loadGoalProgress'), context);
   const first = context.loadGoalProgress(2026, 8);
+  await Promise.resolve();
   context.selectedGoalMonth = 9;
   const second = context.loadGoalProgress(2026, 9);
-  requests[1]({ month_km: 10 }); await second;
+  await Promise.resolve(); requests[1]({ month_km: 10 }); await second;
   requests[0]({ month_km: 999 }); await first;
   assert.deepEqual(renders, [10]);
-  const stale = context.loadGoalProgress(2026, 10); current = false;
-  requests[2]({ month_km: 123 }); await stale;
+  const stale = context.loadGoalProgress(2026, 10);
+  await Promise.resolve(); current = false; requests[2]({ month_km: 123 }); await stale;
   assert.deepEqual(renders, [10]);
 });
 
@@ -92,7 +93,7 @@ test('SPEC-017 deleted shoes remain in annual stacked mileage totals', async () 
   const nodes = elements(); nodes['stacked-year-select'].value = '2026';
   const context = runContext({ document: { getElementById: id => nodes[id], querySelector: () => ({ dataset: { panel: 'monthly' } }) },
     chartInstances: {}, shoes: [{ id: 2, brand: 'A', model: 'Visible' }], retiredShoes: [],
-    yearlyRunsCache: new Map([[2026, { shoes: [{ shoe_id: 1, monthly_km: [10] }, { shoe_id: 2, monthly_km: [20] }] }]]),
+    apiGet: async () => ({ shoes: [{ shoe_id: 1, monthly_km: [10] }, { shoe_id: 2, monthly_km: [20] }] }),
     brandColor: () => '#000', getThemeColor: () => '#000', stackedRunsRequestId: 0,
     Chart: function(_, config) { this.config = config; },
   });

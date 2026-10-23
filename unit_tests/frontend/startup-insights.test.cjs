@@ -128,7 +128,7 @@ test('monthly inline edits commit once and include the loaded version', async ()
     loadData: async () => {}, render() {}, alert() {},
   });
   vm.runInContext(extract('inlineEditMonthly'), context);
-  await context.inlineEditMonthly(0, 'km', { innerHTML: '', appendChild() {} });
+  await context.inlineEditMonthly(0, 'km', { innerHTML: '', appendChild() {}, querySelector: () => null });
   input.value = '60';
   handlers.keydown({ key: 'Enter' });
   await handlers.blur();

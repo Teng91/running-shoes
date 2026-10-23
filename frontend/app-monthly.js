@@ -7,7 +7,9 @@ registerFeatureReset('monthly-editor', () => {
   document.getElementById('add-error').style.display = 'none';
 });
 function renderMonthlyTable() {
+  if (preserveInlineTable('monthly-table')) return;
   const tbody = document.getElementById('monthly-table');
+  inlineTableRows.set('monthly-table', monthlyMileages.map(entry => ({ ...entry })));
   if (monthlyMileages.length === 0) {
     tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-dim);padding:24px;">尚無月跑量紀錄，使用上方表單新增</td></tr>';
     return;
@@ -28,9 +30,10 @@ function renderMonthlyTable() {
 }
 
 async function inlineEditMonthly(idx, field, el) {
+  if (el.querySelector('.inline-input')) return;
   const operations = getFormOperations('monthly');
   const operation = operations.capture();
-  const entry = { ...monthlyMileages[idx] };
+  const entry = { ...(inlineTableRows.get('monthly-table') || monthlyMileages)[idx] };
   const current = entry[field];
   const input = document.createElement('input');
   input.type = 'number';
@@ -39,9 +42,12 @@ async function inlineEditMonthly(idx, field, el) {
   input.min = '0';
   input.value = current;
   let committed = false;
+  const editor = beginInlineEdit('monthly-table', () => { committed = true; });
   const commit = async () => {
     if (committed || !operations.current(operation)) return;
     committed = true;
+    finishInlineEdit(editor);
+    input.disabled = true;
     const val = parseFloat(input.value);
     if (Number.isFinite(val) && val >= 0) {
       try {
@@ -53,12 +59,15 @@ async function inlineEditMonthly(idx, field, el) {
         if (operations.current(operation) && e.name !== 'AbortError') alert(e.message || '更新失敗');
       }
     }
-    if (operations.current(operation)) await loadData({ mutation: 'monthly' });
+    if (operations.current(operation)) {
+      await loadData({ mutation: 'monthly' });
+      render('monthly');
+    }
   };
   input.addEventListener('blur', commit);
   input.addEventListener('keydown', e => {
     if (e.key === 'Enter') commit();
-    if (e.key === 'Escape') { committed = true; render(); }
+    if (e.key === 'Escape') { committed = true; finishInlineEdit(editor); render('monthly'); }
   });
   el.innerHTML = '';
   el.appendChild(input);
@@ -68,7 +77,7 @@ async function inlineEditMonthly(idx, field, el) {
 async function deleteMonthlyMileage(idx) {
   const operations = getFormOperations('monthly');
   const operation = operations.capture();
-  const m = { ...monthlyMileages[idx] };
+  const m = { ...(inlineTableRows.get('monthly-table') || monthlyMileages)[idx] };
   if (!confirm(`確定要刪除 ${m.year} 年 ${m.month} 月的紀錄？`)) return;
   try {
     await apiDelete('/monthly-mileage/' + m.id + '?expected_version=' + (m.version || 0));
@@ -146,7 +155,7 @@ async function addMonthlyMileage() {
 let editingMonthly = null;
 
 function editMonthlyMileage(idx) {
-  const m = monthlyMileages[idx];
+  const m = (inlineTableRows.get('monthly-table') || monthlyMileages)[idx];
   if (!m) return;
   editingMonthly = { ...m, ...getFormOperations('monthly').capture() };
   document.getElementById('save-monthly-btn').disabled = false;

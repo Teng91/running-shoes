@@ -60,6 +60,8 @@ running-shoes/
 │   ├── services/
 │   │   ├── accounts.py    # 註冊容量、密碼 CAS 與 token revocation 交易
 │   │   ├── goals.py       # 個人目標 upsert、版本與 rollback
+│   │   ├── reports.py     # 月報生成身分、事件及成功保存流程
+│   │   ├── report_storage.py # 月報最新生成回執與條件寫入交易
 │   │   ├── run_requests.py # User-scoped 日誌建立回執
 │   │   ├── transactions.py # SQLite writer reservation 與交易生命週期
 │   │   ├── runs.py       # 日誌寫入、重送、版本與里程交易
@@ -80,7 +82,9 @@ running-shoes/
 │   ├── agent_planner.py  # Deterministic intent 與最小查詢計畫
 │   ├── agent_tools.py    # 受信任工具 dispatch
 │   ├── agent_protocol.py # SSE 與搜尋來源摘要 contract
-│   ├── reports.py        # AI 月度跑步報告（後端算統計 + one-shot LLM 串流 + 報告留存）
+│   ├── reports.py        # 月報唯讀統計快照與提示詞
+│   ├── report_llm.py     # One-shot LLM adapter
+│   ├── report_protocol.py # 月報 domain events 的 SSE 序列化
 │   ├── goals.py          # 個人月／年跑量目標與達成率計算
 │   ├── forecasting.py    # 共用退役預估與 user-scoped 批次查詢
 │   ├── shoe_metrics.py   # 共用折數、成本與壽命算術
@@ -108,6 +112,7 @@ running-shoes/
 │   │   ├── run-controller.mjs # 注入 transport/session 的跑步 state
 │   │   └── strava-controller.mjs # 預覽、匯入與視窗操作所有權
 │   ├── app-lifecycle.js  # Legacy handler 與原生 runtime 的過渡橋接
+│   ├── app-inline-editors.js # 表格輸入 DOM、列快照與 session 清理
 │   ├── app-dates.js      # 日曆日期與跨日限制／恢復
 │   ├── app-dialogs.js    # 共用焦點、Tab、Escape 與彈窗語義
 │   ├── app-updates.js    # 版本資訊與不強制重載的 PWA 更新提示
@@ -506,7 +511,7 @@ CI 失敗／取消時嘗試上傳已有產物；引擎完全卡死時可能只�
 CI 的 `frontend-pwa` job 上傳獨立 `browser-diagnostics-roundtrip` artifact，另一個 job 下載並驗證 PNG、trace ZIP 與合成錯誤標記，缺檔／損毀會讓 pipeline 失敗。
 
 `frontend-e2e` 會對真實 FastAPI／CORS 與暫存 SQLite 執行同一個 `release-check`：檢查 readiness／schema、
-完整 API contract、manifest 對應的 44 個 shell／worker 資產雜湊與 MIME、四個統計 API 的匿名拒絕存取，
+完整 API contract、manifest 對應的 45 個 shell／worker 資產雜湊與 MIME、四個統計 API 的匿名拒絕存取，
 再驗證 Chromium／WebKit 匿名手機啟動與 native runtime cache，以及 Chromium 離線重開。
 WebKit 離線 shell 由 `frontend-pwa` 的 fixture transport 中斷驗證；API probe 在 HTTP headers 後截斷 response body，完整讀取 JSON 並檢查 server 請求計數，避免 headers 前 TCP 中斷讓裸 fetch 一直 pending。這些不取代引擎之外的實機驗證。
 這個 task 不登入、不送出資料、不發布或回滾；正式 origin 必須是 HTTPS，HTTP 只允許 loopback。
@@ -572,6 +577,18 @@ Schema 3 正式上線前，必須執行異地備份、checksum 與隔離還原�
 - 切換月跑量時，在欄位可操作前同步初始化目標草稿 baseline；圖表仍於下一個 animation frame 繪製。即使在第一個 frame 前輸入並失焦，後續重繪及晚到的目標回應也不覆蓋草稿。
 - 雙引擎 E2E 明確暫停首次 panel frame，先輸入再釋放，以固定重現原先的時序缺口。正式版本為 asset revision 3.7.2／shell v32，44 個資產、schema 3。
 
+### 行內草稿、衍生資源與月報生成（SPEC-026，v3.8.0）
+
+- 新增跑步草稿所選鞋款被刪除後，保留「請重新選擇」，直到明確選擇替代鞋款；重繪或跨日不默默換鞋。
+- 資源完成只失效依賴它的分頁。鞋款／月跑量行內編輯保留輸入 DOM 與表格列快照；背景刷新、主題或跨日重繪不觸發部分數字儲存。Enter／使用者離開欄位才提交原始 id／version，Escape 取消，換帳號清理。
+- 年度彙總、目標進度與首頁洞察透過 resource store 合併同 key 的 pending 與成功結果；失效後拒絕舊回應，失敗可重試。完整刷新導致的有效日誌失效可以啟動新讀取，單純重繪不增加請求。
+- Strava 匯入期間停用配對選單；失敗可在同一視窗重新調整。舊操作不解鎖替換視窗。
+- 月報採「最新開始的生成」：同帳號同月份的新請求開始後，舊請求即使較晚完成也不保存，串流回傳錯誤而非成功。新請求失敗／取消時保留先前成功報告，不讓舊請求重新取得資格。不同帳號／月份互不撤銷；LLM 等待不持有資料庫交易。
+- Schema 4 僅新增 `report_generations`，每帳號／月份一筆最新身分，不產生可見的空月報；既有報告、里程與版本不改寫。Asset 3.8.0／shell v33，共 45 個資產。
+
+Schema 4 上線前，執行異地備份、checksum 與隔離還原驗證。回滾優先 forward fix；若需回 v3.7.2，先停止所有實例與寫入、另備份 schema 4，確認新增表是唯一 schema 差異，
+再對停止寫入的資料庫執行 `UPDATE schema_metadata SET value='3' WHERE key='schema_version' AND value='4';`，保留新增表與業務資料，部署已驗證的 v3.7.2 image。禁止混跑兩版月報生成服務；回滾後失去生成順序保護。還原部署前快照會遺失後續寫入，僅作災難復原選項。
+
 ### Schema 2 上線與回滾
 
 v3.4.0 只新增 `run_creation_requests` 表與 user/key 唯一約束，沒有改寫既有鞋款、日誌或里程。
@@ -591,7 +608,7 @@ Playwright／Chromium／WebKit 齊全時，也會執行版面測試。
 避免每次停止都重跑。Hook 不會呼叫其他模型、外部 API，或傳送提示、diff、原始碼與測試輸出。
 GitHub Actions 仍會在 push／pull request 執行 `verify`，並以三個可獨立重跑的 browser jobs 執行完整版面矩陣、真實 CRUD E2E 與 PWA 升級／離線測試；Dependabot 每週檢查 Python 與 GitHub Actions 更新。
 
-本次驗證基線為 Python **464 passed**、前端回歸測試 **106 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
+本次驗證基線為 Python **475 passed**、前端回歸測試 **113 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
 版面檢查涵蓋 WebKit／Chromium、亮／暗模式與 10 組直橫向尺寸，共 40 組設定，檢查六個功能分頁、三個認證表單、圖表、全部彈窗、行內編輯、停用／錯誤及空資料狀態。
 
 主要表單、工具列與彈窗操作統一為 44px 控制項；桌面表格內的緊湊操作為 36px，手機至少 44px。
@@ -610,7 +627,7 @@ Software Design Description（含 Mermaid 架構圖與拆分順序），
 建立 feature spec，寫清楚 goals、non-goals、帳號隔離、migration、rollback、acceptance criteria
 與測試追蹤；PR template 會要求連結 spec／ADR 與實際驗證結果。
 
-鞋款、跑步日誌、月跑量與跑量目標的更新都會使用版本檢查，舊畫面遇到衝突時請重新載入後再操作。跑步日誌造成的鞋款與月跑量增減會在同一交易中處理；同月份彙總、首次建立目標及月報保存皆使用 SQLite 原子 upsert，避免同時寫入發生 500 或遺失更新。SQLite 連線啟用 foreign keys、30 秒 busy timeout 與 WAL，降低讀取分析和一般寫入互相鎖住的機率。已有逐筆日誌的月份不能直接改年月，必須先調整日誌日期；純手動月份仍可移動。改密碼後既有登入會失效，需重新登入。
+鞋款、跑步日誌、月跑量與跑量目標的更新都會使用版本檢查，舊畫面遇到衝突時請重新載入後再操作。跑步日誌造成的鞋款與月跑量增減會在同一交易中處理；同月份彙總與首次建立目標使用 SQLite 原子 upsert，搭配交易與版本條件處理並行寫入。月報另以 user／月份的最新生成身分，在同一寫交易中驗證並保存，舊生成不會覆蓋新內容或統計快照。SQLite 連線啟用 foreign keys、30 秒 busy timeout 與 WAL，降低讀取分析和一般寫入互相鎖住的機率。已有逐筆日誌的月份不能直接改年月，必須先調整日誌日期；純手動月份仍可移動。改密碼後既有登入會失效，需重新登入。
 
 並行改密碼使用原密碼與登入版本的條件更新；過期請求回 409，請重新登入後再試，避免覆寫較新的密碼或保留應撤銷憑證。註冊在資料庫寫入保留後才檢查同名與容量，空資料庫與多 worker 皆適用；同名維持回 400、容量不足回 403（SPEC-021）。
 啟動時會自動為既有資料庫補上鞋款、跑步日誌、月跑量、跑量目標與登入版本欄位，並依當前顯示總里程建立歷史調整基準；升級前後的顯示總里程不會改變。

@@ -4,6 +4,22 @@
 
 ## [Unreleased]
 
+## [3.8.0] - 2026-10-23
+
+### Fixed
+
+- 新增跑步選定鞋款遭刪除後保留「請重新選擇」，重繪不默默改記其他鞋款。
+- 鞋款／月跑量行內編輯保留 DOM、草稿與顯示列快照；背景來源、主題與跨日重繪不自動提交部分數字，明確提交仍檢查原版本。
+- 月報以最新開始的生成身分驗證保存，舊請求不能覆蓋新內容與統計；失敗／取消保留之前成功報告。
+- Strava 匯入期間停用配對，失敗只解鎖同一視窗；延後資源 dispatch 在發送前拒絕過期 session。
+
+### Changed
+
+- 依來源失效相依分頁；年度彙總、目標進度與洞察讀取由 resource store 合併 pending／快取與拒絕過期結果，格式錯誤可重試。
+- 月報 application service、條件持久化、統計、LLM adapter 與 SSE 分離；月報 router 納入交易邊界檢查。
+- Schema 4 僅新增 user／月份最新身分表，不改寫既有報告／里程；同步 README、SPEC-025／026、ADR-0009、SDD、測試策略與 rollback。
+- Asset 3.8.0／shell v33，45 個 release assets；驗收基線為 475 Python、113 Node，完整 browser／CI 與部署證據見 GitHub Release。
+
 ## [3.7.2] - 2026-10-23
 
 ### Fixed

@@ -43,7 +43,7 @@ test('inline edits send only the changed field and guard duplicate commits', asy
     apiPut: async (url, payload) => { writes.push({ url, payload }); },
   });
   vm.runInContext(extract('inlineEditRow'), context);
-  await context.inlineEditRow([shoe], 0, 'price', { appendChild() {} });
+  await context.inlineEditRow([shoe], 0, 'price', { appendChild() {}, querySelector: () => null, closest: () => ({ id: 'shoe-table' }) });
   input.value = '30';
   handlers.keydown({ key: 'Enter' });
   await handlers.blur();
