@@ -501,3 +501,21 @@ class StravaImportOut(BaseModel):
     @field_serializer("imported_at")
     def serialize_imported_at(self, value: datetime) -> str:
         return serialize_utc_timestamp(value)
+
+
+class MutationCommand(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    operation_id: str = Field(min_length=16, max_length=128, pattern=r"^[A-Za-z0-9._:-]+$")
+    kind: Literal["run.create", "run.update", "run.delete", "shoe.create", "shoe.update", "shoe.delete",
+                  "monthly.create", "monthly.update", "monthly.delete", "goal.update", "history.restore"]
+    entity_id: int | None = Field(default=None, gt=0)
+    expected_version: int | None = Field(default=None, ge=0)
+    payload: dict = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def require_identity_and_version(self):
+        if self.kind.endswith((".update", ".delete")) and self.expected_version is None:
+            raise ValueError("更新與刪除必須提供 expected_version")
+        if self.kind not in {"run.create", "shoe.create", "monthly.create", "goal.update"} and self.entity_id is None:
+            raise ValueError("此操作必須提供 entity_id")
+        return self

@@ -14,6 +14,7 @@ const checkConsistency = require('./frontend_consistency.cjs');
 const checkReliability = require('./frontend_reliability.cjs');
 const checkDrafts = require('./frontend_drafts.cjs');
 const checkStravaOwnership = require('./frontend_strava_ownership.cjs');
+const checkWorkspace = require('./frontend_workspace.cjs');
 const checkResourceEditing = require('./frontend_resource_editing.cjs');
 
 const projectRoot = path.resolve(__dirname, '..');
@@ -232,6 +233,7 @@ async function run() {
     await withDeadline(() => checkDrafts(browser, baseUrl), 60000, 'browser checkDrafts');
     await withDeadline(() => checkStravaOwnership(browser, baseUrl), 60000, 'browser checkStravaOwnership');
     await withDeadline(() => checkResourceEditing(browser, baseUrl), 60000, 'browser checkResourceEditing');
+    await withDeadline(() => checkWorkspace(browser, baseUrl), 120000, 'Chromium recoverable workspace');
     const safari = await webkit.launch({ headless: true, timeout: 30000 });
     try {
       await withDeadline(() => checkSessionIsolation(safari, baseUrl), 60000, 'safari checkSessionIsolation');
@@ -241,6 +243,7 @@ async function run() {
       await withDeadline(() => checkDrafts(safari, baseUrl), 60000, 'safari checkDrafts');
       await withDeadline(() => checkStravaOwnership(safari, baseUrl), 60000, 'safari checkStravaOwnership');
       await withDeadline(() => checkResourceEditing(safari, baseUrl), 60000, 'safari checkResourceEditing');
+      await withDeadline(() => checkWorkspace(safari, baseUrl), 120000, 'WebKit recoverable workspace');
     } finally {
       await closeBrowser(null, safari);
     }

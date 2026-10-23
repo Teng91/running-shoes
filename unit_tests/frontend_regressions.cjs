@@ -13,3 +13,4 @@ require('./frontend/draft-resources.test.cjs');
 require('./frontend/browser-deadlines.test.cjs');
 require('./frontend/strava-resources.test.cjs');
 require('./frontend/resource-editing.test.cjs');
+require('./frontend/workspace.test.cjs');

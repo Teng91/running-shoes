@@ -129,6 +129,7 @@ async function loadData({ mutation = null } = {}) {
       Object.assign(runController.state, { rows: page.rows, summary, offset: 0, hasMore: page.hasMore, day: null });
       document.getElementById('run-load-error').hidden = true;
     }
+    if (typeof workspaceDataArrived === 'function' && (resource !== 'runs' || requestedRunMonth === selectedRunMonth())) workspaceDataArrived(resource, value);
     render(resource);
     // A slow optional source must not hold an otherwise usable screen behind boot.
     if (typeof hideAppBoot === 'function') hideAppBoot();

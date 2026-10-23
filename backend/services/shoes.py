@@ -9,7 +9,7 @@ from backend.services.transactions import write_transaction
 
 
 def create_shoe(db: Session, user_id: int, payload: schemas.ShoeCreate, *, max_shoes: int):
-    with write_transaction(db, user_id):
+    with write_transaction(db, user_id, reason="shoe.create"):
         shoe_count = (
             db.query(models.Shoe)
             .filter(models.Shoe.user_id == user_id, models.Shoe.is_deleted.is_(False))
@@ -25,7 +25,7 @@ def create_shoe(db: Session, user_id: int, payload: schemas.ShoeCreate, *, max_s
 
 
 def update_shoe(db: Session, user_id: int, shoe_id: int, payload: schemas.ShoeUpdate):
-    with write_transaction(db, user_id):
+    with write_transaction(db, user_id, reason="shoe.update"):
         shoe = (
             db.query(models.Shoe)
             .filter(
@@ -70,7 +70,7 @@ def update_shoe(db: Session, user_id: int, shoe_id: int, payload: schemas.ShoeUp
 
 
 def delete_shoe(db: Session, user_id: int, shoe_id: int, expected_version: int | None = None):
-    with write_transaction(db, user_id):
+    with write_transaction(db, user_id, reason="shoe.delete"):
         shoe = (
             db.query(models.Shoe)
             .filter(

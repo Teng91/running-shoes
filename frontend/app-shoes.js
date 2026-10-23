@@ -10,7 +10,7 @@ async function inlineEditRow(arr, idx, field, el) {
   input.value = arr[idx][field];
   const shoe = { ...arr[idx] };
   let committed = false;
-  const editor = beginInlineEdit(el.closest('tbody').id, () => { committed = true; });
+  const editor = beginInlineEdit(el.closest('tbody').id, () => { committed = true; }, { kind: 'shoe', base: shoe, field, input });
   const commit = async () => {
     if (committed || !operations.current(operation)) return;
     committed = true;
@@ -20,7 +20,11 @@ async function inlineEditRow(arr, idx, field, el) {
     if (Number.isFinite(val) && val >= 0) {
       try {
         await apiPut('/shoes/' + shoe.id, { [field]: val, expected_version: shoe.version });
-        if (operations.current(operation)) await loadData({ mutation: 'shoe' });
+        if (operations.current(operation)) {
+          if (typeof discardWorkspaceEditor === 'function') discardWorkspaceEditor('shoe', shoe.id);
+          if (typeof persistWorkspaceDrafts === 'function') persistWorkspaceDrafts();
+          await loadData({ mutation: 'shoe' });
+        }
       } catch (e) {
         if (operations.current(operation) && e.name !== 'AbortError') alert(e.message || '更新失敗');
       }
@@ -147,10 +151,14 @@ class ShoeModal {
       if (!operations.owns(context, operation)) return;
       const baseline = acknowledged || operation.form;
       if (this.context === context && matchesForm(baseline.fields)
-          && JSON.stringify(getSelectedCategories()) === baseline.categories) this.close();
+          && JSON.stringify(getSelectedCategories()) === baseline.categories) {
+        if (typeof discardWorkspaceEditor === 'function') discardWorkspaceEditor('shoe', context.mode === 'create' ? null : context.shoe?.id);
+        this.close();
+      }
       if (this.context === context && saved?.version !== undefined) {
         this._rebase(context, saved, baseline);
       }
+      if (typeof persistWorkspaceDrafts === 'function') persistWorkspaceDrafts();
       await loadData({ mutation: 'shoe' });
     } catch (error) {
       if (this.context === context && operations.owns(context, operation) && error.name !== 'AbortError') {

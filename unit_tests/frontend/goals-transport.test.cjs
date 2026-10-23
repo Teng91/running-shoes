@@ -51,7 +51,7 @@ test('dashboard analytics cache expires by local date and goals invalidate it', 
   assert.match(loader, /const cacheKey = `\$\{cachePrefix\}\$\{month\}`/);
   assert.match(loader, /resourceStore\.read\('dashboard-analytics'/);
   assert.match(saveGoal, /expected_version: Number\(runningGoal\.version \|\| 0\)/);
-  assert.match(saveGoal, /dashboardAnalyticsCache\.clear\(\)/);
+  assert.match(saveGoal, /invalidateDataResources\(\['goal', 'goal-progress', 'dashboard-analytics'\]\)/);
 });
 
 test('every JSON and upload helper ignores a previous session 401', async () => {

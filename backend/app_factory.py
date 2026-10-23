@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import cast
 
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
 from sqlalchemy.engine import Engine
@@ -29,12 +30,20 @@ from backend.routers import (
     shoes,
     spending,
     strava,
+    workspace,
 )
 from backend.seeding import seed_default_data
 from backend.settings import Settings
 from backend.settings import settings as default_settings
 
 SessionFactory = Callable[[], Session]
+
+
+async def validation_exception_handler(request: Request, exc: Exception) -> Response:
+    validation = cast(RequestValidationError, exc)
+    # Preserve loc/msg/type without echoing password, token or uploaded input.
+    detail = [{key: error[key] for key in ("loc", "msg", "type")} for error in validation.errors()]
+    return JSONResponse({"detail": detail, "error": {"code": "validation", "message": "輸入資料格式不正確"}}, status_code=422)
 
 
 def _index_response(frontend_dir: Path) -> FileResponse:
@@ -49,11 +58,13 @@ async def http_exception_handler(request: Request, exc: Exception) -> Response:
     exc = cast(StarletteHTTPException, exc)
     if exc.status_code != 404:
         return JSONResponse(
-            {"detail": exc.detail}, status_code=exc.status_code, headers=exc.headers
+            {"detail": exc.detail, "error": {"code": {400: "invalid", 401: "unauthorized", 403: "capacity",
+                409: "conflict", 413: "too_large", 422: "validation"}.get(exc.status_code, "http_error"),
+                "message": exc.detail}}, status_code=exc.status_code, headers=exc.headers
         )
     path = request.url.path
     if path.startswith(("/api/", "/docs", "/openapi.json")):
-        return JSONResponse({"detail": exc.detail}, status_code=404, headers=exc.headers)
+        return JSONResponse({"detail": exc.detail, "error": {"code": "not_found", "message": exc.detail}}, status_code=404, headers=exc.headers)
     frontend_dir: Path = request.app.state.frontend_dir
     try:
         candidate = (frontend_dir / path.lstrip("/")).resolve()
@@ -126,7 +137,9 @@ def create_app(
         runs.router,
         strava.router,
         health.router,
+        workspace.router,
     ):
         app.include_router(router)
     app.add_exception_handler(StarletteHTTPException, http_exception_handler)
+    app.add_exception_handler(RequestValidationError, validation_exception_handler)
     return app

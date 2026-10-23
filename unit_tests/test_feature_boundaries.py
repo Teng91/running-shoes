@@ -83,10 +83,12 @@ def test_schema_three_nickname_upgrade_preserves_ids_mileage_versions_and_is_ide
                            mileage=123.45, baseline_mileage=123.45, version=9, categories=[]))
         db.commit()
     with engine.begin() as connection:
+        for action in ('insert', 'update', 'delete'):
+            connection.execute(text(f'DROP TRIGGER IF EXISTS audit_shoes_{action}'))
         connection.execute(text('ALTER TABLE shoes DROP COLUMN nickname'))
         connection.execute(text("UPDATE schema_metadata SET value='2' WHERE key='schema_version'"))
     run_startup_migrations(engine, sessionmaker(bind=engine))
-    assert schema_version(engine) == 4
+    assert schema_version(engine) == 5
     with Session(engine) as db:
         shoe = db.get(models.Shoe, 7)
         assert (shoe.nickname, shoe.mileage, shoe.baseline_mileage, shoe.version) == ('', 123.45, 123.45, 9)

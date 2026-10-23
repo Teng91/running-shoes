@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from uuid import uuid4
 
 from sqlalchemy import (
     JSON,
@@ -28,6 +29,9 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(UTC)
     )
+
+    backup_id: Mapped[str] = mapped_column(String(36), default=lambda: str(uuid4()), server_default="", nullable=False)
+    data_revision: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
 
     shoes: Mapped[list["Shoe"]] = relationship(back_populates="owner")
     monthly_mileages: Mapped[list["MonthlyMileage"]] = relationship(back_populates="owner")
@@ -203,3 +207,61 @@ class RunCreationRequest(Base):
     request_key: Mapped[str] = mapped_column(String(128), nullable=False)
     payload_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     response_json: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+
+
+class MutationReceipt(Base):
+    __tablename__ = "mutation_receipts"
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    operation_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    payload_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    response_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+
+
+class EntitySequence(Base):
+    """Global primary-key allocator metadata; contains no account records."""
+    __tablename__ = "entity_sequences"
+    name: Mapped[str] = mapped_column(String(30), primary_key=True)
+    next_id: Mapped[int] = mapped_column(Integer, nullable=False)
+
+
+class WriteContext(Base):
+    __tablename__ = "write_contexts"
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    operation_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    reason: Mapped[str] = mapped_column(String(40), nullable=False)
+
+
+class AuditEvent(Base):
+    __tablename__ = "audit_events"
+    __table_args__ = (Index("idx_audit_user_id", "user_id", "id"),)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    operation_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    reason: Mapped[str] = mapped_column(String(40), nullable=False)
+    entity: Mapped[str] = mapped_column(String(30), nullable=False)
+    entity_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    action: Mapped[str] = mapped_column(String(10), nullable=False)
+    before_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    after_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[str] = mapped_column(String, nullable=False)
+    restored: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0", nullable=False)
+    imported: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0", nullable=False)
+
+
+class RestorePreview(Base):
+    __tablename__ = "restore_previews"
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    token: Mapped[str] = mapped_column(String(36), nullable=False)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False)
+    payload_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    payload_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+
+class RestoreMapping(Base):
+    __tablename__ = "restore_mappings"
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    source_id: Mapped[str] = mapped_column(String(90), primary_key=True)
+    entity: Mapped[str] = mapped_column(String(30), primary_key=True)
+    source_key: Mapped[str] = mapped_column(String(80), primary_key=True)
+    target_id: Mapped[int] = mapped_column(Integer, nullable=False)

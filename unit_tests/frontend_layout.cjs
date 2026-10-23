@@ -360,6 +360,14 @@ async function run(engine, name) {
           for (const id of await page.locator('.modal-overlay').evaluateAll(es => es.map(e => e.id))) {
             if (id === 'modal') await page.evaluate(() => shoeModal.openForCreate());
             if (id === 'run-modal') await page.evaluate(() => openRunModal(runController.state.rows[0].id));
+            if (id === 'workspace-modal') await page.evaluate(() => {
+              document.getElementById('workspace-owner').textContent = '目前帳號：layout-synthetic；備份會合併到此帳號。';
+              const queue = document.getElementById('workspace-queue');
+              queue.innerHTML = '<div class="workspace-item"><p>2026-01-02 · 180 km · 需要處理：原鞋款已刪除，請明確重新選擇鞋款後重試同步，其他草稿會保留。</p><select aria-label="重新配對鞋款"><option>請明確選擇鞋款</option><option>Very long shoe nickname · Brand Reliable Runner · 2026-01-01 · #123</option></select><button class="btn btn-edit">重新配對並重試</button><button class="btn btn-cancel">移除待同步紀錄</button></div>';
+              document.getElementById('workspace-drafts').innerHTML = '<div class="workspace-item"><button class="btn btn-edit">繼續編輯 鞋款 新增草稿</button><button class="btn btn-cancel">捨棄草稿</button></div>';
+              document.getElementById('restore-preview').textContent = '預計新增 123 雙鞋、12345 筆跑步；略過 12 雙鞋、345 筆跑步。預覽後資料變更，請重新預覽。';
+              document.getElementById('workspace-history').innerHTML = '<div class="workspace-item"><p>2026/10/24 · 跑步 #123 · 刪除 · run.delete</p><button class="btn btn-edit">復原誤刪</button></div>';
+            });
             if (id === 'monthly-modal') await page.evaluate(() => editMonthlyMileage(0));
             if (id === 'shoe-analysis-modal') await page.evaluate(() => renderShoeAnalytics({
               shoe: { brand: 'Mizuno', model: 'Wave Rider 29 非常長的鞋款名稱', categories: ['Daily'], purchase_date: '2026-01-01', is_retired: false },

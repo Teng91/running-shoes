@@ -7,6 +7,7 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
 from backend import models
+from backend.services.identifiers import allocate_id
 
 
 def apply_run_mileage_deltas(
@@ -49,7 +50,7 @@ def apply_run_mileage_deltas(
         rounded_delta = round(delta, 2)
         if rounded_delta > 0:
             statement = sqlite_insert(models.MonthlyMileage).values(
-                user_id=user_id,
+                id=allocate_id(db, "monthly_mileages"), user_id=user_id,
                 year=year,
                 month=month,
                 km=rounded_delta,

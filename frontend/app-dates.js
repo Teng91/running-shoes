@@ -20,8 +20,7 @@ function refreshDateLimits() {
 function resumeCalendarDay() {
   if (!refreshDateLimits() || !authToken) return;
   // Invalidate date-based results, but leave tab, month, input values and drafts alone.
-  dashboardAnalyticsCache.clear();
-  if (typeof goalProgressCache !== 'undefined') goalProgressCache.clear();
+  resourceStore.invalidate(['dashboard-analytics', 'goal-progress']);
   invalidatePanels();
   renderActivePanel();
 }

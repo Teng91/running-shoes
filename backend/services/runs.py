@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from backend import models, schemas
 from backend.services import run_requests
 from backend.services.errors import Conflict, NotFound
+from backend.services.identifiers import allocate_id
 from backend.services.mileage import apply_run_mileage_deltas
 from backend.services.transactions import write_transaction
 
@@ -32,7 +33,7 @@ def create_run(
     max_runs: int,
     idempotency_key: str | None = None,
 ):
-    with write_transaction(db, user_id):
+    with write_transaction(db, user_id, reason="run.create"):
         fingerprint = run_requests.payload_hash(payload.model_dump())
         receipt = None
         try:
@@ -49,7 +50,7 @@ def create_run(
             run_count = db.query(models.Run).filter(models.Run.user_id == user_id).count()
             if isinstance(run_count, int) and run_count >= max_runs:
                 raise Conflict("跑步紀錄已達上限")
-            run = models.Run(**payload.model_dump(), user_id=user_id)
+            run = models.Run(**payload.model_dump(), user_id=user_id, id=allocate_id(db, "runs"))
             db.add(run)
             apply_run_mileage_deltas(db, user_id, [(payload.shoe_id, payload.date, payload.km)], 1)
             if receipt is not None:
@@ -61,7 +62,7 @@ def create_run(
 
 
 def update_run(db: Session, user_id: int, run_id: int, payload: schemas.RunUpdate):
-    with write_transaction(db, user_id):
+    with write_transaction(db, user_id, reason="run.update"):
         run = (
             db.query(models.Run)
             .filter(models.Run.id == run_id, models.Run.user_id == user_id)
@@ -103,7 +104,7 @@ def update_run(db: Session, user_id: int, run_id: int, payload: schemas.RunUpdat
 
 
 def delete_run(db: Session, user_id: int, run_id: int, expected_version: int | None = None):
-    with write_transaction(db, user_id):
+    with write_transaction(db, user_id, reason="run.delete"):
         run = (
             db.query(models.Run)
             .filter(models.Run.id == run_id, models.Run.user_id == user_id)

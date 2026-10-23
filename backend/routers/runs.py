@@ -9,10 +9,11 @@ from sqlalchemy.orm import Session
 from backend import models, schemas
 from backend.auth import get_current_user
 from backend.database import get_db
-from backend.dependencies import get_settings
+from backend.dependencies import OperationKey, get_settings
 from backend.read_models.runs import month_run_summary, year_run_summary
 from backend.routers.errors import service_errors
 from backend.services import runs as runs_service
+from backend.services.operations import legacy_operation
 from backend.settings import Settings
 
 router = APIRouter(tags=["runs"])
@@ -79,6 +80,8 @@ def create_run(
     ] = None,
 ):
     with service_errors():
+        if idempotency_key:
+            return legacy_operation(db, current_user.id, "run.create", config, idempotency_key, payload.model_dump(exclude_unset=True))
         return runs_service.create_run(
             db,
             current_user.id,
@@ -102,9 +105,14 @@ def update_run(
     run_id: int,
     payload: schemas.RunUpdate,
     current_user: models.User = Depends(get_current_user),
+    config: Settings = Depends(get_settings),
     db: Session = Depends(get_db),
+    operation_key: OperationKey = None,
 ):
     with service_errors():
+        if operation_key and payload.expected_version is not None:
+            return legacy_operation(db, current_user.id, "run.update", config, operation_key,
+                                    payload.model_dump(exclude_unset=True), entity_id=run_id)
         return runs_service.update_run(db, current_user.id, run_id, payload)
 
 
@@ -113,7 +121,12 @@ def delete_run(
     run_id: int,
     expected_version: Annotated[int | None, Query(ge=0)] = None,
     current_user: models.User = Depends(get_current_user),
+    config: Settings = Depends(get_settings),
     db: Session = Depends(get_db),
+    operation_key: OperationKey = None,
 ):
     with service_errors():
+        if operation_key and expected_version is not None:
+            return legacy_operation(db, current_user.id, "run.delete", config, operation_key,
+                                    {}, entity_id=run_id, expected_version=expected_version)
         return runs_service.delete_run(db, current_user.id, run_id, expected_version)

@@ -8,10 +8,11 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
 from backend import models
+from backend.audit_schema import install_audit_triggers
 from backend.credentials import get_password_hash
 from backend.database import Base
 
-CURRENT_SCHEMA_VERSION = 4
+CURRENT_SCHEMA_VERSION = 5
 
 
 def schema_version(engine: Engine) -> int:
@@ -66,6 +67,12 @@ def run_startup_migrations(
                 conn.execute(text("ALTER TABLE users ADD COLUMN token_version INTEGER NOT NULL DEFAULT 0"))
         db = session_factory()
         try:
+            with engine.begin() as connection:
+                columns = {column["name"] for column in inspect(connection).get_columns("users")}
+                if "backup_id" not in columns:
+                    connection.execute(text("ALTER TABLE users ADD COLUMN backup_id VARCHAR(36) NOT NULL DEFAULT ''"))
+                if "data_revision" not in columns:
+                    connection.execute(text("ALTER TABLE users ADD COLUMN data_revision INTEGER NOT NULL DEFAULT 0"))
             joy_user = db.query(models.User).filter(models.User.username == "Joy").first()
             if joy_user is None:
                 joy_user = models.User(
@@ -88,8 +95,16 @@ def run_startup_migrations(
             db.close()
 
     Base.metadata.create_all(bind=engine, tables=[
-        table for table in Base.metadata.sorted_tables if table.name not in {"run_creation_requests", "report_generations"}
+        table for table in Base.metadata.sorted_tables if table.name not in {"run_creation_requests", "report_generations", "mutation_receipts", "entity_sequences", "write_contexts", "audit_events", "restore_previews", "restore_mappings"}
     ])
+
+    with engine.begin() as connection:
+        columns = {column["name"] for column in inspect(connection).get_columns("users")}
+        if "backup_id" not in columns:
+            connection.execute(text("ALTER TABLE users ADD COLUMN backup_id VARCHAR(36) NOT NULL DEFAULT ''"))
+        if "data_revision" not in columns:
+            connection.execute(text("ALTER TABLE users ADD COLUMN data_revision INTEGER NOT NULL DEFAULT 0"))
+        connection.execute(text("UPDATE users SET backup_id=lower(hex(randomblob(16))) WHERE backup_id=''"))
 
     # Add concurrency/session versions to existing databases without changing data.
     for table, column in (
@@ -204,6 +219,17 @@ def run_startup_migrations(
     # remain untouched, and no empty placeholder report becomes visible.
     if applied_version < 4:
         cast(Table, models.ReportGeneration.__table__).create(bind=engine, checkfirst=True)
+
+    for model in (models.MutationReceipt, models.EntitySequence, models.WriteContext, models.AuditEvent,
+                  models.RestorePreview, models.RestoreMapping):
+        cast(Table, model.__table__).create(bind=engine, checkfirst=True)
+    with engine.begin() as connection:
+        for table in ("runs", "monthly_mileages"):
+            connection.execute(text(
+                f"INSERT INTO entity_sequences (name,next_id) SELECT :name,coalesce(max(id),0)+1 FROM {table} WHERE 1 "
+                "ON CONFLICT(name) DO UPDATE SET next_id=max(entity_sequences.next_id,excluded.next_id)"
+            ), {"name": table})
+    install_audit_triggers(engine)
 
     with engine.begin() as connection:
         connection.execute(text(

@@ -1,10 +1,9 @@
 // Goal presentation consumes the same backend policy as dashboard and reports.
-const goalProgressCache = new Map();
 let goalProgressRequestId = 0;
 let goalSaveOperation = null;
 
 registerFeatureReset('goal-progress', () => {
-  goalProgressCache.clear();
+  resourceStore?.invalidate(['goal-progress']);
   goalProgressRequestId += 1;
   goalSaveOperation = null;
   document.getElementById('save-goal-btn').disabled = false;
@@ -49,7 +48,6 @@ async function loadGoalProgress(year, month) {
     if (result.status === 'rejected') throw result.error;
     const progress = result.value;
     if (!isCurrentAuthSession(session) || requestId !== goalProgressRequestId || selectedYear !== year || selectedGoalMonth !== month) return;
-    goalProgressCache.set(key, progress);
     renderGoalCards(progress, year, month);
   } catch (error) {
     if (error.name === 'AbortError' || !isCurrentAuthSession(session) || requestId !== goalProgressRequestId) return;
@@ -109,9 +107,9 @@ async function saveRunningGoal() {
     const values = getFormDraft('goal').acknowledge(serverValues, operation.form, readForm(Object.keys(serverValues)));
     for (const [id, value] of Object.entries(values)) document.getElementById(id).value = value;
     runningGoal = goal;
-    dashboardAnalyticsCache.clear();
+    if (typeof persistWorkspaceDrafts === 'function') persistWorkspaceDrafts();
     dashboardAnalyticsRequest++;
-    goalProgressCache.clear();
+    resourceStore?.invalidate(['goal-progress']);
     goalProgressRequestId += 1;
     status.textContent = Object.keys(values).some(id => values[id] !== serverValues[id])
       ? '目標已儲存；新的變更尚未儲存。' : '目標已儲存。';

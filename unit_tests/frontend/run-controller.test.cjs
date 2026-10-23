@@ -49,7 +49,7 @@ test('SPEC-020 native run controllers isolate state, editor snapshots and reset 
   assert.equal(controller.beginCreate({ km: 6 }, {}), null);
   const pending = controller.submitCreate(operation, { km: 5 });
   controller.state.rows.push({ id: 1 });
-  controller.state.annualCache.set(2026, {});
+  controller.state.lastCreateResult = { queued: true };
   const editor = controller.openEditor({ id: 1, version: 2 });
   assert.equal(await controller.saveEditor(editor, { km: 8 }), true);
   assert.equal(await controller.deleteEditor(editor), true);
@@ -63,5 +63,5 @@ test('SPEC-020 native run controllers isolate state, editor snapshots and reset 
   assert.equal(await controller.deleteEditor(editor), false);
   assert.equal(controller.editor, null);
   assert.equal(controller.state.rows.length, 0);
-  assert.equal(controller.state.annualCache.size, 0);
+  assert.equal(controller.state.lastCreateResult, null);
 });
