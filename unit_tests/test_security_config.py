@@ -158,7 +158,8 @@ def test_run_log_frontend_keeps_calendar_actions_and_select_state_safe():
     assert "formatDate(next) <= today" in source
     assert "nextStart ? today" in source
     assert "async function loadStravaHistory()" in source
-    assert "await apiGet('/runs/import/strava/history')" in source
+    assert "resourceStore.read('strava-history'" in source
+    assert "apiGet('/runs/import/strava/history')" in source
     assert "載入 Strava 匯入歷史失敗:" in source
     assert "id === 'edit-run-shoe' && selectedId !== null" in source
     assert "原鞋款已刪除，請重新選擇" in source
@@ -204,8 +205,8 @@ def test_strava_frontend_discards_stale_preview_responses():
     source = FRONTEND_SOURCE
 
     assert "new AbortController()" in source
-    assert "requestId !== stravaPreviewRequestId" in source
-    assert "stravaPreviewKey !== stravaInputKey" in source
+    assert "!stravaController.acceptPreview(operation, preview, inputKey)" in source
+    assert "stravaController.state.key !== stravaInputKey" in source
     assert "file.size > 10 * 1024 * 1024" in source
 
 

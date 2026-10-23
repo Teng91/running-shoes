@@ -316,7 +316,7 @@ def shoe_usage_analytics(
         shoes = [selected] if selected is not None else []
     results = []
     for shoe, payload in zip(
-        shoes, analytics.batch_shoe_analytics(db, user_id, shoes), strict=True
+        shoes, analytics.batch_shoe_analytics(db, user_id, shoes, include_details=False), strict=True
     ):
         life = payload["lifecycle"]
         usage = payload["usage"]
