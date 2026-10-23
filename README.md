@@ -540,13 +540,13 @@ Schema 3 正式上線前，必須執行異地備份、checksum 與隔離還原�
 再於停止的資料庫執行 `UPDATE schema_metadata SET value='2' WHERE key='schema_version' AND value='3';`，保留 nickname 欄位和新業務資料，部署已驗證的 schema 2 image。
 不要以舊快照覆蓋新資料。重新發布舊來源仍須新 shell revision。
 
-### 草稿狀態轉移與資源模組（SPEC-024）
+### 草稿狀態轉移與資源模組（SPEC-024，v3.6.1）
 
 - 鞋款移至退役／現役成功後，保留的新草稿會同步最新模式、月跑量與版本；再次儲存只提交實際修改的欄位，避免撤銷剛完成的狀態轉移。
 - 目標以 server baseline 比較草稿，失焦、主題切換與背景重繪皆保留未儲存內容；儲存期間的新修改也會保留，帳號切換會清理。
 - `runtime/resource-store.mjs` 不依賴 DOM 或 HTTP，注入 session 與快取 hooks；同資源／key 的並行讀取共用 pending request，成功與錯誤各自管理，失效或換帳號後拒絕舊結果。
 - `app-resources.js` 註冊既有快取 adapters；`app-core.js` 負責 reader 組合、套用結果與 render。某個來源失敗仍能更新其他成功來源，完整／部分刷新沿用 SPEC-023 的異動範圍。
-- 開發資產 revision 為 3.6.1／shell v29；schema 仍為 3，沒有資料 migration，API method/path 不變。
+- v3.6.1 使用 asset revision 3.6.1／shell v29；schema 仍為 3，沒有資料 migration，API method/path 不變。
 
 ### Schema 2 上線與回滾
 
