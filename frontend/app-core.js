@@ -38,6 +38,9 @@ function setMobileMenu(open) {
 }
 
 function switchTab(name) {
+  // Establish a baseline before the fields become interactive; the chart render
+  // runs in a later frame and must already recognize edits made in between.
+  if (name === 'monthly') prepareGoalForm();
   document.querySelectorAll('.tab').forEach(tab => {
     const active = tab.dataset.tab === name;
     tab.classList.toggle('active', active);

@@ -28,4 +28,8 @@
 
 ## CI follow-up
 
-Main 39934466655 的 trace 證明 worker script request 可在 installing candidate 建立前卡住；僅補 statechange observer 不足。v3.7.1 fixture 對離線 worker script 回 HTTP 503，並在每次在線轉換前要求離線 update 有限失敗。這避免 TCP drop 的背景更新重試阻塞下一個 scope job；不擴大 deadline、不跳過 WebKit。正式發布使用 v3.7.1／v31，v3.7.0 tag 保留原始證據。
+Main 39934466655 的 trace 證明 worker script request 可在 installing candidate 建立前卡住；僅補 statechange observer 不足。v3.7.1 fixture 對離線 worker script 回 HTTP 503，並在每次在線轉換前要求離線 update 有限失敗。這避免 TCP drop 的背景更新重試阻塞下一個 scope job；不擴大 deadline、不跳過 WebKit。此修正納入 v3.7.1／v31，v3.7.0 tag 保留原始證據；最終驗收版本見下節。
+
+## 首次可互動的界線
+
+v3.7.1 tag E2E 發現第一次 render 前已可操作的 goal inputs，尚無 baseline，導致使用者輸入被視為初始化值並覆蓋。v3.7.2 在 panel 顯示前同步 prepareGoalForm，再把圖表留給下一 frame；這使可互動與 draft ownership 的開始一致。Node 與雙引擎 browser fixture 固定持有第一個 frame 來驗證，版本 3.7.2／v32。

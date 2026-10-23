@@ -533,3 +533,5 @@ Browser capture 的錯誤文字先保存，截圖／trace 及 teardown 分別限
 PWA fixture 對 worker.update 與 candidate 終態設共同 deadline，涵蓋已在 installing 的 candidate。階段／最近 HTTP 請求與 registration timeline 隨失敗文字保存；截斷 body 的未壓縮長度由 installer 驗證，壓縮 wire bytes 不與 decoded bytes 比較。完整雙引擎 failed-upgrade、offline、recovery gates 保留。
 
 PWA CI 後續補充（v3.7.1）：離線 worker script fixture 回 503，並在每次回到在線前驗證 update 在期限內失敗，清楚區分尚未建立 installing candidate 的 script request 卡住與 worker statechange 漏接；細節見 SPEC-025 CI follow-up。正式 shell revision 為 v31，schema 3 不變。
+
+Goal form 初始化（v3.7.2）：switchTab 在 monthly panel 變成 active 前呼叫 prepareGoalForm，同步建立草稿 baseline，避免下一個 animation frame 才第一次 reconcile 時覆蓋已輸入內容。圖表仍使用延後 render；晚到的 goal resource 依既有 baseline 合併。正式 shell revision 為 v32。
