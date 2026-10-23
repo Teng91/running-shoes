@@ -98,16 +98,21 @@ async function loadData({ mutation = null } = {}) {
     },
     goal: () => apiGet('/running-goal'),
   };
-  const results = await resourceStore.refresh(mutation, readers, { runs: requestedRunMonth });
-  const accepted = resourceStore.accept(results, mutation);
-  for (const result of accepted) {
-    const { resource, value } = result;
-    if (result.status === 'rejected') {
-      if (result.error.name !== 'AbortError') console.error('載入資料失敗:', result.error);
-      continue;
+  const applyResource = result => {
+    const [accepted] = resourceStore.accept([result], mutation);
+    if (!accepted || !isCurrentAuthSession(session)) return;
+    const { resource, value } = accepted;
+    error.hidden = !resourceStore.hasErrors();
+    if (accepted.status === 'rejected') {
+      if (accepted.error.name !== 'AbortError') console.error('載入資料失敗:', accepted.error);
+      return;
     }
     if (resource === 'shoes') [shoes, retiredShoes] = value;
-    if (resource === 'monthly') monthlyMileages = value;
+    if (resource === 'monthly') {
+      monthlyMileages = value;
+      const years = [...new Set(monthlyMileages.map(item => item.year))].sort((a, b) => b - a);
+      if (!selectedYear || !years.includes(selectedYear)) selectedYear = years[0] || new Date().getFullYear();
+    }
     if (resource === 'goal') runningGoal = value;
     if (resource === 'runs' && value.requestId === runController.state.listRequest
         && requestedRunMonth === selectedRunMonth()) {
@@ -115,15 +120,11 @@ async function loadData({ mutation = null } = {}) {
       Object.assign(runController.state, { rows: page.rows, summary, offset: 0, hasMore: page.hasMore, day: null });
       document.getElementById('run-load-error').hidden = true;
     }
-  }
-  if (!isCurrentAuthSession(session)) return;
-  error.hidden = !resourceStore.hasErrors();
-  const succeeded = accepted.filter(result => result.status === 'fulfilled');
-  if (!succeeded.length) return;
-  if (succeeded.some(result => result.resource === 'monthly')) {
-    const years = [...new Set(monthlyMileages.map(item => item.year))].sort((a, b) => b - a);
-    if (!selectedYear || !years.includes(selectedYear)) selectedYear = years[0] || new Date().getFullYear();
-  }
-  render();
-  if (resourceStore.policy(mutation).history && isCurrentAuthSession(session)) loadStravaHistory();
+    render();
+    // A slow optional source must not hold an otherwise usable screen behind boot.
+    if (typeof hideAppBoot === 'function') hideAppBoot();
+  };
+  const completion = resourceStore.refresh(mutation, readers, { runs: requestedRunMonth }, applyResource);
+  if (resourceStore.policy(mutation).history) void loadStravaHistory();
+  await completion;
 }

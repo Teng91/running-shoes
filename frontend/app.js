@@ -55,6 +55,8 @@ initializeFeatureLifecycle().then(() => {
 }).then(() => {
   return initializeDataResources();
 }).then(() => {
+  return initializeStravaFeature();
+}).then(() => {
   initializeDialogs();
   initializeAuthSync();
   initializeAppUpdates();

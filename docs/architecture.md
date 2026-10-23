@@ -162,6 +162,8 @@ flowchart TB
     Analytics --> Models
     Shoes --> Forecast[forecasting.py<br/>shared retirement policy]
     Analytics --> Forecast
+    Analytics --> ShoeStats[read_models/shoe_statistics.py<br/>SQL aggregates / bounded recent]
+    ShoeStats --> Models
     Forecast --> Models
     Exporting --> Models
     Goals --> Models
@@ -199,7 +201,11 @@ flowchart LR
     State --> API[app-api.js<br/>HTTP adapters]
     API --> AuthUI[app-auth.js<br/>session lifecycle]
     AuthUI --> Streams[app-streams.js<br/>JSON SSE lifecycle]
-    Streams --> Core[app-core.js<br/>shell / theme / loadData]
+    Streams --> Resources[app-resources.js<br/>cache adapters]
+    Resources --> Store[runtime/resource-store.mjs<br/>tickets / per-resource completion]
+    Resources --> Core[app-core.js<br/>shell / theme / loadData]
+    Core --> Store
+    Lifecycle --> Forms[runtime/form-operations.mjs<br/>draft baseline / operations]
     Streams -.-> AgentUI
     Streams -.-> ReportsUI
     Core --> AgentUI[app-agent.js]
@@ -208,7 +214,10 @@ flowchart LR
     MarkdownUI[app-markdown.js] --> AgentUI
     Core --> ReportsUI[app-reports.js]
     Core --> RunCRUD[app-runs.js]
+    RunCRUD --> RunNative[runtime/run-controller.mjs<br/>injected session / transport]
     RunCRUD --> StravaUI[app-strava.js]
+    StravaUI --> StravaNative[runtime/strava-controller.mjs<br/>window / preview / import ownership]
+    StravaUI --> Store
     RunCRUD --> RunInsights[app-run-insights.js]
     Core --> ShoesUI[app-shoes.js]
     Core --> Dashboard[app-dashboard.js]
@@ -512,3 +521,13 @@ Native module 不讀 DOM、認證 storage 或 HTTP，architecture-check 同樣�
 Browser capture 的錯誤文字先保存，截圖／trace 及 teardown 分別限時。Python watchdog 處理 IPC 完全卡住的程序樹，
 三個 CI jobs 以 composite setup 共用鎖定依賴，沒有彼此的成功依賴；diagnostics roundtrip 只依賴 PWA job。
 細部期限與可保留產物的限制見 README 及測試策略；驗證一律使用暫存 DB／合成 context。
+
+## 12. SPEC-025：匯入生命週期與有界分析
+
+[ADR-0008](adr/0008-strava-ownership-progressive-resources-and-sql-analytics.md) 定義 Strava controller／DOM adapter、歷史 resource ticket 與逐資源完成的依賴方向。取消視窗使 UI operation 失效，但已提交的成功仍更新相同帳號資料。歷史先失效再刷新，拒絕舊 GET，下一次日期預設只讀有效歷史。
+
+`refresh(..., onResult)` 每個來源完成即交付，accept 保證同 ticket 最多套用一次；慢 goal／history 不阻擋 runs。整批 Promise 仍等待全部完成供呼叫者收尾。獨立錯誤在來源恢復前保留。跑步編輯的空白替代鞋款狀態經重繪仍保留；鞋款狀態指令保留原基準上的其他未儲存欄位。
+
+詳細單鞋／批次分析使用 `shoe_statistics.py` 三次 SQL 查詢：全歷史 conditional aggregate、12 個月份 group、每鞋 partition recent 12；摘要只需第一個 aggregate。全部 user-scoped，無 Run entity 全歷史載入；rounding、成本與 forecast 位於既有 backend 政策。Schema 及 API contract 不變。
+
+PWA fixture 對 worker.update 與 candidate 終態設共同 deadline，涵蓋已在 installing 的 candidate。階段／最近 HTTP 請求與 registration timeline 隨失敗文字保存；截斷 body 的未壓縮長度由 installer 驗證，壓縮 wire bytes 不與 decoded bytes 比較。完整雙引擎 failed-upgrade、offline、recovery gates 保留。

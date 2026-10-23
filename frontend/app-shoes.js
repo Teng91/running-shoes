@@ -129,7 +129,7 @@ class ShoeModal {
     return context && !context.saving && isCurrentAuthSession(context.session);
   }
 
-  async _mutate(context, request, errorMessage) {
+  async _mutate(context, request, errorMessage, acknowledged = null) {
     const operations = getFormOperations('shoes');
     const operation = operations.begin(context, this._formSnapshot());
     if (!operation) return;
@@ -138,10 +138,11 @@ class ShoeModal {
     try {
       const saved = await request();
       if (!operations.owns(context, operation)) return;
-      if (this.context === context && matchesForm(operation.form.fields)
-          && JSON.stringify(getSelectedCategories()) === operation.form.categories) this.close();
+      const baseline = acknowledged || operation.form;
+      if (this.context === context && matchesForm(baseline.fields)
+          && JSON.stringify(getSelectedCategories()) === baseline.categories) this.close();
       if (this.context === context && saved?.version !== undefined) {
-        this._rebase(context, saved, operation.form);
+        this._rebase(context, saved, baseline);
       }
       await loadData({ mutation: 'shoe' });
     } catch (error) {
@@ -236,7 +237,15 @@ class ShoeModal {
         ? Math.round(activeKm.reduce((a, b) => a + b, 0) / activeKm.length * 10) / 10
         : 60;
     }
-    return this._mutate(context, () => apiPut('/shoes/' + shoe.id, payload), '移動失敗');
+    // Movement acknowledges only lifecycle fields; unsaved descriptive fields retain
+    // their original baseline, including edits made before clicking Move.
+    const baseline = this._formSnapshot();
+    for (const [name, id] of Object.entries(this.formIds)) {
+      const key = ({ orig: 'orig_price', expected: 'expected_mileage', monthly: 'monthly_km' })[name] || name;
+      if (key !== 'monthly_km') baseline.fields[id] = String(context.draftBase[key] ?? '');
+    }
+    baseline.categories = JSON.stringify(context.draftBase.categories);
+    return this._mutate(context, () => apiPut('/shoes/' + shoe.id, payload), '移動失敗', baseline);
   }
 }
 

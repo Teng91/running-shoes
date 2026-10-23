@@ -85,6 +85,7 @@ running-shoes/
 │   ├── forecasting.py    # 共用退役預估與 user-scoped 批次查詢
 │   ├── shoe_metrics.py   # 共用折數、成本與壽命算術
 │   ├── read_models/      # API／月報／AI 共用的 user-scoped native statistics
+│   │   └── shoe_statistics.py # SQL 聚合與每雙鞋 12 筆 recent window
 │   ├── analytics.py      # 首頁洞察與單鞋使用分析
 │   ├── strava_import.py  # 純 Strava CSV 解析、篩選與領域錯誤
 │   ├── exporting.py      # CSV／XLSX 安全匯出列與檔名
@@ -104,7 +105,8 @@ running-shoes/
 │   │   ├── feature-lifecycle.mjs # 功能生命週期
 │   │   ├── form-operations.mjs # 操作身分、草稿快照與成功回應合併
 │   │   ├── resource-store.mjs # 請求合併、ownership、錯誤與快取失效策略
-│   │   └── run-controller.mjs # 注入 transport/session 的跑步 state
+│   │   ├── run-controller.mjs # 注入 transport/session 的跑步 state
+│   │   └── strava-controller.mjs # 預覽、匯入與視窗操作所有權
 │   ├── app-lifecycle.js  # Legacy handler 與原生 runtime 的過渡橋接
 │   ├── app-dates.js      # 日曆日期與跨日限制／恢復
 │   ├── app-dialogs.js    # 共用焦點、Tab、Escape 與彈窗語義
@@ -504,7 +506,7 @@ CI 失敗／取消時嘗試上傳已有產物；引擎完全卡死時可能只�
 CI 的 `frontend-pwa` job 上傳獨立 `browser-diagnostics-roundtrip` artifact，另一個 job 下載並驗證 PNG、trace ZIP 與合成錯誤標記，缺檔／損毀會讓 pipeline 失敗。
 
 `frontend-e2e` 會對真實 FastAPI／CORS 與暫存 SQLite 執行同一個 `release-check`：檢查 readiness／schema、
-完整 API contract、manifest 對應的 43 個 shell／worker 資產雜湊與 MIME、四個統計 API 的匿名拒絕存取，
+完整 API contract、manifest 對應的 44 個 shell／worker 資產雜湊與 MIME、四個統計 API 的匿名拒絕存取，
 再驗證 Chromium／WebKit 匿名手機啟動與 native runtime cache，以及 Chromium 離線重開。
 WebKit 離線 shell 由 `frontend-pwa` 的 fixture transport 中斷驗證；API probe 在 HTTP headers 後截斷 response body，完整讀取 JSON 並檢查 server 請求計數，避免 headers 前 TCP 中斷讓裸 fetch 一直 pending。這些不取代引擎之外的實機驗證。
 這個 task 不登入、不送出資料、不發布或回滾；正式 origin 必須是 HTTPS，HTTP 只允許 loopback。
@@ -548,6 +550,17 @@ Schema 3 正式上線前，必須執行異地備份、checksum 與隔離還原�
 - `app-resources.js` 註冊既有快取 adapters；`app-core.js` 負責 reader 組合、套用結果與 render。某個來源失敗仍能更新其他成功來源，完整／部分刷新沿用 SPEC-023 的異動範圍。
 - v3.6.1 使用 asset revision 3.6.1／shell v29；schema 仍為 3，沒有資料 migration，API method/path 不變。
 
+### 匯入所有權與逐資源呈現（SPEC-025，v3.7.0）
+
+- 編輯原鞋款已刪除的日誌，跨日／背景刷新仍保留「請重新選擇」；明確選取替代鞋款後才能儲存，避免自動轉移里程。
+- Strava 預覽、匯入與視窗操作由 `runtime/strava-controller.mjs` 管理。取消／重開後，舊成功或失敗不關閉新視窗、不清除新預覽，也不解鎖其他提交；已完成的匯入仍刷新資料。
+- Strava 歷史納入 resource store；匯入成功使舊讀取失效，新歷史及下次預設日期不會被晚到的舊回應覆蓋。
+- 鞋款移至現役／退役保留點擊前和等待期間的其他未儲存欄位；再次儲存只更新這些欄位並使用新版本。狀態操作本身仍更新月跑量。
+- 各資源完成即套用及呈現，慢來源不再阻擋已完成資料或持續蓋住啟動畫面；整批 Promise 仍可等待全部完成，失敗按來源保留。
+- 單鞋及批次分析共用 SQL read model：三次查詢取得全歷史統計、12 個月聚合及每雙鞋最多 12 筆最近紀錄，不載入全部 Run entities；統計欄位及日期政策維持相容。
+- PWA worker observer 同時觀測既有與新 installing candidate，deadline 涵蓋 update 呼叫與終態；失敗文字附註冊狀態時間線、目前階段及最近合成 HTTP 請求。中斷資產 fixture 在 headers 後截斷宣告的 body，避免 WebKit TCP 重試使錯誤掛起；worker 拒絕長度不符的未壓縮回應，避免截斷內容仍被當成成功。
+- Asset revision 3.7.0／shell v30；schema 維持 3。部署前做異地備份及隔離還原演練，回滾可直接部署相容 schema 3 的 v3.6.1 image；不以舊資料覆寫正式站。
+
 ### Schema 2 上線與回滾
 
 v3.4.0 只新增 `run_creation_requests` 表與 user/key 唯一約束，沒有改寫既有鞋款、日誌或里程。
@@ -567,7 +580,7 @@ Playwright／Chromium／WebKit 齊全時，也會執行版面測試。
 避免每次停止都重跑。Hook 不會呼叫其他模型、外部 API，或傳送提示、diff、原始碼與測試輸出。
 GitHub Actions 仍會在 push／pull request 執行 `verify`，並以三個可獨立重跑的 browser jobs 執行完整版面矩陣、真實 CRUD E2E 與 PWA 升級／離線測試；Dependabot 每週檢查 Python 與 GitHub Actions 更新。
 
-本次驗證基線為 Python **462 passed**、前端回歸測試 **95 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
+本次驗證基線為 Python **464 passed**、前端回歸測試 **105 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
 版面檢查涵蓋 WebKit／Chromium、亮／暗模式與 10 組直橫向尺寸，共 40 組設定，檢查六個功能分頁、三個認證表單、圖表、全部彈窗、行內編輯、停用／錯誤及空資料狀態。
 
 主要表單、工具列與彈窗操作統一為 44px 控制項；桌面表格內的緊湊操作為 36px，手機至少 44px。
