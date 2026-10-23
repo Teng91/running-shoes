@@ -32,6 +32,7 @@
   每個結果含 ownership，可只接受一次；錯誤獨立保留。Classic resource bridge 註冊 cache hooks，core 僅組合 readers、apply 與 render。
 - Browser harness 共用 deadline、engine watchdog、failure capture 與 bounded cleanup。錯誤文字先寫入，trace／screenshot 分別限時。
   外層 watchdog 在必要時終止整個 synthetic runner，避免無法結束的 browser 子程序拖到 job timeout。
+- WebKit 離線 shell 保留 transport 中斷；API probe 在 headers 後截斷 HTTP body，完整讀取 JSON 並驗證 server 請求計數，使用 10 秒 deadline。Worker update 同時等待 update request／statechange，另有 20 秒外層期限。
 - CI 三個 browser jobs 共用初始化步驟；diagnostic roundtrip 依賴 PWA job，失敗／取消也嘗試上傳已有診斷。
 
 ## Security and data isolation
@@ -71,3 +72,5 @@
 雙引擎整合：`python3 scripts/task.py frontend-e2e` 於 `unit_tests/frontend_drafts.cjs` 以合成 API／真實 DOM 驗證退役→保留暱稱→再儲存、目標失焦→切主題及等待儲存→修改→再儲存。
 
 本機驗證：`python3 scripts/task.py verify-all` 通過，462 Python／95 Node／95.26% backend branch coverage，40 組版面、Chromium／WebKit E2E 及 PWA 無跳過；10 個 Agent evals 通過，合成 diagnostics 產生與內容驗證通過。拆分後 CI 的實際執行結果以該 commit 的 Actions run 為準。
+
+遠端診斷驗證：首次拆分後的 CI 在 WebKit 離線 API probe 卡住時，以 120 秒 engine deadline 失敗並成功上傳 screenshot／trace／error；下載 trace 後定位裸 fetch，改為 headers 後截斷 body、完整讀取 JSON 與 server 計數斷言；Chromium／WebKit 本機回歸通過。

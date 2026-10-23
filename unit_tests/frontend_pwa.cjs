@@ -17,7 +17,7 @@ const mime = { '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'tex
 const debug = (...args) => { if (process.env.PWA_DEBUG) console.log(...args); };
 
 async function updateWorker(page) {
-  return page.evaluate(async () => {
+  return withDeadline(() => page.evaluate(async () => {
     const registration = await navigator.serviceWorker.getRegistration();
     const finished = new Promise((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error('worker update timed out')), 15000);
@@ -32,9 +32,8 @@ async function updateWorker(page) {
         changed();
       }, { once: true });
     });
-    await registration.update();
-    return finished;
-  });
+    return Promise.all([registration.update(), finished]).then(([, state]) => state);
+  }), 20000, 'service worker update');
 }
 
 async function assertShell(page, release) {
@@ -48,11 +47,21 @@ async function assertShell(page, release) {
 
 async function run() {
   let release = 'fixture-a', failure = null, failedAssets = 0, networkDown = false, legacy = true;
-  let moduleOriginRequests = 0;
+  let moduleOriginRequests = 0, offlineApiFailures = 0;
   const failedKinds = new Set();
   const server = http.createServer((request, response) => {
-    if (networkDown) { request.socket.destroy(); return; }
     const url = new URL(request.url, 'http://127.0.0.1');
+    if (networkDown) {
+      if (url.pathname === '/api/test') {
+        // WebKit may keep retrying a connection closed before HTTP headers.
+        // Deliver headers first, then end an incomplete body: consuming JSON
+        // must fail, while a worker-cached valid response would still succeed.
+        offlineApiFailures++;
+        response.writeHead(200, { 'Content-Type': 'application/json', 'Content-Length': '1000', 'Connection': 'close' });
+        response.end('{"interrupted":');
+      } else request.socket.destroy();
+      return;
+    }
     if (process.env.PWA_DEBUG) console.log('PWA fixture request', url.pathname, url.search);
     response.setHeader('Cache-Control', 'no-store');
     // Match production CORSMiddleware: module requests have Origin, precache requests do not.
@@ -110,7 +119,7 @@ async function run() {
   try {
     for (const engine of [chromium, webkit]) {
       release = 'fixture-a'; failure = null; failedAssets = 0; networkDown = false; legacy = true;
-      moduleOriginRequests = 0;
+      moduleOriginRequests = 0; offlineApiFailures = 0;
       failedKinds.clear();
       let browser, context, page;
       try {
@@ -166,7 +175,12 @@ async function run() {
           });
           await page.reload({ waitUntil: 'networkidle' });
           await assertShell(page, 'fixture-a-safe');
-          assert.equal(await page.evaluate(() => fetch('/api/test').then(() => false, () => true)), true, 'offline API must fail instead of using cache');
+          const apiFailed = await withDeadline(
+            () => page.evaluate(() => fetch('/api/test').then(response => response.json()).then(() => false, () => true)),
+            10000, engine.name() + ' offline API network probe',
+          );
+          assert.equal(apiFailed, true, 'offline API must fail instead of using cache');
+          if (engine === webkit) assert.ok(offlineApiFailures > 0, 'API request reached the disconnected transport rather than a worker cache');
           await setOffline(false);
 
           for (const [revision, problem] of [['fixture-b', 'http'], ['fixture-c', 'mime'], ['fixture-e', 'disconnect'], ['fixture-f', 'html-version'], ['fixture-g', 'module-mime']]) {

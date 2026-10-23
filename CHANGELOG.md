@@ -12,6 +12,7 @@
 ### Changed
 
 - 原生 resource store 管理 session／request ownership、同資源讀取合併、獨立錯誤與快取失效；core 僅組合 readers、套用結果及呈現。
+- WebKit PWA 離線 API probe 在 headers 後截斷 HTTP body，完整讀取 JSON 並檢查 server 計數；probe／worker update 各有期限，避免 fixture TCP 中斷後裸 fetch 長期 pending。
 - Layout／CRUD／PWA 拆成獨立 CI jobs，加入階段 deadline、先落檔的原始錯誤、限時 trace／screenshot／close 與外層程序 watchdog。
 - 新增 SPEC-024／ADR-0007、雙引擎草稿操作與卡住的 diagnostics／子程序回歸；同步 README module map、SPEC-023 狀態轉移追蹤與測試策略。
 - 開發資產 revision 3.6.1／shell v29；schema 維持 3，沒有資料 migration。

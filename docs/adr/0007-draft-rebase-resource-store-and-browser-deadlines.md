@@ -21,6 +21,8 @@ v3.6.0 tag 的一次 WebKit PWA 工作卡到 job timeout；原本 trace／close 
   保留 classic handlers 與 run controller；不引入 framework、global fetch 或另一份帳號狀態。
 - 每個 browser engine／操作階段有 deadline。共用 capture 先同步保存 error，再分別限時 screenshot／trace；context 和 browser close 各自限時並依序嘗試。
   外層 Python watchdog 超時先落檔、再終止自己的子程序樹並回 124；POSIX 以程序 ancestry／身分辨識涵蓋另開 process group 的 browser。
+- WebKit PWA 的離線 shell 保留 fixture transport 中斷；API probe 在 HTTP headers 後截斷 body，完整讀取 JSON 並檢查 server 請求計數，避免裸 fetch 在 headers 前 TCP 中斷後長期 pending。
+  API probe／worker update 各有獨立 deadline，worker update 同時等待 update request 與 statechange，讓 timeout 直接成為測試失敗。
 - Layout／CRUD／PWA CI jobs 共用鎖版 composite setup，但各自執行、失敗上傳及重跑。合成 artifact roundtrip 依賴 PWA，繼續驗證真實 trace 內容。
 
 ## Consequences
