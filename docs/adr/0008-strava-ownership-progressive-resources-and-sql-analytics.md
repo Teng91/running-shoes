@@ -25,3 +25,7 @@
 - 逐來源 render 會增加輕量重繪次數，既有 panel revision／request guards 保持過期統計拒收；同資源 coalescing 仍只套用一次。
 - 逾時不證明瀏覽器所有內部競態已消失；失敗會阻擋發布，不能把定向重跑當成根因修正。外層 watchdog／限時 trace 與 close 保持有效。
 - v3.7.0／shell v30、schema 3。部署前驗證備份，回滾用相容 v3.6.1 image。
+
+## CI follow-up
+
+Main 39934466655 的 trace 證明 worker script request 可在 installing candidate 建立前卡住；僅補 statechange observer 不足。v3.7.1 fixture 對離線 worker script 回 HTTP 503，並在每次在線轉換前要求離線 update 有限失敗。這避免 TCP drop 的背景更新重試阻塞下一個 scope job；不擴大 deadline、不跳過 WebKit。正式發布使用 v3.7.1／v31，v3.7.0 tag 保留原始證據。
