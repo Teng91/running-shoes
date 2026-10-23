@@ -4,6 +4,21 @@
 
 ## [Unreleased]
 
+## [3.9.0] - 2026-10-24
+
+### Added
+
+- SPEC-027：依帳號保存表單與編輯版本、最近資源快照；側欄「資料與同步」可恢復／捨棄草稿及清除目前帳號的本機資料。
+- 新增跑步的 IndexedDB 同步佇列，原子消耗對應草稿、多分頁 lease、相同操作重播、登入過期暫停及明確刪鞋配對；離線重開可保留。
+- 帳號備份 v2 及 v1 相容匯入：有界驗證、本人預覽、revision 檢查、來源 mapping、保留既有內容及一次交易合併；同檔／來源重複不重建。
+- SQLite 同交易異動事件、本人歷史分頁及防衝突誤刪復原；匯入歷史唯讀，復原同步重算里程與配額。
+
+### Changed
+
+- 原生 workspace controller 注入 storage／session／transport，IndexedDB 與 DOM adapters 分離；移除年度、目標、洞察舊快取鏡像。
+- 新 `/api/operations` 統一身分、版本與回執；既有 HTTP adapters 保持相容，錯誤補機器可讀 code。Schema 5 增加 metadata／歷史／mapping，run／month 主鍵不重用。
+- README、SPEC-027、ADR-0010、SDD、測試策略與 harness 同步；Asset 3.9.0／shell v34、50 assets；本機驗收 508 Python、124 Node、94.66% 後端分支覆蓋率，包含 40 組版面與雙引擎 E2E／PWA，沒有 browser skip。正式 migration 須先完成備份與隔離還原，部署後執行匿名 release-check。
+
 ## [3.8.0] - 2026-10-23
 
 ### Fixed

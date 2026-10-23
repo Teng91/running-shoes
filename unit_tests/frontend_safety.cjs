@@ -126,7 +126,6 @@ module.exports = async function checkFrontendSafety(browser, baseUrl) {
 
       // A late annual read must not construct a chart after leaving monthly.
       switchTab('monthly'); await frame();
-      runController.state.annualCache.clear();
       resourceStore.invalidate(['annual-summary']);
       let finishAnnual;
       window.fetch = url => String(url).includes('/runs/year-summary?')
@@ -137,7 +136,7 @@ module.exports = async function checkFrontendSafety(browser, baseUrl) {
       finishAnnual(json({ shoes: [] })); await pending;
       check(created.length === beforeFinish, 'late monthly response cannot paint hidden panel');
       switchTab('monthly'); await frame();
-      check(created.includes('chart-shoe-stacked') && runController.state.annualCache.has(2026), 'return to monthly recovers from cached result');
+      check(created.includes('chart-shoe-stacked') && resourceStore.peek('annual-summary'), 'return to monthly recovers from cached result');
       Chart = OriginalChart;
 
       // A reordered list must not change the month captured by the modal.

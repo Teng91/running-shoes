@@ -1,6 +1,6 @@
 const CACHE_PREFIX = 'running-shoes-shell-';
-const CACHE_NAME = 'running-shoes-shell-v33';
-const APP_ASSET_VERSION = '3.8.0';
+const CACHE_NAME = 'running-shoes-shell-v34';
+const APP_ASSET_VERSION = '3.9.0';
 const versioned = path => `${path}?v=${APP_ASSET_VERSION}`;
 const APP_SHELL = [
   '/',
@@ -12,6 +12,10 @@ const APP_SHELL = [
   versioned('/app-streams.js'),
   versioned('/app-resources.js'),
   versioned('/app-inline-editors.js'),
+  versioned('/app-local-store.js'),
+  versioned('/app-workspace.js'),
+  versioned('/app-account-restore.js'),
+  versioned('/app-history.js'),
   versioned('/app-core.js'),
   versioned('/app-models.js'),
   versioned('/app-markdown.js'),
@@ -38,6 +42,7 @@ const APP_SHELL = [
   versioned('/runtime/form-operations.mjs'),
   versioned('/runtime/resource-store.mjs'),
   versioned('/runtime/strava-controller.mjs'),
+  versioned('/runtime/workspace-controller.mjs'),
   versioned('/styles.css'),
   '/offline.html',
   '/manifest.webmanifest',

@@ -1,6 +1,6 @@
 // Run dashboard cards, calendar, charts, and per-shoe analytics.
 registerFeatureReset('run-insights', () => {
-  dashboardAnalyticsCache.clear();
+  resourceStore?.invalidate(['dashboard-analytics']);
   dashboardAnalyticsRequest += 1;
   document.getElementById('dashboard-insights').replaceChildren();
   closeShoeAnalytics();
@@ -66,7 +66,6 @@ async function loadDashboardAnalytics(month) {
     if (result.status === 'rejected') throw result.error;
     const data = result.value;
     if (!isCurrentAuthSession(session) || requestId !== dashboardAnalyticsRequest || selectedRunMonth() !== month) return;
-    dashboardAnalyticsCache.set(cacheKey, data);
     renderDashboardInsights(data);
   } catch (error) {
     if (!isCurrentAuthSession(session) || requestId !== dashboardAnalyticsRequest) return;

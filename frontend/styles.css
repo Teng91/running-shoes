@@ -434,6 +434,14 @@ td.editable { padding: 10px 8px; }
 .modal-actions .btn { min-height: var(--control-height); font-size: 13px; }
 .btn-cancel { background: var(--btn-bg); color: var(--text); border: 1px solid var(--border); }
 
+/* Account recovery and local sync share the established modal controls. */
+.workspace-modal { width: 680px; max-height: 88dvh; overflow-y: auto; }
+.workspace-modal section { margin: 20px 0; }
+.workspace-help { color: var(--text-dim); font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
+.workspace-item { border-bottom: 1px solid var(--border); padding: 12px 0; overflow-wrap: anywhere; }
+.workspace-item p { white-space: pre-wrap; font-size: 13px; }
+.workspace-item .btn, .workspace-item select { margin: 4px 6px 4px 0; max-width: 100%; }
+
 /* Source: css/06-shoes.css */
 /* Shoe alerts */
 .shoe-alerts { display: grid; gap: 8px; margin: -12px 0 28px; }

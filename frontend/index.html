@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
 <meta charset="UTF-8">
-<meta name="app-asset-version" content="3.8.0">
+<meta name="app-asset-version" content="3.9.0">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>跑鞋追蹤 Dashboard</title>
 <meta name="theme-color" content="#0f1117">
@@ -34,8 +34,8 @@ body { margin: 0; opacity: 1 !important; }
 @keyframes app-boot-critical-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .app-boot { transition: none; } .app-boot-spinner { animation: none; } }
 </style>
-<link id="app-styles" rel="preload" href="/styles.css?v=3.8.0" as="style" onload="this.onload=null;this.rel='stylesheet';this.dataset.ready='true';window.dispatchEvent(new Event('appstylesready'))">
-<noscript><link rel="stylesheet" href="/styles.css?v=3.8.0"></noscript>
+<link id="app-styles" rel="preload" href="/styles.css?v=3.9.0" as="style" onload="this.onload=null;this.rel='stylesheet';this.dataset.ready='true';window.dispatchEvent(new Event('appstylesready'))">
+<noscript><link rel="stylesheet" href="/styles.css?v=3.9.0"></noscript>
 </head>
 <body>
 
@@ -175,6 +175,7 @@ window.__appBootLegacyPoll = window.setInterval(function () {
 
     <div class="user-info">
       <span class="user-name" id="user-label"></span>
+      <button class="btn btn-sm btn-edit" onclick="openWorkspaceModal()">資料與同步</button>
       <div class="sidebar-actions">
         <button class="btn btn-sm btn-edit" id="theme-toggle-btn" onclick="toggleTheme()">☀️ 亮色模式</button>
         <button class="btn btn-sm btn-edit" onclick="handleLogout()">登出</button>
@@ -186,6 +187,7 @@ window.__appBootLegacyPoll = window.setInterval(function () {
 
   <main class="app-workspace" id="app-workspace">
     <div class="app-version" id="app-version" aria-label="目前應用程式版本"></div>
+    <p id="workspace-status" class="workspace-help" role="status" aria-live="polite"></p>
     <div id="data-load-error" role="alert" hidden>載入資料失敗，目前顯示上次載入的資料。<button class="btn" onclick="loadData()">重新載入</button></div>
     <div id="run-load-error" role="alert" hidden>跑步紀錄載入失敗，目前保留上次資料。<button class="btn" onclick="loadRunsForSelectedMonth(runController.state.retryOptions)">重試跑步紀錄</button></div>
 
@@ -595,37 +597,71 @@ window.__appBootLegacyPoll = window.setInterval(function () {
     <div id="shoe-analysis-content"><div class="empty-state">載入中…</div></div>
   </div>
 </div>
+<div class="modal-overlay" id="workspace-modal">
+  <div class="modal workspace-modal">
+    <h2 id="workspace-modal-title">資料與同步</h2>
+    <p id="workspace-owner" class="workspace-help"></p>
+    <section aria-labelledby="queue-title">
+      <h3 id="queue-title">本機待同步跑步</h3>
+      <p class="workspace-help">尚未同步的紀錄不計入統計。連線並開啟 App／回到前景後會重試；需要處理時請明確重新配對鞋款。關閉 App 後仍保留，清除網站資料或瀏覽器回收儲存空間則會移除，請定期備份。</p>
+      <button class="btn btn-edit" onclick="syncWorkspace()">立即同步</button>
+      <div id="workspace-queue" role="status" aria-live="polite"></div>
+    </section>
+    <section aria-labelledby="drafts-title"><h3 id="drafts-title">未完成的編輯草稿</h3><div id="workspace-drafts"></div></section>
+    <section aria-labelledby="restore-title">
+      <h3 id="restore-title">帳號備份合併還原</h3>
+      <p class="workspace-help">先下載完整備份，再選擇 JSON 預覽。還原只合併新增資料，保留既有內容；預覽後有新異動時需重新預覽。</p>
+      <button class="btn btn-edit" onclick="exportAccountData()">下載完整備份 JSON</button>
+      <div class="form-group"><label for="restore-file">選擇備份 JSON（最多 20 MB）</label><input id="restore-file" type="file" accept=".json,application/json" onchange="previewAccountRestore()"></div>
+      <p id="restore-preview" role="status" aria-live="polite"></p>
+      <button class="btn btn-edit" onclick="previewAccountRestore()">重新預覽</button>
+      <button id="restore-apply" class="btn btn-primary" disabled onclick="applyAccountRestore()">確認合併還原</button>
+    </section>
+    <section aria-labelledby="history-title"><h3 id="history-title">異動歷史與誤刪復原</h3>
+      <button class="btn btn-edit" onclick="loadWorkspaceHistory()">重新整理歷史</button>
+      <div id="workspace-history"></div><button id="history-more" class="btn btn-edit" hidden onclick="loadWorkspaceHistory(true)">更多異動</button>
+    </section>
+    <div class="modal-actions">
+      <div class="modal-actions-secondary"><button class="btn btn-delete" onclick="clearLocalWorkspace()">清除此帳號的本機資料</button></div>
+      <div class="modal-actions-primary"><button class="btn btn-cancel" onclick="closeWorkspaceModal()">關閉</button></div>
+    </div>
+  </div>
+</div>
 
 <script src="/vendor/chart.umd.min.js"></script>
 <script src="/vendor/marked.min.js"></script>
-<script src="/app-boot.js?v=3.8.0"></script>
-<script src="/app-lifecycle.js?v=3.8.0"></script>
-<script src="/app-state.js?v=3.8.0"></script>
-<script src="/app-api.js?v=3.8.0"></script>
-<script src="/app-auth.js?v=3.8.0"></script>
-<script src="/app-streams.js?v=3.8.0"></script>
-<script src="/app-resources.js?v=3.8.0"></script>
-<script src="/app-inline-editors.js?v=3.8.0"></script>
-<script src="/app-core.js?v=3.8.0"></script>
-<script src="/app-models.js?v=3.8.0"></script>
-<script src="/app-markdown.js?v=3.8.0"></script>
-<script src="/app-agent.js?v=3.8.0"></script>
-<script src="/app-reports.js?v=3.8.0"></script>
-<script src="/app-runs.js?v=3.8.0"></script>
-<script src="/app-dates.js?v=3.8.0"></script>
-<script src="/app-strava.js?v=3.8.0"></script>
-<script src="/app-run-insights.js?v=3.8.0"></script>
-<script src="/app-shoes.js?v=3.8.0"></script>
-<script src="/app-dashboard.js?v=3.8.0"></script>
-<script src="/app-monthly.js?v=3.8.0"></script>
-<script src="/app-exports.js?v=3.8.0"></script>
-<script src="/app-goals.js?v=3.8.0"></script>
-<script src="/app-charts.js?v=3.8.0"></script>
-<script src="/app-shoe-charts.js?v=3.8.0"></script>
-<script src="/app-monthly-charts.js?v=3.8.0"></script>
-<script src="/app-spending.js?v=3.8.0"></script>
-<script src="/app-dialogs.js?v=3.8.0"></script>
-<script src="/app-updates.js?v=3.8.0"></script>
-<script src="/app.js?v=3.8.0"></script>
+<script src="/app-boot.js?v=3.9.0"></script>
+<script src="/app-lifecycle.js?v=3.9.0"></script>
+<script src="/app-state.js?v=3.9.0"></script>
+<script src="/app-api.js?v=3.9.0"></script>
+<script src="/app-auth.js?v=3.9.0"></script>
+<script src="/app-streams.js?v=3.9.0"></script>
+<script src="/app-resources.js?v=3.9.0"></script>
+<script src="/app-inline-editors.js?v=3.9.0"></script>
+<script src="/app-local-store.js?v=3.9.0"></script>
+<script src="/app-workspace.js?v=3.9.0"></script>
+<script src="/app-account-restore.js?v=3.9.0"></script>
+<script src="/app-history.js?v=3.9.0"></script>
+<script src="/app-core.js?v=3.9.0"></script>
+<script src="/app-models.js?v=3.9.0"></script>
+<script src="/app-markdown.js?v=3.9.0"></script>
+<script src="/app-agent.js?v=3.9.0"></script>
+<script src="/app-reports.js?v=3.9.0"></script>
+<script src="/app-runs.js?v=3.9.0"></script>
+<script src="/app-dates.js?v=3.9.0"></script>
+<script src="/app-strava.js?v=3.9.0"></script>
+<script src="/app-run-insights.js?v=3.9.0"></script>
+<script src="/app-shoes.js?v=3.9.0"></script>
+<script src="/app-dashboard.js?v=3.9.0"></script>
+<script src="/app-monthly.js?v=3.9.0"></script>
+<script src="/app-exports.js?v=3.9.0"></script>
+<script src="/app-goals.js?v=3.9.0"></script>
+<script src="/app-charts.js?v=3.9.0"></script>
+<script src="/app-shoe-charts.js?v=3.9.0"></script>
+<script src="/app-monthly-charts.js?v=3.9.0"></script>
+<script src="/app-spending.js?v=3.9.0"></script>
+<script src="/app-dialogs.js?v=3.9.0"></script>
+<script src="/app-updates.js?v=3.9.0"></script>
+<script src="/app.js?v=3.9.0"></script>
 </body>
 </html>

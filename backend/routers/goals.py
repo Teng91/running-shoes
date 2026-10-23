@@ -7,8 +7,11 @@ from backend import goals as goal_service
 from backend import models, schemas
 from backend.auth import get_current_user
 from backend.database import get_db
+from backend.dependencies import OperationKey, get_settings
 from backend.routers.errors import service_errors
 from backend.services import goals
+from backend.services.operations import legacy_operation
+from backend.settings import Settings
 
 router = APIRouter(prefix="/api/running-goal", tags=["goals"])
 
@@ -25,9 +28,14 @@ def get_running_goal(
 def update_running_goal(
     payload: schemas.RunningGoalUpdate,
     current_user: models.User = Depends(get_current_user),
+    config: Settings = Depends(get_settings),
     db: Session = Depends(get_db),
+    operation_key: OperationKey = None,
 ):
     with service_errors():
+        if operation_key and payload.expected_version is not None:
+            return legacy_operation(db, current_user.id, "goal.update", config, operation_key,
+                                    payload.model_dump(exclude_unset=True))
         return goals.update_goal(db, current_user.id, payload)
 
 

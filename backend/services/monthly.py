@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from backend import models, schemas
 from backend.read_models.run_statistics import month_bounds, sum_run_distance
 from backend.services.errors import Conflict, Invalid, NotFound
+from backend.services.identifiers import allocate_id
 from backend.services.transactions import write_transaction
 
 
@@ -14,7 +15,7 @@ def _logged_km(db: Session, user_id: int, year: int, month: int):
 
 
 def create_monthly_mileage(db: Session, user_id: int, payload: schemas.MonthlyMileageCreate):
-    with write_transaction(db, user_id):
+    with write_transaction(db, user_id, reason="monthly.create"):
         existing = (
             db.query(models.MonthlyMileage)
             .filter(
@@ -30,7 +31,7 @@ def create_monthly_mileage(db: Session, user_id: int, payload: schemas.MonthlyMi
         if payload.km + 0.005 < logged_total:
             raise Invalid(f"月跑量不可低於逐筆跑步日誌合計 {logged_total:.2f} km")
         entry = models.MonthlyMileage(
-            **payload.model_dump(),
+            id=allocate_id(db, "monthly_mileages"), **payload.model_dump(),
             adjustment_km=round(payload.km - logged_total, 2),
             user_id=user_id,
         )
@@ -41,7 +42,7 @@ def create_monthly_mileage(db: Session, user_id: int, payload: schemas.MonthlyMi
 def update_monthly_mileage(
     db: Session, user_id: int, entry_id: int, payload: schemas.MonthlyMileageUpdate
 ):
-    with write_transaction(db, user_id):
+    with write_transaction(db, user_id, reason="monthly.update"):
         entry = (
             db.query(models.MonthlyMileage)
             .filter(models.MonthlyMileage.id == entry_id, models.MonthlyMileage.user_id == user_id)
@@ -106,7 +107,7 @@ def update_monthly_mileage(
 def delete_monthly_mileage(
     db: Session, user_id: int, entry_id: int, expected_version: int | None = None
 ):
-    with write_transaction(db, user_id):
+    with write_transaction(db, user_id, reason="monthly.delete"):
         entry = (
             db.query(models.MonthlyMileage)
             .filter(models.MonthlyMileage.id == entry_id, models.MonthlyMileage.user_id == user_id)

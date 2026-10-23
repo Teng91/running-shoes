@@ -560,6 +560,7 @@ def test_monthly_mileage_rejects_negative_create_and_invalid_updates(client, db,
 
 def _failing_db(existing=None):
     db = MagicMock()
+    db.info = {}
     db.query.return_value.filter.return_value.first.return_value = existing
     db.commit.side_effect = RuntimeError("commit failed")
     return db
@@ -688,7 +689,7 @@ def test_static_asset_and_non404_http_errors(client):
 
     service_worker = client.get("/service-worker.js")
     assert service_worker.status_code == 200
-    assert "running-shoes-shell-v33" in service_worker.text
+    assert "running-shoes-shell-v34" in service_worker.text
 
     agent_script = client.get("/app-agent.js")
     assert agent_script.status_code == 200

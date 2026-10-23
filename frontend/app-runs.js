@@ -5,7 +5,7 @@ async function initializeRunFeature() {
   const version = document.querySelector('meta[name="app-asset-version"]').content;
   const { createRunController } = await import('./runtime/run-controller.mjs?v=' + encodeURIComponent(version));
   runController = createRunController({
-    transport: { post: apiPost, put: apiPut, delete: apiDelete },
+    transport: { post: submitWorkspaceRun, put: apiPut, delete: apiDelete },
     session: { capture: captureAuthSession, current: isCurrentAuthSession },
     newKey: () => globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}-${Math.random()}`,
   });
@@ -156,7 +156,8 @@ async function addRun() {
     if (unchanged && document.getElementById('run-month').value === form.month) {
       document.getElementById('run-month').value = date.slice(0, 7);
     }
-    await loadData({ mutation: 'run' });
+    if (typeof persistWorkspaceDrafts === 'function') persistWorkspaceDrafts();
+    if (!runController.state.lastCreateResult?.queued) await loadData({ mutation: 'run' });
   } catch (errorMessage) {
     if (errorMessage.name === 'AbortError' || !runController.isCurrentCreate(operation)) return;
     error.textContent = errorMessage.message || '新增失敗，請稍後再試。';
@@ -206,9 +207,11 @@ async function saveRun() {
     snapshot.saving = true;
     if (!await runController.saveEditor(snapshot, payload)) return;
     if (runController.editor === snapshot && matchesForm(draft)) {
+      if (typeof discardWorkspaceEditor === 'function') discardWorkspaceEditor('run', snapshot.id);
       closeRunModal();
       document.getElementById('run-month').value = payload.date.slice(0, 7);
     }
+    if (typeof persistWorkspaceDrafts === 'function') persistWorkspaceDrafts();
     await loadData({ mutation: 'run' });
   } catch (saveError) {
     if (runController.editor !== snapshot || !isCurrentAuthSession(snapshot.session) || saveError.name === 'AbortError') return;
@@ -226,7 +229,11 @@ async function deleteEditingRun() {
   try {
     run.saving = true;
     if (!await runController.deleteEditor(run)) return;
-    if (runController.editor === run) closeRunModal();
+    if (runController.editor === run) {
+      if (typeof discardWorkspaceEditor === 'function') discardWorkspaceEditor('run', run.id);
+      closeRunModal();
+    }
+    if (typeof persistWorkspaceDrafts === 'function') persistWorkspaceDrafts();
     await loadData({ mutation: 'run' });
   } catch (error) {
     if (runController.editor === run && isCurrentAuthSession(run.session) && error.name !== 'AbortError') alert(error.message || '刪除失敗');

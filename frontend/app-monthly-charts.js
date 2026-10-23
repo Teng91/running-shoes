@@ -75,7 +75,6 @@ async function renderShoeStackedChart() {
     if (!resourceStore.current(result) || requestId !== runController.state.annualRequest) return;
     if (result.status === 'rejected') throw result.error;
     yearRuns = result.value;
-    runController.state.annualCache.set(year, yearRuns);
   } catch (error) {
     console.error('載入年度跑步紀錄失敗:', error);
     if (requestId === runController.state.annualRequest) renderedPanels.delete('monthly');

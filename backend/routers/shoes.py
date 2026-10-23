@@ -8,10 +8,11 @@ from sqlalchemy.orm import Session
 from backend import models, schemas
 from backend.auth import get_current_user
 from backend.database import get_db
-from backend.dependencies import get_settings
+from backend.dependencies import OperationKey, get_settings
 from backend.forecasting import forecasts_for_shoes
 from backend.routers.errors import service_errors
 from backend.services import shoes as shoes_service
+from backend.services.operations import legacy_operation
 from backend.settings import Settings
 from backend.shoe_metrics import shoe_metrics
 
@@ -75,8 +76,12 @@ def create_shoe(
     config: Settings = Depends(get_settings),
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    operation_key: OperationKey = None,
 ):
     with service_errors():
+        if operation_key:
+            return legacy_operation(db, current_user.id, "shoe.create", config, operation_key,
+                                    payload.model_dump(exclude_unset=True))
         return _shoe_outputs(
             db,
             current_user.id,
@@ -93,9 +98,14 @@ def update_shoe(
     shoe_id: int,
     payload: schemas.ShoeUpdate,
     current_user: models.User = Depends(get_current_user),
+    config: Settings = Depends(get_settings),
     db: Session = Depends(get_db),
+    operation_key: OperationKey = None,
 ):
     with service_errors():
+        if operation_key and payload.expected_version is not None:
+            return legacy_operation(db, current_user.id, "shoe.update", config, operation_key,
+                                    payload.model_dump(exclude_unset=True), entity_id=shoe_id)
         return _shoe_outputs(
             db, current_user.id, [shoes_service.update_shoe(db, current_user.id, shoe_id, payload)]
         )[0]
@@ -106,7 +116,12 @@ def delete_shoe(
     shoe_id: int,
     expected_version: Annotated[int | None, Query(ge=0)] = None,
     current_user: models.User = Depends(get_current_user),
+    config: Settings = Depends(get_settings),
     db: Session = Depends(get_db),
+    operation_key: OperationKey = None,
 ):
     with service_errors():
+        if operation_key and expected_version is not None:
+            return legacy_operation(db, current_user.id, "shoe.delete", config, operation_key,
+                                    {}, entity_id=shoe_id, expected_version=expected_version)
         return shoes_service.delete_shoe(db, current_user.id, shoe_id, expected_version)

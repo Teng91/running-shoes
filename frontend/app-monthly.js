@@ -42,7 +42,7 @@ async function inlineEditMonthly(idx, field, el) {
   input.min = '0';
   input.value = current;
   let committed = false;
-  const editor = beginInlineEdit('monthly-table', () => { committed = true; });
+  const editor = beginInlineEdit('monthly-table', () => { committed = true; }, { kind: 'monthly', base: entry, field, input });
   const commit = async () => {
     if (committed || !operations.current(operation)) return;
     committed = true;
@@ -55,6 +55,8 @@ async function inlineEditMonthly(idx, field, el) {
           km: val,
           expected_version: entry.version || 0,
         });
+        if (operations.current(operation) && typeof discardWorkspaceEditor === 'function') discardWorkspaceEditor('monthly', entry.id);
+        if (operations.current(operation) && typeof persistWorkspaceDrafts === 'function') persistWorkspaceDrafts();
       } catch (e) {
         if (operations.current(operation) && e.name !== 'AbortError') alert(e.message || '更新失敗');
       }
@@ -138,6 +140,7 @@ async function addMonthlyMileage() {
     await apiPost('/monthly-mileage', { year, month, km });
     if (!operations.owns('create', operation)) return;
     if (matchesForm(operation.form)) document.getElementById('add-km').value = '';
+    if (typeof persistWorkspaceDrafts === 'function') persistWorkspaceDrafts();
     await loadData({ mutation: 'monthly' });
   } catch (e) {
     if (!operations.owns('create', operation) || e.name === 'AbortError' || !matchesForm(operation.form)) return;
@@ -237,7 +240,11 @@ async function saveMonthlyMileage() {
     if (editingMonthly === snapshot) button.disabled = false;
   }
   if (!isCurrentAuthSession(snapshot.session)) return;
-  if (editingMonthly === snapshot && matchesForm(draft)) closeMonthlyModal();
+  if (editingMonthly === snapshot && matchesForm(draft)) {
+    if (typeof discardWorkspaceEditor === 'function') discardWorkspaceEditor('monthly', snapshot.id);
+    closeMonthlyModal();
+  }
+  if (typeof persistWorkspaceDrafts === 'function') persistWorkspaceDrafts();
   await loadData({ mutation: 'monthly' });
 }
 

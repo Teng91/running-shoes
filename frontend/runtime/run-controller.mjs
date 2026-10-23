@@ -6,7 +6,7 @@ const { createFormOperations } = await import(new URL(
 export function createRunController({ transport, session, newKey }) {
   const state = {
     rows: [], summary: null, offset: 0, hasMore: false, day: null,
-    listRequest: 0, annualRequest: 0, annualCache: new Map(), retryOptions: {},
+    listRequest: 0, annualRequest: 0, lastCreateResult: null, retryOptions: {},
   };
   const operations = createFormOperations(session);
   let pending = null, latest = null, retry = null, editor = null;
@@ -27,8 +27,9 @@ export function createRunController({ transport, session, newKey }) {
     async submitCreate(operation, payload) {
       if (pending !== operation || !current(operation)) return false;
       try {
-        await transport.post('/runs', payload, { idempotencyKey: operation.retry.key });
+        const result = await transport.post('/runs', payload, { idempotencyKey: operation.retry.key });
         if (latest !== operation || !current(operation)) return false;
+        state.lastCreateResult = result || null;
         retry = null;
         return true;
       } catch (error) {
@@ -59,7 +60,7 @@ export function createRunController({ transport, session, newKey }) {
       operations.reset();
       pending = latest = retry = editor = null;
       Object.assign(state, { rows: [], summary: null, offset: 0, hasMore: false, day: null, retryOptions: {} });
-      state.annualCache.clear();
+      state.lastCreateResult = null;
       state.listRequest++;
       state.annualRequest++;
     },

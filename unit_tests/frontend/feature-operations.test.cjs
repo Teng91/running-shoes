@@ -118,18 +118,19 @@ function refreshContext() {
 
 test('SPEC-023 mutation refresh limits requests and preserves unrelated caches', async () => {
   const { context, calls } = refreshContext();
-  context.runController.state.annualCache.set('retained', 1);
+  await context.resourceStore.read('annual-summary', { loader: () => 1 });
+  await context.resourceStore.read('goal-progress', { loader: () => 1 });
   await context.loadData({ mutation: 'monthly' });
   assert.deepEqual(calls, ['/monthly-mileage']);
-  assert.equal(context.goalProgressCache.size, 1); assert.equal(context.runController.state.annualCache.size, 1);
+  assert.equal(context.resourceStore.peek('goal-progress'), 1); assert.equal(context.resourceStore.peek('annual-summary'), 1);
   assert.equal(vm.runInContext('spendingSummary.retained', context), true);
   calls.length = 0; await context.loadData({ mutation: 'shoe' });
   assert.deepEqual(calls, ['/shoes/active', '/shoes/retired']);
   assert.equal(vm.runInContext('spendingSummary', context), null);
-  assert.equal(context.goalProgressCache.size, 1); assert.equal(context.runController.state.annualCache.size, 1);
+  assert.equal(context.resourceStore.peek('goal-progress'), 1); assert.equal(context.resourceStore.peek('annual-summary'), 1);
   calls.length = 0; await context.loadData({ mutation: 'run' });
   assert.equal(calls.includes('/running-goal'), false); assert.equal(calls.includes('history'), false);
-  assert.equal(calls.length, 5); assert.equal(context.goalProgressCache.size, 0); assert.equal(context.runController.state.annualCache.size, 0);
+  assert.equal(calls.length, 5); assert.equal(context.resourceStore.peek('goal-progress'), undefined); assert.equal(context.resourceStore.peek('annual-summary'), undefined);
 });
 
 test('SPEC-023 overlapping full and mutation reloads reject stale resources and retain unrelated results', async () => {

@@ -67,6 +67,7 @@ function setAuth(token, username) {
 
 function clearAuth({ persist = true } = {}) {
   cancelAuthOperation();
+  if (typeof persistWorkspaceDrafts === 'function') persistWorkspaceDrafts();
   authGeneration += 1;
   resetFeatureLifecycles();
   authToken = null;
@@ -102,6 +103,7 @@ function showAppView({ keepBoot = false } = {}) {
   document.getElementById('app-view').style.display = '';
   document.getElementById('user-label').textContent = currentUser || '';
   render();
+  if (typeof activateLocalWorkspace === 'function') void activateLocalWorkspace();
   if (!keepBoot) hideAppBoot();
 }
 

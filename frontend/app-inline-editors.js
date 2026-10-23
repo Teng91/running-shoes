@@ -2,8 +2,8 @@
 const inlineEditors = new Map();
 const inlineTableRows = new Map();
 
-function beginInlineEdit(table, cancel) {
-  const editor = { table, cancel };
+function beginInlineEdit(table, cancel, draft = null) {
+  const editor = { table, cancel, draft };
   inlineEditors.set(table, editor);
   return editor;
 }
