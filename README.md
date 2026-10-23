@@ -561,6 +561,12 @@ Schema 3 正式上線前，必須執行異地備份、checksum 與隔離還原�
 - PWA worker observer 同時觀測既有與新 installing candidate，deadline 涵蓋 update 呼叫與終態；失敗文字附註冊狀態時間線、目前階段及最近合成 HTTP 請求。中斷資產 fixture 在 headers 後截斷宣告的 body，避免 WebKit TCP 重試使錯誤掛起；worker 拒絕長度不符的未壓縮回應，避免截斷內容仍被當成成功。
 - Asset revision 3.7.0／shell v30；schema 維持 3。部署前做異地備份及隔離還原演練，回滾可直接部署相容 schema 3 的 v3.6.1 image；不以舊資料覆寫正式站。
 
+### 離線 worker 更新與佇列驗證（v3.7.1）
+
+- v3.7.0 main CI 的 trace 顯示 worker update 卡在尚無 installing candidate 的 script request；相同 tag 的 PWA 已通過，不能以此略過 main 失敗。
+- WebKit 離線 fixture 對 worker script 回 503，避免背景 register/update 在 TCP drop 後持續重試。每次恢復連線前，明確驗證離線 `registration.update()` 在 10 秒內失敗，然後驗證下一個在線候選正常處理；離線 shell／API exclusion 與 failed-upgrade gates 保留。
+- v3.7.1 使用 asset revision 3.7.1／shell v31，仍是 44 個資產、schema 3。v3.7.0 tag 保留原始內容；正式發布及部署使用修正後 v3.7.1。
+
 ### Schema 2 上線與回滾
 
 v3.4.0 只新增 `run_creation_requests` 表與 user/key 唯一約束，沒有改寫既有鞋款、日誌或里程。
