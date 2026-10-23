@@ -1,6 +1,6 @@
 {
-  "version": "3.6.0",
-  "cache_name": "running-shoes-shell-v28",
+  "version": "3.6.1",
+  "cache_name": "running-shoes-shell-v29",
   "scripts": [
     "app-boot.js",
     "app-lifecycle.js",
@@ -8,6 +8,7 @@
     "app-api.js",
     "app-auth.js",
     "app-streams.js",
+    "app-resources.js",
     "app-core.js",
     "app-models.js",
     "app-markdown.js",
@@ -33,7 +34,8 @@
   "modules": [
     "runtime/feature-lifecycle.mjs",
     "runtime/run-controller.mjs",
-    "runtime/form-operations.mjs"
+    "runtime/form-operations.mjs",
+    "runtime/resource-store.mjs"
   ],
   "styles": [
     "css/01-foundation.css",

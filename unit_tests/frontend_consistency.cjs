@@ -1,6 +1,6 @@
 // SPEC-017 real DOM/engines with isolated API fixtures. Never contacts production.
 const assert = require('node:assert/strict');
-const { startArtifacts, saveFailure } = require('../scripts/browser_artifacts.cjs');
+const { startArtifacts, saveFailure, closeBrowser } = require('../scripts/browser_artifacts.cjs');
 
 module.exports = async function checkConsistency(browser, baseUrl) {
   const context = await browser.newContext({ serviceWorkers: 'block', timezoneId: 'America/Los_Angeles' });
@@ -103,5 +103,5 @@ module.exports = async function checkConsistency(browser, baseUrl) {
   } catch (error) {
     await saveFailure(context, page, 'consistency-' + browser.browserType().name(), error);
     throw error;
-  } finally { await context.close(); }
+  } finally { await closeBrowser(context); }
 };

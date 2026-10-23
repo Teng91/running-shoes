@@ -11,13 +11,16 @@ registerFeatureReset('goal-progress', () => {
   document.getElementById('goal-settings-status').textContent = '';
 });
 
+function goalFormValues(goal) {
+  return { 'goal-start-year': String(goal.start_year), 'goal-monthly-km': String(goal.monthly_km) };
+}
+
 function renderGoalProgress() {
   const cards = document.getElementById('goal-cards');
   if (!cards) return;
-  for (const [id, value] of [['goal-start-year', runningGoal.start_year], ['goal-monthly-km', runningGoal.monthly_km]]) {
-    const input = document.getElementById(id);
-    if (input !== document.activeElement) input.value = value;
-  }
+  const fields = goalFormValues(runningGoal);
+  const values = getFormDraft('goal').reconcile(fields, readForm(Object.keys(fields)));
+  for (const [id, value] of Object.entries(values)) document.getElementById(id).value = value;
   const year = selectedYear || new Date().getFullYear();
   const now = new Date();
   const rows = monthlyMileages.filter(item => item.year === year);
@@ -87,26 +90,31 @@ async function saveRunningGoal() {
     status.textContent = '請輸入有效的年份與正數里程。';
     return;
   }
-  const operation = { session: captureAuthSession() };
+  const operation = getFormOperations('goal').begin('save', readForm(Object.keys(goalFormValues(runningGoal))));
+  if (!operation) return;
   goalSaveOperation = operation;
   document.getElementById('save-goal-btn').disabled = true;
   try {
     const goal = await apiPut('/running-goal', payload);
     if (goalSaveOperation !== operation || !isCurrentAuthSession(operation.session)) return;
     invalidateDataResources(['goal']);
+    const serverValues = goalFormValues(goal);
+    const values = getFormDraft('goal').acknowledge(serverValues, operation.form, readForm(Object.keys(serverValues)));
+    for (const [id, value] of Object.entries(values)) document.getElementById(id).value = value;
     runningGoal = goal;
     dashboardAnalyticsCache.clear();
     dashboardAnalyticsRequest++;
     goalProgressCache.clear();
     goalProgressRequestId += 1;
-    status.textContent = '目標已儲存。';
+    status.textContent = Object.keys(values).some(id => values[id] !== serverValues[id])
+      ? '目標已儲存；新的變更尚未儲存。' : '目標已儲存。';
     invalidatePanels();
     renderActivePanel();
   } catch (error) {
     if (error.name === 'AbortError' || goalSaveOperation !== operation || !isCurrentAuthSession(operation.session)) return;
     status.textContent = error.message || '目標儲存失敗。';
   } finally {
-    if (goalSaveOperation === operation) {
+    if (getFormOperations('goal').finish('save', operation) && goalSaveOperation === operation) {
       goalSaveOperation = null;
       document.getElementById('save-goal-btn').disabled = false;
     }

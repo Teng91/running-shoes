@@ -1,6 +1,6 @@
 const CACHE_PREFIX = 'running-shoes-shell-';
-const CACHE_NAME = 'running-shoes-shell-v28';
-const APP_ASSET_VERSION = '3.6.0';
+const CACHE_NAME = 'running-shoes-shell-v29';
+const APP_ASSET_VERSION = '3.6.1';
 const versioned = path => `${path}?v=${APP_ASSET_VERSION}`;
 const APP_SHELL = [
   '/',
@@ -10,6 +10,7 @@ const APP_SHELL = [
   versioned('/app-api.js'),
   versioned('/app-auth.js'),
   versioned('/app-streams.js'),
+  versioned('/app-resources.js'),
   versioned('/app-core.js'),
   versioned('/app-models.js'),
   versioned('/app-markdown.js'),
@@ -34,6 +35,7 @@ const APP_SHELL = [
   versioned('/runtime/feature-lifecycle.mjs'),
   versioned('/runtime/run-controller.mjs'),
   versioned('/runtime/form-operations.mjs'),
+  versioned('/runtime/resource-store.mjs'),
   versioned('/styles.css'),
   '/offline.html',
   '/manifest.webmanifest',

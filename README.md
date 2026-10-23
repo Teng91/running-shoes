@@ -32,6 +32,7 @@ Fly.io 帳號或其他支援 Docker 的平台。
 ```
 running-shoes/
 ├── .github/
+│   ├── actions/browser-setup/ # 三個 browser jobs 共用的鎖版環境
 │   └── workflows/
 │       └── verify.yml    # Push／PR 自動執行完整 harness 驗證
 ├── .claude/
@@ -57,6 +58,9 @@ running-shoes/
 │   │   ├── runs.py       # 跑步日誌 CRUD routes
 │   │   └── shoes.py      # 跑鞋 CRUD HTTP routes
 │   ├── services/
+│   │   ├── accounts.py    # 註冊容量、密碼 CAS 與 token revocation 交易
+│   │   ├── goals.py       # 個人目標 upsert、版本與 rollback
+│   │   ├── run_requests.py # User-scoped 日誌建立回執
 │   │   ├── transactions.py # SQLite writer reservation 與交易生命週期
 │   │   ├── runs.py       # 日誌寫入、重送、版本與里程交易
 │   │   ├── shoes.py      # 鞋款配額、編輯與刪除交易
@@ -96,7 +100,11 @@ running-shoes/
 │   ├── assets.json       # Script 順序、CSS 來源與 PWA revision 的單一清單
 │   ├── templates/        # Shell、六個彈窗與 worker 的可編輯來源
 │   ├── css/              # 依責任拆分的樣式來源，產生單一 styles.css
-│   ├── runtime/          # 原生 lifecycle 與可注入 transport/session 的跑步控制器
+│   ├── runtime/
+│   │   ├── feature-lifecycle.mjs # 功能生命週期
+│   │   ├── form-operations.mjs # 操作身分、草稿快照與成功回應合併
+│   │   ├── resource-store.mjs # 請求合併、ownership、錯誤與快取失效策略
+│   │   └── run-controller.mjs # 注入 transport/session 的跑步 state
 │   ├── app-lifecycle.js  # Legacy handler 與原生 runtime 的過渡橋接
 │   ├── app-dates.js      # 日曆日期與跨日限制／恢復
 │   ├── app-dialogs.js    # 共用焦點、Tab、Escape 與彈窗語義
@@ -107,6 +115,7 @@ running-shoes/
 │   ├── app-api.js        # HTTP／upload helpers
 │   ├── app-auth.js       # 登入、註冊、登出與帳號切換
 │   ├── app-streams.js    # 共用 SSE 解碼、取消與完成狀態
+│   ├── app-resources.js  # 原生資源模組、session 與功能快取的過渡橋接
 │   ├── app-core.js       # Shell、主題、分頁與聚合資料載入
 │   ├── app-dashboard.js  # 首頁卡片、提醒與跑鞋表格
 │   ├── app-monthly.js    # 月跑量 CRUD、inline 表單與編輯快照
@@ -146,6 +155,8 @@ running-shoes/
 │   ├── document_contracts.py # 本地連結、spec 結構、AC 狀態與測試路徑
 │   ├── database_backup.py # SQLite backup／checksum／retention／restore
 │   ├── offsite_backup.py # Fly 外部下載、private staging 與隔離還原演練
+│   ├── browser_runner.py # Browser 程序 deadline、錯誤落檔與子程序收尾
+│   ├── browser_artifacts.cjs # 先存 error、限時 screenshot／trace／close
 │   ├── smoke_test.py     # 部署後 health 與 OpenAPI smoke check
 │   └── task.py           # 跨平台 setup、測試、eval 與完整驗證入口
 ├── unit_tests/           # Pytest、Agent eval、前端邏輯與版面回歸測試
@@ -483,12 +494,17 @@ Playwright 版本由 `package.json`／`package-lock.json` 鎖定，使用 `npm c
 本機由該版 Playwright 安裝匹配的 Chromium／WebKit；CI 使用同版本官方 noble container，已包含瀏覽器與系統依賴，避免每次下載 apt 套件。映像版本必須和 lockfile 同步（[官方容器說明](https://playwright.dev/docs/docker)）。瀏覽器失敗時在 `.artifacts/browser/` 保存截圖、trace 與錯誤輸出，
 CI 明確允許上傳這個隱藏目錄並保留 7 天，範圍只限 browser diagnostics；可用 `npx playwright show-trace /path/to/trace.zip` 開啟。Artifacts 可能包含測試畫面，只記錄合成帳號或匿名 smoke，不對真實登入工作階段錄製。
 
+Layout／CRUD／PWA 在 CI 分成 `frontend-layout`、`frontend-e2e`、`frontend-pwa`，共用鎖版初始化，不互相依賴。
+引擎／操作階段使用明確 deadline；trace 啟動最多 10 秒，失敗時先保存原始錯誤文字，再讓 screenshot／trace 各最多 5 秒，context／browser close 也分別限時 5 秒。
+外層 `browser_runner.py` 為 layout／E2E／PWA 設定 660／420／300 秒程序期限；超時先寫 watchdog 診斷，再終止該 runner 的子程序，回傳 124。
+CI 失敗／取消時嘗試上傳已有產物；引擎完全卡死時可能只有錯誤文字，不能保證產生 trace。這些期限不改變產品的 API timeout 或重試策略。
+
 診斷演練使用 `python3 scripts/task.py diagnostics-generate` 產生刻意失敗的合成 browser screenshot／trace／error，並驗證 checksum 與內容；
 `python3 scripts/task.py diagnostics-verify` 可在只有 Python 標準函式庫的環境驗證 `.artifacts/browser/roundtrip/`。
-CI 上傳獨立 `browser-diagnostics-roundtrip` artifact，另一個 job 下載並驗證 PNG、trace ZIP 與合成錯誤標記，缺檔／損毀會讓 pipeline 失敗。
+CI 的 `frontend-pwa` job 上傳獨立 `browser-diagnostics-roundtrip` artifact，另一個 job 下載並驗證 PNG、trace ZIP 與合成錯誤標記，缺檔／損毀會讓 pipeline 失敗。
 
 `frontend-e2e` 會對真實 FastAPI／CORS 與暫存 SQLite 執行同一個 `release-check`：檢查 readiness／schema、
-完整 API contract、manifest 對應的 41 個 shell／worker 資產雜湊與 MIME、四個統計 API 的匿名拒絕存取，
+完整 API contract、manifest 對應的 43 個 shell／worker 資產雜湊與 MIME、四個統計 API 的匿名拒絕存取，
 再驗證 Chromium／WebKit 匿名手機啟動與 native runtime cache，以及 Chromium 離線重開。
 WebKit 離線由 `frontend-pwa` 的 fixture transport 中斷驗證，不把引擎的離線模擬開關當成實機結果。
 這個 task 不登入、不送出資料、不發布或回滾；正式 origin 必須是 HTTPS，HTTP 只允許 loopback。
@@ -524,6 +540,14 @@ Schema 3 正式上線前，必須執行異地備份、checksum 與隔離還原�
 再於停止的資料庫執行 `UPDATE schema_metadata SET value='2' WHERE key='schema_version' AND value='3';`，保留 nickname 欄位和新業務資料，部署已驗證的 schema 2 image。
 不要以舊快照覆蓋新資料。重新發布舊來源仍須新 shell revision。
 
+### 草稿狀態轉移與資源模組（SPEC-024）
+
+- 鞋款移至退役／現役成功後，保留的新草稿會同步最新模式、月跑量與版本；再次儲存只提交實際修改的欄位，避免撤銷剛完成的狀態轉移。
+- 目標以 server baseline 比較草稿，失焦、主題切換與背景重繪皆保留未儲存內容；儲存期間的新修改也會保留，帳號切換會清理。
+- `runtime/resource-store.mjs` 不依賴 DOM 或 HTTP，注入 session 與快取 hooks；同資源／key 的並行讀取共用 pending request，成功與錯誤各自管理，失效或換帳號後拒絕舊結果。
+- `app-resources.js` 註冊既有快取 adapters；`app-core.js` 負責 reader 組合、套用結果與 render。某個來源失敗仍能更新其他成功來源，完整／部分刷新沿用 SPEC-023 的異動範圍。
+- 開發資產 revision 為 3.6.1／shell v29；schema 仍為 3，沒有資料 migration，API method/path 不變。
+
 ### Schema 2 上線與回滾
 
 v3.4.0 只新增 `run_creation_requests` 表與 user/key 唯一約束，沒有改寫既有鞋款、日誌或里程。
@@ -541,9 +565,9 @@ Playwright／Chromium／WebKit 齊全時，也會執行版面測試。
 
 驗證失敗會把指令輸出送回 Claude 繼續修正。同一個 session 的同一份 diff 會重用本機快取，
 避免每次停止都重跑。Hook 不會呼叫其他模型、外部 API，或傳送提示、diff、原始碼與測試輸出。
-GitHub Actions 仍會在 push／pull request 執行 `verify`，並在獨立工作中安裝 Chromium／WebKit、跑完完整版面矩陣、真實 CRUD E2E 與 PWA 升級／離線測試；Dependabot 每週檢查 Python 與 GitHub Actions 更新。
+GitHub Actions 仍會在 push／pull request 執行 `verify`，並以三個可獨立重跑的 browser jobs 執行完整版面矩陣、真實 CRUD E2E 與 PWA 升級／離線測試；Dependabot 每週檢查 Python 與 GitHub Actions 更新。
 
-本次驗證基線為 Python **458 passed**、前端回歸測試 **88 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
+本次驗證基線為 Python **462 passed**、前端回歸測試 **95 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
 版面檢查涵蓋 WebKit／Chromium、亮／暗模式與 10 組直橫向尺寸，共 40 組設定，檢查六個功能分頁、三個認證表單、圖表、全部彈窗、行內編輯、停用／錯誤及空資料狀態。
 
 主要表單、工具列與彈窗操作統一為 44px 控制項；桌面表格內的緊湊操作為 36px，手機至少 44px。

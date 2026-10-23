@@ -4,17 +4,26 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-let createRunController, createFormOperations, matchesSnapshot;
+let createRunController, createFormOperations, matchesSnapshot, createFormDraft, createResourceStore;
 require('node:test').before(async () => {
   ({ createRunController } = await import('../../frontend/runtime/run-controller.mjs'));
-  ({ createFormOperations, matchesSnapshot } = await import('../../frontend/runtime/form-operations.mjs'));
+  ({ createFormOperations, matchesSnapshot, createFormDraft } = await import('../../frontend/runtime/form-operations.mjs'));
+  ({ createResourceStore } = await import('../../frontend/runtime/resource-store.mjs'));
 });
 
 function featureContext(globals = {}) {
-  const context = vm.createContext({ structuredClone, formSnapshotMatches: matchesSnapshot, dataResourceRequests: new Map(),
+  const context = vm.createContext({ structuredClone, formSnapshotMatches: matchesSnapshot,
     dashboardAnalyticsCache: new Map(), dashboardAnalyticsRequest: 0,
     captureAuthSession: () => ({}), isCurrentAuthSession: () => true,
     getSelectedCategories: () => [], ...globals });
+  const drafts = new Map();
+  context.getFormDraft = name => {
+    if (!drafts.has(name)) drafts.set(name, createFormDraft());
+    return drafts.get(name);
+  };
+  context.resourceStore = createResourceStore({ session: {
+    capture: () => context.captureAuthSession(), current: value => context.isCurrentAuthSession(value),
+  } });
   const owners = new Map();
   context.getFormOperations = name => {
     if (!owners.has(name)) owners.set(name, createFormOperations({
@@ -22,7 +31,8 @@ function featureContext(globals = {}) {
     }));
     return owners.get(name);
   };
-  vm.runInContext(['readForm', 'matchesForm', 'shoeLabel', 'dataRefreshPolicy', 'invalidateDataResources'].map(extract).join('\n'), context);
+  vm.runInContext(['readForm', 'matchesForm', 'shoeLabel', 'invalidateDataResources', 'registerResourceCaches', 'goalFormValues'].map(extract).join('\n'), context);
+  context.registerResourceCaches();
   return context;
 }
 

@@ -100,8 +100,10 @@ def main() -> int:
         report = check_release(lambda path: fetch_public(origin, path))
         print(f"Release assets passed: v{report['version']}, {report['assets']} matching hashes/MIMEs, schema and API isolation.", flush=True)
         subprocess.run([
-            "node", str(ROOT / "scripts/release_browser.cjs"), origin, report["version"], report["cache"],
-        ], cwd=ROOT, check=True, timeout=180)
+            sys.executable, str(ROOT / "scripts/browser_runner.py"), "--timeout", "240",
+            "--label", "release-browser", "--", "node",
+            str(ROOT / "scripts/release_browser.cjs"), origin, report["version"], report["cache"],
+        ], cwd=ROOT, check=True, timeout=270)
     except (OSError, ValueError, subprocess.SubprocessError) as error:
         print(f"Release check failed: {error}", file=sys.stderr)
         return 1

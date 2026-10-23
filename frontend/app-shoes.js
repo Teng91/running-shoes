@@ -80,6 +80,7 @@ class ShoeModal {
       monthly: isRetired ? 0 : shoe.monthly_km,
       monthlyVisible: !isRetired
     });
+    this.context.draftBase = this._payload();
     this._show();
   }
 
@@ -95,7 +96,7 @@ class ShoeModal {
 
   _fillForm(s) {
     Object.entries(this.formIds).forEach(([k, id]) => {
-      const field = k === 'orig' ? 'orig_price' : k === 'expected' ? 'expected_mileage' : k;
+      const field = k === 'orig' ? 'orig_price' : k === 'expected' ? 'expected_mileage' : k === 'monthly' ? 'monthly_km' : k;
       document.getElementById(id).value = s[field] ?? '';
     });
     // Check category checkboxes based on the shoe's categories
@@ -140,7 +141,7 @@ class ShoeModal {
       if (this.context === context && matchesForm(operation.form.fields)
           && JSON.stringify(getSelectedCategories()) === operation.form.categories) this.close();
       if (this.context === context && saved?.version !== undefined) {
-        context.shoe = this.shoe = { ...saved };
+        this._rebase(context, saved, operation.form);
       }
       await loadData({ mutation: 'shoe' });
     } catch (error) {
@@ -150,6 +151,27 @@ class ShoeModal {
     } finally {
       context.saving = false;
       if (operations.finish(context, operation) && this.context === context) this._setBusy(false);
+    }
+  }
+
+  _rebase(context, saved, submitted) {
+    const draft = this._formSnapshot();
+    const dirtyFields = Object.keys(draft.fields).filter(id => draft.fields[id] !== submitted.fields[id]);
+    const dirtyCategories = draft.categories !== submitted.categories;
+    context.shoe = this.shoe = { ...saved };
+    // A create form retained for the next shoe remains a create form.
+    if (context.mode === 'create') return;
+    const retired = Boolean(saved.is_retired);
+    context.mode = this.mode = retired ? 'editRetired' : 'editActive';
+    this._fillForm(saved);
+    this._updateUI({ title: retired ? '編輯退役跑鞋' : '編輯跑鞋', showDelete: true, showMove: true,
+      moveText: retired ? '移至現役' : '移至退役', monthly: saved.monthly_km, monthlyVisible: !retired });
+    context.draftBase = this._payload();
+    for (const id of dirtyFields) document.getElementById(id).value = draft.fields[id];
+    if (dirtyCategories) {
+      const categories = JSON.parse(draft.categories);
+      document.querySelectorAll('#f-category-group input[type="checkbox"]')
+        .forEach(checkbox => checkbox.checked = categories.includes(checkbox.value));
     }
   }
 
@@ -183,7 +205,7 @@ class ShoeModal {
     if (!data.brand || !data.model || !data.date) return alert('請填寫品牌、鞋款、日期');
     return this._mutate(context, () => {
       if (context.mode === 'create') return apiPost('/shoes', data);
-      const changes = Object.fromEntries(Object.entries(data).filter(([key, value]) => JSON.stringify(value) !== JSON.stringify(context.shoe[key])));
+      const changes = Object.fromEntries(Object.entries(data).filter(([key, value]) => JSON.stringify(value) !== JSON.stringify((context.draftBase || context.shoe)[key])));
       return apiPut('/shoes/' + context.shoe.id, { ...changes, expected_version: context.shoe.version });
     }, '儲存失敗');
   }
