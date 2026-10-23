@@ -1,4 +1,5 @@
 import os
+import re
 from pathlib import Path
 
 from scripts import task
@@ -84,18 +85,16 @@ def test_browser_ci_pins_runtime_and_preserves_failure_diagnostics():
     version = package["devDependencies"]["playwright"]
     assert lock["packages"]["node_modules/playwright"]["version"] == version
     workflow = (root / ".github/workflows/verify.yml").read_text()
-    browser_job = workflow.split("  frontend-layout:", 1)[1]
-    assert f"image: mcr.microsoft.com/playwright:v{version}-noble" in browser_job
-    assert "options: --ipc=host" in browser_job
-    assert "--with-deps" not in browser_job
-    # setup-python cache invokes a host-shebang pip executable in /__t;
-    # python -m pip remains valid inside the job container.
-    assert "cache: pip" not in browser_job
-    assert "python -m pip install --require-hashes" in browser_job
     for gate in ("frontend-layout", "frontend-e2e", "frontend-pwa"):
+        browser_job = re.search(r'^  ' + gate + r':\n(.*?)(?=^  [a-z]|\Z)', workflow, re.M | re.S)[1]
+        assert f"image: mcr.microsoft.com/playwright:v{version}-noble" in browser_job
+        assert "options: --ipc=host" in browser_job
+        assert "--with-deps" not in browser_job
         assert f"python scripts/task.py {gate}" in browser_job
-    assert "path: .artifacts/browser/" in browser_job
-    assert "include-hidden-files: true" in browser_job
+        assert "include-hidden-files: true" in browser_job
+    setup = (root / '.github/actions/browser-setup/action.yml').read_text()
+    assert 'cache: pip' not in setup
+    assert 'python -m pip install --require-hashes' in setup
 
 
 def test_diagnostics_roundtrip_requires_capture_upload_download_and_content_verification():
@@ -105,7 +104,7 @@ def test_diagnostics_roundtrip_requires_capture_upload_download_and_content_veri
     assert 'python scripts/task.py diagnostics-generate' in capture
     assert 'name: browser-diagnostics-roundtrip' in capture
     assert 'if-no-files-found: error' in capture
-    assert 'needs: frontend-layout' in download
+    assert 'needs: frontend-pwa' in download
     assert 'actions/download-artifact@v8' in download
     assert 'name: browser-diagnostics-roundtrip' in download
     assert 'python scripts/task.py diagnostics-verify' in download
@@ -137,3 +136,24 @@ def test_downloaded_diagnostics_validate_checksums_trace_contents_and_safe_paths
     target.write_text(json.dumps(manifest))
     with pytest.raises(ValueError, match='unsafe'):
         verify(tmp_path)
+
+
+def test_browser_jobs_are_independent_and_keep_timeout_diagnostics():
+    root = Path(__file__).resolve().parents[1]
+    source = (root / '.github/workflows/verify.yml').read_text()
+    for gate in ('frontend-layout', 'frontend-e2e', 'frontend-pwa'):
+        body = re.search(r'^  ' + gate + r':\n(.*?)(?=^  [a-z]|\Z)', source, re.M | re.S)[1]
+        assert 'needs:' not in body
+        assert 'uses: ./.github/actions/browser-setup' in body
+        assert f'run: python scripts/task.py {gate}' in body
+        assert 'if: always() && (failure() || cancelled())' in body
+        assert f'name: {gate}-failure-diagnostics' in body
+    commands = []
+    from unittest.mock import patch
+    with patch.object(task, 'layout_dependencies_available', return_value=True), patch.object(task, 'run_checked', commands.append):
+        for gate in ('frontend-layout', 'frontend-e2e', 'frontend-pwa'):
+            task.run_task(gate)
+    assert len(commands) == 3
+    for command in commands:
+        assert 'scripts/browser_runner.py' in command.arguments
+        assert '--timeout' in command.arguments

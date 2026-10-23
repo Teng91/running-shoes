@@ -1,6 +1,6 @@
 // Six SPEC-012 regressions against real application modules/DOM and mock I/O.
 const assert = require('node:assert/strict');
-const { startArtifacts, saveFailure } = require('../scripts/browser_artifacts.cjs');
+const { startArtifacts, saveFailure, closeBrowser } = require('../scripts/browser_artifacts.cjs');
 
 async function checkRunLogHome(browser, baseUrl) {
   const context = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 390, height: 844 } });
@@ -71,7 +71,7 @@ async function checkRunLogHome(browser, baseUrl) {
   } catch (error) {
     await saveFailure(context, context.pages().at(-1), 'home-' + browser.browserType().name(), error);
     throw error;
-  } finally { await context.close(); }
+  } finally { await closeBrowser(context); }
 }
 
 module.exports = async function checkFrontendSafety(browser, baseUrl) {
@@ -251,5 +251,5 @@ module.exports = async function checkFrontendSafety(browser, baseUrl) {
   } catch (error) {
     await saveFailure(context, page, 'safety-' + browser.browserType().name(), error);
     throw error;
-  } finally { await context.close(); }
+  } finally { await closeBrowser(context); }
 };

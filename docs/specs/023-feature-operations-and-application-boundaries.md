@@ -60,7 +60,7 @@
 | AC | Named regression / gate |
 | --- | --- |
 | AC-1 | `unit_tests/frontend/feature-operations.test.cjs::SPEC-023 monthly save preserves changed month and distance but clears an unchanged draft`；`unit_tests/frontend/feature-operations.test.cjs::SPEC-023 stale monthly completions cannot clear errors or unlock a replacement operation` |
-| AC-2 | `unit_tests/frontend/feature-operations.test.cjs::SPEC-023 operation owners preserve identity after reset and isolate independent features`；`unit_tests/frontend/feature-operations.test.cjs::SPEC-023 shoe save preserves an edited draft and rebases its optimistic version`；`unit_tests/frontend/auth-editors.test.cjs::all shoe mutations lock their snapshot and leave replacement drafts and sessions untouched` |
+| AC-2 | `unit_tests/frontend/feature-operations.test.cjs::SPEC-023 operation owners preserve identity after reset and isolate independent features`；`unit_tests/frontend/feature-operations.test.cjs::SPEC-023 shoe save preserves an edited draft and rebases its optimistic version`；`unit_tests/frontend/draft-resources.test.cjs::SPEC-024 shoe transitions preserve only new edits and retain the server state`；`unit_tests/frontend/auth-editors.test.cjs::all shoe mutations lock their snapshot and leave replacement drafts and sessions untouched` |
 | AC-3 | `unit_tests/frontend/feature-operations.test.cjs::SPEC-023 shoe selectors distinguish duplicate models and escape nicknames`；`unit_tests/test_feature_boundaries.py::test_nickname_persists_is_scoped_and_survives_account_and_safe_csv_exports` |
 | AC-4 | `unit_tests/test_feature_boundaries.py::test_schema_three_nickname_upgrade_preserves_ids_mileage_versions_and_is_idempotent` |
 | AC-5 | `unit_tests/test_feature_boundaries.py::test_account_services_enforce_capacity_credentials_and_revocation`；`unit_tests/test_feature_boundaries.py::test_goal_service_is_user_scoped_rejects_stale_versions_and_rolls_back`；`unit_tests/test_auth_concurrency.py::test_overlapping_password_changes_reject_stale_snapshot_and_revoke_tokens`；`python3 scripts/task.py architecture-check` |
@@ -69,3 +69,5 @@
 | AC-8 | `unit_tests/test_task_runner.py::test_diagnostics_roundtrip_requires_capture_upload_download_and_content_verification`；`unit_tests/test_task_runner.py::test_downloaded_diagnostics_validate_checksums_trace_contents_and_safe_paths`；`python3 scripts/task.py diagnostics-generate`；`python3 scripts/task.py diagnostics-verify`；CI diagnostics-roundtrip job |
 
 本機驗證：`python3 scripts/task.py verify-all` 全通過，458 Python／88 Node／95.26% backend branch coverage，40 組版面及雙引擎 E2E／PWA 無跳過；Agent evals 10 個通過。合成 diagnostics 已透過實際 Chromium 產生並驗證，CI 獨立 job 負責上傳後的下載驗證。
+
+SPEC-024 補足退役／現役成功後再次儲存保留草稿的狀態轉移追蹤；新案例同時於 Chromium／WebKit 的 `unit_tests/frontend_drafts.cjs` 操作真實 DOM。上述 458／88 為 v3.6.0 發布時的歷史基線。

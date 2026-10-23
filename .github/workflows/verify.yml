@@ -32,23 +32,51 @@ jobs:
     container:
       image: mcr.microsoft.com/playwright:v1.63.0-noble
       options: --ipc=host
-
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: "22"
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.11"
-      - name: Install Python dependencies
-        run: python -m pip install --require-hashes -r requirements-dev.txt
-      - name: Install Playwright
-        run: npm ci
+      - uses: ./.github/actions/browser-setup
       - name: Run layout matrix
         run: python scripts/task.py frontend-layout
+      - name: Save browser failure diagnostics
+        if: always() && (failure() || cancelled())
+        uses: actions/upload-artifact@v7
+        with:
+          name: frontend-layout-failure-diagnostics
+          path: .artifacts/browser/
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 7
+
+  frontend-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    container:
+      image: mcr.microsoft.com/playwright:v1.63.0-noble
+      options: --ipc=host
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/browser-setup
       - name: Run browser CRUD flow
         run: python scripts/task.py frontend-e2e
+      - name: Save browser failure diagnostics
+        if: always() && (failure() || cancelled())
+        uses: actions/upload-artifact@v7
+        with:
+          name: frontend-e2e-failure-diagnostics
+          path: .artifacts/browser/
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 7
+
+  frontend-pwa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    container:
+      image: mcr.microsoft.com/playwright:v1.63.0-noble
+      options: --ipc=host
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/browser-setup
       - name: Run PWA upgrade and offline flow
         run: python scripts/task.py frontend-pwa
       - name: Exercise synthetic failure capture
@@ -62,17 +90,17 @@ jobs:
           if-no-files-found: error
           retention-days: 7
       - name: Save browser failure diagnostics
-        if: failure()
+        if: always() && (failure() || cancelled())
         uses: actions/upload-artifact@v7
         with:
-          name: browser-failure-diagnostics
+          name: frontend-pwa-failure-diagnostics
           path: .artifacts/browser/
           include-hidden-files: true
           if-no-files-found: ignore
           retention-days: 7
 
   diagnostics-roundtrip:
-    needs: frontend-layout
+    needs: frontend-pwa
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

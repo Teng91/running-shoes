@@ -5,7 +5,7 @@ const { chromium, webkit } = require('playwright');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { startArtifacts, saveFailure } = require('../scripts/browser_artifacts.cjs');
+const { startArtifacts, saveFailure, closeBrowser, withDeadline } = require('../scripts/browser_artifacts.cjs');
 
 async function selectTab(page, name) {
   const toggle = page.locator('.mobile-menu-toggle');
@@ -222,221 +222,223 @@ function alignmentIssues() {
 }
 
 async function run(engine, name) {
-  const browser = await engine.launch({ headless: true,
-    ...(name === 'chromium' && process.env.PLAYWRIGHT_CHROMIUM_CHANNEL ? { channel: process.env.PLAYWRIGHT_CHROMIUM_CHANNEL } : {}) });
-  let page;
+  let browser, page;
   try {
-    page = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, locale: 'zh-TW' });
-    await startArtifacts(page.context());
-    const errors = [];
-    let allowBootScript;
-    const bootScriptGate = new Promise(resolve => { allowBootScript = resolve; });
-    page.on('pageerror', error => errors.push(error.message));
-    await page.route('http://layout.test/**', async route => {
-      const url = new URL(route.request().url());
-      const relative = url.pathname === '/' ? 'index.html' : url.pathname.slice(1);
-      const asset = path.resolve(__dirname, '../frontend', relative);
-      const frontendRoot = path.resolve(__dirname, '../frontend');
-      if (asset !== frontendRoot && !asset.startsWith(frontendRoot + path.sep)) {
-        return route.abort();
-      }
-      if (url.pathname === '/api/running-goal/progress') return route.fulfill({ json: {
-        active: true, start_year: 2026, monthly_km: 125, yearly_km: 1500,
-        month_km: 50, ytd_km: 150, month_achievement_percent: 40, year_achievement_percent: 10,
-        month_state: 'past', month_remaining_km: 75, year_remaining_km: 1350,
-      } });
-      if (url.pathname === '/api/runs/year-summary') return route.fulfill({ json: { shoes: [] } });
-      const contentTypes = { '.html': 'text/html', '.js': 'application/javascript', '.mjs': 'application/javascript', '.css': 'text/css',
-        '.json': 'application/json', '.webmanifest': 'application/manifest+json',
-        '.svg': 'image/svg+xml', '.png': 'image/png' };
-      if (relative === 'app-boot.js') await bootScriptGate;
-      return route.fulfill({ contentType: contentTypes[path.extname(asset)] || 'application/octet-stream',
-        body: fs.readFileSync(asset) });
-    });
-    const navigation = page.goto('http://layout.test');
-    try {
-      await page.locator('#app-boot').waitFor({ state: 'visible' });
-      assert.match(await page.locator('#app-boot-message').textContent(), /正在準備應用程式/);
-    } finally { allowBootScript(); }
-    await navigation;
-    await page.waitForFunction(() => typeof Chart !== 'undefined');
-    await page.locator('#app-boot').waitFor({ state: 'hidden' });
-    await page.evaluate(() => {
-      Chart.defaults.animation = false;
-      document.querySelector('#auth-view').style.display = 'none';
-      document.querySelector('#app-view').style.display = '';
-      document.querySelector('#user-label').textContent = 'runner_with_a_very_long_username';
-      shoes = Array.from({ length: 8 }, (_, i) => ({ id: i + 1, brand: 'Mizuno',
-        model: i === 0 ? 'Wave Rider 29 非常長的鞋款名稱' : `非常長的鞋款名稱 Very long running shoe model ${i}`,
-        date: '2026-01-01', price: 4000, orig_price: 5000, mileage: 120 + i * 10,
-        expected_mileage: 800, monthly_km: 80, category: 'Daily', size: 'US 9',
-        discount_percent: 80, cost_per_km: 33.33, expected_cost_per_km: 5,
-        usage_percent: 15 + i * 1.25, remaining_mileage_km: 680 - i * 10,
-        forecast_retirement_date: '2027-06-01', forecast_source: 'recent_90_days', forecast_monthly_km: 80 }));
-      retiredShoes = [{ ...shoes[0], id: 20, is_retired: true }];
-      runController.state.rows = shoes.map((shoe, i) => ({ id: i + 1, shoe_id: shoe.id, date: `2026-09-${String(i + 1).padStart(2, '0')}`, km: 18.67, source: 'manual' }));
-      runController.state.annualCache.set(2026, { shoes: runController.state.rows.map(run => ({ shoe_id: run.shoe_id, monthly_km: Array.from({length: 12}, (_, i) => i === 8 ? run.km : 0) })) });
-      monthlyMileages = Array.from({ length: 12 }, (_, i) => ({ id: i + 1, year: 2026, month: i + 1, km: 120 + i }));
-      monthlySpending = Array.from({ length: 12 }, (_, i) => ({ year: 2026, month: i + 1, total_paid: 4000, total_orig: 5000 }));
-      spendingSummary = { total_paid: 48000, total_original: 60000, savings: 12000,
-        average_discount_percent: 80, average_monthly_paid: 4000, month_span: 12,
-        start_month: '2026-01', highest_month: { year: 2026, month: 1, total_paid: 4000 }, monthly: monthlySpending };
-      document.querySelector('#run-month').value = '2026-09';
-      document.querySelector('#agent-model').innerHTML = '<option>Very long model provider and model name</option>';
-      document.querySelector('#report-model').innerHTML = '<option>Very long model provider and model name</option>';
-      document.querySelector('#shoe-analysis-content').innerHTML = '<div class="shoe-analysis-grid">' +
-        ['627.62 km', '87 次', '61.9 / 222.7 km', '2026/10/01', '78.5%', '2026/12/12'].map((value, i) =>
-          '<div class="insight-card"><div class="insight-card-label">指標 ' + i + '</div><div class="insight-card-value">' + value + '</div><div class="insight-card-sub">長內容測試</div></div>').join('') +
-        '</div><div class="shoe-analysis-chart"></div>';
-      document.querySelector('#agent-messages').innerHTML += '<div class="agent-message bot"><div class="agent-msg-content"><p>' + 'long-message'.repeat(40) + '</p><pre>' + 'code'.repeat(100) + '</pre><table><tr><td>' + 'wide-table'.repeat(50) + '</td></tr></table></div></div>';
-      addAgentMessage('user', '請幫我檢查這個月的跑步紀錄與跑鞋使用情況。');
-      document.querySelector('#agent-messages').insertAdjacentHTML('beforeend', '<div class="agent-thinking">正在分析很長的訓練內容與跑鞋資料。</div><div class="agent-tools"><div class="tool-item done"><span class="tool-icon">✅</span><span class="tool-name">query_run_history</span></div><div class="tool-item failed"><span class="tool-icon">⚠️</span><span class="tool-name">web_search_' + 'very-long-query'.repeat(10) + '</span><span class="tool-detail">來源暫時無法使用</span></div></div>');
-      const markdown = '# 跑步與鞋款分析\n\n> 本月穩定進步，請繼續保持。\n\n## 訓練摘要\n\n- 第一項訓練建議\n- 第二項訓練建議\n\n| 指標 | 本月 | 上月 |\n| --- | --- | --- |\n| 總里程 | 120.50 km | 100.00 km |\n\n**注意恢復**，資料僅供訓練參考。';
-      const answer = addAgentMessage('bot', markdown);
-      appendAgentSourceStatus(answer, { web: { status: 'live', result_count: 1, sources: [{ id: '1', title: '這是一個很長的參考資料標題', url: 'https://example.test/source' }] } }, true, true);
-      addRetryButton();
-      renderReport({ year: 2026, month: 9, model: 'mock', content_md: markdown, updated_at: '2026-10-01T00:00:00Z' });
-      document.querySelector('#strava-mapping').innerHTML = '<div class="strava-group"><div>Very long imported shoe name from Strava</div><select><option>Very long matching running shoe name</option></select></div>';
-      renderStravaImportHistory();
-      document.querySelectorAll('input[type="date"]').forEach(e => { e.value = '2026-09-06'; });
-      render();
-      window.layoutAnalytics = {
-        comparison: { label: '較上月同期', delta_km: -23.45, through_day: 19, previous_km: 80.52 },
-        recent_7_days: { km: 6.4, delta_km: -25.72 },
-        goal: { active: true, start_year: 2026, month_state: 'current', month_achievement_percent: 45.7, pace_delta_km: -19.54, remaining_days: 12, required_daily_km: 5.66 },
-        forecast: { state: 'current', projected_month_km: 93.11 },
-        alerts: [{ severity: 'warning', message: 'Wave Rider 29 已使用 82.2% 預期壽命' }],
-      };
-      renderDashboardInsights(window.layoutAnalytics);
-    });
-    const screenshots = process.env.LAYOUT_SCREENSHOT_DIR;
-    if (screenshots) fs.mkdirSync(screenshots, { recursive: true });
-    for (const theme of ['light', 'dark']) {
-      await page.evaluate(theme => applyTheme(theme), theme);
-      for (const [width, height] of [[320, 740], [375, 812], [390, 844], [430, 932], [844, 390], [768, 1024], [800, 1024], [1024, 768], [1280, 800], [1440, 900]]) {
-        await page.setViewportSize({ width, height });
-        for (const tab of ['runs', 'shoes', 'monthly', 'spending', 'agent', 'report']) {
-          await selectTab(page, tab);
-          await page.waitForTimeout(100);
-          await assertLayout(page, `${name} ${theme} ${width} ${tab}`);
-          const expected = { runs: 1, shoes: 4, monthly: 3, spending: 2, agent: 0, report: 0 }[tab];
-          assert.equal(await page.locator('.tab-panel.active canvas').count(), expected);
-          assert.equal(await page.evaluate(() => Object.values(chartInstances).filter(c => c.canvas.getClientRects().length).length), expected, 'all charts initialized with data');
-          await page.locator('.tab-panel.active .table-wrap').evaluateAll(wrappers => wrappers.forEach(wrapper => {
-            wrapper.scrollLeft = wrapper.scrollWidth;
-            if (wrapper.scrollWidth > wrapper.clientWidth + 1 && wrapper.scrollLeft === 0) throw Error('wide table cannot scroll');
-            wrapper.scrollLeft = 0;
-          }));
-          if (screenshots && width === 390) await page.screenshot({ path: path.join(screenshots, `${name}-${theme}-${tab}.png`), fullPage: true });
-          if (screenshots && width === 1440) {
-            await page.screenshot({ path: path.join(screenshots, `${name}-${theme}-${tab}-desktop.png`), fullPage: true });
-          }
-          if (screenshots && [390, 1440].includes(width) && tab === 'agent') {
-            await page.locator('#agent-messages').evaluate(node => { node.scrollTop = node.scrollHeight; });
-            await page.screenshot({ path: path.join(screenshots, `${name}-${theme}-agent-status-${width}.png`) });
-            await page.locator('#agent-messages').evaluate(node => { node.scrollTop = 0; });
-          }
-          if (screenshots && width === 390 && tab === 'runs') {
-            await page.locator('.run-metrics').screenshot({ path: path.join(screenshots, `${name}-${theme}-run-metrics.png`) });
-            await page.evaluate(() => window.scrollTo(0, 0));
-            await page.screenshot({ path: path.join(screenshots, `${name}-${theme}-runs-top.png`) });
-            await page.locator('.mobile-menu-toggle').click();
-            await page.screenshot({ path: path.join(screenshots, `${name}-${theme}-mobile-menu.png`) });
-            await page.locator('.mobile-menu-toggle').click();
-          }
-          if (screenshots && width === 1440 && tab === 'runs') {
-            await page.evaluate(() => window.scrollTo(0, 0));
-            await page.screenshot({ path: path.join(screenshots, `${name}-${theme}-runs-desktop.png`) });
-          }
+    await withDeadline(async () => {
+      browser = await engine.launch({ headless: true, timeout: 30000,
+        ...(name === 'chromium' && process.env.PLAYWRIGHT_CHROMIUM_CHANNEL ? { channel: process.env.PLAYWRIGHT_CHROMIUM_CHANNEL } : {}) });
+      page = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, locale: 'zh-TW' });
+      await startArtifacts(page.context());
+      const errors = [];
+      let allowBootScript;
+      const bootScriptGate = new Promise(resolve => { allowBootScript = resolve; });
+      page.on('pageerror', error => errors.push(error.message));
+      await page.route('http://layout.test/**', async route => {
+        const url = new URL(route.request().url());
+        const relative = url.pathname === '/' ? 'index.html' : url.pathname.slice(1);
+        const asset = path.resolve(__dirname, '../frontend', relative);
+        const frontendRoot = path.resolve(__dirname, '../frontend');
+        if (asset !== frontendRoot && !asset.startsWith(frontendRoot + path.sep)) {
+          return route.abort();
         }
-        await selectTab(page, 'shoes');
-        assert.equal(await page.locator('#chart-value-legend').count(), 0, 'monthly share legend is removed');
-        const pairedHeights = await page.locator('#chart-retire, #chart-value').evaluateAll(canvases =>
-          canvases.map(canvas => canvas.closest('.chart-box').getBoundingClientRect().height));
-        assert.ok(Math.abs(pairedHeights[0] - pairedHeights[1]) <= 1, 'retirement and monthly share cards have equal heights');
-        for (const id of await page.locator('.modal-overlay').evaluateAll(es => es.map(e => e.id))) {
-          if (id === 'modal') await page.evaluate(() => shoeModal.openForCreate());
-          if (id === 'run-modal') await page.evaluate(() => openRunModal(runController.state.rows[0].id));
-          if (id === 'monthly-modal') await page.evaluate(() => editMonthlyMileage(0));
-          if (id === 'shoe-analysis-modal') await page.evaluate(() => renderShoeAnalytics({
-            shoe: { brand: 'Mizuno', model: 'Wave Rider 29 非常長的鞋款名稱', categories: ['Daily'], purchase_date: '2026-01-01', is_retired: false },
-            lifecycle: { total_mileage_km: 627.62, usage_percent: 78.5, remaining_mileage_km: 172.38, forecast_retirement_date: '2027-06-01', forecast_source: 'recent_90_days', forecast_monthly_km: 80 },
-            usage: { count: 87, km_30_days: 61.9, km_90_days: 222.7, actual_monthly_km_90_days: 74.2, first_run_date: '2026-01-01', last_run_date: '2026-10-01' },
-            recent_runs: runController.state.rows.slice(0, 2), monthly_history: Array.from({ length: 12 }, (_, i) => ({ year: 2026, month: i + 1, km: 60, count: 4 })),
-          }));
-          await page.evaluate(id => document.getElementById(id).classList.add('active'), id);
-          await assertLayout(page, `${name} ${theme} ${width} ${id}`);
-          if (screenshots && [390, 1440].includes(width)) await page.screenshot({ path: path.join(screenshots, `${name}-${theme}-${id}-${width}.png`) });
-          if (id === 'modal') {
-            for (const retired of [false, true]) {
-              await page.evaluate(retired => shoeModal.openForEdit(retired ? retiredShoes[0] : shoes[0], retired), retired);
-              assert.equal(await page.locator('#shoe-secondary-actions').isVisible(), true);
-              await assertLayout(page, `${name} ${theme} ${width} shoe edit ${retired}`);
-              if (screenshots && [390, 1440].includes(width)) await page.screenshot({ path: path.join(screenshots, `${name}-${theme}-shoe-edit-${retired}-${width}.png`) });
+        if (url.pathname === '/api/running-goal/progress') return route.fulfill({ json: {
+          active: true, start_year: 2026, monthly_km: 125, yearly_km: 1500,
+          month_km: 50, ytd_km: 150, month_achievement_percent: 40, year_achievement_percent: 10,
+          month_state: 'past', month_remaining_km: 75, year_remaining_km: 1350,
+        } });
+        if (url.pathname === '/api/runs/year-summary') return route.fulfill({ json: { shoes: [] } });
+        const contentTypes = { '.html': 'text/html', '.js': 'application/javascript', '.mjs': 'application/javascript', '.css': 'text/css',
+          '.json': 'application/json', '.webmanifest': 'application/manifest+json',
+          '.svg': 'image/svg+xml', '.png': 'image/png' };
+        if (relative === 'app-boot.js') await bootScriptGate;
+        return route.fulfill({ contentType: contentTypes[path.extname(asset)] || 'application/octet-stream',
+          body: fs.readFileSync(asset) });
+      });
+      const navigation = page.goto('http://layout.test');
+      try {
+        await page.locator('#app-boot').waitFor({ state: 'visible' });
+        assert.match(await page.locator('#app-boot-message').textContent(), /正在準備應用程式/);
+      } finally { allowBootScript(); }
+      await navigation;
+      await page.waitForFunction(() => typeof Chart !== 'undefined');
+      await page.locator('#app-boot').waitFor({ state: 'hidden' });
+      await page.evaluate(() => {
+        Chart.defaults.animation = false;
+        document.querySelector('#auth-view').style.display = 'none';
+        document.querySelector('#app-view').style.display = '';
+        document.querySelector('#user-label').textContent = 'runner_with_a_very_long_username';
+        shoes = Array.from({ length: 8 }, (_, i) => ({ id: i + 1, brand: 'Mizuno',
+          model: i === 0 ? 'Wave Rider 29 非常長的鞋款名稱' : `非常長的鞋款名稱 Very long running shoe model ${i}`,
+          date: '2026-01-01', price: 4000, orig_price: 5000, mileage: 120 + i * 10,
+          expected_mileage: 800, monthly_km: 80, category: 'Daily', size: 'US 9',
+          discount_percent: 80, cost_per_km: 33.33, expected_cost_per_km: 5,
+          usage_percent: 15 + i * 1.25, remaining_mileage_km: 680 - i * 10,
+          forecast_retirement_date: '2027-06-01', forecast_source: 'recent_90_days', forecast_monthly_km: 80 }));
+        retiredShoes = [{ ...shoes[0], id: 20, is_retired: true }];
+        runController.state.rows = shoes.map((shoe, i) => ({ id: i + 1, shoe_id: shoe.id, date: `2026-09-${String(i + 1).padStart(2, '0')}`, km: 18.67, source: 'manual' }));
+        runController.state.annualCache.set(2026, { shoes: runController.state.rows.map(run => ({ shoe_id: run.shoe_id, monthly_km: Array.from({length: 12}, (_, i) => i === 8 ? run.km : 0) })) });
+        monthlyMileages = Array.from({ length: 12 }, (_, i) => ({ id: i + 1, year: 2026, month: i + 1, km: 120 + i }));
+        monthlySpending = Array.from({ length: 12 }, (_, i) => ({ year: 2026, month: i + 1, total_paid: 4000, total_orig: 5000 }));
+        spendingSummary = { total_paid: 48000, total_original: 60000, savings: 12000,
+          average_discount_percent: 80, average_monthly_paid: 4000, month_span: 12,
+          start_month: '2026-01', highest_month: { year: 2026, month: 1, total_paid: 4000 }, monthly: monthlySpending };
+        document.querySelector('#run-month').value = '2026-09';
+        document.querySelector('#agent-model').innerHTML = '<option>Very long model provider and model name</option>';
+        document.querySelector('#report-model').innerHTML = '<option>Very long model provider and model name</option>';
+        document.querySelector('#shoe-analysis-content').innerHTML = '<div class="shoe-analysis-grid">' +
+          ['627.62 km', '87 次', '61.9 / 222.7 km', '2026/10/01', '78.5%', '2026/12/12'].map((value, i) =>
+            '<div class="insight-card"><div class="insight-card-label">指標 ' + i + '</div><div class="insight-card-value">' + value + '</div><div class="insight-card-sub">長內容測試</div></div>').join('') +
+          '</div><div class="shoe-analysis-chart"></div>';
+        document.querySelector('#agent-messages').innerHTML += '<div class="agent-message bot"><div class="agent-msg-content"><p>' + 'long-message'.repeat(40) + '</p><pre>' + 'code'.repeat(100) + '</pre><table><tr><td>' + 'wide-table'.repeat(50) + '</td></tr></table></div></div>';
+        addAgentMessage('user', '請幫我檢查這個月的跑步紀錄與跑鞋使用情況。');
+        document.querySelector('#agent-messages').insertAdjacentHTML('beforeend', '<div class="agent-thinking">正在分析很長的訓練內容與跑鞋資料。</div><div class="agent-tools"><div class="tool-item done"><span class="tool-icon">✅</span><span class="tool-name">query_run_history</span></div><div class="tool-item failed"><span class="tool-icon">⚠️</span><span class="tool-name">web_search_' + 'very-long-query'.repeat(10) + '</span><span class="tool-detail">來源暫時無法使用</span></div></div>');
+        const markdown = '# 跑步與鞋款分析\n\n> 本月穩定進步，請繼續保持。\n\n## 訓練摘要\n\n- 第一項訓練建議\n- 第二項訓練建議\n\n| 指標 | 本月 | 上月 |\n| --- | --- | --- |\n| 總里程 | 120.50 km | 100.00 km |\n\n**注意恢復**，資料僅供訓練參考。';
+        const answer = addAgentMessage('bot', markdown);
+        appendAgentSourceStatus(answer, { web: { status: 'live', result_count: 1, sources: [{ id: '1', title: '這是一個很長的參考資料標題', url: 'https://example.test/source' }] } }, true, true);
+        addRetryButton();
+        renderReport({ year: 2026, month: 9, model: 'mock', content_md: markdown, updated_at: '2026-10-01T00:00:00Z' });
+        document.querySelector('#strava-mapping').innerHTML = '<div class="strava-group"><div>Very long imported shoe name from Strava</div><select><option>Very long matching running shoe name</option></select></div>';
+        renderStravaImportHistory();
+        document.querySelectorAll('input[type="date"]').forEach(e => { e.value = '2026-09-06'; });
+        render();
+        window.layoutAnalytics = {
+          comparison: { label: '較上月同期', delta_km: -23.45, through_day: 19, previous_km: 80.52 },
+          recent_7_days: { km: 6.4, delta_km: -25.72 },
+          goal: { active: true, start_year: 2026, month_state: 'current', month_achievement_percent: 45.7, pace_delta_km: -19.54, remaining_days: 12, required_daily_km: 5.66 },
+          forecast: { state: 'current', projected_month_km: 93.11 },
+          alerts: [{ severity: 'warning', message: 'Wave Rider 29 已使用 82.2% 預期壽命' }],
+        };
+        renderDashboardInsights(window.layoutAnalytics);
+      });
+      const screenshots = process.env.LAYOUT_SCREENSHOT_DIR;
+      if (screenshots) fs.mkdirSync(screenshots, { recursive: true });
+      for (const theme of ['light', 'dark']) {
+        await page.evaluate(theme => applyTheme(theme), theme);
+        for (const [width, height] of [[320, 740], [375, 812], [390, 844], [430, 932], [844, 390], [768, 1024], [800, 1024], [1024, 768], [1280, 800], [1440, 900]]) {
+          await page.setViewportSize({ width, height });
+          for (const tab of ['runs', 'shoes', 'monthly', 'spending', 'agent', 'report']) {
+            await selectTab(page, tab);
+            await page.waitForTimeout(100);
+            await assertLayout(page, `${name} ${theme} ${width} ${tab}`);
+            const expected = { runs: 1, shoes: 4, monthly: 3, spending: 2, agent: 0, report: 0 }[tab];
+            assert.equal(await page.locator('.tab-panel.active canvas').count(), expected);
+            assert.equal(await page.evaluate(() => Object.values(chartInstances).filter(c => c.canvas.getClientRects().length).length), expected, 'all charts initialized with data');
+            await page.locator('.tab-panel.active .table-wrap').evaluateAll(wrappers => wrappers.forEach(wrapper => {
+              wrapper.scrollLeft = wrapper.scrollWidth;
+              if (wrapper.scrollWidth > wrapper.clientWidth + 1 && wrapper.scrollLeft === 0) throw Error('wide table cannot scroll');
+              wrapper.scrollLeft = 0;
+            }));
+            if (screenshots && width === 390) await page.screenshot({ path: path.join(screenshots, `${name}-${theme}-${tab}.png`), fullPage: true });
+            if (screenshots && width === 1440) {
+              await page.screenshot({ path: path.join(screenshots, `${name}-${theme}-${tab}-desktop.png`), fullPage: true });
+            }
+            if (screenshots && [390, 1440].includes(width) && tab === 'agent') {
+              await page.locator('#agent-messages').evaluate(node => { node.scrollTop = node.scrollHeight; });
+              await page.screenshot({ path: path.join(screenshots, `${name}-${theme}-agent-status-${width}.png`) });
+              await page.locator('#agent-messages').evaluate(node => { node.scrollTop = 0; });
+            }
+            if (screenshots && width === 390 && tab === 'runs') {
+              await page.locator('.run-metrics').screenshot({ path: path.join(screenshots, `${name}-${theme}-run-metrics.png`) });
+              await page.evaluate(() => window.scrollTo(0, 0));
+              await page.screenshot({ path: path.join(screenshots, `${name}-${theme}-runs-top.png`) });
+              await page.locator('.mobile-menu-toggle').click();
+              await page.screenshot({ path: path.join(screenshots, `${name}-${theme}-mobile-menu.png`) });
+              await page.locator('.mobile-menu-toggle').click();
+            }
+            if (screenshots && width === 1440 && tab === 'runs') {
+              await page.evaluate(() => window.scrollTo(0, 0));
+              await page.screenshot({ path: path.join(screenshots, `${name}-${theme}-runs-desktop.png`) });
             }
           }
-          const error = page.locator(`#${id} .auth-error`).first();
-          if (await error.count()) {
-            await error.evaluate(node => { node.textContent = '驗證失敗：這是一段很長的錯誤訊息，請檢查輸入資料後再試一次。'; node.style.display = 'block'; });
-            await assertLayout(page, `${name} ${theme} ${width} ${id} error`);
-            await error.evaluate(node => { node.textContent = ''; node.style.display = ''; });
+          await selectTab(page, 'shoes');
+          assert.equal(await page.locator('#chart-value-legend').count(), 0, 'monthly share legend is removed');
+          const pairedHeights = await page.locator('#chart-retire, #chart-value').evaluateAll(canvases =>
+            canvases.map(canvas => canvas.closest('.chart-box').getBoundingClientRect().height));
+          assert.ok(Math.abs(pairedHeights[0] - pairedHeights[1]) <= 1, 'retirement and monthly share cards have equal heights');
+          for (const id of await page.locator('.modal-overlay').evaluateAll(es => es.map(e => e.id))) {
+            if (id === 'modal') await page.evaluate(() => shoeModal.openForCreate());
+            if (id === 'run-modal') await page.evaluate(() => openRunModal(runController.state.rows[0].id));
+            if (id === 'monthly-modal') await page.evaluate(() => editMonthlyMileage(0));
+            if (id === 'shoe-analysis-modal') await page.evaluate(() => renderShoeAnalytics({
+              shoe: { brand: 'Mizuno', model: 'Wave Rider 29 非常長的鞋款名稱', categories: ['Daily'], purchase_date: '2026-01-01', is_retired: false },
+              lifecycle: { total_mileage_km: 627.62, usage_percent: 78.5, remaining_mileage_km: 172.38, forecast_retirement_date: '2027-06-01', forecast_source: 'recent_90_days', forecast_monthly_km: 80 },
+              usage: { count: 87, km_30_days: 61.9, km_90_days: 222.7, actual_monthly_km_90_days: 74.2, first_run_date: '2026-01-01', last_run_date: '2026-10-01' },
+              recent_runs: runController.state.rows.slice(0, 2), monthly_history: Array.from({ length: 12 }, (_, i) => ({ year: 2026, month: i + 1, km: 60, count: 4 })),
+            }));
+            await page.evaluate(id => document.getElementById(id).classList.add('active'), id);
+            await assertLayout(page, `${name} ${theme} ${width} ${id}`);
+            if (screenshots && [390, 1440].includes(width)) await page.screenshot({ path: path.join(screenshots, `${name}-${theme}-${id}-${width}.png`) });
+            if (id === 'modal') {
+              for (const retired of [false, true]) {
+                await page.evaluate(retired => shoeModal.openForEdit(retired ? retiredShoes[0] : shoes[0], retired), retired);
+                assert.equal(await page.locator('#shoe-secondary-actions').isVisible(), true);
+                await assertLayout(page, `${name} ${theme} ${width} shoe edit ${retired}`);
+                if (screenshots && [390, 1440].includes(width)) await page.screenshot({ path: path.join(screenshots, `${name}-${theme}-shoe-edit-${retired}-${width}.png`) });
+              }
+            }
+            const error = page.locator(`#${id} .auth-error`).first();
+            if (await error.count()) {
+              await error.evaluate(node => { node.textContent = '驗證失敗：這是一段很長的錯誤訊息，請檢查輸入資料後再試一次。'; node.style.display = 'block'; });
+              await assertLayout(page, `${name} ${theme} ${width} ${id} error`);
+              await error.evaluate(node => { node.textContent = ''; node.style.display = ''; });
+            }
+            const buttons = page.locator(`#${id} .modal-actions button`);
+            const disabled = await buttons.evaluateAll(nodes => nodes.map(node => node.disabled));
+            await buttons.evaluateAll(nodes => nodes.forEach(node => { node.disabled = true; }));
+            await assertLayout(page, `${name} ${theme} ${width} ${id} disabled`);
+            await buttons.evaluateAll((nodes, states) => nodes.forEach((node, index) => { node.disabled = states[index]; }), disabled);
+            await page.evaluate(id => document.getElementById(id).classList.remove('active'), id);
+            if (id === 'shoe-analysis-modal') await page.evaluate(() => closeShoeAnalytics());
           }
-          const buttons = page.locator(`#${id} .modal-actions button`);
-          const disabled = await buttons.evaluateAll(nodes => nodes.map(node => node.disabled));
-          await buttons.evaluateAll(nodes => nodes.forEach(node => { node.disabled = true; }));
-          await assertLayout(page, `${name} ${theme} ${width} ${id} disabled`);
-          await buttons.evaluateAll((nodes, states) => nodes.forEach((node, index) => { node.disabled = states[index]; }), disabled);
-          await page.evaluate(id => document.getElementById(id).classList.remove('active'), id);
-          if (id === 'shoe-analysis-modal') await page.evaluate(() => closeShoeAnalytics());
+          for (const tab of ['shoes', 'monthly']) {
+            await selectTab(page, tab);
+            await page.evaluate(tab => {
+              if (tab === 'shoes') inlineEditRow(shoes, 0, 'mileage', document.querySelector('#shoe-table .editable'));
+              else inlineEditMonthly(0, 'km', document.querySelector('#monthly-table .editable'));
+            }, tab);
+            await assertLayout(page, `${name} ${theme} ${width} ${tab} inline edit`);
+            await page.locator('.inline-input').press('Escape');
+          }
+          await page.evaluate(() => { document.getElementById('app-view').style.display = 'none'; document.getElementById('auth-view').style.display = ''; });
+          for (const action of ['showLoginForm', 'showRegisterForm', 'showChangeForm']) {
+            await page.evaluate(action => window[action](), action);
+            await assertLayout(page, `${name} ${theme} ${width} ${action}`);
+            if (screenshots && [390, 1440].includes(width)) await page.screenshot({ path: path.join(screenshots, `${name}-${theme}-${action}-${width}.png`), fullPage: true });
+          }
+          await page.evaluate(() => { document.getElementById('app-view').style.display = ''; document.getElementById('auth-view').style.display = 'none'; });
+          console.log(`PASS ${name} ${theme} ${width}x${height}: all tabs, populated charts, controls and dialogs`);
         }
-        for (const tab of ['shoes', 'monthly']) {
-          await selectTab(page, tab);
-          await page.evaluate(tab => {
-            if (tab === 'shoes') inlineEditRow(shoes, 0, 'mileage', document.querySelector('#shoe-table .editable'));
-            else inlineEditMonthly(0, 'km', document.querySelector('#monthly-table .editable'));
-          }, tab);
-          await assertLayout(page, `${name} ${theme} ${width} ${tab} inline edit`);
-          await page.locator('.inline-input').press('Escape');
-        }
-        await page.evaluate(() => { document.getElementById('app-view').style.display = 'none'; document.getElementById('auth-view').style.display = ''; });
-        for (const action of ['showLoginForm', 'showRegisterForm', 'showChangeForm']) {
-          await page.evaluate(action => window[action](), action);
-          await assertLayout(page, `${name} ${theme} ${width} ${action}`);
-          if (screenshots && [390, 1440].includes(width)) await page.screenshot({ path: path.join(screenshots, `${name}-${theme}-${action}-${width}.png`), fullPage: true });
-        }
-        await page.evaluate(() => { document.getElementById('app-view').style.display = ''; document.getElementById('auth-view').style.display = 'none'; });
-        console.log(`PASS ${name} ${theme} ${width}x${height}: all tabs, populated charts, controls and dialogs`);
       }
-    }
-    await page.setViewportSize({ width: 390, height: 844 });
-    await selectTab(page, 'runs');
-    for (const message of ['<div class="insight-card">分析載入中…</div>', '<div class="insight-alert warning">進階分析暫時無法載入</div>']) {
-      await page.evaluate(message => { document.getElementById('dashboard-insights').innerHTML = message; }, message);
-      const widths = await page.evaluate(() => ({
-        grid: document.querySelector('.run-metrics').clientWidth,
-        message: document.querySelector('#dashboard-insights > div').getBoundingClientRect().width,
-      }));
-      assert.ok(Math.abs(widths.grid - widths.message) <= 1, 'analytics loading and error states span both columns');
-      await assertLayout(page, `${name} analytics message`);
-    }
-    await page.evaluate(() => renderDashboardInsights(window.layoutAnalytics));
-    await assertLayout(page, `${name} analytics recovery`);
-    await page.evaluate(() => { shoes = []; retiredShoes = []; runController.state.rows = []; monthlyMileages = []; monthlySpending = []; render(); });
-    for (const tab of ['runs', 'shoes', 'monthly', 'spending', 'report']) {
-      await selectTab(page, tab);
-      await page.waitForTimeout(100);
-      await assertLayout(page, `${name} empty ${tab}`);
-    }
-    await page.setViewportSize({ width: 320, height: 740 });
-    await page.evaluate(() => { document.querySelector('#app-view').style.display = 'none'; document.querySelector('#auth-view').style.display = 'block'; });
-    for (const action of ['showLoginForm', 'showRegisterForm', 'showChangeForm']) {
-      await page.evaluate(action => window[action](), action);
-      await assertLayout(page, `${name} ${action}`);
-    }
-    assert.deepEqual(errors, [], 'browser JavaScript errors');
+      await page.setViewportSize({ width: 390, height: 844 });
+      await selectTab(page, 'runs');
+      for (const message of ['<div class="insight-card">分析載入中…</div>', '<div class="insight-alert warning">進階分析暫時無法載入</div>']) {
+        await page.evaluate(message => { document.getElementById('dashboard-insights').innerHTML = message; }, message);
+        const widths = await page.evaluate(() => ({
+          grid: document.querySelector('.run-metrics').clientWidth,
+          message: document.querySelector('#dashboard-insights > div').getBoundingClientRect().width,
+        }));
+        assert.ok(Math.abs(widths.grid - widths.message) <= 1, 'analytics loading and error states span both columns');
+        await assertLayout(page, `${name} analytics message`);
+      }
+      await page.evaluate(() => renderDashboardInsights(window.layoutAnalytics));
+      await assertLayout(page, `${name} analytics recovery`);
+      await page.evaluate(() => { shoes = []; retiredShoes = []; runController.state.rows = []; monthlyMileages = []; monthlySpending = []; render(); });
+      for (const tab of ['runs', 'shoes', 'monthly', 'spending', 'report']) {
+        await selectTab(page, tab);
+        await page.waitForTimeout(100);
+        await assertLayout(page, `${name} empty ${tab}`);
+      }
+      await page.setViewportSize({ width: 320, height: 740 });
+      await page.evaluate(() => { document.querySelector('#app-view').style.display = 'none'; document.querySelector('#auth-view').style.display = 'block'; });
+      for (const action of ['showLoginForm', 'showRegisterForm', 'showChangeForm']) {
+        await page.evaluate(action => window[action](), action);
+        await assertLayout(page, `${name} ${action}`);
+      }
+      assert.deepEqual(errors, [], 'browser JavaScript errors');
+    }, 300000, 'layout engine ' + name);
   } catch (error) {
     await saveFailure(page?.context(), page, 'layout-' + name, error);
     throw error;
-  } finally { await browser.close(); }
+  } finally { await closeBrowser(null, browser); }
 }
 (async () => { await run(webkit, 'webkit'); await run(chromium, 'chromium'); })().catch(error => { console.error(error); process.exitCode = 1; });

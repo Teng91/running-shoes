@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const http = require('node:http');
 const path = require('node:path');
-const { startArtifacts, saveFailure } = require('../scripts/browser_artifacts.cjs');
+const { startArtifacts, saveFailure, closeBrowser, withDeadline } = require('../scripts/browser_artifacts.cjs');
 
 const frontend = path.resolve(__dirname, '../frontend');
 const htmlSource = fs.readFileSync(path.join(frontend, 'index.html'), 'utf8');
@@ -112,107 +112,110 @@ async function run() {
       release = 'fixture-a'; failure = null; failedAssets = 0; networkDown = false; legacy = true;
       moduleOriginRequests = 0;
       failedKinds.clear();
-      const browser = await engine.launch({ headless: true });
-      const context = await browser.newContext({ serviceWorkers: 'allow', locale: 'zh-TW' });
-      await startArtifacts(context);
-      const page = await context.newPage();
-      page.setDefaultTimeout(15000);
-      page.setDefaultNavigationTimeout(15000);
-      const errors = [];
-      page.on('pageerror', error => errors.push(error.message));
-      page.on('console', message => { if (process.env.PWA_DEBUG && message.type() === 'error') console.error('PWA fixture console:', message.text()); });
-      const setOffline = async offline => {
-        // WebKit's network-emulation switch also prevents cached SW navigations.
-        // A dropped fixture transport tests actual network failure without disabling SW itself.
-        networkDown = offline;
-        if (engine === chromium) await context.setOffline(offline);
-      };
+      let browser, context, page;
       try {
-        debug(`PWA ${engine.name()}: first offline / online install`);
-        // Without a previously installed shell, an offline first visit cannot load.
-        await setOffline(true);
-        await assert.rejects(page.goto(origin, { timeout: 5000 }));
-        debug(`PWA ${engine.name()}: offline first visit rejected`);
-        await setOffline(false);
-        debug(`PWA ${engine.name()}: fetching initial online document`);
-        await page.goto(origin, { waitUntil: 'networkidle' });
-        await page.waitForFunction(async () => (await navigator.serviceWorker.getRegistration())?.active?.state === 'activated', null, { timeout: 15000 });
-        await page.evaluate(() => navigator.serviceWorker.ready);
-        await page.waitForFunction(() => navigator.serviceWorker.controller !== null);
-        await assertShell(page, 'fixture-a');
-        // Migrate the frozen real v3.2.2 worker online before testing failure-safe future upgrades.
-        legacy = false; release = 'fixture-a-safe';
-        assert.equal(await updateWorker(page), 'activated');
-        await page.reload({ waitUntil: 'networkidle' });
-        await assertShell(page, 'fixture-a-safe');
-        assert.ok(moduleOriginRequests > 0, 'native module actually requests an Origin variant');
-        assert.equal(await page.evaluate(async () => {
-          const cache = await caches.open('running-shoes-shell-fixture-a-safe');
-          const response = await cache.match('/runtime/feature-lifecycle.mjs?v=fixture-a-safe');
-          return response.headers.get('Vary');
-        }), 'Origin', 'precache retains the production Vary response header');
-        debug(`PWA ${engine.name()}: installed shell ready`);
-        await page.evaluate(async () => {
-          const other = await caches.open('unrelated-cache');
-          await other.put('/sentinel', new Response('keep'));
-          await fetch('/api/test');
-        });
-        await setOffline(true);
-        await page.evaluate(() => {
-          localStorage.setItem('activeTab', 'agent');
-          switchTab('agent');
-        });
-        await page.reload({ waitUntil: 'networkidle' });
-        await assertShell(page, 'fixture-a-safe');
-        assert.equal(await page.evaluate(() => fetch('/api/test').then(() => false, () => true)), true, 'offline API must fail instead of using cache');
-        await setOffline(false);
-
-        for (const [revision, problem] of [['fixture-b', 'http'], ['fixture-c', 'mime'], ['fixture-e', 'disconnect'], ['fixture-f', 'html-version'], ['fixture-g', 'module-mime']]) {
-          debug(`PWA ${engine.name()}: reject ${problem} upgrade`);
-          release = revision; failure = problem;
-          assert.equal(await updateWorker(page), 'redundant', 'incomplete install must not activate');
-          // A navigation while a newer deployment exists must not rewrite old HTML.
+        await withDeadline(async () => {
+          browser = await engine.launch({ headless: true, timeout: 30000 });
+          context = await browser.newContext({ serviceWorkers: 'allow', locale: 'zh-TW' });
+          await startArtifacts(context);
+          page = await context.newPage();
+          page.setDefaultTimeout(15000);
+          page.setDefaultNavigationTimeout(15000);
+          const errors = [];
+          page.on('pageerror', error => errors.push(error.message));
+          page.on('console', message => { if (process.env.PWA_DEBUG && message.type() === 'error') console.error('PWA fixture console:', message.text()); });
+          const setOffline = async offline => {
+            // WebKit's network-emulation switch also prevents cached SW navigations.
+            // A dropped fixture transport tests actual network failure without disabling SW itself.
+            networkDown = offline;
+            if (engine === chromium) await context.setOffline(offline);
+          };
+          debug(`PWA ${engine.name()}: first offline / online install`);
+          // Without a previously installed shell, an offline first visit cannot load.
+          await setOffline(true);
+          await assert.rejects(page.goto(origin, { timeout: 5000 }));
+          debug(`PWA ${engine.name()}: offline first visit rejected`);
+          await setOffline(false);
+          debug(`PWA ${engine.name()}: fetching initial online document`);
+          await page.goto(origin, { waitUntil: 'networkidle' });
+          await page.waitForFunction(async () => (await navigator.serviceWorker.getRegistration())?.active?.state === 'activated', null, { timeout: 15000 });
+          await page.evaluate(() => navigator.serviceWorker.ready);
+          await page.waitForFunction(() => navigator.serviceWorker.controller !== null);
+          await assertShell(page, 'fixture-a');
+          // Migrate the frozen real v3.2.2 worker online before testing failure-safe future upgrades.
+          legacy = false; release = 'fixture-a-safe';
+          assert.equal(await updateWorker(page), 'activated');
           await page.reload({ waitUntil: 'networkidle' });
           await assertShell(page, 'fixture-a-safe');
+          assert.ok(moduleOriginRequests > 0, 'native module actually requests an Origin variant');
+          assert.equal(await page.evaluate(async () => {
+            const cache = await caches.open('running-shoes-shell-fixture-a-safe');
+            const response = await cache.match('/runtime/feature-lifecycle.mjs?v=fixture-a-safe');
+            return response.headers.get('Vary');
+          }), 'Origin', 'precache retains the production Vary response header');
+          debug(`PWA ${engine.name()}: installed shell ready`);
+          await page.evaluate(async () => {
+            const other = await caches.open('unrelated-cache');
+            await other.put('/sentinel', new Response('keep'));
+            await fetch('/api/test');
+          });
+          await setOffline(true);
+          await page.evaluate(() => {
+            localStorage.setItem('activeTab', 'agent');
+            switchTab('agent');
+          });
+          await page.reload({ waitUntil: 'networkidle' });
+          await assertShell(page, 'fixture-a-safe');
+          assert.equal(await page.evaluate(() => fetch('/api/test').then(() => false, () => true)), true, 'offline API must fail instead of using cache');
+          await setOffline(false);
+
+          for (const [revision, problem] of [['fixture-b', 'http'], ['fixture-c', 'mime'], ['fixture-e', 'disconnect'], ['fixture-f', 'html-version'], ['fixture-g', 'module-mime']]) {
+            debug(`PWA ${engine.name()}: reject ${problem} upgrade`);
+            release = revision; failure = problem;
+            assert.equal(await updateWorker(page), 'redundant', 'incomplete install must not activate');
+            // A navigation while a newer deployment exists must not rewrite old HTML.
+            await page.reload({ waitUntil: 'networkidle' });
+            await assertShell(page, 'fixture-a-safe');
+            await setOffline(true);
+            await page.reload({ waitUntil: 'networkidle' });
+            await assertShell(page, 'fixture-a-safe');
+            await setOffline(false);
+            assert.ok(await page.evaluate(() => caches.has('unrelated-cache')));
+            assert.equal(await page.evaluate(name => caches.has(name), 'running-shoes-shell-' + revision), false);
+          }
+          assert.ok(failedAssets >= 5, 'fixture actually interrupted candidate installs');
+          assert.deepEqual([...failedKinds].sort(), ['disconnect', 'html-version', 'http', 'mime', 'module-mime']);
+
+          release = 'fixture-d'; failure = null;
+          debug(`PWA ${engine.name()}: reconnect and activate complete upgrade`);
+          assert.equal(await updateWorker(page), 'activated');
+          await page.locator('#app-update-notice').waitFor({ state: 'visible' });
+          assert.equal(await page.evaluate(() => window.__pwaRelease), 'fixture-a-safe', 'upgrade does not reload a live draft');
+          await page.reload({ waitUntil: 'networkidle' });
+          await assertShell(page, 'fixture-d');
+          const state = await page.evaluate(async () => {
+            const names = await caches.keys();
+            const owned = names.filter(name => name.startsWith('running-shoes-shell-'));
+            const cache = await caches.open(owned[0]);
+            return { owned, other: await (await caches.open('unrelated-cache')).match('/sentinel').then(Boolean),
+              api: !!(await cache.match('/api/test')), urls: (await cache.keys()).map(request => request.url),
+              html: await (await cache.match('/')).text() };
+          });
+          assert.deepEqual(state.owned, ['running-shoes-shell-fixture-d']);
+          assert.equal(state.other, true); assert.equal(state.api, false);
+          assert.ok(state.urls.filter(url => url.includes('?v=')).every(url => url.endsWith('?v=fixture-d')));
+          assert.ok(state.html.includes('content="fixture-d"'));
           await setOffline(true);
           await page.reload({ waitUntil: 'networkidle' });
-          await assertShell(page, 'fixture-a-safe');
-          await setOffline(false);
-          assert.ok(await page.evaluate(() => caches.has('unrelated-cache')));
-          assert.equal(await page.evaluate(name => caches.has(name), 'running-shoes-shell-' + revision), false);
-        }
-        assert.ok(failedAssets >= 5, 'fixture actually interrupted candidate installs');
-        assert.deepEqual([...failedKinds].sort(), ['disconnect', 'html-version', 'http', 'mime', 'module-mime']);
-
-        release = 'fixture-d'; failure = null;
-        debug(`PWA ${engine.name()}: reconnect and activate complete upgrade`);
-        assert.equal(await updateWorker(page), 'activated');
-        await page.locator('#app-update-notice').waitFor({ state: 'visible' });
-        assert.equal(await page.evaluate(() => window.__pwaRelease), 'fixture-a-safe', 'upgrade does not reload a live draft');
-        await page.reload({ waitUntil: 'networkidle' });
-        await assertShell(page, 'fixture-d');
-        const state = await page.evaluate(async () => {
-          const names = await caches.keys();
-          const owned = names.filter(name => name.startsWith('running-shoes-shell-'));
-          const cache = await caches.open(owned[0]);
-          return { owned, other: await (await caches.open('unrelated-cache')).match('/sentinel').then(Boolean),
-            api: !!(await cache.match('/api/test')), urls: (await cache.keys()).map(request => request.url),
-            html: await (await cache.match('/')).text() };
-        });
-        assert.deepEqual(state.owned, ['running-shoes-shell-fixture-d']);
-        assert.equal(state.other, true); assert.equal(state.api, false);
-        assert.ok(state.urls.filter(url => url.includes('?v=')).every(url => url.endsWith('?v=fixture-d')));
-        assert.ok(state.html.includes('content="fixture-d"'));
-        await setOffline(true);
-        await page.reload({ waitUntil: 'networkidle' });
-        await assertShell(page, 'fixture-d');
-        assert.deepEqual(errors, []);
-        console.log(`PASS ${engine.name()} PWA: legacy migration, first/installed offline with CORS Vary/Origin module requests, HTTP/MIME/disconnect/revision failed upgrades, immutable shell, recovery, API exclusion and scoped cleanup`);
+          await assertShell(page, 'fixture-d');
+          assert.deepEqual(errors, []);
+          console.log(`PASS ${engine.name()} PWA: legacy migration, first/installed offline with CORS Vary/Origin module requests, HTTP/MIME/disconnect/revision failed upgrades, immutable shell, recovery, API exclusion and scoped cleanup`);
+        }, 120000, 'PWA engine ' + engine.name());
       } catch (error) {
         await saveFailure(context, page, 'pwa-' + engine.name(), error);
         console.error(`PWA ${engine.name()} case failed:`, error);
         throw error;
-      } finally { await context.close(); await browser.close(); }
+      } finally { await closeBrowser(context, browser); }
     }
   } finally { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
 }
