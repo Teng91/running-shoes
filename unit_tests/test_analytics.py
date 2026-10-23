@@ -216,3 +216,102 @@ def test_shoe_analytics_survives_legacy_extreme_forecast_values(db, user_with_to
 
     assert result is not None
     assert result["lifecycle"]["forecast_retirement_date"] is None
+
+
+def test_shoe_analytics_sql_is_bounded_and_user_scoped(db, user_with_token):
+    from datetime import timedelta
+
+    from sqlalchemy import event
+
+    from backend.models import User
+
+    user, _ = user_with_token
+    other = User(username="analytics-private", hashed_password="synthetic")
+    db.add(other)
+    db.flush()
+    shoes = [Shoe(user_id=user.id, brand="Test", model=str(index), date="2025-01-01",
+                  price=1000, mileage=500, expected_mileage=800, monthly_km=60)
+             for index in range(3)]
+    foreign = Shoe(user_id=other.id, brand="Private", model="Hidden", date="2025-01-01")
+    deleted = Shoe(user_id=user.id, brand="Deleted", model="Hidden", date="2025-01-01", is_deleted=True)
+    db.add_all([*shoes, foreign, deleted])
+    db.flush()
+    as_of = date(2026, 10, 23)
+    records = []
+    for shoe in shoes:
+        for index in range(400):
+            run = Run(user_id=user.id, shoe_id=shoe.id,
+                      date=(as_of - timedelta(days=index // 2)).isoformat(), km=1.25 + index % 3)
+            db.add(run)
+            records.append(run)
+        for when in ["2020-01-01", "2026-10-31", "2027-01-01"]:
+            run = Run(user_id=user.id, shoe_id=shoe.id, date=when, km=7.75)
+            db.add(run)
+            records.append(run)
+    db.add(Run(user_id=other.id, shoe_id=shoes[0].id, date="2026-10-22", km=9999))
+    db.commit()
+    # Warm attributes, then ensure read models never materialize even one Run entity.
+    expected = [{"id": run.id, "shoe_id": run.shoe_id, "date": run.date, "km": run.km} for run in records]
+    for shoe in [*shoes, foreign, deleted]:
+        _ = shoe.id, shoe.user_id, shoe.is_deleted, shoe.price
+    user_id = user.id
+    for instance in list(db.identity_map.values()):
+        if isinstance(instance, Run):
+            db.expunge(instance)
+    queries = []
+    loaded = []
+
+    def query(_connection, _cursor, statement, _parameters, _context, _many):
+        queries.append(statement)
+
+    def load(_session, instance):
+        if isinstance(instance, Run):
+            loaded.append(instance)
+
+    engine = db.get_bind()
+    event.listen(engine, "before_cursor_execute", query)
+    event.listen(db, "loaded_as_persistent", load)
+    try:
+        batch = analytics.batch_shoe_analytics(db, user_id, [*shoes, foreign, deleted], today=as_of)
+        assert len(queries) == 3
+        assert "row_number() OVER" in queries[-1]
+        assert not loaded
+        queries.clear()
+        assert analytics.batch_shoe_analytics(db, user_id, [], today=as_of) == []
+        assert not queries
+    finally:
+        event.remove(engine, "before_cursor_execute", query)
+        event.remove(db, "loaded_as_persistent", load)
+    assert [item["shoe"]["id"] for item in batch] == [shoe.id for shoe in shoes]
+    for shoe, result in zip(shoes, batch, strict=True):
+        rows = [run for run in expected if run["shoe_id"] == shoe.id]
+        ordered = sorted(rows, key=lambda run: (run["date"], run["id"]), reverse=True)
+        usage = result["usage"]
+        assert usage["count"] == len(rows) == 403
+        assert usage["km"] == sum(run["km"] for run in rows)
+        assert usage["days"] == len({run["date"] for run in rows})
+        assert usage["first_run_date"] == "2020-01-01"
+        assert usage["last_run_date"] == "2027-01-01"
+        for days in [30, 90]:
+            start = (as_of - timedelta(days=days - 1)).isoformat()
+            assert usage[f"km_{days}_days"] == sum(run["km"] for run in rows if start <= run["date"] <= as_of.isoformat())
+        assert result["recent_runs"] == [{key: run[key] for key in ["id", "date", "km"]} for run in ordered[:12]]
+        assert len(result["monthly_history"]) == 12
+        assert result["monthly_history"][-1]["km"] == sum(run["km"] for run in rows if run["date"].startswith("2026-10"))
+        assert analytics.shoe_analytics(db, user_id, shoe.id, today=as_of) == result
+    assert analytics.shoe_analytics(db, user_id, foreign.id, today=as_of) is None
+    assert analytics.shoe_analytics(db, user_id, deleted.id, today=as_of) is None
+
+
+def test_shoe_analytics_empty_history_has_zero_metrics(db, user_with_token):
+    user, _ = user_with_token
+    shoe = Shoe(user_id=user.id, brand="Empty", model="Pair", date="2026-01-01")
+    db.add(shoe)
+    db.commit()
+    result = analytics.shoe_analytics(db, user.id, shoe.id, today=date(2026, 1, 1))
+    assert result["usage"]["km"] == result["usage"]["count"] == result["usage"]["days"] == 0
+    assert result["usage"]["first_run_date"] is None
+    assert result["usage"]["last_run_date"] is None
+    assert result["usage"]["cost_per_wear"] is None
+    assert result["recent_runs"] == []
+    assert result["monthly_history"][0] == {"year": 2025, "month": 2, "km": 0, "count": 0}

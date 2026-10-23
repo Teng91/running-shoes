@@ -74,3 +74,7 @@
 本機驗證：`python3 scripts/task.py verify-all` 通過，462 Python／95 Node／95.26% backend branch coverage，40 組版面、Chromium／WebKit E2E 及 PWA 無跳過；10 個 Agent evals 通過，合成 diagnostics 產生與內容驗證通過。拆分後 CI 的實際執行結果以該 commit 的 Actions run 為準。
 
 遠端診斷驗證：首次拆分後的 CI 在 WebKit 離線 API probe 卡住時，以 120 秒 engine deadline 失敗並成功上傳 screenshot／trace／error；下載 trace 後定位裸 fetch，改為 headers 後截斷 body、完整讀取 JSON 與 server 計數斷言；Chromium／WebKit 本機回歸通過。
+
+## 後續狀態轉移驗收
+
+SPEC-025 延伸退役前草稿、已刪鞋款跨日選擇、Strava 替換視窗及歷史交錯，具名追蹤見 [SPEC-025](025-strava-ownership-progressive-resources-and-bounded-analytics.md)。原本整批完成再 render 的限制改由逐資源交付取代；既有 SPEC-024 測試仍保留。

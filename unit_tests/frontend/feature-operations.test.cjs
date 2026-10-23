@@ -2,6 +2,7 @@ const { test, assert, vm, fs, extract, runContext, source } = require('./helpers
 
 function nodes() {
   return new Proxy({}, { get: (target, id) => target[id] ||= { value: '', style: {}, hidden: true,
+    insertAdjacentHTML(_, html) { this.innerHTML = html + this.innerHTML; },
     classList: { add() {}, remove() {} } } });
 }
 function deferred() { let resolve, reject; const promise = new Promise((a, b) => { resolve = a; reject = b; }); return { promise, resolve, reject }; }

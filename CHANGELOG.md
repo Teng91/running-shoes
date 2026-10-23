@@ -4,6 +4,24 @@
 
 ## [Unreleased]
 
+## [3.7.0] - 2026-10-23
+
+### Fixed
+
+- 編輯已刪鞋款日誌跨日刷新仍要求重新選鞋，避免隱性轉移里程。
+- Strava 舊匯入成功／失敗不修改替換視窗或新預覽，歷史舊 GET 不覆蓋新匯入結果；同視窗新預覽也不會重複提交。
+- 鞋款現役／退役保留操作前與等待期間的未儲存暱稱等欄位，再儲存使用新版本且不撤銷狀態。
+- PWA installer 拒絕長度不符的未壓縮 body，防止 WebKit 將截斷資產當作成功並啟用不完整 shell。
+
+### Changed
+
+- 原生 Strava controller 管理視窗、預覽／匯入 operation 與注入 transport/session，歷史納入 resource store。
+- 各來源完成即套用並呈現，慢來源不再阻擋可用資料；獨立錯誤、session／request ownership 與精準失效保留。
+- 單鞋／批次分析改 SQL 聚合與每鞋 recent12，固定三次 detail queries；AI 摘要只讀 aggregate，不載入完整 Run history。
+- PWA observer 涵蓋已在 installing 的 candidate，update／終態共用 deadline，失敗附 worker timeline、fixture 階段與最近 HTTP 請求。
+- 同步 README、SPEC-024／025、SDD 主圖、ADR-0008 與測試策略；asset revision 3.7.0／shell v30，schema 仍為 3。
+- 本機 verify-all、最新 frontend-test 及 Agent eval 通過：464 Python、105 Node、95.29% backend branch coverage；40 組版面、雙引擎 E2E／PWA 無跳過，10 個 Agent evals 通過。
+
 ## [3.6.1] - 2026-10-23
 
 ### Fixed

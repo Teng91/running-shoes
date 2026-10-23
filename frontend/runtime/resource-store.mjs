@@ -41,12 +41,12 @@ export function createResourceStore({ session }) {
   }
   return Object.freeze({
     read, current, invalidate, policy: dataRefreshPolicy,
-    async refresh(mutation, readers, keys = {}) {
+    async refresh(mutation, readers, keys = {}, onResult = () => {}) {
       const policy = dataRefreshPolicy(mutation);
       if (mutation) invalidate(policy.resources);
       return Promise.all(policy.resources.map(resource => read(resource, {
         key: keys[resource] || '', loader: readers[resource],
-      })));
+      }).then(result => { onResult(result); return result; })));
     },
     accept(results, mutation = null) {
       const accepted = results.filter(result => current(result) && !result.ticket.consumed);

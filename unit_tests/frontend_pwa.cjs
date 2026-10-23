@@ -16,24 +16,9 @@ const mime = { '.js': 'text/javascript', '.mjs': 'text/javascript', '.css': 'tex
   '.svg': 'image/svg+xml', '.png': 'image/png', '.webmanifest': 'application/manifest+json' };
 const debug = (...args) => { if (process.env.PWA_DEBUG) console.log(...args); };
 
+const { observeWorkerUpdate } = require('../scripts/worker_update.cjs');
 async function updateWorker(page) {
-  return withDeadline(() => page.evaluate(async () => {
-    const registration = await navigator.serviceWorker.getRegistration();
-    const finished = new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error('worker update timed out')), 15000);
-      registration.addEventListener('updatefound', () => {
-        const worker = registration.installing;
-        const changed = () => {
-          if (['activated', 'redundant'].includes(worker.state)) {
-            clearTimeout(timer); resolve(worker.state);
-          }
-        };
-        worker.addEventListener('statechange', changed);
-        changed();
-      }, { once: true });
-    });
-    return Promise.all([registration.update(), finished]).then(([, state]) => state);
-  }), 20000, 'service worker update');
+  return withDeadline(() => page.evaluate(observeWorkerUpdate, {}), 20000, 'service worker update');
 }
 
 async function assertShell(page, release) {
@@ -47,10 +32,15 @@ async function assertShell(page, release) {
 
 async function run() {
   let release = 'fixture-a', failure = null, failedAssets = 0, networkDown = false, legacy = true;
-  let moduleOriginRequests = 0, offlineApiFailures = 0;
+  let candidateGate = null, candidateStarted = null;
+  let moduleOriginRequests = 0, offlineApiFailures = 0, stage = 'startup';
+  const requests = [];
+  const phase = value => { stage = value; console.log('PWA phase:', value); };
   const failedKinds = new Set();
-  const server = http.createServer((request, response) => {
+  const server = http.createServer(async (request, response) => {
     const url = new URL(request.url, 'http://127.0.0.1');
+    requests.push({ path: url.pathname, version: url.searchParams.get('v'), release, failure, networkDown });
+    if (requests.length > 100) requests.shift();
     if (networkDown) {
       if (url.pathname === '/api/test') {
         // WebKit may keep retrying a connection closed before HTTP headers.
@@ -62,6 +52,7 @@ async function run() {
       } else request.socket.destroy();
       return;
     }
+    if (candidateGate && url.pathname === '/release-marker.js') { candidateStarted(); await candidateGate; }
     if (process.env.PWA_DEBUG) console.log('PWA fixture request', url.pathname, url.search);
     response.setHeader('Cache-Control', 'no-store');
     // Match production CORSMiddleware: module requests have Origin, precache requests do not.
@@ -84,9 +75,10 @@ async function run() {
       failedAssets++;
       failedKinds.add(failure);
       if (failure === 'disconnect') {
-        response.setHeader('Content-Type', 'text/javascript');
-        response.flushHeaders(); response.write('// interrupted asset');
-        setImmediate(() => response.destroy()); return;
+        // Headers plus a truncated declared body avoid WebKit retrying a socket
+        // dropped before an HTTP response, while Response.text() must still reject.
+        response.writeHead(200, { 'Content-Type': 'text/javascript', 'Content-Length': '1000', 'Connection': 'close' });
+        response.end('// interrupted asset'); return;
       }
       response.statusCode = failure === 'http' ? 503 : 200;
       response.setHeader('Content-Type', 'text/html');
@@ -120,7 +112,7 @@ async function run() {
     for (const engine of [chromium, webkit]) {
       release = 'fixture-a'; failure = null; failedAssets = 0; networkDown = false; legacy = true;
       moduleOriginRequests = 0; offlineApiFailures = 0;
-      failedKinds.clear();
+      failedKinds.clear(); requests.length = 0; phase(engine.name() + ': launch');
       let browser, context, page;
       try {
         await withDeadline(async () => {
@@ -139,13 +131,13 @@ async function run() {
             networkDown = offline;
             if (engine === chromium) await context.setOffline(offline);
           };
-          debug(`PWA ${engine.name()}: first offline / online install`);
+          phase(`PWA ${engine.name()}: first offline / online install`);
           // Without a previously installed shell, an offline first visit cannot load.
           await setOffline(true);
           await assert.rejects(page.goto(origin, { timeout: 5000 }));
-          debug(`PWA ${engine.name()}: offline first visit rejected`);
+          phase(`PWA ${engine.name()}: offline first visit rejected`);
           await setOffline(false);
-          debug(`PWA ${engine.name()}: fetching initial online document`);
+          phase(`PWA ${engine.name()}: fetching initial online document`);
           await page.goto(origin, { waitUntil: 'networkidle' });
           await page.waitForFunction(async () => (await navigator.serviceWorker.getRegistration())?.active?.state === 'activated', null, { timeout: 15000 });
           await page.evaluate(() => navigator.serviceWorker.ready);
@@ -162,7 +154,7 @@ async function run() {
             const response = await cache.match('/runtime/feature-lifecycle.mjs?v=fixture-a-safe');
             return response.headers.get('Vary');
           }), 'Origin', 'precache retains the production Vary response header');
-          debug(`PWA ${engine.name()}: installed shell ready`);
+          phase(`PWA ${engine.name()}: installed shell ready`);
           await page.evaluate(async () => {
             const other = await caches.open('unrelated-cache');
             await other.put('/sentinel', new Response('keep'));
@@ -184,7 +176,7 @@ async function run() {
           await setOffline(false);
 
           for (const [revision, problem] of [['fixture-b', 'http'], ['fixture-c', 'mime'], ['fixture-e', 'disconnect'], ['fixture-f', 'html-version'], ['fixture-g', 'module-mime']]) {
-            debug(`PWA ${engine.name()}: reject ${problem} upgrade`);
+            phase(`PWA ${engine.name()}: reject ${problem} upgrade`);
             release = revision; failure = problem;
             assert.equal(await updateWorker(page), 'redundant', 'incomplete install must not activate');
             // A navigation while a newer deployment exists must not rewrite old HTML.
@@ -201,8 +193,18 @@ async function run() {
           assert.deepEqual([...failedKinds].sort(), ['disconnect', 'html-version', 'http', 'mime', 'module-mime']);
 
           release = 'fixture-d'; failure = null;
-          debug(`PWA ${engine.name()}: reconnect and activate complete upgrade`);
-          assert.equal(await updateWorker(page), 'activated');
+          phase(`PWA ${engine.name()}: reconnect and activate complete upgrade`);
+          let releaseCandidate, markStarted;
+          candidateGate = new Promise(resolve => { releaseCandidate = resolve; });
+          const started = new Promise(resolve => { markStarted = resolve; }); candidateStarted = markStarted;
+          await page.evaluate(() => { navigator.serviceWorker.getRegistration().then(reg => reg.update()).catch(() => {}); });
+          await withDeadline(() => started, 15000, 'candidate install begins');
+          assert.equal(await page.evaluate(async () => (await navigator.serviceWorker.getRegistration()).installing?.state), 'installing');
+          await page.evaluate(() => { window.__workerUpdateTimeline = null; });
+          const observing = page.evaluate(observeWorkerUpdate, { trigger: false });
+          await page.waitForFunction(() => window.__workerUpdateTimeline?.length > 0);
+          releaseCandidate(); candidateGate = null;
+          assert.equal(await withDeadline(() => observing, 20000, 'already installing candidate'), 'activated');
           await page.locator('#app-update-notice').waitFor({ state: 'visible' });
           assert.equal(await page.evaluate(() => window.__pwaRelease), 'fixture-a-safe', 'upgrade does not reload a live draft');
           await page.reload({ waitUntil: 'networkidle' });
@@ -226,6 +228,8 @@ async function run() {
           console.log(`PASS ${engine.name()} PWA: legacy migration, first/installed offline with CORS Vary/Origin module requests, HTTP/MIME/disconnect/revision failed upgrades, immutable shell, recovery, API exclusion and scoped cleanup`);
         }, 120000, 'PWA engine ' + engine.name());
       } catch (error) {
+        error.message += '\nPWA fixture: ' + JSON.stringify({ stage, release, failure, networkDown, failedAssets, requests });
+        error.stack += '\n' + error.message;
         await saveFailure(context, page, 'pwa-' + engine.name(), error);
         console.error(`PWA ${engine.name()} case failed:`, error);
         throw error;

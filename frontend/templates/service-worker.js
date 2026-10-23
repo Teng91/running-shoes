@@ -25,7 +25,14 @@ async function installShell() {
       }
       // Drain each response before waiting for all headers. Otherwise a large
       // unread body can occupy the limited connection pool during installation.
-      await response.clone().arrayBuffer();
+      const body = await response.clone().arrayBuffer();
+      // Some engines resolve a truncated unencoded HTTP body. Compressed
+      // lengths describe wire bytes, so only compare identity responses.
+      const length = response.headers.get('content-length');
+      const encoding = response.headers.get('content-encoding');
+      if ((!encoding || encoding === 'identity') && /^\d+$/.test(length || '') && Number(length) !== body.byteLength) {
+        throw new Error('App shell asset truncated');
+      }
       return [path, response];
     }));
     const cache = await caches.open(CACHE_NAME);

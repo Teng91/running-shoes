@@ -11,3 +11,4 @@ require('./frontend/run-controller.test.cjs');
 require('./frontend/feature-operations.test.cjs');
 require('./frontend/draft-resources.test.cjs');
 require('./frontend/browser-deadlines.test.cjs');
+require('./frontend/strava-resources.test.cjs');

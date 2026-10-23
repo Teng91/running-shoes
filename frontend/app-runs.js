@@ -42,7 +42,7 @@ function populateRunShoeSelects(selectedId = null) {
     select.innerHTML = options || '<option value="">請先新增跑鞋</option>';
     if (previous && shoeList.some(shoe => shoe.id === previous)) {
       select.value = String(previous);
-    } else if (id === 'edit-run-shoe' && selectedId !== null) {
+    } else if (id === 'edit-run-shoe') {
       select.insertAdjacentHTML(
         'afterbegin',
         '<option value="" selected disabled>原鞋款已刪除，請重新選擇</option>',

@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from backend import goals, models
 from backend.forecasting import retirement_forecast
 from backend.read_models.run_statistics import month_bounds, run_period
+from backend.read_models.shoe_statistics import shoe_run_statistics
 from backend.shoe_metrics import shoe_metrics
 
 
@@ -41,52 +42,37 @@ def shoe_analytics(db: Session, user_id: int, shoe_id: int, *, today: date | Non
         return None
 
     as_of = today or datetime.now(timezone(timedelta(hours=8))).date()
-    runs = db.query(models.Run).filter(
-        models.Run.user_id == user_id,
-        models.Run.shoe_id == shoe.id,
-    ).order_by(models.Run.date, models.Run.id).all()
-    return _shoe_analytics(shoe, runs, as_of)
+    return _shoe_analytics(shoe, shoe_run_statistics(db, user_id, [shoe.id], as_of)[shoe.id], as_of)
 
 
 def batch_shoe_analytics(
-    db: Session, user_id: int, shoes: list[models.Shoe], *, today: date | None = None
+    db: Session, user_id: int, shoes: list[models.Shoe], *, today: date | None = None,
+    include_details: bool = True
 ) -> list[dict]:
-    """Load all matching run histories once, never once per shoe."""
+    """Three aggregate/window queries for any number of owned shoes."""
     scoped = [shoe for shoe in shoes if shoe.user_id == user_id and not shoe.is_deleted]
     if not scoped:
         return []
-    rows = db.query(models.Run).filter(
-        models.Run.user_id == user_id,
-        models.Run.shoe_id.in_([shoe.id for shoe in scoped]),
-    ).order_by(models.Run.date, models.Run.id).all()
-    by_shoe: dict[int, list[models.Run]] = defaultdict(list)
-    for run in rows:
-        by_shoe[run.shoe_id].append(run)
     as_of = today or datetime.now(timezone(timedelta(hours=8))).date()
-    return [_shoe_analytics(shoe, by_shoe[shoe.id], as_of) for shoe in scoped]
+    statistics = shoe_run_statistics(
+        db, user_id, [shoe.id for shoe in scoped], as_of, include_details=include_details
+    )
+    return [_shoe_analytics(shoe, statistics[shoe.id], as_of) for shoe in scoped]
 
 
-def _shoe_analytics(shoe: models.Shoe, runs: list[models.Run], as_of: date) -> dict:
-    """One calculation policy for single-shoe API and batched tool read models."""
-    metrics = _run_metrics(runs)
-    cutoff_30 = (as_of - timedelta(days=29)).isoformat()
-    cutoff_90 = (as_of - timedelta(days=89)).isoformat()
-    km_30 = _round(sum(run.km for run in runs if cutoff_30 <= run.date <= as_of.isoformat()))
-    km_90 = _round(sum(run.km for run in runs if cutoff_90 <= run.date <= as_of.isoformat()))
+def _shoe_analytics(shoe: models.Shoe, statistics: dict, as_of: date) -> dict:
+    """One presentation policy for single-shoe API and batched tool read models."""
+    metrics = {
+        "km": _round(statistics["km"]), "count": statistics["count"], "days": statistics["days"],
+    }
+    km_30, km_90 = _round(statistics["km_30"]), _round(statistics["km_90"])
     forecast = retirement_forecast(shoe, km_90, as_of)
     costs = shoe_metrics(shoe)
 
-    monthly: dict[tuple[int, int], dict[str, float | int]] = defaultdict(
-        lambda: {"km": 0.0, "count": 0}
-    )
-    for run in runs:
-        key = (int(run.date[:4]), int(run.date[5:7]))
-        monthly[key]["km"] = float(monthly[key]["km"]) + run.km
-        monthly[key]["count"] = int(monthly[key]["count"]) + 1
     monthly_history = []
     for offset in range(-11, 1):
         year, month = _shift_month(as_of.year, as_of.month, offset)
-        values = monthly[(year, month)]
+        values = statistics["monthly"].get(f"{year:04d}-{month:02d}", {"km": 0, "count": 0})
         monthly_history.append({
             "year": year,
             "month": month,
@@ -119,23 +105,16 @@ def _shoe_analytics(shoe: models.Shoe, runs: list[models.Run], as_of: date) -> d
         },
         "usage": {
             **metrics,
-            "first_run_date": runs[0].date if runs else None,
-            "last_run_date": runs[-1].date if runs else None,
+            "first_run_date": statistics["first"],
+            "last_run_date": statistics["last"],
             "km_30_days": km_30,
             "km_90_days": km_90,
             "actual_monthly_km_90_days": forecast["actual_monthly_km_90_days"],
             "cost_per_km": costs["cost_per_km"],
-            "cost_per_wear": _round(shoe.price / len(runs)) if runs else None,
+            "cost_per_wear": _round(shoe.price / metrics["count"]) if metrics["count"] else None,
         },
         "monthly_history": monthly_history,
-        "recent_runs": [
-            {
-                "id": run.id,
-                "date": run.date,
-                "km": _round(run.km),
-            }
-            for run in reversed(runs[-12:])
-        ],
+        "recent_runs": statistics["recent"],
     }
 
 
