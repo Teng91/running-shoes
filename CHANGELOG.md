@@ -4,6 +4,15 @@
 
 ## [Unreleased]
 
+## [3.7.1] - 2026-10-23
+
+### Fixed
+
+- v3.7.0 main PWA CI 在 WebKit 的 worker script request 逾時，尚未建立 installing candidate。離線 fixture 改以 HTTP 503 結束背景 register/update，避免 TCP drop 後的重試阻塞 scope job queue。
+- 每次恢復在線前驗證 offline registration.update 在 10 秒內失敗，再驗證後續候選更新；保留完整離線 shell、API exclusion、failed upgrades 與 recovery 測試，沒有放寬 deadline 或定向重跑取代修正。
+- Asset revision 3.7.1／shell v31；schema 3、44 個 release assets。原 v3.7.0 tag 不改寫。
+- verify-all 全數通過：464 Python、105 Node、95.29% backend branch coverage、40 組版面、雙引擎 E2E／PWA 無跳過。
+
 ## [3.7.0] - 2026-10-23
 
 ### Fixed

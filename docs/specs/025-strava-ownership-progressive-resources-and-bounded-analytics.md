@@ -65,3 +65,11 @@
 - 本機 `verify-all` 通過：464 Python、95.29% backend branch coverage、40 組版面、雙引擎 CRUD／SPEC-025 與 PWA，無跳過。
 - `frontend-test` 最新 105 個具名案例通過；`eval-agent` 10 個合成評估通過；`docs-check` 核對 44 個 release assets 及具名追蹤。
 - 發布必須再確認 main／tag CI、備份還原及正式 origin 的匿名 release-check。
+
+## CI follow-up：v3.7.1
+
+v3.7.0 main run 39934466655 的 PWA 失敗 artifact 12492509529 顯示 update timeline 只有 observe／failure、installing 與 waiting 都為 null；trace 的 worker script request status -1。最後的 fixture 請求是在 networkDown 中的 worker script；後續候選尚未抵達 server。相同 SHA 的 tag run 39934467048 PWA 與 diagnostics roundtrip 通過，仍不能作為 main 失敗的替代。
+
+離線 fixture 針對 worker script 回 503 以終止背景更新；每次回到在線前，以 10 秒 deadline 驗證 registration.update 必須失敗，避免舊更新佇列延誤下一個 candidate。這是 AC-7 的實際 browser 驗收，仍保留全部失敗安裝／離線／恢復斷言。v3.7.0 tag 不重寫；正式發布／部署使用 asset 3.7.1／shell v31，schema 維持 3，回滾 image 不變。
+
+v3.7.1 本機 `verify-all` 全數通過：464 Python、105 Node、95.29% backend branch coverage、40 組版面、雙引擎 E2E／PWA 無跳過。離線 update 明確失敗後才恢復在線，避免只用改變 fixture 狀態推論先前 scope job 已結束。

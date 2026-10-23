@@ -531,3 +531,5 @@ Browser capture 的錯誤文字先保存，截圖／trace 及 teardown 分別限
 詳細單鞋／批次分析使用 `shoe_statistics.py` 三次 SQL 查詢：全歷史 conditional aggregate、12 個月份 group、每鞋 partition recent 12；摘要只需第一個 aggregate。全部 user-scoped，無 Run entity 全歷史載入；rounding、成本與 forecast 位於既有 backend 政策。Schema 及 API contract 不變。
 
 PWA fixture 對 worker.update 與 candidate 終態設共同 deadline，涵蓋已在 installing 的 candidate。階段／最近 HTTP 請求與 registration timeline 隨失敗文字保存；截斷 body 的未壓縮長度由 installer 驗證，壓縮 wire bytes 不與 decoded bytes 比較。完整雙引擎 failed-upgrade、offline、recovery gates 保留。
+
+PWA CI 後續補充（v3.7.1）：離線 worker script fixture 回 503，並在每次回到在線前驗證 update 在期限內失敗，清楚區分尚未建立 installing candidate 的 script request 卡住與 worker statechange 漏接；細節見 SPEC-025 CI follow-up。正式 shell revision 為 v31，schema 3 不變。

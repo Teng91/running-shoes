@@ -33,7 +33,7 @@ async function assertShell(page, release) {
 async function run() {
   let release = 'fixture-a', failure = null, failedAssets = 0, networkDown = false, legacy = true;
   let candidateGate = null, candidateStarted = null;
-  let moduleOriginRequests = 0, offlineApiFailures = 0, stage = 'startup';
+  let moduleOriginRequests = 0, offlineApiFailures = 0, offlineWorkerFailures = 0, stage = 'startup';
   const requests = [];
   const phase = value => { stage = value; console.log('PWA phase:', value); };
   const failedKinds = new Set();
@@ -42,7 +42,13 @@ async function run() {
     requests.push({ path: url.pathname, version: url.searchParams.get('v'), release, failure, networkDown });
     if (requests.length > 100) requests.shift();
     if (networkDown) {
-      if (url.pathname === '/api/test') {
+      if (url.pathname === '/service-worker.js') {
+        // WebKit retries TCP drops for background register/update jobs. A failed
+        // HTTP update ends that job, allowing the next online update to start.
+        offlineWorkerFailures++;
+        response.writeHead(503, { 'Content-Type': 'text/javascript', 'Cache-Control': 'no-store' });
+        response.end('// worker update unavailable offline');
+      } else if (url.pathname === '/api/test') {
         // WebKit may keep retrying a connection closed before HTTP headers.
         // Deliver headers first, then end an incomplete body: consuming JSON
         // must fail, while a worker-cached valid response would still succeed.
@@ -111,7 +117,7 @@ async function run() {
   try {
     for (const engine of [chromium, webkit]) {
       release = 'fixture-a'; failure = null; failedAssets = 0; networkDown = false; legacy = true;
-      moduleOriginRequests = 0; offlineApiFailures = 0;
+      moduleOriginRequests = 0; offlineApiFailures = 0; offlineWorkerFailures = 0;
       failedKinds.clear(); requests.length = 0; phase(engine.name() + ': launch');
       let browser, context, page;
       try {
@@ -130,6 +136,15 @@ async function run() {
             // A dropped fixture transport tests actual network failure without disabling SW itself.
             networkDown = offline;
             if (engine === chromium) await context.setOffline(offline);
+          };
+          const assertOfflineUpdate = async () => {
+            phase(`PWA ${engine.name()}: offline worker update rejects`);
+            const failed = await withDeadline(() => page.evaluate(async () => {
+              const registration = await navigator.serviceWorker.getRegistration();
+              return registration.update().then(() => false, () => true);
+            }), 10000, engine.name() + ' offline worker update');
+            assert.equal(failed, true, 'offline update must settle as a failure, not hold the scope job queue');
+            if (engine === webkit) assert.ok(offlineWorkerFailures > 0, 'WebKit update reached the HTTP failure fixture');
           };
           phase(`PWA ${engine.name()}: first offline / online install`);
           // Without a previously installed shell, an offline first visit cannot load.
@@ -173,6 +188,7 @@ async function run() {
           );
           assert.equal(apiFailed, true, 'offline API must fail instead of using cache');
           if (engine === webkit) assert.ok(offlineApiFailures > 0, 'API request reached the disconnected transport rather than a worker cache');
+          await assertOfflineUpdate();
           await setOffline(false);
 
           for (const [revision, problem] of [['fixture-b', 'http'], ['fixture-c', 'mime'], ['fixture-e', 'disconnect'], ['fixture-f', 'html-version'], ['fixture-g', 'module-mime']]) {
@@ -185,6 +201,7 @@ async function run() {
             await setOffline(true);
             await page.reload({ waitUntil: 'networkidle' });
             await assertShell(page, 'fixture-a-safe');
+            await assertOfflineUpdate();
             await setOffline(false);
             assert.ok(await page.evaluate(() => caches.has('unrelated-cache')));
             assert.equal(await page.evaluate(name => caches.has(name), 'running-shoes-shell-' + revision), false);
@@ -225,7 +242,7 @@ async function run() {
           await page.reload({ waitUntil: 'networkidle' });
           await assertShell(page, 'fixture-d');
           assert.deepEqual(errors, []);
-          console.log(`PASS ${engine.name()} PWA: legacy migration, first/installed offline with CORS Vary/Origin module requests, HTTP/MIME/disconnect/revision failed upgrades, immutable shell, recovery, API exclusion and scoped cleanup`);
+          console.log(`PASS ${engine.name()} PWA: legacy migration, bounded offline worker failure and queued-update recovery, first/installed offline with CORS Vary/Origin module requests, HTTP/MIME/disconnect/revision failed upgrades, immutable shell, recovery, API exclusion and scoped cleanup`);
         }, 120000, 'PWA engine ' + engine.name());
       } catch (error) {
         error.message += '\nPWA fixture: ' + JSON.stringify({ stage, release, failure, networkDown, failedAssets, requests });
