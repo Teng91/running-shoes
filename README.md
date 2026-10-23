@@ -506,7 +506,7 @@ CI 的 `frontend-pwa` job 上傳獨立 `browser-diagnostics-roundtrip` artifact�
 `frontend-e2e` 會對真實 FastAPI／CORS 與暫存 SQLite 執行同一個 `release-check`：檢查 readiness／schema、
 完整 API contract、manifest 對應的 43 個 shell／worker 資產雜湊與 MIME、四個統計 API 的匿名拒絕存取，
 再驗證 Chromium／WebKit 匿名手機啟動與 native runtime cache，以及 Chromium 離線重開。
-WebKit 離線由 `frontend-pwa` 的 fixture transport 中斷驗證，不把引擎的離線模擬開關當成實機結果。
+WebKit 離線 shell 由 `frontend-pwa` 的 fixture transport 中斷驗證；API probe 在 HTTP headers 後截斷 response body，完整讀取 JSON 並檢查 server 請求計數，避免 headers 前 TCP 中斷讓裸 fetch 一直 pending。這些不取代引擎之外的實機驗證。
 這個 task 不登入、不送出資料、不發布或回滾；正式 origin 必須是 HTTPS，HTTP 只允許 loopback。
 
 ### 請求、重試與跨分頁（SPEC-019）
