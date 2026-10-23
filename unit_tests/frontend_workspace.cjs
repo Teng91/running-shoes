@@ -1,0 +1,141 @@
+// SPEC-027: real IndexedDB, offline shell and transactional APIs; synthetic accounts only.
+const assert = require('node:assert/strict');
+const http = require('node:http');
+const { startArtifacts, saveFailure, closeBrowser } = require('../scripts/browser_artifacts.cjs');
+module.exports = async function checkWorkspace(browser, baseUrl) {
+  const suffix = `${browser.browserType().name()}-${Date.now()}`;
+  const password = 'Synthetic-workspace-91!';
+  async function api(token, path, body, method = body === undefined ? 'GET' : 'POST') {
+    const response = await fetch(baseUrl + '/api' + path, { method, headers: {
+      'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}),
+    }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+    assert.ok(response.ok, `${method} ${path}: ${response.status}`);
+    return response.json();
+  }
+  async function account(name) {
+    const username = `workspace-${name}-${suffix}`;
+    await api(null, '/auth/register', { username, password });
+    const result = await api(null, '/auth/login', { username, password });
+    return { username, token: result.access_token };
+  }
+  const a = await account('a'), b = await account('b');
+  const shoe = await api(a.token, '/shoes', { brand: 'Offline', model: 'Reliable', date: '2026-01-01', mileage: 20 });
+  await api(b.token, '/shoes', { brand: 'Other', model: 'Existing', date: '2026-01-01', mileage: 3 });
+  // WebKit's native emulation rejects SW navigations internally. As in the PWA
+  // harness, disconnect the origin itself and let the installed SW serve the shell.
+  let networkDown = false, disconnectedApi = 0;
+  const origin = http.createServer((request, response) => {
+    if (networkDown) {
+      if (request.url.startsWith('/service-worker.js')) { response.writeHead(503); response.end('// offline'); return; }
+      if (request.url.startsWith('/api/')) disconnectedApi++;
+      request.socket.destroy(); return;
+    }
+    const upstream = http.request(new URL(request.url, baseUrl), { method: request.method, headers: request.headers }, result => {
+      response.writeHead(result.statusCode, result.headers); result.pipe(response);
+    });
+    upstream.on('error', () => { if (!response.headersSent) response.writeHead(502); response.end(); });
+    request.pipe(upstream);
+  });
+  await new Promise(resolve => origin.listen(0, '127.0.0.1', resolve));
+  const browserUrl = 'http://127.0.0.1:' + origin.address().port;
+  const context = await browser.newContext({ storageState: { cookies: [], origins: [{ origin: browserUrl, localStorage: [
+    { name: 'token', value: a.token }, { name: 'username', value: a.username },
+  ] }] } });
+  let page;
+  try {
+    await startArtifacts(context);
+    if (browser.browserType().name() === 'webkit') await context.addInitScript(() => {
+      Object.defineProperty(navigator, 'onLine', { get: () => localStorage.getItem('__test_network_down') !== '1' });
+    });
+    page = await context.newPage();
+    async function setOffline(offline) {
+      networkDown = offline;
+      if (browser.browserType().name() === 'chromium') await context.setOffline(offline);
+      else await page.evaluate(value => {
+        localStorage.setItem('__test_network_down', value ? '1' : '0');
+        window.dispatchEvent(new Event(value ? 'offline' : 'online'));
+      }, offline);
+    }
+    const errors = []; page.on('pageerror', error => errors.push(error.message));
+    page.on('dialog', dialog => dialog.accept());
+    await page.goto(browserUrl, { waitUntil: 'networkidle' });
+    await page.waitForFunction(() => localWorkspace.controller?.account && shoes.length === 1);
+    await page.evaluate(async () => { await navigator.serviceWorker.ready; });
+    await page.waitForFunction(() => navigator.serviceWorker.controller);
+    await page.locator('.tab[data-tab="runs"]').click();
+    await page.locator('#run-date').fill('2026-01-02');
+    await page.locator('#run-shoe').selectOption(String(shoe.id));
+    await page.locator('#run-km').fill('5');
+    await page.evaluate(() => { switchTab('monthly'); });
+    await page.locator('#add-km').fill('180');
+    await page.evaluate(() => { shoeModal.openForEdit(shoes[0], false); });
+    await page.locator('#f-nickname').fill('Unfinished nickname');
+    await page.evaluate(() => { shoeModal.close(); });
+    await page.waitForFunction(async () => (await localWorkspace.controller.read('drafts'))[0]?.value.editors['shoe:' + shoes[0].id]?.values['f-nickname'] === 'Unfinished nickname');
+    await page.reload({ waitUntil: 'networkidle' });
+    await page.waitForFunction(() => document.getElementById('run-km').value === '5' && document.getElementById('add-km').value === '180');
+    await page.getByRole('button', { name: '資料與同步', exact: true }).click();
+    await page.locator('#workspace-drafts').getByRole('button', { name: /繼續編輯 鞋款/ }).click();
+    assert.equal(await page.locator('#f-nickname').inputValue(), 'Unfinished nickname');
+    await page.evaluate(() => shoeModal.close());
+    async function login(user) {
+      await page.getByRole('button', { name: '登出', exact: true }).click();
+      await page.locator('#login-username').fill(user.username); await page.locator('#login-password').fill(password);
+      await page.locator('#login-form').getByRole('button', { name: '登入', exact: true }).click();
+      await page.waitForFunction(name => currentUser === name && localWorkspace.controller?.account?.endsWith('|' + name), user.username);
+      await page.evaluate(() => localWorkspace.activating);
+    }
+    await login(b);
+    assert.equal(await page.locator('#run-km').inputValue(), '', 'B never sees A draft');
+    assert.equal(await page.locator('#add-km').inputValue(), '');
+    assert.equal(await page.evaluate(() => Object.keys(localWorkspace.editors).length), 0);
+    await login(a);
+    await page.waitForFunction(() => document.getElementById('run-km').value === '5');
+    await page.locator('.tab[data-tab="runs"]').click();
+    await setOffline(true);
+    await page.locator('#add-run-btn').click();
+    await page.waitForFunction(async () => document.getElementById('run-km').value === '' && (await localWorkspace.controller.read('queue')).length === 1);
+    assert.equal((await api(a.token, '/runs')).length, 0, 'offline acceptance does not write server');
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(async () => localWorkspace.controller?.account && shoes.length === 1 && (await localWorkspace.controller.read('queue')).length === 1);
+    assert.equal(await page.locator('#run-km').inputValue(), '', 'consumed draft never reappears on offline restart');
+    const failedProbe = await page.evaluate(async () => { try { await fetch('/api/runs'); return false; } catch { return true; } });
+    assert.equal(failedProbe, true, 'authenticated API is not served from shell cache');
+    if (browser.browserType().name() === 'webkit') assert.ok(disconnectedApi > 0);
+    await setOffline(false);
+    await page.evaluate(() => syncWorkspace());
+    await page.waitForFunction(async () => (await localWorkspace.controller.read('queue')).length === 0);
+    let runs = await api(a.token, '/runs'); assert.equal(runs.length, 1); assert.equal(runs[0].km, 5);
+    const deletedRunId = runs[0].id;
+    assert.equal((await api(a.token, '/shoes/active'))[0].mileage, 25);
+    await page.evaluate(() => { switchTab('runs'); });
+    await page.locator('#run-month').fill('2026-01'); await page.locator('#run-month').dispatchEvent('change');
+    await page.locator('#run-table tr').filter({ hasText: '5.00 km' }).getByRole('button', { name: '編輯' }).click();
+    await page.locator('#run-modal').getByRole('button', { name: '刪除', exact: true }).click();
+    await page.locator('#run-modal').waitFor({ state: 'hidden' });
+    await page.waitForFunction(async () => !Object.keys((await localWorkspace.controller.read('drafts'))[0]?.value.editors || {}).some(key => key.startsWith('run:')), null);
+    await page.getByRole('button', { name: '資料與同步', exact: true }).click();
+    await page.locator('#workspace-history').getByRole('button', { name: '復原誤刪' }).click();
+    await page.waitForFunction(() => document.getElementById('workspace-history').textContent.includes('已復原'));
+    runs = await api(a.token, '/runs'); assert.equal(runs.length, 1); assert.notEqual(runs[0].id, deletedRunId);
+    assert.equal((await api(a.token, '/shoes/active'))[0].mileage, 25);
+    const backup = await api(a.token, '/export/account');
+    await page.evaluate(() => closeWorkspaceModal()); await login(b);
+    await page.getByRole('button', { name: '資料與同步', exact: true }).click();
+    const file = { name: 'synthetic-backup.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(backup)) };
+    await page.locator('#restore-file').setInputFiles(file);
+    await page.waitForFunction(() => !document.getElementById('restore-apply').disabled);
+    assert.match(await page.locator('#restore-preview').textContent(), /新增 1 雙鞋、1 筆跑步/);
+    await page.locator('#restore-apply').click(); await page.getByText('合併還原完成，現有內容已保留。', { exact: true }).waitFor();
+    assert.equal((await api(b.token, '/runs')).length, 1);
+    assert.equal((await api(b.token, '/shoes/active')).length, 2);
+    await page.locator('#restore-file').setInputFiles(file);
+    await page.waitForFunction(() => !document.getElementById('restore-apply').disabled);
+    assert.match(await page.locator('#restore-preview').textContent(), /新增 0 雙鞋、0 筆跑步/);
+    await page.locator('#restore-apply').click(); await page.getByText('合併還原完成，現有內容已保留。', { exact: true }).waitFor();
+    assert.equal((await api(b.token, '/runs')).length, 1);
+    assert.deepEqual(errors, []);
+    console.log(`PASS ${browser.browserType().name()} SPEC-027: durable drafts, account isolation, offline restart/sync, recovery and deduplicated restore`);
+  } catch (error) { await saveFailure(context, page, 'workspace', error); throw error; }
+  finally { try { await closeBrowser(context); } finally { origin.closeAllConnections(); await new Promise(resolve => origin.close(resolve)); } }
+};

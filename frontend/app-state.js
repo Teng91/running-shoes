@@ -36,7 +36,6 @@ let runningGoal = { version: 0, start_year: 2026, monthly_km: 125, yearly_km: 15
 let selectedYear = null;
 let selectedGoalMonth = null;
 let selectedSpendingYear = null;
-let dashboardAnalyticsCache = new Map();
 let dashboardAnalyticsRequest = 0;
 let reportLoadRequestId = 0;
 let reportLoadController = null;

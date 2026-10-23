@@ -3,8 +3,18 @@ const API_BASE = window.location.origin + '/api';
 const authenticatedResponses = new WeakMap();
 const JSON_TIMEOUT_MS = 20_000;
 const activeHttpRequests = new Set();
+const mutationKeys = new Map();
+function newOperationKey() {
+  return globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}-${Math.random()}`;
+}
+function mutationRequest(url, method, body, suppliedKey) {
+  const fingerprint = JSON.stringify([captureAuthSession().generation, url, method, body, suppliedKey || null]);
+  if (!mutationKeys.has(fingerprint)) mutationKeys.set(fingerprint, suppliedKey || newOperationKey());
+  return { fingerprint, key: mutationKeys.get(fingerprint) };
+}
 registerFeatureReset('http-requests', () => {
   for (const controller of activeHttpRequests) controller.abort();
+  mutationKeys.clear();
 });
 
 async function withRequestDeadline(job, { signal, timeoutMs = JSON_TIMEOUT_MS } = {}) {
@@ -113,6 +123,7 @@ async function jsonRequest(url, options = {}, deadline = {}) {
           const detail = Array.isArray(body.detail) ? body.detail.map(item => item.msg).join('；') : body.detail;
           const error = new Error(typeof detail === 'string' ? detail : `請求失敗（HTTP ${res.status}）`);
           error.status = res.status;
+          error.code = body.error?.code || '';
           throw error;
         }
         return readAuthenticatedBody(res);
@@ -133,16 +144,24 @@ async function apiGet(url, options = {}) {
 
 async function apiPost(url, body, options = {}) {
   const headers = authHeaders();
-  if (options.idempotencyKey) headers['Idempotency-Key'] = options.idempotencyKey;
-  return jsonRequest(url, { method: 'POST', headers, body: JSON.stringify(body), signal: options.signal }, options);
+  const tracked = ['/runs', '/shoes', '/monthly-mileage'].includes(url);
+  const operation = tracked ? mutationRequest(url, 'POST', body, options.idempotencyKey) : null;
+  if (operation || options.idempotencyKey) headers['Idempotency-Key'] = operation?.key || options.idempotencyKey;
+  const value = await jsonRequest(url, { method: 'POST', headers, body: JSON.stringify(body), signal: options.signal }, options);
+  if (operation) mutationKeys.delete(operation.fingerprint);
+  return value;
 }
 
 async function apiPut(url, body) {
-  return jsonRequest(url, { method: 'PUT', headers: authHeaders(), body: JSON.stringify(body) });
+  const operation = mutationRequest(url, 'PUT', body);
+  const value = await jsonRequest(url, { method: 'PUT', headers: { ...authHeaders(), 'Idempotency-Key': operation.key }, body: JSON.stringify(body) });
+  mutationKeys.delete(operation.fingerprint); return value;
 }
 
 async function apiDelete(url) {
-  return jsonRequest(url, { method: 'DELETE', headers: authHeaders() });
+  const operation = mutationRequest(url, 'DELETE');
+  const value = await jsonRequest(url, { method: 'DELETE', headers: { ...authHeaders(), 'Idempotency-Key': operation.key } });
+  mutationKeys.delete(operation.fingerprint); return value;
 }
 
 async function apiUpload(url, file, fields = {}, signal = undefined) {

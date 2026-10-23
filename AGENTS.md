@@ -22,6 +22,12 @@
 - `backend/services/reports.py`: injected report generation and domain events; `report_storage.py` owns latest-generation conditional transactions.
 - `backend/report_llm.py`, `backend/report_protocol.py`: model and SSE adapters; neither owns persistence.
 - `backend/services/run_requests.py`: user-scoped transactional run-creation receipts; operation keys never replace authentication.
+- `backend/audit_schema.py`: same-transaction domain audit and revision triggers; never audit credentials.
+- `backend/backup_contract.py`: bounded, credential-free v1/v2 account archives.
+- `backend/services/operations.py`: operation identities, expected versions, transactional receipts.
+- `backend/services/account_restore.py`: user-bound preview, source mappings and atomic non-destructive merges.
+- `backend/services/history.py`: user-scoped audit and conflict-aware deletion recovery.
+- `backend/services/identifiers.py`: monotonic run/month primary-key allocation metadata.
 - `backend/migrations.py`: ordered SQLite schema upgrades and the current schema version.
 - `backend/rate_limits.py`: shared authentication and AI request throttling.
 - `docs/architecture.md`: current SDD, module boundaries, diagrams, and evolution sequence.
@@ -50,6 +56,11 @@
 - `frontend/app-auth.js`: authentication state, forms, and account transitions.
 - `frontend/app-streams.js`: shared authenticated SSE decoding, cancellation, and terminal state.
 - `frontend/app-inline-editors.js`: live table DOM ownership and immutable row snapshots across refreshes.
+- `frontend/runtime/workspace-controller.mjs`: injected account drafts, leases and durable run queue.
+- `frontend/app-local-store.js`: atomic IndexedDB adapter; credentials never belong in records.
+- `frontend/app-workspace.js`: account cache, draft and queue DOM bridge.
+- `frontend/app-account-restore.js`: restore preview/window/session ownership.
+- `frontend/app-history.js`: audit paging and recover-deletion presentation.
 - `frontend/app-core.js`: dashboard shell, theme, tabs, and aggregate data loading.
 - `frontend/app-dashboard.js`: dashboard cards, alerts, and shoe tables.
 - `frontend/app-monthly.js`: monthly mileage table, inline forms, and edit snapshots.

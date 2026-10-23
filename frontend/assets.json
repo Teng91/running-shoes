@@ -1,6 +1,6 @@
 {
-  "version": "3.8.0",
-  "cache_name": "running-shoes-shell-v33",
+  "version": "3.9.0",
+  "cache_name": "running-shoes-shell-v34",
   "scripts": [
     "app-boot.js",
     "app-lifecycle.js",
@@ -10,6 +10,10 @@
     "app-streams.js",
     "app-resources.js",
     "app-inline-editors.js",
+    "app-local-store.js",
+    "app-workspace.js",
+    "app-account-restore.js",
+    "app-history.js",
     "app-core.js",
     "app-models.js",
     "app-markdown.js",
@@ -37,7 +41,8 @@
     "runtime/run-controller.mjs",
     "runtime/form-operations.mjs",
     "runtime/resource-store.mjs",
-    "runtime/strava-controller.mjs"
+    "runtime/strava-controller.mjs",
+    "runtime/workspace-controller.mjs"
   ],
   "styles": [
     "css/01-foundation.css",

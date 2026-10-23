@@ -175,6 +175,7 @@ window.__appBootLegacyPoll = window.setInterval(function () {
 
     <div class="user-info">
       <span class="user-name" id="user-label"></span>
+      <button class="btn btn-sm btn-edit" onclick="openWorkspaceModal()">資料與同步</button>
       <div class="sidebar-actions">
         <button class="btn btn-sm btn-edit" id="theme-toggle-btn" onclick="toggleTheme()">☀️ 亮色模式</button>
         <button class="btn btn-sm btn-edit" onclick="handleLogout()">登出</button>
@@ -186,6 +187,7 @@ window.__appBootLegacyPoll = window.setInterval(function () {
 
   <main class="app-workspace" id="app-workspace">
     <div class="app-version" id="app-version" aria-label="目前應用程式版本"></div>
+    <p id="workspace-status" class="workspace-help" role="status" aria-live="polite"></p>
     <div id="data-load-error" role="alert" hidden>載入資料失敗，目前顯示上次載入的資料。<button class="btn" onclick="loadData()">重新載入</button></div>
     <div id="run-load-error" role="alert" hidden>跑步紀錄載入失敗，目前保留上次資料。<button class="btn" onclick="loadRunsForSelectedMonth(runController.state.retryOptions)">重試跑步紀錄</button></div>
 
@@ -452,6 +454,7 @@ window.__appBootLegacyPoll = window.setInterval(function () {
 <!-- include:monthly-modal.html -->
 <!-- include:export-modal.html -->
 <!-- include:shoe-analysis-modal.html -->
+<!-- include:workspace-modal.html -->
 
 <script src="/vendor/chart.umd.min.js"></script>
 <script src="/vendor/marked.min.js"></script>

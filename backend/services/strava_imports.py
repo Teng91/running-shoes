@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from backend import models
 from backend.read_models.strava_preview import build_preview
+from backend.services.identifiers import allocate_id
 from backend.services.mileage import apply_run_mileage_deltas
 from backend.services.transactions import write_transaction
 
@@ -70,7 +71,7 @@ def import_runs(
     history_limit: int,
 ) -> ImportResult:
     """Validate, persist, and mileage-sync a user-scoped Strava import."""
-    with write_transaction(db, user_id):
+    with write_transaction(db, user_id, reason="strava.import"):
         normalized_mapping = _normalize_mapping(db, user_id, mapping)
         existing_ids = {
             value[0]
@@ -84,6 +85,8 @@ def import_runs(
         runs, duplicate_count, unmapped_count = _prepare_runs(
             rows, user_id, normalized_mapping, existing_ids
         )
+        for run in runs:
+            run.id = allocate_id(db, "runs")
         current_count = db.query(models.Run).filter(models.Run.user_id == user_id).count()
         if current_count + len(runs) > max_runs:
             raise RunQuotaExceededError

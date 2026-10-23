@@ -38,7 +38,14 @@ def build_account_export(
     *,
     now: datetime | None = None,
 ) -> tuple[dict[str, Any], str]:
-    """Build a user-scoped account backup without credentials or secrets."""
+    """Keep every collection in the same SQLite read snapshot, including legacy mode."""
+    # SAVEPOINT establishes a physical transaction even when pysqlite does not
+    # BEGIN for SELECT. Releasing it neither commits nor rolls back caller writes.
+    with db.begin_nested():
+        return _account_export_snapshot(db, user, now=now)
+
+
+def _account_export_snapshot(db: Session, user: models.User, *, now: datetime | None) -> tuple[dict[str, Any], str]:
     exported_at = now or datetime.now(UTC)
     shoes = db.query(models.Shoe).filter(models.Shoe.user_id == user.id).all()
     runs = db.query(models.Run).filter(models.Run.user_id == user.id).all()
@@ -56,7 +63,8 @@ def build_account_export(
     ).first()
     payload = {
         "format": "running-shoes-account-backup",
-        "version": 1,
+        "version": 2,
+        "source_id": user.backup_id,
         "exported_at": exported_at.isoformat(),
         "username": user.username,
         "shoes": [_serialize_shoe(shoe) for shoe in shoes],
@@ -65,6 +73,10 @@ def build_account_export(
         "running_goal": _serialize_goal(goal),
         "monthly_reports": [_serialize_report(row) for row in reports],
         "strava_imports": [_serialize_strava_import(row) for row in imports],
+        "history": [{key: getattr(row, key) for key in (
+            "id", "operation_id", "reason", "entity", "entity_id", "action", "before_json",
+            "after_json", "created_at", "restored", "imported",
+        )} for row in db.query(models.AuditEvent).filter_by(user_id=user.id).order_by(models.AuditEvent.id).all()],
     }
     filename = f"running_shoes_account_{exported_at.astimezone():%Y%m%d_%H%M%S}.json"
     return payload, filename

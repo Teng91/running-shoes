@@ -22,9 +22,9 @@ module.exports = async function checkSessionIsolation(browser, baseUrl) {
       window.fetch = async () => json({ recent_7_days: { km: 123.45 } });
       await loadDashboardAnalytics(selectedRunMonth());
       check(insights.textContent.includes('123.45'), 'A insights were rendered');
-      check(dashboardAnalyticsCache.size > 0, 'A insights were cached');
+      check(Boolean(resourceStore.peek('dashboard-analytics')), 'A insights were cached');
       handleLogout();
-      check(dashboardAnalyticsCache.size === 0, 'logout clears insight cache');
+      check(resourceStore.peek('dashboard-analytics') === undefined, 'logout clears insight cache');
       check(insights.textContent === '', 'logout clears insight DOM');
       setAuth('synthetic-B', 'user-B');
       window.fetch = async () => new Response('{}', { status: 503 });
@@ -42,7 +42,7 @@ module.exports = async function checkSessionIsolation(browser, baseUrl) {
       finishAnalytics(json({ recent_7_days: { km: 987.65 } }));
       await analytics;
       check(!insights.textContent.includes('987.65'), 'late A analytics cannot render');
-      check(dashboardAnalyticsCache.size === 0, 'late A analytics cannot refill cache');
+      check(resourceStore.peek('dashboard-analytics') === undefined, 'late A analytics cannot refill cache');
 
       setAuth('synthetic-A', 'user-A');
       let oldSignal, oldStream, oldCancelled = false;

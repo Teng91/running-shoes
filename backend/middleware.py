@@ -12,6 +12,7 @@ class StravaUploadLimitMiddleware:
     _paths: ClassVar[frozenset[str]] = frozenset({
         "/api/runs/import/strava",
         "/api/runs/import/strava/preview",
+        "/api/account-restore/preview",
     })
 
     def __init__(self, app: ASGIApp, max_bytes: int):
@@ -27,14 +28,17 @@ class StravaUploadLimitMiddleware:
             await self.app(scope, receive, send)
             return
         headers = dict(scope.get("headers", []))
+        is_backup = scope.get("path") == "/api/account-restore/preview"
+        max_bytes = 20 * 1024 * 1024 if is_backup else self.max_bytes
+        detail = "備份不可超過 20 MB" if is_backup else "Strava 上傳請求不可超過 11 MB"
         content_length = headers.get(b"content-length", b"")
         try:
             declared_size = int(content_length) if content_length else None
         except ValueError:
             declared_size = None
-        if declared_size is not None and declared_size > self.max_bytes:
+        if declared_size is not None and declared_size > max_bytes:
             await JSONResponse(
-                {"detail": "Strava 上傳請求不可超過 11 MB"}, status_code=413
+                {"detail": detail, "error": {"code": "too_large", "message": detail}}, status_code=413
             )(scope, receive, send)
             return
         body = bytearray()
@@ -45,9 +49,9 @@ class StravaUploadLimitMiddleware:
             if message["type"] != "http.request":
                 continue
             body.extend(message.get("body", b""))
-            if len(body) > self.max_bytes:
+            if len(body) > max_bytes:
                 await JSONResponse(
-                    {"detail": "Strava 上傳請求不可超過 11 MB"}, status_code=413
+                    {"detail": detail, "error": {"code": "too_large", "message": detail}}, status_code=413
                 )(scope, receive, send)
                 return
             if not message.get("more_body", False):

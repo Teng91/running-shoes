@@ -12,6 +12,10 @@ document.getElementById('shoe-analysis-modal').addEventListener('click', e => {
   if (e.target.id === 'shoe-analysis-modal') closeShoeAnalytics();
 });
 
+document.getElementById('workspace-modal').addEventListener('click', event => {
+  if (event.target.id === 'workspace-modal') closeWorkspaceModal();
+});
+
 // Check stored token on load
 async function init() {
   // Every new document starts at the home page, regardless of legacy saved tabs.
@@ -56,6 +60,8 @@ initializeFeatureLifecycle().then(() => {
   return initializeDataResources();
 }).then(() => {
   return initializeStravaFeature();
+}).then(() => {
+  return initializeLocalWorkspace();
 }).then(() => {
   initializeDialogs();
   initializeAuthSync();

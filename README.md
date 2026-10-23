@@ -55,9 +55,14 @@ running-shoes/
 │   │   ├── exports.py    # 帳號備份與跑鞋匯出 routes
 │   │   ├── spending.py   # 支出統計 routes
 │   │   ├── strava.py     # Strava upload／import routes
+│   │   ├── workspace.py  # 操作回執、歷史與帳號還原 adapters
 │   │   ├── runs.py       # 跑步日誌 CRUD routes
 │   │   └── shoes.py      # 跑鞋 CRUD HTTP routes
 │   ├── services/
+│   │   ├── account_restore.py # 預覽、來源 mapping 與原子合併還原
+│   │   ├── operations.py  # 操作身分、版本及回執的統一寫入入口
+│   │   ├── history.py     # User-scoped 歷史與防衝突誤刪復原
+│   │   ├── identifiers.py # 單調遞增 run／month 主鍵配置
 │   │   ├── accounts.py    # 註冊容量、密碼 CAS 與 token revocation 交易
 │   │   ├── goals.py       # 個人目標 upsert、版本與 rollback
 │   │   ├── reports.py     # 月報生成身分、事件及成功保存流程
@@ -70,6 +75,8 @@ running-shoes/
 │   │   ├── exports.py    # Framework-independent 匯出內容生成
 │   │   ├── strava_imports.py # Strava 匯入 transaction 與配對驗證
 │   │   └── mileage.py    # 跑步、鞋款、月份彙總的交易式里程同步
+│   ├── audit_schema.py   # 同交易異動事件及資料 revision triggers
+│   ├── backup_contract.py # 有界 v1／v2 備份格式與參照驗證
 │   ├── migrations.py     # 有版本的 SQLite schema upgrade
 │   ├── observability.py  # Request ID 與不含敏感內容的結構化 HTTP log
 │   ├── rate_limits.py    # Auth／AI process 與 SQLite shared rate limits
@@ -103,12 +110,13 @@ running-shoes/
 ├── frontend/
 │   ├── index.html        # 由 templates/ 產生的完整 Dashboard HTML
 │   ├── assets.json       # Script 順序、CSS 來源與 PWA revision 的單一清單
-│   ├── templates/        # Shell、六個彈窗與 worker 的可編輯來源
+│   ├── templates/        # Shell、七個彈窗與 worker 的可編輯來源
 │   ├── css/              # 依責任拆分的樣式來源，產生單一 styles.css
 │   ├── runtime/
 │   │   ├── feature-lifecycle.mjs # 功能生命週期
 │   │   ├── form-operations.mjs # 操作身分、草稿快照與成功回應合併
 │   │   ├── resource-store.mjs # 請求合併、ownership、錯誤與快取失效策略
+│   │   ├── workspace-controller.mjs # 注入帳號 storage／session 的草稿與同步佇列
 │   │   ├── run-controller.mjs # 注入 transport/session 的跑步 state
 │   │   └── strava-controller.mjs # 預覽、匯入與視窗操作所有權
 │   ├── app-lifecycle.js  # Legacy handler 與原生 runtime 的過渡橋接
@@ -123,6 +131,10 @@ running-shoes/
 │   ├── app-auth.js       # 登入、註冊、登出與帳號切換
 │   ├── app-streams.js    # 共用 SSE 解碼、取消與完成狀態
 │   ├── app-resources.js  # 原生資源模組、session 與功能快取的過渡橋接
+│   ├── app-local-store.js # IndexedDB 原子交易 adapter
+│   ├── app-workspace.js  # 草稿、資源快照及同步 DOM adapter
+│   ├── app-account-restore.js # 還原預覽與視窗操作身分
+│   ├── app-history.js    # 異動分頁與誤刪復原 UI
 │   ├── app-core.js       # Shell、主題、分頁與聚合資料載入
 │   ├── app-dashboard.js  # 首頁卡片、提醒與跑鞋表格
 │   ├── app-monthly.js    # 月跑量 CRUD、inline 表單與編輯快照
@@ -511,7 +523,7 @@ CI 失敗／取消時嘗試上傳已有產物；引擎完全卡死時可能只�
 CI 的 `frontend-pwa` job 上傳獨立 `browser-diagnostics-roundtrip` artifact，另一個 job 下載並驗證 PNG、trace ZIP 與合成錯誤標記，缺檔／損毀會讓 pipeline 失敗。
 
 `frontend-e2e` 會對真實 FastAPI／CORS 與暫存 SQLite 執行同一個 `release-check`：檢查 readiness／schema、
-完整 API contract、manifest 對應的 45 個 shell／worker 資產雜湊與 MIME、四個統計 API 的匿名拒絕存取，
+完整 API contract、manifest 對應的 50 個 shell／worker 資產雜湊與 MIME、四個統計 API 的匿名拒絕存取，
 再驗證 Chromium／WebKit 匿名手機啟動與 native runtime cache，以及 Chromium 離線重開。
 WebKit 離線 shell 由 `frontend-pwa` 的 fixture transport 中斷驗證；API probe 在 HTTP headers 後截斷 response body，完整讀取 JSON 並檢查 server 請求計數，避免 headers 前 TCP 中斷讓裸 fetch 一直 pending。這些不取代引擎之外的實機驗證。
 這個 task 不登入、不送出資料、不發布或回滾；正式 origin 必須是 HTTPS，HTTP 只允許 loopback。
@@ -589,6 +601,21 @@ Schema 3 正式上線前，必須執行異地備份、checksum 與隔離還原�
 Schema 4 上線前，執行異地備份、checksum 與隔離還原驗證。回滾優先 forward fix；若需回 v3.7.2，先停止所有實例與寫入、另備份 schema 4，確認新增表是唯一 schema 差異，
 再對停止寫入的資料庫執行 `UPDATE schema_metadata SET value='3' WHERE key='schema_version' AND value='4';`，保留新增表與業務資料，部署已驗證的 v3.7.2 image。禁止混跑兩版月報生成服務；回滾後失去生成順序保護。還原部署前快照會遺失後續寫入，僅作災難復原選項。
 
+### 可恢復的帳號工作區（SPEC-027，v3.9.0）
+
+側欄「資料與同步」提供草稿、同步佇列、備份合併還原及異動歷史。Asset 3.9.0／shell v34，共 50 個資產；發布流程包含正式備份、隔離還原驗證、CI 與部署後匿名 release-check。
+
+- 跑步、月跑量與目標表單自動存入 IndexedDB；鞋款、跑步、月份的彈窗／行內編輯保留原 ID、version 與輸入，可在工作區選擇恢復或捨棄。重開仍使用原版本，伺服器有新異動會回報衝突。資料按 origin／帳號分區，登出保留本機資料，另一帳號不可顯示或同步；共用裝置可按「清除此帳號的本機資料」。
+- 僅新增跑步支援離線寫入。先以同一 IndexedDB 交易持久化 payload／operation ID 並消耗對應草稿，成功才清除仍相同的表單；等待時的新輸入保留。尚未同步不計入統計。連線且開啟 App、回到前景或按立即同步時重試；不承諾關閉 App 後背景同步。
+- 多分頁以 120 秒原子 lease 避免同時發送，失聯重播同 operation ID，由伺服器交易回執防止重複。401 暫停等待重新登入；刪鞋、版本／配額或格式錯誤會列為「需要處理」，必須明確重新配對或移除，絕不默默換鞋。移除／清除會失去尚未同步紀錄，介面會先確認。瀏覽器儲存不可用時保留輸入並提示，連線可使用一般新增。
+- 最近鞋款、月跑量、目標及目前月份跑步另存本機快照；它們可能過期，不作為伺服器權威。Service worker 只快取公開 shell，IndexedDB 不存 token／密碼。瀏覽器回收空間或使用者清除網站資料會移除本機草稿／佇列，請定期同步、下載備份；本機資料不是加密保險箱。
+- 完整備份以同一資料庫讀取快照匯出，並行新增不會產生跨集合不一致。備份 JSON v2 包含穩定來源身分、鞋款基礎里程、月份歷史調整與異動歷史。選檔後先驗證／預覽，確認才在一個交易合併，保留既有暱稱、月份調整、目標與月報；不按同品牌型號合併鞋款。相同來源 ID／Strava ID 不重建，mapping 保留已刪紀錄的身分，重複匯入不撤銷後續刪除。新跑步正常累加里程。Strava 匯入摘要保留既有項目，剩餘容量內按新到舊合併，超額略過並在預覽列出，不清除既有摘要。舊 v1 格式仍接受，只保證完全相同檔案重複匯入不重建。
+- 預覽僅限本人、有效 20 分鐘；預覽後資料異動須重新預覽。上限 20 MB、5,000 雙鞋、50,000 筆跑步／歷史、2,412 個月份／月報及 1,000 筆匯入歷史，並受目標帳號配額限制；拒絕非有限數值、無效參照、未知欄位與認證內容，失敗整筆回滾。超過還原限制的大型完整匯出不會截斷，需另行規劃資料搬移；不會靜默部分還原。
+- Schema 5 起，鞋款、跑步、月跑量、目標每次寫入都在同一交易記錄前後值、原因及操作身分；升級前的歷史無法回溯產生。歷史分頁僅限本人；可復原刪除的跑步／鞋款及清除的月份，仍檢查原鞋款、目前版本、配額與 Strava 重複。復原會重新計算里程，原事件只可復原一次；備份帶入的歷史明確標為唯讀。
+- `/api/operations` 統一 operation ID、更新／刪除 expected_version、成功回執與錯誤 `{detail, error: {code, message}}`。既有 CRUD 保留相容性，新增／帶版本的異動可附 `Idempotency-Key`；未提供版本的舊式刪除不取得新契約的重播保護。年度、目標與洞察已移除相容鏡像 Map，統一由 resource store 擁有請求與快取。
+
+Schema 5 增加 user metadata、回執、預覽、mapping、異動、context 與主鍵配置表；既有業務資料／里程不改寫。Run／month ID 不因刪除而重用，避免恢復草稿寫到新紀錄；allocator 僅讀全域最大主鍵與 sequence 這類配置 metadata，不讀取其他帳號的業務值。上線前必須建立、校驗正式備份並完成隔離還原演練。若回滾至 v3.8.0，先停止所有寫入、另備份 schema 5，保留新增表／欄位／triggers，將 `schema_metadata` marker 降至 4，再切回舊映像及通過 readiness／匿名 release-check；舊版不再保證離線操作回執與主鍵不重用，不能混跑新舊寫入。重新升級需保留本機 queue 並使用新 shell revision。
+
 ### Schema 2 上線與回滾
 
 v3.4.0 只新增 `run_creation_requests` 表與 user/key 唯一約束，沒有改寫既有鞋款、日誌或里程。
@@ -608,7 +635,7 @@ Playwright／Chromium／WebKit 齊全時，也會執行版面測試。
 避免每次停止都重跑。Hook 不會呼叫其他模型、外部 API，或傳送提示、diff、原始碼與測試輸出。
 GitHub Actions 仍會在 push／pull request 執行 `verify`，並以三個可獨立重跑的 browser jobs 執行完整版面矩陣、真實 CRUD E2E 與 PWA 升級／離線測試；Dependabot 每週檢查 Python 與 GitHub Actions 更新。
 
-本次驗證基線為 Python **475 passed**、前端回歸測試 **113 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
+本次驗證基線為 Python **508 passed**、前端回歸測試 **124 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
 版面檢查涵蓋 WebKit／Chromium、亮／暗模式與 10 組直橫向尺寸，共 40 組設定，檢查六個功能分頁、三個認證表單、圖表、全部彈窗、行內編輯、停用／錯誤及空資料狀態。
 
 主要表單、工具列與彈窗操作統一為 44px 控制項；桌面表格內的緊湊操作為 36px，手機至少 44px。
@@ -803,7 +830,7 @@ Machine 若已停止，先用 `fly machine start <id> -a running-shoes` 啟動�
 每次發布須一併更新 HTML 的 `app-asset-version`、資產 query revision 與 SW cache 名稱。
 安裝先檢查所有資源及 HTML revision，成功後才啟用；導覽不將新 HTML 塞入舊 cache。
 新版資產下載失敗時保留完整舊 shell，恢復網路後重新更新；清理只限本 app 的 cache，不快取 API。
-首次安裝必須連網；離線 app shell 不代表能離線查詢或寫入跑步資料。首次從舊 worker 遷移時亦應保持連線，
+首次安裝必須連網；完成安裝且此帳號已載入鞋款後，可離線查看最近快照、恢復草稿與新增跑步至本機佇列；伺服器統計須連線同步。首次從舊 worker 遷移時亦應保持連線，
 讓新 worker 完整安裝後再重新開啟。`frontend-pwa` 使用本機 fixture、不連正式站，也不等同 iPhone 實機驗證。
 
 ### 同步雲端資料到本地

@@ -555,3 +555,27 @@ Goal form 初始化（v3.7.2）：switchTab 在 monthly panel 變成 active 前�
 `services/report_storage.py` 在短 writer reservation 交易中 upsert schema 4 的 `report_generations`。完成時以同一 user/year/month/token 驗證及 upsert，保護整份內容與 stats；DB receipt 適用多連線與多 process。
 統計完成後 rollback 讀取交易，LLM 不持有任何 transaction。新請求失敗／取消仍使舊生成過期，之前成功報告保持可讀；reservation 不進歷史 API。
 升級只新增表；備份、禁止混跑與 schema marker 回滾程序見 README／SPEC-026。Asset 3.8.0、shell v33。
+
+## 14. SPEC-027：可恢復帳號工作區
+
+[ADR-0010](adr/0010-recoverable-account-workspace.md) 定義草稿、離線佇列、還原及歷史邊界。
+
+```mermaid
+flowchart LR
+  UI[workspace / history / restore DOM adapters] --> WC[Native workspace controller]
+  WC --> IDB[Injected IndexedDB adapter]
+  WC --> HTTP[Authenticated transport]
+  UI --> HTTP
+  HTTP --> API[Workspace and legacy HTTP adapters]
+  API --> OPS[Operation / restore / history services]
+  OPS --> TX[User-scoped writer transaction]
+  TX --> SQL[Business rows + receipt + audit triggers]
+```
+
+`workspace-controller.mjs` 擁有 account/session ticket、草稿存取、queue lease、錯誤分類與明確重新配對；`app-local-store.js` 擁有 IDB transaction commit，DOM bridge 只負責表單／快照轉換及呈現。操作與消耗相同草稿在同一 IDB transaction；回應成功、帳號切換或重開均不把已接收操作當成新草稿。
+
+`services/operations.py` 是新契約的寫入入口，receipt 在業務交易內；舊 CRUD 帶版本＋key 時可轉交，未帶版本保持相容。`services/transactions.py` 的外層 user reservation 管理 WriteContext、flush／commit／rollback，巢狀 service 不獨立 commit。Schema 5 由 `audit_schema.py` 的白名單 triggers 產生原子事件／revision；不 audit 密碼或 users 表。`identifiers.py` 只配置全域 PK metadata，業務內容查詢仍限本人。
+
+`backup_contract.py` 驗證有界 v1/v2 graph；`services/account_restore.py` 擁有本人預覽、hash/revision、來源 mapping、完整交易與保留現有內容策略；router 不接管 commit。`services/history.py` 擁有可復原事件判斷、原鞋款／版本／配額檢查及里程重算，匯入事件只讀。
+
+resource store 現在直接擁有年度／目標／洞察結果，已移除原本診斷鏡像 Map。Service worker 只快取公開 shell，帳號資源快照由 IDB adapter 管理；新鮮網路結果及已修改欄位不被晚到本機快照覆蓋。v3.9.0 使用 asset 3.9.0、shell v34、schema 5；正式備份／rollback 見 README 與 SPEC-027。

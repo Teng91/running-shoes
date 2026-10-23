@@ -95,7 +95,7 @@ def forbidden_dependency_chain(start: Path, forbidden: tuple[str, ...]) -> list[
 
 
 def check_feature_boundaries() -> None:
-    for filename in ("runs.py", "shoes.py", "monthly.py", "auth.py", "goals.py", "reports.py"):
+    for filename in ("runs.py", "shoes.py", "monthly.py", "auth.py", "goals.py", "reports.py", "workspace.py"):
         path = ROUTERS / filename
         tree = ast.parse(path.read_text(encoding="utf-8"))
         for node in ast.walk(tree):

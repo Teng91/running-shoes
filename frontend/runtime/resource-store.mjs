@@ -48,6 +48,10 @@ export function createResourceStore({ session }) {
   }
   return Object.freeze({
     read, current, invalidate, policy: dataRefreshPolicy,
+    peek(resource) {
+      const result = records.get(resource)?.result;
+      return result?.status === 'fulfilled' && current(result) ? result.value : undefined;
+    },
     async refresh(mutation, readers, keys = {}, onResult = () => {}) {
       const policy = dataRefreshPolicy(mutation);
       if (mutation) invalidate(policy.resources);

@@ -6,7 +6,7 @@ function initializeDialogs() {
   const closers = {
     modal: closeModal, 'run-modal': closeRunModal, 'monthly-modal': closeMonthlyModal,
     'strava-modal': closeStravaModal, 'export-modal': closeExportModal,
-    'shoe-analysis-modal': closeShoeAnalytics,
+    'shoe-analysis-modal': closeShoeAnalytics, 'workspace-modal': closeWorkspaceModal,
   };
   const active = () => overlays.filter(overlay => overlay.classList.contains('active')).at(-1);
   const focusables = overlay => [...overlay.querySelectorAll('button, input, select, textarea, a[href], [tabindex]')]
