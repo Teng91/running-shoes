@@ -15,12 +15,16 @@ function goalFormValues(goal) {
   return { 'goal-start-year': String(goal.start_year), 'goal-monthly-km': String(goal.monthly_km) };
 }
 
-function renderGoalProgress() {
-  const cards = document.getElementById('goal-cards');
-  if (!cards) return;
+function prepareGoalForm() {
   const fields = goalFormValues(runningGoal);
   const values = getFormDraft('goal').reconcile(fields, readForm(Object.keys(fields)));
   for (const [id, value] of Object.entries(values)) document.getElementById(id).value = value;
+}
+
+function renderGoalProgress() {
+  const cards = document.getElementById('goal-cards');
+  if (!cards) return;
+  prepareGoalForm();
   const year = selectedYear || new Date().getFullYear();
   const now = new Date();
   const rows = monthlyMileages.filter(item => item.year === year);
