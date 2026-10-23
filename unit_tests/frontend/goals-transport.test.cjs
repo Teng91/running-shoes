@@ -49,7 +49,7 @@ test('dashboard analytics cache expires by local date and goals invalidate it', 
   const saveGoal = extract('saveRunningGoal');
   assert.match(loader, /const cachePrefix = `\$\{session\.generation\}\|\$\{localDateISO\(\)\}\|`/);
   assert.match(loader, /const cacheKey = `\$\{cachePrefix\}\$\{month\}`/);
-  assert.match(loader, /!key\.startsWith\(cachePrefix\)/);
+  assert.match(loader, /resourceStore\.read\('dashboard-analytics'/);
   assert.match(saveGoal, /expected_version: Number\(runningGoal\.version \|\| 0\)/);
   assert.match(saveGoal, /dashboardAnalyticsCache\.clear\(\)/);
 });

@@ -2,9 +2,15 @@
 let panelRevision = 0;
 const renderedPanels = new Map();
 
-function invalidatePanels() {
-  panelRevision += 1;
-  runController.state.annualRequest += 1;
+function invalidatePanels(resource = null) {
+  if (!resource) {
+    panelRevision += 1;
+    runController.state.annualRequest += 1;
+    return;
+  }
+  const dependencies = { shoes: ['shoes', 'runs', 'monthly', 'spending'],
+    monthly: ['monthly'], runs: ['runs', 'monthly'], goal: ['runs', 'monthly'] };
+  for (const name of dependencies[resource] || []) renderedPanels.delete(name);
 }
 
 function resetPanelRendering() {
@@ -123,7 +129,7 @@ async function loadData({ mutation = null } = {}) {
       Object.assign(runController.state, { rows: page.rows, summary, offset: 0, hasMore: page.hasMore, day: null });
       document.getElementById('run-load-error').hidden = true;
     }
-    render();
+    render(resource);
     // A slow optional source must not hold an otherwise usable screen behind boot.
     if (typeof hideAppBoot === 'function') hideAppBoot();
   };

@@ -127,6 +127,7 @@ module.exports = async function checkFrontendSafety(browser, baseUrl) {
       // A late annual read must not construct a chart after leaving monthly.
       switchTab('monthly'); await frame();
       runController.state.annualCache.clear();
+      resourceStore.invalidate(['annual-summary']);
       let finishAnnual;
       window.fetch = url => String(url).includes('/runs/year-summary?')
         ? new Promise(resolve => { finishAnnual = resolve; }) : Promise.resolve(json({}));

@@ -12,9 +12,15 @@ function registerResourceCaches() {
   resourceStore.registerCache('spending', () => {
     spendingSummary = null; spendingLoadRequestId++; spendingLoadPending = false;
   });
-  resourceStore.registerCache('goal', () => { goalProgressCache.clear(); goalProgressRequestId++; });
-  resourceStore.registerCache('annual', () => runController.state.annualCache.clear());
-  resourceStore.registerCache('dashboard', () => { dashboardAnalyticsCache.clear(); dashboardAnalyticsRequest++; });
+  resourceStore.registerCache('goal', () => {
+    goalProgressCache.clear(); goalProgressRequestId++; resourceStore.invalidate(['goal-progress']);
+  });
+  resourceStore.registerCache('annual', () => {
+    runController.state.annualCache.clear(); runController.state.annualRequest++; resourceStore.invalidate(['annual-summary']);
+  });
+  resourceStore.registerCache('dashboard', () => {
+    dashboardAnalyticsCache.clear(); dashboardAnalyticsRequest++; resourceStore.invalidate(['dashboard-analytics']);
+  });
 }
 
 function invalidateDataResources(resources) {

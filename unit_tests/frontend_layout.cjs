@@ -246,7 +246,10 @@ async function run(engine, name) {
           month_km: 50, ytd_km: 150, month_achievement_percent: 40, year_achievement_percent: 10,
           month_state: 'past', month_remaining_km: 75, year_remaining_km: 1350,
         } });
-        if (url.pathname === '/api/runs/year-summary') return route.fulfill({ json: { shoes: [] } });
+        if (url.pathname === '/api/runs/year-summary') return route.fulfill({ json: {
+          shoes: Array.from({ length: 8 }, (_, index) => ({ shoe_id: index + 1,
+            monthly_km: Array.from({ length: 12 }, (_, month) => month === 8 ? 18.67 : 0) })),
+        } });
         const contentTypes = { '.html': 'text/html', '.js': 'application/javascript', '.mjs': 'application/javascript', '.css': 'text/css',
           '.json': 'application/json', '.webmanifest': 'application/manifest+json',
           '.svg': 'image/svg+xml', '.png': 'image/png' };
@@ -276,7 +279,6 @@ async function run(engine, name) {
           forecast_retirement_date: '2027-06-01', forecast_source: 'recent_90_days', forecast_monthly_km: 80 }));
         retiredShoes = [{ ...shoes[0], id: 20, is_retired: true }];
         runController.state.rows = shoes.map((shoe, i) => ({ id: i + 1, shoe_id: shoe.id, date: `2026-09-${String(i + 1).padStart(2, '0')}`, km: 18.67, source: 'manual' }));
-        runController.state.annualCache.set(2026, { shoes: runController.state.rows.map(run => ({ shoe_id: run.shoe_id, monthly_km: Array.from({length: 12}, (_, i) => i === 8 ? run.km : 0) })) });
         monthlyMileages = Array.from({ length: 12 }, (_, i) => ({ id: i + 1, year: 2026, month: i + 1, km: 120 + i }));
         monthlySpending = Array.from({ length: 12 }, (_, i) => ({ year: 2026, month: i + 1, total_paid: 4000, total_orig: 5000 }));
         spendingSummary = { total_paid: 48000, total_original: 60000, savings: 12000,

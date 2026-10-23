@@ -1,6 +1,7 @@
 // ====== Inline Edit (double-click) ======
 // 現役與退役共用的表格內即時編輯：差別只在操作哪個陣列（arr）
 async function inlineEditRow(arr, idx, field, el) {
+  if (el.querySelector('.inline-input')) return;
   const operations = getFormOperations('shoes');
   const operation = operations.capture();
   const input = document.createElement('input');
@@ -9,9 +10,12 @@ async function inlineEditRow(arr, idx, field, el) {
   input.value = arr[idx][field];
   const shoe = { ...arr[idx] };
   let committed = false;
+  const editor = beginInlineEdit(el.closest('tbody').id, () => { committed = true; });
   const commit = async () => {
     if (committed || !operations.current(operation)) return;
     committed = true;
+    finishInlineEdit(editor);
+    input.disabled = true;
     const val = parseFloat(input.value);
     if (Number.isFinite(val) && val >= 0) {
       try {
@@ -21,10 +25,13 @@ async function inlineEditRow(arr, idx, field, el) {
         if (operations.current(operation) && e.name !== 'AbortError') alert(e.message || '更新失敗');
       }
     }
-    if (operations.current(operation)) render();
+    if (operations.current(operation)) render('shoes');
   };
   input.addEventListener('blur', commit);
-  input.addEventListener('keydown', e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') { committed = true; render(); } });
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') commit();
+    if (e.key === 'Escape') { committed = true; finishInlineEdit(editor); render('shoes'); }
+  });
   el.innerHTML = '';
   el.appendChild(input);
   input.focus();
@@ -255,7 +262,7 @@ registerFeatureReset('shoe-editor', () => shoeModal.close());
 
 // 給舊呼叫處用的精簡 wrapper
 function openAddModal()      { shoeModal.openForCreate(); }
-function openEditModal(i)    { shoeModal.openForEdit(shoes[i], false); }
-function openRetiredEditModal(i) { shoeModal.openForEdit(retiredShoes[i], true); }
+function openEditModal(i)    { shoeModal.openForEdit((inlineTableRows.get('shoe-table') || shoes)[i], false); }
+function openRetiredEditModal(i) { shoeModal.openForEdit((inlineTableRows.get('retired-table') || retiredShoes)[i], true); }
 function closeModal()        { shoeModal.close(); }
 

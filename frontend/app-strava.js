@@ -110,6 +110,7 @@ async function previewStravaFile() {
     stravaController.state.preview.gear_groups.forEach((group, index) => {
       if (group.suggested_shoe_id) document.getElementById(`strava-map-${index}`).value = String(group.suggested_shoe_id);
     });
+    setStravaMappingDisabled(stravaController.importing());
     document.getElementById('strava-import-btn').disabled = stravaController.importing() || stravaController.state.preview.importable_count === 0;
   } catch (e) {
     if (e.name === 'AbortError' || !stravaController.current(operation)) return;
@@ -142,6 +143,7 @@ async function importStrava() {
   if (!operation) return;
   const button = document.getElementById('strava-import-btn');
   button.disabled = true;
+  setStravaMappingDisabled(true);
   try {
     const result = await stravaController.import(operation, file, {
       mapping: JSON.stringify(mapping), start_date: startDate, end_date: endDate,
@@ -161,7 +163,12 @@ async function importStrava() {
   } finally {
     stravaController.finishImport(operation);
     if (stravaController.windowCurrent(operation) && !stravaController.importing() && stravaController.state.preview) {
+      setStravaMappingDisabled(false);
       button.disabled = stravaController.state.preview.importable_count === 0;
     }
   }
+}
+
+function setStravaMappingDisabled(disabled) {
+  document.querySelectorAll('#strava-mapping select').forEach(select => { select.disabled = disabled; });
 }

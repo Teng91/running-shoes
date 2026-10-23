@@ -62,20 +62,25 @@ async function renderShoeStackedChart() {
   const year = parseInt(sel ? sel.value : selectedStackedYear, 10);
   if (!year) return;
   const requestId = ++runController.state.annualRequest;
-  let yearRuns = runController.state.annualCache.get(year);
-  if (!yearRuns) {
-    try {
-      yearRuns = await apiGet(`/runs/year-summary?year=${year}`);
-      if (!Array.isArray(yearRuns.shoes)) throw new Error('年度彙總資料格式錯誤');
-    } catch (error) {
-      console.error('載入年度跑步紀錄失敗:', error);
-      if (requestId === runController.state.annualRequest) renderedPanels.delete('monthly');
-      return;
-    }
-    if (requestId !== runController.state.annualRequest) return;
+  let yearRuns;
+  try {
+    const result = await resourceStore.read('annual-summary', {
+      key: String(year), refresh: false,
+      loader: async () => {
+        const value = await apiGet(`/runs/year-summary?year=${year}`);
+        if (!Array.isArray(value.shoes)) throw new Error('年度彙總資料格式錯誤');
+        return value;
+      },
+    });
+    if (!resourceStore.current(result) || requestId !== runController.state.annualRequest) return;
+    if (result.status === 'rejected') throw result.error;
+    yearRuns = result.value;
     runController.state.annualCache.set(year, yearRuns);
+  } catch (error) {
+    console.error('載入年度跑步紀錄失敗:', error);
+    if (requestId === runController.state.annualRequest) renderedPanels.delete('monthly');
+    return;
   }
-  if (requestId !== runController.state.annualRequest) return;
 
   if (document.querySelector('.tab-panel.active')?.dataset.panel !== 'monthly') {
     renderedPanels.delete('monthly');

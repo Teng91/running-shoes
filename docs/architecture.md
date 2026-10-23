@@ -142,7 +142,13 @@ flowchart TB
     AI --> Planner[agent_planner.py]
     AI --> AgentTools[agent_tools.py]
     AI --> Protocol[agent_protocol.py]
-    ReportRoutes --> Reports[reports.py]
+    ReportRoutes --> ReportService[services/reports.py<br/>generation ownership / events]
+    ReportService --> ReportStorage[services/report_storage.py<br/>reservation / conditional upsert]
+    ReportStorage --> Models
+    ReportRoutes --> ReportLLM[report_llm.py]
+    ReportRoutes --> ReportProtocol[report_protocol.py<br/>events to SSE]
+    ReportLLM --> Reports[reports.py<br/>statistics / prompt]
+    ReportRoutes --> Reports
     Reports --> ReadModels[read_models/<br/>shared user-scoped native statistics]
     Tools --> ReadModels
     ReadModels --> Models
@@ -205,6 +211,7 @@ flowchart LR
     Resources --> Store[runtime/resource-store.mjs<br/>tickets / per-resource completion]
     Resources --> Core[app-core.js<br/>shell / theme / loadData]
     Core --> Store
+    Core --> Inline[app-inline-editors.js<br/>live DOM / row snapshots]
     Lifecycle --> Forms[runtime/form-operations.mjs<br/>draft baseline / operations]
     Streams -.-> AgentUI
     Streams -.-> ReportsUI
@@ -361,7 +368,7 @@ ARIA 與 `agent-mode` 狀態，不以 inline style 決定 shell 幾何，因此�
 | `backend/read_models/` | user-scoped native statistics／身份消歧義 | models、純 domain、SQLAlchemy | HTTP frameworks、routers、tools |
 | `backend/shoe_metrics.py` | 折數、成本、壽命共同算術 | models | HTTP、AI、UI |
 | `backend/migrations.py` | ordered/idempotent schema upgrade 與版本 | models、database | routers、frontend |
-| `backend/analytics.py`、`goals.py`、`reports.py` | 可重用的業務計算與 use case | models、LLM adapter（僅 AI use case） | FastAPI app、frontend |
+| `backend/analytics.py`、`goals.py`、`reports.py` | 可重用的唯讀統計與月報提示詞 | models、read models | FastAPI app、frontend |
 | `backend/exporting.py`、`strava_import.py` | 輸入／輸出轉換 | models 或純資料 | FastAPI／HTTP exception |
 | `backend/tools/` | Agent JSON adapter、tool definitions、legacy parser | read models、受信任 adapter | route 與 UI state |
 | `backend/agent.py` | LLM／tool loop runner | planner、tools、protocol、LLM adapter | HTTP response、frontend state |
@@ -535,3 +542,16 @@ PWA fixture 對 worker.update 與 candidate 終態設共同 deadline，涵蓋已
 PWA CI 後續補充（v3.7.1）：離線 worker script fixture 回 503，並在每次回到在線前驗證 update 在期限內失敗，清楚區分尚未建立 installing candidate 的 script request 卡住與 worker statechange 漏接；細節見 SPEC-025 CI follow-up。正式 shell revision 為 v31，schema 3 不變。
 
 Goal form 初始化（v3.7.2）：switchTab 在 monthly panel 變成 active 前呼叫 prepareGoalForm，同步建立草稿 baseline，避免下一個 animation frame 才第一次 reconcile 時覆蓋已輸入內容。圖表仍使用延後 render；晚到的 goal resource 依既有 baseline 合併。正式 shell revision 為 v32。
+
+## 13. SPEC-026：表格所有權與月報生成服務
+
+[ADR-0009](adr/0009-inline-edit-ownership-and-report-generations.md) 將資源完成的畫面失效限制在依賴分頁；goal 不重建鞋款表格。
+`app-inline-editors.js` 以 tbody 擁有 live editor，表格 renderer 在編輯期間不替換 DOM；列快照讓其他按鈕／第二次編輯仍使用顯示中的 id／version，避免背景排序後用錯陣列索引。
+明確提交先結束 ownership，再刷新；失敗依原有 CAS 衝突政策處理。取消與 session teardown 撤銷 blur callback，完成後顯示最新資料。
+年度／目標／洞察讀取都走 resource store，既有 Map 保留作診斷鏡像，不再作為讀取快取來源。失效同時清除 ticket 與鏡像，session reset 全部清理。
+延後 dispatch 先驗證 ticket／session，舊 owner 不得借用新帳號 token 發送請求。
+
+`services/reports.py` 注入統計 builder 及 text stream，產生 token/error/done domain events；`report_llm.py` 僅轉接 prompt／provider error，`report_protocol.py` 序列化 SSE／UTC timestamp。
+`services/report_storage.py` 在短 writer reservation 交易中 upsert schema 4 的 `report_generations`。完成時以同一 user/year/month/token 驗證及 upsert，保護整份內容與 stats；DB receipt 適用多連線與多 process。
+統計完成後 rollback 讀取交易，LLM 不持有任何 transaction。新請求失敗／取消仍使舊生成過期，之前成功報告保持可讀；reservation 不進歷史 API。
+升級只新增表；備份、禁止混跑與 schema marker 回滾程序見 README／SPEC-026。Asset 3.8.0、shell v33。

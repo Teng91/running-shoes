@@ -11,7 +11,7 @@ from backend import models
 from backend.credentials import get_password_hash
 from backend.database import Base
 
-CURRENT_SCHEMA_VERSION = 3
+CURRENT_SCHEMA_VERSION = 4
 
 
 def schema_version(engine: Engine) -> int:
@@ -88,7 +88,7 @@ def run_startup_migrations(
             db.close()
 
     Base.metadata.create_all(bind=engine, tables=[
-        table for table in Base.metadata.sorted_tables if table.name != "run_creation_requests"
+        table for table in Base.metadata.sorted_tables if table.name not in {"run_creation_requests", "report_generations"}
     ])
 
     # Add concurrency/session versions to existing databases without changing data.
@@ -199,6 +199,11 @@ def run_startup_migrations(
             connection.execute(text(
                 "ALTER TABLE shoes ADD COLUMN nickname VARCHAR(80) NOT NULL DEFAULT ''"
             ))
+
+    # Schema 4 adds one latest-generation receipt per user/month. Saved reports
+    # remain untouched, and no empty placeholder report becomes visible.
+    if applied_version < 4:
+        cast(Table, models.ReportGeneration.__table__).create(bind=engine, checkfirst=True)
 
     with engine.begin() as connection:
         connection.execute(text(

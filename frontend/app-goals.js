@@ -41,10 +41,13 @@ async function loadGoalProgress(year, month) {
   const requestId = ++goalProgressRequestId;
   const key = `${session.generation}|${runningGoal.version}|${localDateISO()}|${year}-${month}`;
   const cards = document.getElementById('goal-cards');
-  if (goalProgressCache.has(key)) { renderGoalCards(goalProgressCache.get(key), year, month); return; }
   cards.innerHTML = '<div class="card"><div class="card-sub">目標進度載入中…</div></div>';
   try {
-    const progress = await apiGet(`/running-goal/progress?year=${year}&month=${month}`);
+    const result = await resourceStore.read('goal-progress', { key, refresh: false,
+      loader: () => apiGet(`/running-goal/progress?year=${year}&month=${month}`) });
+    if (!resourceStore.current(result)) return;
+    if (result.status === 'rejected') throw result.error;
+    const progress = result.value;
     if (!isCurrentAuthSession(session) || requestId !== goalProgressRequestId || selectedYear !== year || selectedGoalMonth !== month) return;
     goalProgressCache.set(key, progress);
     renderGoalCards(progress, year, month);
@@ -101,7 +104,7 @@ async function saveRunningGoal() {
   try {
     const goal = await apiPut('/running-goal', payload);
     if (goalSaveOperation !== operation || !isCurrentAuthSession(operation.session)) return;
-    invalidateDataResources(['goal']);
+    invalidateDataResources(['goal', 'goal-progress', 'dashboard-analytics']);
     const serverValues = goalFormValues(goal);
     const values = getFormDraft('goal').acknowledge(serverValues, operation.form, readForm(Object.keys(serverValues)));
     for (const [id, value] of Object.entries(values)) document.getElementById(id).value = value;

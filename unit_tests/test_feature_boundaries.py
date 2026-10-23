@@ -86,7 +86,7 @@ def test_schema_three_nickname_upgrade_preserves_ids_mileage_versions_and_is_ide
         connection.execute(text('ALTER TABLE shoes DROP COLUMN nickname'))
         connection.execute(text("UPDATE schema_metadata SET value='2' WHERE key='schema_version'"))
     run_startup_migrations(engine, sessionmaker(bind=engine))
-    assert schema_version(engine) == 3
+    assert schema_version(engine) == 4
     with Session(engine) as db:
         shoe = db.get(models.Shoe, 7)
         assert (shoe.nickname, shoe.mileage, shoe.baseline_mileage, shoe.version) == ('', 123.45, 123.45, 9)

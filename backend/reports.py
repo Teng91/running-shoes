@@ -1,28 +1,22 @@
-"""AI 月度跑步報告：後端算好統計 → one-shot LLM 串流生成 → 存入 monthly_reports。
+"""月報統計與提示詞：後端計算數字，LLM adapter 使用此唯讀快照。
 
 與 agent.py 的差別：不走 agent loop、不提供工具。所有數字由後端
 計算後以 JSON 餵給模型，LLM 只負責把數字寫成文字（zh-TW markdown）。
-成功產生的報告存入 `monthly_reports`（一人一月一版，重新產生即覆蓋），
-之後由 GET endpoint 直接讀取，不必重打 LLM。
+生成身分與保存由 application service 管理；本模組只提供統計及提示詞。
+已保存報告由 GET endpoint 讀取，不必重打 LLM。
 """
 
 import json
-from collections.abc import Generator
-from datetime import UTC, date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
-from backend import goals, llm, models, schemas
+from backend import goals, models
 from backend.read_models import mileage as mileage_stats
 from backend.read_models import shoes as shoe_stats
 from backend.read_models.run_statistics import month_bounds, period_distances, run_period
 
 REPORT_SECTIONS = ["本月總覽", "趨勢解讀", "鞋款壽命與退役提醒", "下月建議"]
-
-
-def _sse(event: dict) -> str:
-    return f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
 
 
 def _round(value: float | None, digits: int = 2) -> float:
@@ -193,83 +187,3 @@ def build_report_messages(stats: dict) -> list[dict]:
         {"role": "system", "content": system},
         {"role": "user", "content": json.dumps(stats, ensure_ascii=False)},
     ]
-
-
-def _persist_report(
-    db: Session, user_id: int, year: int, month: int, content: str, model: str, stats: dict
-) -> datetime:
-    now = datetime.now(UTC)
-    statement = sqlite_insert(models.MonthlyReport).values(
-        user_id=user_id,
-        year=year,
-        month=month,
-        content_md=content,
-        model=model,
-        stats_json=stats,
-        created_at=now,
-        updated_at=now,
-    )
-    statement = statement.on_conflict_do_update(
-        index_elements=["user_id", "year", "month"],
-        set_={
-            "content_md": content,
-            "model": model,
-            "stats_json": stats,
-            "updated_at": now,
-        },
-    )
-    db.execute(statement)
-    db.commit()
-    return now
-
-
-def generate_report_stream(
-    db: Session,
-    user_id: int,
-    year: int,
-    month: int,
-    model: str,
-    *,
-    today: date | None = None,
-) -> Generator[str, None, None]:
-    """產生月度報告的 SSE 串流；成功才寫入 monthly_reports，失敗不留任何資料。"""
-    stats = build_report_stats(db, user_id, year, month, today=today)
-    messages = build_report_messages(stats)
-    # Release the read snapshot before waiting on a potentially long external
-    # LLM stream.  WAL already permits readers and writers to coexist, and this
-    # keeps the report request from retaining an unnecessary transaction.
-    db.rollback()
-
-    chunks: list[str] = []
-    try:
-        for chunk in llm.call_llm_stream(llm.LLMProvider.openrouter, model, messages, tools=None):
-            chunks.append(chunk)
-            yield _sse({"type": "token", "text": chunk})
-    except llm.LLMError as exc:
-        yield _sse({"type": "error", "text": str(exc)})
-        return
-    except Exception:  # noqa: BLE001
-        yield _sse({"type": "error", "text": "報告產生失敗，請稍後再試。"})
-        return
-
-    content = "".join(chunks)
-    if not content.strip():
-        yield _sse({"type": "error", "text": "模型未回傳任何內容，請稍後再試。"})
-        return
-
-    try:
-        updated_at = _persist_report(db, user_id, year, month, content, model, stats)
-    except Exception:  # noqa: BLE001
-        db.rollback()
-        yield _sse({"type": "error", "text": "報告產生成功，但儲存失敗，請重新產生。"})
-        return
-
-    yield _sse(
-        {
-            "type": "done",
-            "model": model,
-            "year": year,
-            "month": month,
-            "updated_at": schemas.serialize_utc_timestamp(updated_at),
-        }
-    )

@@ -66,7 +66,7 @@
 ## Verification evidence
 
 - 本機 `verify-all` 通過：464 Python、95.29% backend branch coverage、40 組版面、雙引擎 CRUD／SPEC-025 與 PWA，無跳過。
-- `frontend-test` 最新 105 個具名案例通過；`eval-agent` 10 個合成評估通過；`docs-check` 核對 44 個 release assets 及具名追蹤。
+- `frontend-test` 在 v3.7.2 為 106 個具名案例通過；`eval-agent` 10 個合成評估通過；`docs-check` 核對 44 個 release assets 及具名追蹤。
 - 發布必須再確認 main／tag CI、備份還原及正式 origin 的匿名 release-check。
 
 ## CI follow-up：v3.7.1

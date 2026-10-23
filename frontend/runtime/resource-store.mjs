@@ -24,7 +24,14 @@ export function createResourceStore({ session }) {
     const ticket = { key, epoch, session: session.capture(), consumed: false };
     records.set(resource, ticket);
     // Deferring loader also coalesces calls made in the same synchronous turn.
-    const promise = Promise.resolve().then(loader).then(
+    const promise = Promise.resolve().then(() => {
+      // Dispatch in the same captured session even when auth changes before
+      // this microtask. A discarded read must never borrow a new account token.
+      if (ticket.epoch !== epoch || records.get(resource) !== ticket || !session.current(ticket.session)) {
+        throw Object.assign(new Error('Resource owner expired'), { name: 'AbortError' });
+      }
+      return loader();
+    }).then(
       value => ({ resource, key, ticket, status: 'fulfilled', value }),
       error => ({ resource, key, ticket, status: 'rejected', error }),
     ).then(result => {

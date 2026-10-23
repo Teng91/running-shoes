@@ -13,7 +13,7 @@ require('node:test').before(async () => {
 
 function featureContext(globals = {}) {
   const context = vm.createContext({ structuredClone, formSnapshotMatches: matchesSnapshot,
-    dashboardAnalyticsCache: new Map(), dashboardAnalyticsRequest: 0,
+    dashboardAnalyticsCache: new Map(), dashboardAnalyticsRequest: 0, inlineEditors: new Map(), inlineTableRows: new Map(),
     captureAuthSession: () => ({}), isCurrentAuthSession: () => true,
     getSelectedCategories: () => [], ...globals });
   const drafts = new Map();
@@ -31,7 +31,7 @@ function featureContext(globals = {}) {
     }));
     return owners.get(name);
   };
-  vm.runInContext(['readForm', 'matchesForm', 'shoeLabel', 'invalidateDataResources', 'registerResourceCaches', 'goalFormValues', 'prepareGoalForm'].map(extract).join('\n'), context);
+  vm.runInContext(['beginInlineEdit', 'finishInlineEdit', 'preserveInlineTable', 'readForm', 'matchesForm', 'shoeLabel', 'invalidateDataResources', 'registerResourceCaches', 'goalFormValues', 'prepareGoalForm'].map(extract).join('\n'), context);
   context.registerResourceCaches();
   return context;
 }
