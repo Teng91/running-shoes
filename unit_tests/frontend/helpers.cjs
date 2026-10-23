@@ -31,7 +31,7 @@ function featureContext(globals = {}) {
     }));
     return owners.get(name);
   };
-  vm.runInContext(['readForm', 'matchesForm', 'shoeLabel', 'invalidateDataResources', 'registerResourceCaches', 'goalFormValues'].map(extract).join('\n'), context);
+  vm.runInContext(['readForm', 'matchesForm', 'shoeLabel', 'invalidateDataResources', 'registerResourceCaches', 'goalFormValues', 'prepareGoalForm'].map(extract).join('\n'), context);
   context.registerResourceCaches();
   return context;
 }

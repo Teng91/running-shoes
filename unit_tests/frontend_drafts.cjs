@@ -52,10 +52,17 @@ module.exports = async function checkDrafts(browser, baseUrl) {
     page.on('dialog', dialog => dialog.accept());
     await page.goto(baseUrl, { waitUntil: 'networkidle' });
     await page.locator('#app-boot').waitFor({ state: 'hidden' });
-    await page.evaluate(() => switchTab('monthly'));
+    // Hold the first panel frame so typing before its render is deterministic.
+    await page.evaluate(() => {
+      const frames = [], original = window.requestAnimationFrame;
+      window.requestAnimationFrame = callback => { frames.push(callback); return 0; };
+      switchTab('monthly');
+      window.requestAnimationFrame = original;
+      window.__resumeGoalPanel = () => frames.forEach(callback => callback(performance.now()));
+    });
     await page.locator('#goal-monthly-km').fill('180');
     await page.locator('#goal-start-year').focus();
-    await page.evaluate(() => toggleTheme());
+    await page.evaluate(() => { window.__resumeGoalPanel(); toggleTheme(); });
     assert.equal(await page.locator('#goal-monthly-km').inputValue(), '180', 'blurred goal draft survives theme redraw');
     await page.locator('#save-goal-btn').click(); await goalPending;
     await page.locator('#goal-monthly-km').fill('200');

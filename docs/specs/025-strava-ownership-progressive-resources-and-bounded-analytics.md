@@ -45,6 +45,8 @@
 - [x] AC-7：Given 已在 installing 的更新或中斷資產，When PWA 檢查，Then 正確觀測該 worker 並在逾時保存階段與註冊狀態。
 - [x] AC-8：Given 未壓縮資產 body 長度不符，When 引擎仍回傳成功，Then installer 拒絕候選 shell；壓縮回應不以解壓大小比對 wire length。
 
+- [x] AC-9：Given 首次切換月跑量，When 使用者在第一個 panel frame 前輸入並失焦，Then 延後 render 及晚到的 goal 不覆蓋草稿。
+
 ## Test traceability
 
 | Acceptance criterion | Named test / command |
@@ -57,6 +59,7 @@
 | AC-6 | `unit_tests/test_analytics.py::test_shoe_analytics_sql_is_bounded_and_user_scoped` |
 | AC-7 | `unit_tests/frontend/strava-resources.test.cjs::SPEC-025 worker observer handles an already installing candidate` |
 | AC-8 | `unit_tests/frontend/strava-resources.test.cjs::SPEC-025 worker refuses truncated identity bodies without comparing compressed lengths` |
+| AC-9 | `unit_tests/frontend/strava-resources.test.cjs::SPEC-025 goal baseline exists before the first deferred panel render` |
 
 補充雙引擎驗收：`python3 scripts/task.py frontend-e2e`、`python3 scripts/task.py frontend-pwa`。
 
@@ -70,6 +73,12 @@
 
 v3.7.0 main run 39934466655 的 PWA 失敗 artifact 12492509529 顯示 update timeline 只有 observe／failure、installing 與 waiting 都為 null；trace 的 worker script request status -1。最後的 fixture 請求是在 networkDown 中的 worker script；後續候選尚未抵達 server。相同 SHA 的 tag run 39934467048 PWA 與 diagnostics roundtrip 通過，仍不能作為 main 失敗的替代。
 
-離線 fixture 針對 worker script 回 503 以終止背景更新；每次回到在線前，以 10 秒 deadline 驗證 registration.update 必須失敗，避免舊更新佇列延誤下一個 candidate。這是 AC-7 的實際 browser 驗收，仍保留全部失敗安裝／離線／恢復斷言。v3.7.0 tag 不重寫；正式發布／部署使用 asset 3.7.1／shell v31，schema 維持 3，回滾 image 不變。
+離線 fixture 針對 worker script 回 503 以終止背景更新；每次回到在線前，以 10 秒 deadline 驗證 registration.update 必須失敗，避免舊更新佇列延誤下一個 candidate。這是 AC-7 的實際 browser 驗收，仍保留全部失敗安裝／離線／恢復斷言。v3.7.0 tag 不重寫；此修正納入 asset 3.7.1／shell v31，schema 維持 3，回滾 image 不變；正式發布版本依後續驗收。
 
 v3.7.1 本機 `verify-all` 全數通過：464 Python、105 Node、95.29% backend branch coverage、40 組版面、雙引擎 E2E／PWA 無跳過。離線 update 明確失敗後才恢復在線，避免只用改變 fixture 狀態推論先前 scope job 已結束。
+
+## CI follow-up：v3.7.2
+
+v3.7.1 main／tag PWA 均通過；tag 39936149030 的 WebKit E2E artifact 12493792297 顯示首次 monthly panel 尚未 render，使用者輸入 180 後第一次 reconcile 將其覆蓋為 125。單靠之後的 baseline 保護不足，必須在可互動前建立 baseline。switchTab 同步呼叫 prepareGoalForm，圖表保留延後繪製；雙引擎 fixture 持有首次 frame、先輸入再釋放，固定驗證此交錯。正式版本使用 3.7.2／shell v32，schema 3。
+
+v3.7.2 本機 `verify`：464 Python、106 Node，後端覆蓋率依當次輸出；`frontend-e2e`／`frontend-pwa` 通過，包含雙引擎首次 frame 草稿與匿名 v3.7.2 的 44 資產檢查。40 組版面沿用相同 UI 的 v3.7.1 本機結果，最終 CI 另對 v3.7.2 執行完整矩陣。

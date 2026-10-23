@@ -145,3 +145,23 @@ test('SPEC-025 worker observer waits for the candidate created by a queued updat
   latest.state = 'activated'; registration.installing = null; latest.dispatchEvent(new Event('statechange'));
   assert.equal(await observing, 'activated');
 });
+
+test('SPEC-025 goal baseline exists before the first deferred panel render', () => {
+  const elements = nodes(), frames = [];
+  const context = vm.createContext({ document: { getElementById: id => elements[id], querySelectorAll: () => [],
+    querySelector: selector => selector === '.mobile-menu-toggle' ? { setAttribute() {} } : { textContent: 'monthly' } },
+    runningGoal: { start_year: 2026, monthly_km: 125 }, authToken: null, setMobileMenu() {},
+    requestAnimationFrame: callback => frames.push(callback),
+    window: { matchMedia: () => ({ matches: false }) } });
+  elements['app-workspace'].classList.toggle = () => {};
+  elements['sidebar-menu'].classList.contains = () => false;
+  vm.runInContext(extract('switchTab'), context);
+  context.renderActivePanel = () => context.prepareGoalForm();
+  context.switchTab('monthly');
+  assert.equal(elements['goal-monthly-km'].value, '125');
+  elements['goal-monthly-km'].value = '180';
+  frames.forEach(callback => callback()); context.prepareGoalForm();
+  assert.equal(elements['goal-monthly-km'].value, '180');
+  context.runningGoal = { start_year: 2027, monthly_km: 200 }; context.prepareGoalForm();
+  assert.equal(elements['goal-monthly-km'].value, '180', 'late server goal preserves typed draft');
+});

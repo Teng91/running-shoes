@@ -565,7 +565,12 @@ Schema 3 正式上線前，必須執行異地備份、checksum 與隔離還原�
 
 - v3.7.0 main CI 的 trace 顯示 worker update 卡在尚無 installing candidate 的 script request；相同 tag 的 PWA 已通過，不能以此略過 main 失敗。
 - WebKit 離線 fixture 對 worker script 回 503，避免背景 register/update 在 TCP drop 後持續重試。每次恢復連線前，明確驗證離線 `registration.update()` 在 10 秒內失敗，然後驗證下一個在線候選正常處理；離線 shell／API exclusion 與 failed-upgrade gates 保留。
-- v3.7.1 使用 asset revision 3.7.1／shell v31，仍是 44 個資產、schema 3。v3.7.0 tag 保留原始內容；正式發布及部署使用修正後 v3.7.1。
+- v3.7.1 使用 asset revision 3.7.1／shell v31，仍是 44 個資產、schema 3。v3.7.0 tag 保留原始內容；正式發布及部署使用後續通過檢查的修正版。
+
+### 首次顯示目標表單的草稿保護（v3.7.2）
+
+- 切換月跑量時，在欄位可操作前同步初始化目標草稿 baseline；圖表仍於下一個 animation frame 繪製。即使在第一個 frame 前輸入並失焦，後續重繪及晚到的目標回應也不覆蓋草稿。
+- 雙引擎 E2E 明確暫停首次 panel frame，先輸入再釋放，以固定重現原先的時序缺口。正式版本為 asset revision 3.7.2／shell v32，44 個資產、schema 3。
 
 ### Schema 2 上線與回滾
 
@@ -586,7 +591,7 @@ Playwright／Chromium／WebKit 齊全時，也會執行版面測試。
 避免每次停止都重跑。Hook 不會呼叫其他模型、外部 API，或傳送提示、diff、原始碼與測試輸出。
 GitHub Actions 仍會在 push／pull request 執行 `verify`，並以三個可獨立重跑的 browser jobs 執行完整版面矩陣、真實 CRUD E2E 與 PWA 升級／離線測試；Dependabot 每週檢查 Python 與 GitHub Actions 更新。
 
-本次驗證基線為 Python **464 passed**、前端回歸測試 **105 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
+本次驗證基線為 Python **464 passed**、前端回歸測試 **106 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
 版面檢查涵蓋 WebKit／Chromium、亮／暗模式與 10 組直橫向尺寸，共 40 組設定，檢查六個功能分頁、三個認證表單、圖表、全部彈窗、行內編輯、停用／錯誤及空資料狀態。
 
 主要表單、工具列與彈窗操作統一為 44px 控制項；桌面表格內的緊湊操作為 36px，手機至少 44px。

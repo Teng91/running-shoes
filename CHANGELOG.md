@@ -4,6 +4,15 @@
 
 ## [Unreleased]
 
+## [3.7.2] - 2026-10-23
+
+### Fixed
+
+- v3.7.1 tag E2E 發現首次月跑量 panel 的延後 render 可能在使用者輸入後才建立 goal baseline，把 180 覆蓋回 125。現在切換分頁時先同步準備表單，再延後繪製圖表。
+- Node 回歸與雙引擎 E2E 固定暫停第一個 panel frame，驗證先輸入／失焦、釋放 render 及晚到 server goal 仍保留草稿；不以重跑通過取代修正。
+- Asset revision 3.7.2／shell v32，schema 3、44 個 release assets；v3.7.0／v3.7.1 tags 保留原始內容。
+- 本機 verify：464 Python、106 Node；雙引擎 E2E／PWA 及匿名 44 資產 release-check 通過。
+
 ## [3.7.1] - 2026-10-23
 
 ### Fixed
