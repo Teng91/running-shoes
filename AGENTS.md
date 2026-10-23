@@ -19,6 +19,8 @@
 - `scripts/document_contracts.py`: Markdown links, feature-spec structure, AC completion and traceability path validation.
 - `backend/credentials.py`: HTTP-independent bcrypt/JWT primitives; runtime secrets are injected.
 - `backend/services/accounts.py`, `goals.py`: account and goal writes, domain errors, and transactions.
+- `backend/services/reports.py`: injected report generation and domain events; `report_storage.py` owns latest-generation conditional transactions.
+- `backend/report_llm.py`, `backend/report_protocol.py`: model and SSE adapters; neither owns persistence.
 - `backend/services/run_requests.py`: user-scoped transactional run-creation receipts; operation keys never replace authentication.
 - `backend/migrations.py`: ordered SQLite schema upgrades and the current schema version.
 - `backend/rate_limits.py`: shared authentication and AI request throttling.
@@ -47,6 +49,7 @@
 - `frontend/app-api.js`: authenticated JSON and upload transport helpers.
 - `frontend/app-auth.js`: authentication state, forms, and account transitions.
 - `frontend/app-streams.js`: shared authenticated SSE decoding, cancellation, and terminal state.
+- `frontend/app-inline-editors.js`: live table DOM ownership and immutable row snapshots across refreshes.
 - `frontend/app-core.js`: dashboard shell, theme, tabs, and aggregate data loading.
 - `frontend/app-dashboard.js`: dashboard cards, alerts, and shoe tables.
 - `frontend/app-monthly.js`: monthly mileage table, inline forms, and edit snapshots.

@@ -37,6 +37,7 @@ module.exports = async function checkSessionIsolation(browser, baseUrl) {
       let finishAnalytics;
       window.fetch = () => new Promise(resolve => { finishAnalytics = resolve; });
       const analytics = loadDashboardAnalytics(selectedRunMonth());
+      await tick();
       setAuth('synthetic-B', 'user-B');
       finishAnalytics(json({ recent_7_days: { km: 987.65 } }));
       await analytics;

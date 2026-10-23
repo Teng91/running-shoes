@@ -117,6 +117,17 @@ class MonthlyReport(Base):
     )
 
 
+class ReportGeneration(Base):
+    """Latest started generation; never exposed as a saved report."""
+
+    __tablename__ = "report_generations"
+
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), primary_key=True)
+    year: Mapped[int] = mapped_column(Integer, primary_key=True)
+    month: Mapped[int] = mapped_column(Integer, primary_key=True)
+    token: Mapped[str] = mapped_column(String(36), nullable=False)
+
+
 class RunningGoal(Base):
     __tablename__ = "running_goals"
 

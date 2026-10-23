@@ -1,6 +1,6 @@
 {
-  "version": "3.7.2",
-  "cache_name": "running-shoes-shell-v32",
+  "version": "3.8.0",
+  "cache_name": "running-shoes-shell-v33",
   "scripts": [
     "app-boot.js",
     "app-lifecycle.js",
@@ -9,6 +9,7 @@
     "app-auth.js",
     "app-streams.js",
     "app-resources.js",
+    "app-inline-editors.js",
     "app-core.js",
     "app-models.js",
     "app-markdown.js",

@@ -1,7 +1,7 @@
 const { test, assert, vm, fs, extract, runContext, source } = require('./helpers.cjs');
 
 function nodes() {
-  return new Proxy({}, { get: (target, id) => target[id] ||= { value: '', style: {}, hidden: true,
+  return new Proxy({}, { get: (target, id) => target[id] ||= { dataset: {}, value: '', style: {}, hidden: true,
     insertAdjacentHTML(_, html) { this.innerHTML = html + this.innerHTML; },
     classList: { add() {}, remove() {} } } });
 }
@@ -138,7 +138,7 @@ test('SPEC-023 overlapping full and mutation reloads reject stale resources and 
     if (url === '/monthly-mileage') return ++count === 1 ? oldMonthly.promise : [{ year: 2026, km: 180 }];
     return [{ id: 7 }];
   };
-  const old = context.loadData(); await context.loadData({ mutation: 'monthly' });
+  const old = context.loadData(); await Promise.resolve(); await context.loadData({ mutation: 'monthly' });
   // A successful goal write owns the newer value even if the full GET is pending.
   context.invalidateDataResources(['goal']); vm.runInContext('runningGoal = { version: 2 }', context);
   oldMonthly.resolve([{ year: 2026, km: 100 }]); await old;

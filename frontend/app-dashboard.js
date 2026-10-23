@@ -29,7 +29,7 @@ function brandColor(brand, seq) {
 }
 
 // ====== Render ======
-function render() {
+function render(resource = null) {
   const now = new Date();
   const todayStr = `${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}/${String(now.getDate()).padStart(2,'0')}`;
   document.getElementById('today-label').textContent = '資料日期：' + todayStr;
@@ -37,7 +37,7 @@ function render() {
   shoes.sort(byDate);
   retiredShoes.sort(byDate);
 
-  invalidatePanels();
+  invalidatePanels(resource);
   renderActivePanel();
 }
 
@@ -129,7 +129,9 @@ function renderAlerts() {
 }
 
 function renderTable() {
+  if (preserveInlineTable('shoe-table')) return;
   const tbody = document.getElementById('shoe-table');
+  inlineTableRows.set('shoe-table', shoes.map(shoe => ({ ...shoe })));
   let brandSeq = {};
   tbody.innerHTML = shoes.map((s, i) => {
     const c = calc(s);
@@ -141,12 +143,12 @@ function renderTable() {
       <td><span class="brand-dot" style="background:${bc}"></span><span class="brand">${esc(s.brand)}</span></td>
       <td><span>${esc(s.model)}</span>${s.nickname ? `<br><small>${esc(s.nickname)}</small>` : ''}</td>
       <td>${esc(s.date.replace(/-/g,'/'))}</td>
-      <td class="editable numeric" ondblclick="inlineEditRow(shoes, ${i}, 'mileage', this)">${s.mileage}</td>
+      <td class="editable numeric" ondblclick="inlineEditRow(inlineTableRows.get('shoe-table'), ${i}, 'mileage', this)">${s.mileage}</td>
       <td class="numeric">${fmtCostPerKm(c.costPerKm)}</td>
-      <td class="editable numeric" ondblclick="inlineEditRow(shoes, ${i}, 'expected_mileage', this)">${s.expected_mileage}</td>
+      <td class="editable numeric" ondblclick="inlineEditRow(inlineTableRows.get('shoe-table'), ${i}, 'expected_mileage', this)">${s.expected_mileage}</td>
       <td class="numeric">${fmtCostPerKm(c.expectedCost)}</td>
       <td class="numeric" style="color:${pc}">${fmtPct(c.lifeProgress)}</td>
-      <td class="editable numeric" ondblclick="inlineEditRow(shoes, ${i}, 'monthly_km', this)">${s.monthly_km}</td>
+      <td class="editable numeric" ondblclick="inlineEditRow(inlineTableRows.get('shoe-table'), ${i}, 'monthly_km', this)">${s.monthly_km}</td>
       <td title="${s.forecast_source === 'recent_90_days' ? '依近 90 天實際使用' : '依計畫月跑量'}">${fmtDate(c.retireDate)}</td>
       <td>${esc(shoeCategories(s).join(', ') || '未分類')}</td>
       <td>
@@ -158,7 +160,9 @@ function renderTable() {
 }
 
 function renderRetiredTable() {
+  if (preserveInlineTable('retired-table')) return;
   const tbody = document.getElementById('retired-table');
+  inlineTableRows.set('retired-table', retiredShoes.map(shoe => ({ ...shoe })));
   let brandSeq = {};
   tbody.innerHTML = retiredShoes.map((s, i) => {
     const c = calc(s);
@@ -170,9 +174,9 @@ function renderRetiredTable() {
       <td><span class="brand-dot" style="background:${bc}"></span><span class="brand">${esc(s.brand)}</span></td>
       <td><span>${esc(s.model)}</span>${s.nickname ? `<br><small>${esc(s.nickname)}</small>` : ''}</td>
       <td>${esc(s.date.replace(/-/g,'/'))}</td>
-      <td class="editable numeric" ondblclick="inlineEditRow(retiredShoes, ${i}, 'mileage', this)">${s.mileage}</td>
+      <td class="editable numeric" ondblclick="inlineEditRow(inlineTableRows.get('retired-table'), ${i}, 'mileage', this)">${s.mileage}</td>
       <td class="numeric">${fmtCostPerKm(c.costPerKm)}</td>
-      <td class="editable numeric" ondblclick="inlineEditRow(retiredShoes, ${i}, 'expected_mileage', this)">${s.expected_mileage}</td>
+      <td class="editable numeric" ondblclick="inlineEditRow(inlineTableRows.get('retired-table'), ${i}, 'expected_mileage', this)">${s.expected_mileage}</td>
       <td class="numeric">${fmtCostPerKm(c.expectedCost)}</td>
       <td class="numeric" style="color:${pc}">${fmtPct(c.lifeProgress)}</td>
       <td>${esc(shoeCategories(s).join(', ') || '未分類')}</td>
