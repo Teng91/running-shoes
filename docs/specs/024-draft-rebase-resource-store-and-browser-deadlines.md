@@ -22,7 +22,7 @@
 ## Non-goals
 
 - 不新增 AI 暱稱查詢、日誌標籤／搜尋、目標歷史或新 API。
-- 不改 schema 3，不在驗證中修改正式資料或自動部署。
+- 不改 schema 3；驗證不修改正式資料，正式發布依使用者明確授權執行。
 
 ## Proposed design
 
@@ -44,8 +44,8 @@
 ## Migration, rollout, and rollback
 
 - Schema／資料 migration：無，維持 schema 3。
-- 上線與 smoke test：frontend regressions、verify-all、architecture/security/docs、synthetic failure/deadline tests 與拆分後 CI。
-- 回滾方式與資料相容性：原 API 與 schema 相容；新 PWA shell revision，既有發布／備份／rollback 規範不變。
+- 上線與 smoke test：frontend regressions、verify-all、architecture/security/docs、synthetic failure/deadline tests 與拆分後 CI；使用者於 2026-10-23 明確授權發布 v3.6.1。部署前依 README 建立異地備份並驗證 checksum／隔離還原；部署後執行匿名唯讀 release-check。
+- 回滾方式與資料相容性：原 API 與 schema 3 相容，可部署已驗證的 v3.6.0 image（`registry.fly.io/running-shoes:v3.6.0-07b509f`）回滾，不回復舊 DB 快照。重新發布舊 frontend 來源仍須新 shell revision；驗證實際 image／schema／readiness 與匿名唯讀 smoke。
 
 ## Acceptance criteria
 
