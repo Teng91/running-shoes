@@ -181,3 +181,175 @@ test('SPEC-027 restore windows reject repreview during apply and stale completio
   assert.equal(vm.runInContext('accountRestore.pending', context), false);
   assert.equal(loads, 1, 'committed old operation still refreshes server data');
 });
+
+function workspaceSyncContext() {
+  let session = {}, reset, flushes = 0, loads = 0;
+  const elements = new Proxy({}, { get: (rows, id) => rows[id] ||= { disabled: false, textContent: '',
+    classList: { remove() {} }, replaceChildren() {} } });
+  const controller = { account: 'synthetic-A', flush: async () => { flushes++; return { synced: 0 }; }, read: async () => [] };
+  const context = vm.createContext({ document: { getElementById: id => elements[id] }, navigator: { onLine: true },
+    authToken: 'synthetic', captureAuthSession: () => session, isCurrentAuthSession: value => value === session,
+    registerFeatureReset: (_, callback) => { reset = callback; }, loadData: async () => { loads++; },
+  });
+  vm.runInContext(fs.readFileSync('frontend/app-workspace.js', 'utf8'), context);
+  context.controller = controller;
+  vm.runInContext('localWorkspace.controller = controller;', context);
+  return { context, elements, controller, flushes: () => flushes, loads: () => loads,
+    switchAccount() {
+      controller.detach = () => {}; controller.account = null; context.authToken = null; session = {}; reset();
+      context.authToken = 'synthetic'; controller.account = 'synthetic-B';
+    },
+  };
+}
+
+test('SPEC-028 manual sync explains empty offline and unavailable states', async () => {
+  const fixture = workspaceSyncContext(), { context, elements, controller } = fixture;
+  const feedback = elements['workspace-sync-status'];
+  await context.syncWorkspace({ manual: true });
+  assert.match(feedback.textContent, /目前沒有待同步/);
+  assert.equal(fixture.flushes(), 1);
+  context.navigator.onLine = false;
+  await context.syncWorkspace({ manual: true });
+  assert.match(feedback.textContent, /目前離線/);
+  assert.equal(fixture.flushes(), 1);
+  context.navigator.onLine = true; controller.account = null;
+  await context.syncWorkspace({ manual: true });
+  assert.match(feedback.textContent, /尚未就緒/);
+  vm.runInContext("localWorkspace.error = '本機儲存不可用';", context);
+  await context.syncWorkspace({ manual: true });
+  assert.match(feedback.textContent, /本機儲存不可用/);
+  context.authToken = null;
+  await context.syncWorkspace({ manual: true });
+  assert.match(feedback.textContent, /請先登入/);
+  assert.equal(fixture.flushes(), 1);
+});
+
+test('SPEC-028 sync shares pending work and reports uploaded runs', async () => {
+  const fixture = workspaceSyncContext(), { context, elements, controller } = fixture;
+  const gate = deferred(); let calls = 0;
+  controller.flush = () => { calls++; return gate.promise; };
+  const automatic = context.syncWorkspace();
+  const manual = context.syncWorkspace({ manual: true });
+  assert.equal(elements['workspace-sync'].disabled, true);
+  assert.match(elements['workspace-sync-status'].textContent, /正在檢查並送出/);
+  assert.equal(calls, 1);
+  gate.resolve({ synced: 2 });
+  await Promise.all([automatic, manual]);
+  assert.match(elements['workspace-sync-status'].textContent, /已同步 2 筆.*沒有待同步/);
+  assert.equal(elements['workspace-sync'].disabled, false);
+  assert.equal(fixture.loads(), 1);
+});
+
+test('SPEC-028 sync reports blocked pending and storage failures', async () => {
+  const { context, elements, controller } = workspaceSyncContext();
+  controller.flush = async () => ({ synced: 1 });
+  controller.read = async () => [{ status: 'blocked' }, { status: 'pending' }];
+  await context.syncWorkspace({ manual: true });
+  assert.match(elements['workspace-sync-status'].textContent, /已同步 1 筆.*仍有 2 筆.*1 筆需要處理.*等待重試/);
+  context.loadData = async () => { throw Error('refresh failed'); };
+  await context.syncWorkspace({ manual: true });
+  assert.match(elements['workspace-sync-status'].textContent, /紀錄已送出，但畫面更新失敗/);
+  controller.flush = async () => { throw Error('storage unavailable'); };
+  await context.syncWorkspace({ manual: true });
+  assert.match(elements['workspace-sync-status'].textContent, /同步未完成.*storage unavailable/);
+  assert.equal(elements['workspace-sync'].disabled, false);
+  controller.flush = async () => ({ synced: 0 });
+  controller.read = async () => { throw Error('read failed'); };
+  await context.syncWorkspace({ manual: true });
+  assert.match(elements['workspace-sync-status'].textContent, /同步未完成.*read failed/);
+});
+
+test('SPEC-028 stale sync cannot change the next account feedback', async () => {
+  for (const reject of [false, true]) {
+    const fixture = workspaceSyncContext(), { context, elements, controller } = fixture;
+    const finishes = [];
+    controller.flush = () => new Promise((resolve, fail) => {
+      finishes.push({ resolve, reject: fail });
+    });
+    const pending = context.syncWorkspace({ manual: true });
+    fixture.switchAccount();
+    const newAccount = context.syncWorkspace({ manual: true });
+    elements['workspace-sync-status'].textContent = 'new account syncing';
+    if (reject) finishes[0].reject(Error('old failure'));
+    else finishes[0].resolve({ synced: 1 });
+    await pending;
+    assert.equal(elements['workspace-sync-status'].textContent, 'new account syncing');
+    assert.equal(elements['workspace-sync'].disabled, true);
+    assert.equal(fixture.loads(), 0);
+    finishes[1].resolve({ synced: 0 }); await newAccount;
+    assert.match(elements['workspace-sync-status'].textContent, /目前沒有待同步/);
+    assert.equal(elements['workspace-sync'].disabled, false);
+  }
+});
+
+test('SPEC-028 workspace guidance distinguishes server backup and local data', () => {
+  const modal = fs.readFileSync('frontend/templates/workspace-modal.html', 'utf8');
+  assert.match(modal, /syncWorkspace\(\{ manual: true \}\)/);
+  assert.match(modal, /id="workspace-sync-status" role="status" aria-live="polite"/);
+  assert.match(modal, /不會覆寫整個資料庫/);
+  assert.match(modal, /不含密碼、本機草稿或待同步紀錄/);
+  assert.match(modal, /尚未同步的紀錄會遺失/);
+  assert.match(fs.readFileSync('README.md', 'utf8'), /\]\(docs\/user-guide.md\)/);
+  const guide = fs.readFileSync('docs/user-guide.md', 'utf8');
+  assert.match(guide, /先連線，在每個有離線紀錄的裝置完成同步/);
+  assert.match(guide, /已合併後又刪除的跑步/);
+});
+
+test('SPEC-029 import modes own their previews and confirmation', async () => {
+  const elements = new Proxy({}, { get: (rows, id) => rows[id] ||= { disabled: false, value: '', textContent: '', files: [] } });
+  let accepted = false, posts = 0, requested, resolvePreview;
+  const context = vm.createContext({ document: { getElementById: id => elements[id] },
+    window: { location: { origin: 'http://localhost:8000' } }, currentUser: 'local-user',
+    captureAuthSession: () => ({}), isCurrentAuthSession: () => true, registerFeatureReset() {},
+    authHeaders: () => ({}), newOperationKey: () => 'synthetic-import-operation',
+    jsonRequest: (url) => { requested = url; return new Promise(resolve => { resolvePreview = resolve; }); },
+    apiPost: async () => { posts++; }, loadData: async () => {}, loadWorkspaceHistory() {},
+    confirm: message => { assert.match(message, /localhost:8000.*local-user/); return accepted; },
+  });
+  vm.runInContext(fs.readFileSync('frontend/app-account-restore.js', 'utf8'), context);
+  elements['restore-mode'].value = 'update';
+  elements['restore-file'].files = [{ size: 4, text: async () => '{}' }];
+  const reading = context.previewAccountRestore();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.match(requested, /\?mode=update$/);
+  resolvePreview({ token: 'synthetic', summary: { mode: 'update', source_username: 'cloud-user', exported_at: '2026-10-24',
+    new_shoes: 0, new_runs: 0, updated_shoes: 1, updated_runs: 2, updated_months: 1, updated_reports: 1, updated_goal: true,
+    policy: '更新', monthly_records: 1, reports: 1, history_records: 0, new_import_summaries: 0, skipped_import_summaries: 0 } });
+  await reading;
+  assert.match(elements['restore-preview'].textContent, /cloud-user.*localhost:8000.*local-user.*更新 1 雙鞋、2 筆跑步/);
+  await context.applyAccountRestore(); assert.equal(posts, 0, 'cancel leaves data unchanged');
+  accepted = true; await context.applyAccountRestore();
+  assert.equal(posts, 1);
+  assert.match(elements['restore-preview'].textContent, /同來源資料已更新/);
+  assert.equal(elements['restore-mode'].disabled, false);
+  const stale = context.previewAccountRestore(); await new Promise(resolve => setImmediate(resolve));
+  context.resetAccountRestore(); resolvePreview({ token: 'old', summary: {} }); await stale;
+  assert.equal(elements['restore-mode'].value, 'merge');
+  assert.equal(elements['restore-apply'].disabled, true);
+});
+
+test('SPEC-029 workspace download reports results and ignores a replaced session', async () => {
+  const elements = new Proxy({}, { get: (rows, id) => rows[id] ||= { disabled: false, textContent: '' } });
+  let session = {}, resets, downloads = 0;
+  const context = vm.createContext({ document: { getElementById: id => elements[id], body: { appendChild() {} },
+    createElement: () => ({ click() { downloads++; }, remove() {} }) },
+    window: { URL: { createObjectURL: () => 'blob:synthetic', revokeObjectURL() {} } },
+    API_BASE: '/api', authHeaders: () => ({}), localDateISO: () => '2026-10-24',
+    captureAuthSession: () => session, isCurrentAuthSession: value => value === session,
+    registerFeatureReset: (_, reset) => { resets = reset; },
+    authenticatedFetch: async () => ({ ok: true, headers: { get: () => null } }), readAuthenticatedBody: async () => ({}),
+  });
+  vm.runInContext(fs.readFileSync('frontend/app-exports.js', 'utf8'), context);
+  await context.exportAccountData(true);
+  assert.equal(downloads, 1); assert.match(elements['workspace-export-status'].textContent, /查看下載項目/);
+  context.authenticatedFetch = async () => { throw Error('offline'); };
+  await context.exportAccountData(true);
+  assert.match(elements['workspace-export-status'].textContent, /offline/);
+  const gate = deferred(); context.authenticatedFetch = () => gate.promise;
+  const stale = context.exportAccountData(true);
+  assert.equal(elements['workspace-export'].disabled, true);
+  session = {}; resets(); elements['workspace-export-status'].textContent = 'next account';
+  gate.resolve({ ok: true, headers: { get: () => null } }); await stale;
+  assert.equal(downloads, 1); assert.equal(elements['workspace-export-status'].textContent, 'next account');
+  assert.equal(elements['workspace-export'].disabled, false);
+});

@@ -2,26 +2,34 @@
   <div class="modal workspace-modal">
     <h2 id="workspace-modal-title">資料與同步</h2>
     <p id="workspace-owner" class="workspace-help"></p>
+    <p class="workspace-help">平常新增或編輯成功後，資料已存到伺服器，不用再按同步。這裡用來處理離線新增的跑步、恢復編輯草稿、下載／合併帳號備份，以及查看異動歷史。</p>
     <section aria-labelledby="queue-title">
       <h3 id="queue-title">本機待同步跑步</h3>
-      <p class="workspace-help">尚未同步的紀錄不計入統計。連線並開啟 App／回到前景後會重試；需要處理時請明確重新配對鞋款。關閉 App 後仍保留，清除網站資料或瀏覽器回收儲存空間則會移除，請定期備份。</p>
-      <button class="btn btn-edit" onclick="syncWorkspace()">立即同步</button>
+      <p class="workspace-help">只有「新增跑步」支援離線送出；這些紀錄暫存於此裝置，尚未同步不計入統計，也不包含在備份 JSON。連線並開啟 App／回到前景會自動重試；「立即同步」可手動重試，不會送出未儲存的編輯草稿。關閉 App 後不保證背景同步；清除網站資料或瀏覽器回收空間會使本機紀錄遺失。</p>
+      <button id="workspace-sync" class="btn btn-edit" onclick="syncWorkspace({ manual: true })" aria-describedby="workspace-sync-status">立即同步</button>
+      <p id="workspace-sync-status" role="status" aria-live="polite"></p>
       <div id="workspace-queue" role="status" aria-live="polite"></div>
     </section>
-    <section aria-labelledby="drafts-title"><h3 id="drafts-title">未完成的編輯草稿</h3><div id="workspace-drafts"></div></section>
+    <section aria-labelledby="drafts-title"><h3 id="drafts-title">未完成的編輯草稿</h3><p class="workspace-help">草稿只是保留輸入，尚未修改伺服器資料。按「繼續編輯」檢查後仍須儲存；「捨棄草稿」只移除本機輸入。新增跑步、月跑量與目標的表單輸入會自動帶回原表單。</p><div id="workspace-drafts"></div></section>
     <section aria-labelledby="restore-title">
-      <h3 id="restore-title">帳號備份合併還原</h3>
-      <p class="workspace-help">先下載完整備份，再選擇 JSON 預覽。還原只合併新增資料，保留既有內容；預覽後有新異動時需重新預覽。</p>
-      <button class="btn btn-edit" onclick="exportAccountData()">下載完整備份 JSON</button>
+      <h3 id="restore-title">帳號資料下載與匯入</h3>
+      <p class="workspace-help">JSON 是目前帳號已存到伺服器的資料副本，包含鞋款、跑步、月跑量、目標、月報、Strava 匯入摘要與異動歷史；不含密碼、本機草稿或待同步紀錄。請先同步完成再下載，將檔案保存在自己的安全位置。</p>
+      <p class="workspace-help">搬到本機版：① 在雲端下載 JSON。② 開啟電腦上執行的本機版並登入。③ 在本機版選檔、選匯入模式、檢查預覽，再按「確認匯入」。資料只寫入上方顯示的網站／帳號，不會覆寫整個資料庫。選檔預覽尚未寫入；預覽後有新異動時需重新預覽。</p>
+      <button id="workspace-export" class="btn btn-edit" onclick="exportAccountData(true)">下載目前帳號資料 JSON</button>
+      <p id="workspace-export-status" role="status" aria-live="polite"></p>
+      <div class="form-group"><label for="restore-mode">匯入模式</label><select id="restore-mode" onchange="previewAccountRestore()"><option value="merge">只新增，保留既有內容</option><option value="update">新增並更新同來源資料（v2）</option></select></div>
+      <p class="workspace-help">「只新增」不更新既有紀錄。「新增並更新」會覆寫同來源鞋款／跑步、檔案內月份調整、目標及月報，適合再次匯入雲端新版資料；仍保留額外資料與已刪除跑步，檔案中缺少的資料不會自動刪除，也不按同品牌型號猜測鞋款。請先下載接收帳號的備份。</p>
       <div class="form-group"><label for="restore-file">選擇備份 JSON（最多 20 MB）</label><input id="restore-file" type="file" accept=".json,application/json" onchange="previewAccountRestore()"></div>
       <p id="restore-preview" role="status" aria-live="polite"></p>
       <button class="btn btn-edit" onclick="previewAccountRestore()">重新預覽</button>
-      <button id="restore-apply" class="btn btn-primary" disabled onclick="applyAccountRestore()">確認合併還原</button>
+      <button id="restore-apply" class="btn btn-primary" disabled onclick="applyAccountRestore()">確認匯入</button>
     </section>
     <section aria-labelledby="history-title"><h3 id="history-title">異動歷史與誤刪復原</h3>
+      <p class="workspace-help">查看已儲存的資料異動；可復原的刪除會顯示「復原誤刪」，需連線操作。這不是任意版本回溯，從備份帶入的歷史僅供查看。</p>
       <button class="btn btn-edit" onclick="loadWorkspaceHistory()">重新整理歷史</button>
       <div id="workspace-history"></div><button id="history-more" class="btn btn-edit" hidden onclick="loadWorkspaceHistory(true)">更多異動</button>
     </section>
+    <p class="workspace-help">「清除此帳號的本機資料」只清除此瀏覽器／此裝置中，這個帳號的草稿、最近資料快取與待同步紀錄；不刪除伺服器資料或已下載的 JSON。尚未同步的紀錄會遺失，請先確認上方沒有待同步資料；共用裝置要清理時再使用。</p>
     <div class="modal-actions">
       <div class="modal-actions-secondary"><button class="btn btn-delete" onclick="clearLocalWorkspace()">清除此帳號的本機資料</button></div>
       <div class="modal-actions-primary"><button class="btn btn-cancel" onclick="closeWorkspaceModal()">關閉</button></div>

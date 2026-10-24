@@ -43,10 +43,11 @@ def get_history(
 async def preview(
     request: Request, config: Settings = Depends(get_settings),
     user: models.User = Depends(get_current_user), db: Session = Depends(get_db),
+    mode: account_restore.RestoreMode = "merge",
 ):
     raw = await request.body()
     with service_errors():
-        return await run_in_threadpool(account_restore.preview_restore, db, user.id, raw, config)
+        return await run_in_threadpool(account_restore.preview_restore, db, user.id, raw, config, mode)
 
 
 class RestoreApply(BaseModel):
