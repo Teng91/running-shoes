@@ -4,7 +4,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --require-hashes -r requirements.txt
 COPY backend backend/
 COPY frontend frontend/
-COPY scripts/database_backup.py scripts/database_backup.py
+COPY scripts/database_backup.py scripts/rollback_preview_schema.sql scripts/
 RUN useradd --create-home appuser && mkdir -p /data && chown appuser:appuser /data
 ENV DB_DIR=/data
 ENV ENVIRONMENT=production

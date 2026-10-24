@@ -26,6 +26,8 @@
 - `backend/backup_contract.py`: bounded, credential-free v1/v2 account archives.
 - `backend/services/operations.py`: operation identities, expected versions, transactional receipts.
 - `backend/services/account_restore.py`: user-bound preview, source mappings and atomic non-destructive merges.
+- `backend/services/account_import_plan.py`: user-scoped source matching and shared import previews/plans.
+- `backend/services/account_import.py`: plan execution inside the caller-owned transaction; no independent commits.
 - `backend/services/history.py`: user-scoped audit and conflict-aware deletion recovery.
 - `backend/services/identifiers.py`: monotonic run/month primary-key allocation metadata.
 - `backend/migrations.py`: ordered SQLite schema upgrades and the current schema version.
@@ -60,6 +62,7 @@
 - `frontend/app-local-store.js`: atomic IndexedDB adapter; credentials never belong in records.
 - `frontend/app-workspace.js`: account cache, draft and queue DOM bridge.
 - `frontend/app-account-restore.js`: restore preview/window/session ownership.
+- `frontend/runtime/account-restore-controller.mjs`: injected restore operation, session and preview cleanup ownership; no DOM or browser transport.
 - `frontend/app-history.js`: audit paging and recover-deletion presentation.
 - `frontend/app-core.js`: dashboard shell, theme, tabs, and aggregate data loading.
 - `frontend/app-dashboard.js`: dashboard cards, alerts, and shoe tables.

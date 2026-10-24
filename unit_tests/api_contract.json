@@ -1,4 +1,5 @@
 [
+  "DELETE /api/account-restore/preview/{token}",
   "DELETE /api/monthly-mileage/{entry_id}",
   "DELETE /api/runs/{run_id}",
   "DELETE /api/shoes/{shoe_id}",

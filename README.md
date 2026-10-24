@@ -529,7 +529,7 @@ CI 失敗／取消時嘗試上傳已有產物；引擎完全卡死時可能只�
 CI 的 `frontend-pwa` job 上傳獨立 `browser-diagnostics-roundtrip` artifact，另一個 job 下載並驗證 PNG、trace ZIP 與合成錯誤標記，缺檔／損毀會讓 pipeline 失敗。
 
 `frontend-e2e` 會對真實 FastAPI／CORS 與暫存 SQLite 執行同一個 `release-check`：檢查 readiness／schema、
-完整 API contract、manifest 對應的 50 個 shell／worker 資產雜湊與 MIME、四個統計 API 的匿名拒絕存取，
+完整 API contract、manifest 對應的 51 個 shell／worker 資產雜湊與 MIME、四個統計 API 的匿名拒絕存取，
 再驗證 Chromium／WebKit 匿名手機啟動與 native runtime cache，以及 Chromium 離線重開。
 WebKit 離線 shell 由 `frontend-pwa` 的 fixture transport 中斷驗證；API probe 在 HTTP headers 後截斷 response body，完整讀取 JSON 並檢查 server 請求計數，避免 headers 前 TCP 中斷讓裸 fetch 一直 pending。這些不取代引擎之外的實機驗證。
 這個 task 不登入、不送出資料、不發布或回滾；正式 origin 必須是 HTTPS，HTTP 只允許 loopback。
@@ -624,7 +624,7 @@ Schema 5 增加 user metadata、回執、預覽、mapping、異動、context 與
 
 ### 雲端下載與本機匯入更新（SPEC-028／029，v3.10.0）
 
-目前 Asset 3.10.0／shell v35，仍為 schema 5、50 個資產。詳見 [使用指南](docs/user-guide.md) 與 [資料搬移規格](docs/specs/029-account-data-transfer.md)。
+v3.10.0 使用 Asset 3.10.0／shell v35、schema 5、50 個資產。詳見 [使用指南](docs/user-guide.md) 與 [資料搬移規格](docs/specs/029-account-data-transfer.md)。
 
 - `POST /api/account-restore/preview?mode=merge|update` 預設只新增；update 僅接受 v2，明確更新同來源鞋款與跑步、檔案內月份調整、目標及月報。模式與資料一起綁定本人預覽 hash／revision，apply 不接受切換模式。
 - 更新保留接收端額外資料、已刪除跑步及不存在於檔案的內容；不是整個帳號的鏡像取代。鞋款刪除狀態依檔案更新，不按同品牌型號合併。所有總里程於後端重算，月報匯入會撤銷同月份舊生成的保存資格。
@@ -639,6 +639,23 @@ v3.4.0 只新增 `run_creation_requests` 表與 user/key 唯一約束，沒有�
 在停止的資料庫上執行 `UPDATE schema_metadata SET value='1' WHERE key='schema_version' AND value='2';`，保留 receipt 表與業務資料，再部署已驗證的 v3.3.1 image。
 重新發布舊程式仍須新的 shell revision。不要以舊快照覆蓋已新增的正式資料；完整還原只用於確認可接受資料回溯的災難復原。
 
+### 匯入操作隔離（SPEC-030，v3.10.1）
+
+目前 v3.10.1 為 Asset 3.10.1／shell v36、schema 6、51 個 release assets。
+[SPEC-030](docs/specs/030-import-operation-isolation.md) 修正跨帳號清除、無變更匯入的假衝突及預覽完成順序問題。
+每份預覽獨立有效 20 分鐘，同帳號最多 8 份、合計 64 MiB；關閉／換檔會以本人
+`DELETE /api/account-restore/preview/{token}` 捨棄不用的 token，失敗由到期清理回收。其他分頁與晚到請求不會撤銷仍有效的預覽；業務資料變更仍需重新預覽。
+相同內容的更新不增加版本或異動紀錄，額外資料的編輯仍可正常儲存。
+
+Schema 5→6 只以交易重建 `restore_previews` 的 `(user_id, token)` 主鍵並保留現有預覽，不修改業務表。
+部署前建立異地備份、校驗與隔離還原，並在私有副本重複升級驗證資料不變。
+回滾優先 forward fix；確需回 v3.10.0，先進入維護環境停止所有 HTTP／背景寫入、另做 schema 6 備份，
+以 Python `sqlite3.Connection.executescript` 在掛載的資料庫執行
+[`scripts/rollback_preview_schema.sql`](scripts/rollback_preview_schema.sql)，再部署先前 v3.10.0 immutable image
+`registry.fly.io/running-shoes@sha256:a6281907140cc065db385eb68769ed86fc2cbbb4757678c48d04755d361bbb78`。
+此程序只捨棄暫存預覽、恢復 schema 5 預覽主鍵及 marker，不以舊快照覆蓋跑步資料；不得混跑兩版。
+重新上線後需重新預覽並執行匿名 release-check。
+
 ### AI 開發規範與自動驗證
 
 `AGENTS.md` 是 Codex 等 Coding Agent 共用的專案規範；`CLAUDE.md` 會把同一份規範匯入
@@ -650,7 +667,7 @@ Playwright／Chromium／WebKit 齊全時，也會執行版面測試。
 避免每次停止都重跑。Hook 不會呼叫其他模型、外部 API，或傳送提示、diff、原始碼與測試輸出。
 GitHub Actions 仍會在 push／pull request 執行 `verify`，並以三個可獨立重跑的 browser jobs 執行完整版面矩陣、真實 CRUD E2E 與 PWA 升級／離線測試；Dependabot 每週檢查 Python 與 GitHub Actions 更新。
 
-本次驗證基線為 Python **513 passed**、前端回歸測試 **131 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
+本次驗證基線為 Python **519 passed**、前端回歸測試 **133 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
 版面檢查涵蓋 WebKit／Chromium、亮／暗模式與 10 組直橫向尺寸，共 40 組設定，檢查六個功能分頁、三個認證表單、圖表、全部彈窗、行內編輯、停用／錯誤及空資料狀態。
 
 主要表單、工具列與彈窗操作統一為 44px 控制項；桌面表格內的緊湊操作為 36px，手機至少 44px。

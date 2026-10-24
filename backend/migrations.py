@@ -12,7 +12,23 @@ from backend.audit_schema import install_audit_triggers
 from backend.credentials import get_password_hash
 from backend.database import Base
 
-CURRENT_SCHEMA_VERSION = 5
+CURRENT_SCHEMA_VERSION = 6
+
+
+def _migrate_preview_tokens(engine: Engine) -> None:
+    """Keep active schema-5 previews while allowing independent user tokens."""
+    if inspect(engine).get_pk_constraint("restore_previews")["constrained_columns"] != ["user_id"]:
+        return
+    with engine.begin() as connection:
+        connection.exec_driver_sql("BEGIN IMMEDIATE")
+        connection.exec_driver_sql("""CREATE TABLE restore_previews_v6 (
+            user_id INTEGER NOT NULL REFERENCES users(id), token VARCHAR(36) NOT NULL,
+            revision INTEGER NOT NULL, payload_hash VARCHAR(64) NOT NULL,
+            payload_json JSON NOT NULL, expires_at DATETIME NOT NULL,
+            PRIMARY KEY (user_id, token))""")
+        connection.exec_driver_sql("INSERT INTO restore_previews_v6 SELECT user_id, token, revision, payload_hash, payload_json, expires_at FROM restore_previews")
+        connection.exec_driver_sql("DROP TABLE restore_previews")
+        connection.exec_driver_sql("ALTER TABLE restore_previews_v6 RENAME TO restore_previews")
 
 
 def schema_version(engine: Engine) -> int:
@@ -223,6 +239,8 @@ def run_startup_migrations(
     for model in (models.MutationReceipt, models.EntitySequence, models.WriteContext, models.AuditEvent,
                   models.RestorePreview, models.RestoreMapping):
         cast(Table, model.__table__).create(bind=engine, checkfirst=True)
+    if applied_version < 6:
+        _migrate_preview_tokens(engine)
     with engine.begin() as connection:
         for table in ("runs", "monthly_mileages"):
             connection.execute(text(

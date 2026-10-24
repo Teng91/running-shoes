@@ -61,6 +61,8 @@ initializeFeatureLifecycle().then(() => {
 }).then(() => {
   return initializeStravaFeature();
 }).then(() => {
+  return initializeAccountRestoreFeature();
+}).then(() => {
   return initializeLocalWorkspace();
 }).then(() => {
   initializeDialogs();
