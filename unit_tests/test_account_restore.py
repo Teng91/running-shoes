@@ -235,3 +235,146 @@ def test_export_uses_one_read_snapshot_while_another_connection_writes(workspace
         event.remove(workspace.engine, 'after_cursor_execute', write_between_collections)
     with workspace.sessions() as db:
         assert db.get(models.Shoe, shoe_id).mileage == 25
+
+
+def test_update_import_refreshes_existing_data_and_recalculates_totals(workspace):
+    from backend.services import report_storage, runs
+    with workspace.sessions() as db:
+        payload = archive(db)
+        payload['running_goal'] = {'start_year': 2026, 'monthly_km': 100, 'yearly_km': 1200}
+        payload['monthly_reports'] = [{'year': 2026, 'month': 1, 'content_md': 'first', 'model': 'mock', 'stats_json': {}}]
+        preview = account_restore.preview_restore(db, 2, json.dumps(payload).encode(), workspace.config)
+        account_restore.apply_restore(db, 2, preview['token'], 'initial-cloud-import', workspace.config)
+        imported_shoe = db.query(models.Shoe).filter_by(user_id=2).one()
+        imported_run_id = db.query(models.Run).filter_by(user_id=2).one().id
+        add_run(db, imported_shoe.id, uid=2, km=3)
+        local_shoe = add_shoe(db, uid=2, mileage=7)
+        local_shoe_id = local_shoe.id
+        generation = report_storage.begin_generation(db, 2, 2026, 1)
+        payload['shoes'][0].update(nickname='Cloud updated', mileage=32, baseline_mileage=30)
+        payload['shoes'].append(dict(payload['shoes'][0], id=99, nickname='Second', mileage=48, baseline_mileage=40))
+        payload['runs'][0].update(date='2026-02-02', km=8, shoe_id=99)
+        payload['runs'].append(dict(payload['runs'][0], id=99, shoe_id=payload['shoes'][0]['id'], km=2))
+        payload['monthly_mileages'] = [{'year': 2026, 'month': 1, 'km': 12, 'adjustment_km': 12},
+                                       {'year': 2026, 'month': 2, 'km': 12, 'adjustment_km': 2}]
+        payload['running_goal']['monthly_km'] = 180
+        payload['running_goal']['yearly_km'] = 2160
+        payload['monthly_reports'][0]['content_md'] = 'cloud updated'
+        raw = json.dumps(payload).encode()
+        preview = account_restore.preview_restore(db, 2, raw, workspace.config, 'update')
+        summary = preview['summary']
+        assert (summary['new_shoes'], summary['updated_shoes'], summary['new_runs'], summary['updated_runs']) == (1, 1, 1, 1)
+        assert summary['updated_months'] == summary['updated_reports'] == 1 and summary['updated_goal']
+        result = account_restore.apply_restore(db, 2, preview['token'], 'update-cloud-import', workspace.config)
+        assert account_restore.apply_restore(db, 2, preview['token'], 'update-cloud-import', workspace.config) == result
+        db.expire_all()
+        assert db.query(models.Shoe).filter_by(user_id=2, nickname='Cloud updated').one().mileage == 35
+        assert db.query(models.Shoe).filter_by(user_id=2, nickname='Second').one().mileage == 48
+        assert db.get(models.Shoe, local_shoe_id).mileage == 7
+        assert db.get(models.Run, imported_run_id).date == '2026-02-02'
+        assert {row.month: row.km for row in db.query(models.MonthlyMileage).filter_by(user_id=2)} == {1: 15, 2: 12}
+        assert db.query(models.RunningGoal).filter_by(user_id=2).one().monthly_km == 180
+        assert db.query(models.MonthlyReport).filter_by(user_id=2).one().content_md == 'cloud updated'
+        assert report_storage.persist_current_report(db, 2, 2026, 1, generation, 'stale', 'mock', {}) is None
+        assert db.query(models.Shoe).filter_by(user_id=1).one().mileage == 25
+        preview = account_restore.preview_restore(db, 2, raw, workspace.config, 'update')
+        account_restore.apply_restore(db, 2, preview['token'], 'repeat-cloud-import', workspace.config)
+        db.expire_all()
+        assert db.query(models.Run).filter_by(user_id=2).count() == 3
+        assert db.query(models.Shoe).filter_by(user_id=2, nickname='Cloud updated').one().mileage == 35
+        run = db.get(models.Run, imported_run_id)
+        runs.delete_run(db, 2, run.id, run.version)
+        preview = account_restore.preview_restore(db, 2, raw, workspace.config, 'update')
+        assert preview['summary']['updated_runs'] == 1
+        account_restore.apply_restore(db, 2, preview['token'], 'preserve-run-deletion', workspace.config)
+        assert db.query(models.Run).filter_by(user_id=2).count() == 2
+
+
+def test_update_preview_binds_mode_rejects_legacy_and_rolls_back(workspace, monkeypatch):
+    with workspace.sessions() as db:
+        payload = archive(db)
+        raw = json.dumps(payload).encode()
+        preview = account_restore.preview_restore(db, 2, raw, workspace.config, 'update')
+        with pytest.raises(Conflict):
+            account_restore.apply_restore(db, 1, preview['token'], 'foreign-update-import', workspace.config)
+        stored = db.query(models.RestorePreview).filter_by(user_id=2).one()
+        stored.payload_json = {**stored.payload_json, 'mode': 'merge'}
+        db.commit()
+        with pytest.raises(Conflict, match='內容已變更'):
+            account_restore.apply_restore(db, 2, preview['token'], 'changed-update-mode', workspace.config)
+        preview = account_restore.preview_restore(db, 2, raw, workspace.config, 'update')
+        def fail():
+            raise RuntimeError('commit failed')
+        with monkeypatch.context() as patch:
+            patch.setattr(db, 'commit', fail)
+            with pytest.raises(RuntimeError):
+                account_restore.apply_restore(db, 2, preview['token'], 'rollback-update-import', workspace.config)
+        assert db.query(models.Shoe).filter_by(user_id=2).count() == 0
+        payload['version'] = 1
+        payload.pop('source_id')
+        with pytest.raises(Invalid, match='v2'):
+            account_restore.preview_restore(db, 2, json.dumps(payload).encode(), workspace.config, 'update')
+        with pytest.raises(Invalid):
+            account_restore.preview_restore(db, 2, raw, workspace.config, 'unknown')
+
+
+def test_update_checks_resulting_shoe_quota_and_strava_conflicts(workspace):
+    from backend.services import shoes
+    with workspace.sessions() as db:
+        payload = archive(db)
+        raw = json.dumps(payload).encode()
+        preview = account_restore.preview_restore(db, 2, raw, workspace.config)
+        account_restore.apply_restore(db, 2, preview['token'], 'quota-initial-import', workspace.config)
+        target = db.query(models.Shoe).filter_by(user_id=2).one()
+        shoes.delete_shoe(db, 2, target.id, target.version)
+        add_shoe(db, uid=2)
+        with pytest.raises(Conflict, match='上限'):
+            account_restore.preview_restore(db, 2, raw, replace(workspace.config, max_shoes_per_user=1), 'update')
+        target = db.query(models.Shoe).filter_by(user_id=2, is_deleted=False).one()
+        another_run = add_run(db, target.id, uid=2)
+        another_run.strava_id = 'conflicting-strava'
+        db.commit()
+        payload['runs'][0]['strava_id'] = 'conflicting-strava'
+        preview = account_restore.preview_restore(db, 2, json.dumps(payload).encode(), workspace.config, 'update')
+        with pytest.raises(Conflict, match='Strava'):
+            account_restore.apply_restore(db, 2, preview['token'], 'strava-update-conflict', workspace.config)
+        assert db.query(models.Shoe).filter_by(user_id=2, is_deleted=True).count() == 1
+
+
+def test_update_http_mode_and_legacy_preview_compatibility(workspace):
+    from fastapi.testclient import TestClient
+
+    from backend.app_factory import create_app
+    from backend.auth import create_access_token
+    from backend.services.run_requests import payload_hash
+    with workspace.sessions() as db:
+        raw = json.dumps(archive(db)).encode()
+        preview = account_restore.preview_restore(db, 2, raw, workspace.config)
+        stored = db.query(models.RestorePreview).filter_by(user_id=2).one()
+        stored.payload_json = stored.payload_json['backup']
+        stored.payload_hash = payload_hash(stored.payload_json)
+        db.commit()
+        account_restore.apply_restore(db, 2, preview['token'], 'legacy-preview-apply', workspace.config)
+    app = create_app(workspace.config, db_engine=workspace.engine, session_factory=workspace.sessions)
+    headers = {'Authorization': 'Bearer ' + create_access_token({'sub': 'two'}, secret_key=workspace.config.secret_key or None)}
+    with TestClient(app) as client:
+        response = client.post('/api/account-restore/preview?mode=update', content=raw, headers=headers)
+        assert response.status_code == 200 and response.json()['summary']['mode'] == 'update'
+        assert client.post('/api/account-restore/preview?mode=unknown', content=raw, headers=headers).status_code == 422
+
+
+def test_update_rejects_two_source_runs_targeting_one_strava_record(workspace):
+    with workspace.sessions() as db:
+        payload = archive(db)
+        payload['runs'][0]['strava_id'] = 'stable-strava'
+        preview = account_restore.preview_restore(db, 2, json.dumps(payload).encode(), workspace.config)
+        account_restore.apply_restore(db, 2, preview['token'], 'strava-initial-import', workspace.config)
+        payload['runs'][0]['strava_id'] = None
+        payload['runs'].append(dict(payload['runs'][0], id=99, strava_id='stable-strava'))
+        payload['shoes'][0]['mileage'] += 5
+        payload['monthly_mileages'][0]['km'] += 5
+        preview = account_restore.preview_restore(db, 2, json.dumps(payload).encode(), workspace.config, 'update')
+        with pytest.raises(Conflict, match='多筆來源'):
+            account_restore.apply_restore(db, 2, preview['token'], 'strava-collision-import', workspace.config)
+        row = db.query(models.Run).filter_by(user_id=2).one()
+        assert row.km == 5 and row.strava_id == 'stable-strava'

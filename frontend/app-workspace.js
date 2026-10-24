@@ -1,6 +1,6 @@
 // DOM bridge for the injected account workspace; persistent records never contain auth tokens.
 const localWorkspace = { controller: null, session: null, account: null, activating: null,
-  runDraftId: null, consumedRunDraftId: null, fresh: new Set(), edited: new Set(), editors: {}, restoring: false, error: '', ready: false };
+  runDraftId: null, consumedRunDraftId: null, fresh: new Set(), edited: new Set(), editors: {}, restoring: false, error: '', ready: false, syncing: null };
 const workspaceForms = {
   run: ['run-date', 'run-km', 'run-shoe'], monthly: ['add-year', 'add-month', 'add-km'],
   goal: ['goal-start-year', 'goal-monthly-km'],
@@ -185,13 +185,55 @@ async function submitWorkspaceRun(url, payload, options) {
   return { queued };
 }
 
-async function syncWorkspace() {
-  if (!authToken || !navigator.onLine || !localWorkspace.controller?.account) return;
-  const session = captureAuthSession();
+function setWorkspaceSyncState(message, busy = false) {
+  document.getElementById('workspace-sync-status').textContent = message;
+  const button = document.getElementById('workspace-sync');
+  button.disabled = busy;
+  button.textContent = busy ? '同步中…' : '立即同步';
+}
+
+async function syncWorkspace({ manual = false } = {}) {
+  const unavailable = !authToken ? '請先登入，再同步此帳號的跑步紀錄。'
+    : !navigator.onLine ? '目前離線，尚未送出的跑步紀錄會保留在此裝置；請連線後再按立即同步。'
+    : !localWorkspace.controller?.account ? localWorkspace.error || '本機工作區尚未就緒，請稍後重試；若持續發生，請重新整理頁面。' : '';
+  if (unavailable) {
+    if (manual) setWorkspaceSyncState(unavailable);
+    return;
+  }
+  if (localWorkspace.syncing) return localWorkspace.syncing;
+  const pending = performWorkspaceSync(captureAuthSession());
+  localWorkspace.syncing = pending;
+  try { await pending; }
+  finally { if (localWorkspace.syncing === pending) localWorkspace.syncing = null; }
+}
+
+async function performWorkspaceSync(session) {
+  setWorkspaceSyncState('正在檢查並送出此裝置的待同步跑步紀錄…', true);
   try {
     const { synced } = await localWorkspace.controller.flush();
-    if (synced && isCurrentAuthSession(session)) await loadData({ mutation: 'run' });
-  } catch (error) { if (isCurrentAuthSession(session)) workspaceStorageError(error); }
+    if (!isCurrentAuthSession(session)) return;
+    const queue = await localWorkspace.controller.read('queue');
+    if (!isCurrentAuthSession(session)) return;
+    const blocked = queue.filter(row => row.status === 'blocked').length;
+    let message = queue.length
+      ? `本次已同步 ${synced} 筆跑步紀錄；仍有 ${queue.length} 筆留在此裝置。` +
+        (blocked ? `${blocked} 筆需要處理，請查看下方原因並重新配對或移除。` : '') +
+        (queue.length > blocked ? '其餘紀錄等待重試，請確認網路與登入狀態；其他分頁正在同步時請稍候。' : '')
+      : synced ? `已同步 ${synced} 筆跑步紀錄，目前沒有待同步資料。`
+        : '目前沒有待同步的跑步紀錄。已儲存的資料不需要再按同步。';
+    if (synced) {
+      try { await loadData({ mutation: 'run' }); }
+      catch { message += ' 紀錄已送出，但畫面更新失敗，請重新整理頁面。'; }
+    }
+    if (isCurrentAuthSession(session)) setWorkspaceSyncState(message);
+  } catch (error) {
+    if (isCurrentAuthSession(session)) setWorkspaceSyncState('同步未完成，請重試：' + error.message);
+  } finally {
+    if (isCurrentAuthSession(session)) {
+      const button = document.getElementById('workspace-sync');
+      button.disabled = false; button.textContent = '立即同步';
+    }
+  }
 }
 
 async function renderWorkspaceQueue() {
@@ -204,6 +246,10 @@ async function renderWorkspaceQueue() {
   const target = document.getElementById('workspace-queue');
   if (!target) return;
   target.replaceChildren();
+  if (!queue.length) {
+    const empty = document.createElement('p'); empty.className = 'workspace-help';
+    empty.textContent = '目前沒有待同步的跑步紀錄。'; target.append(empty);
+  }
   for (const row of queue) {
     const card = document.createElement('div'); card.className = 'workspace-item';
     const text = document.createElement('p');
@@ -240,7 +286,7 @@ async function renderWorkspaceQueue() {
 }
 
 function openWorkspaceModal() {
-  document.getElementById('workspace-owner').textContent = '目前帳號：' + currentUser + '；備份會合併到此帳號。';
+  document.getElementById('workspace-owner').textContent = '目前網站：' + window.location.origin + '；目前帳號：' + currentUser + '。匯入只寫入這個網站的此帳號。';
   document.getElementById('workspace-modal').classList.add('active');
   void renderWorkspaceQueue(); void loadWorkspaceHistory();
 }
@@ -265,6 +311,8 @@ registerFeatureReset('local-workspace', () => {
   localWorkspace.controller?.detach();
   localWorkspace.runDraftId = null; localWorkspace.consumedRunDraftId = null;
   localWorkspace.session = null; localWorkspace.account = null; localWorkspace.editors = {};
+  localWorkspace.syncing = null;
+  setWorkspaceSyncState('');
   localWorkspace.fresh.clear();
   document.getElementById('workspace-modal').classList.remove('active');
   document.getElementById('workspace-status').textContent = '';

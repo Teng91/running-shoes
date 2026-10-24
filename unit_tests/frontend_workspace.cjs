@@ -1,5 +1,6 @@
 // SPEC-027: real IndexedDB, offline shell and transactional APIs; synthetic accounts only.
 const assert = require('node:assert/strict');
+const fs = require('node:fs/promises');
 const http = require('node:http');
 const { startArtifacts, saveFailure, closeBrowser } = require('../scripts/browser_artifacts.cjs');
 module.exports = async function checkWorkspace(browser, baseUrl) {
@@ -75,6 +76,8 @@ module.exports = async function checkWorkspace(browser, baseUrl) {
     await page.reload({ waitUntil: 'networkidle' });
     await page.waitForFunction(() => document.getElementById('run-km').value === '5' && document.getElementById('add-km').value === '180');
     await page.getByRole('button', { name: '資料與同步', exact: true }).click();
+    await page.getByRole('button', { name: '立即同步', exact: true }).click();
+    await page.waitForFunction(() => document.getElementById('workspace-sync-status').textContent.includes('目前沒有待同步'));
     await page.locator('#workspace-drafts').getByRole('button', { name: /繼續編輯 鞋款/ }).click();
     assert.equal(await page.locator('#f-nickname').inputValue(), 'Unfinished nickname');
     await page.evaluate(() => shoeModal.close());
@@ -102,6 +105,10 @@ module.exports = async function checkWorkspace(browser, baseUrl) {
     const failedProbe = await page.evaluate(async () => { try { await fetch('/api/runs'); return false; } catch { return true; } });
     assert.equal(failedProbe, true, 'authenticated API is not served from shell cache');
     if (browser.browserType().name() === 'webkit') assert.ok(disconnectedApi > 0);
+    await page.getByRole('button', { name: '資料與同步', exact: true }).click();
+    await page.getByRole('button', { name: '立即同步', exact: true }).click();
+    assert.match(await page.locator('#workspace-sync-status').textContent(), /目前離線/);
+    await page.getByRole('button', { name: '關閉', exact: true }).click();
     await setOffline(false);
     await page.evaluate(() => syncWorkspace());
     await page.waitForFunction(async () => (await localWorkspace.controller.read('queue')).length === 0);
@@ -119,7 +126,12 @@ module.exports = async function checkWorkspace(browser, baseUrl) {
     await page.waitForFunction(() => document.getElementById('workspace-history').textContent.includes('已復原'));
     runs = await api(a.token, '/runs'); assert.equal(runs.length, 1); assert.notEqual(runs[0].id, deletedRunId);
     assert.equal((await api(a.token, '/shoes/active'))[0].mileage, 25);
-    const backup = await api(a.token, '/export/account');
+    const downloaded = page.waitForEvent('download');
+    await page.locator('#workspace-export').click();
+    const download = await downloaded;
+    const backup = JSON.parse(await fs.readFile(await download.path(), 'utf8'));
+    assert.equal(backup.username, a.username);
+    await page.waitForFunction(() => document.getElementById('workspace-export-status').textContent.includes('查看下載項目'));
     await page.evaluate(() => closeWorkspaceModal()); await login(b);
     await page.getByRole('button', { name: '資料與同步', exact: true }).click();
     const file = { name: 'synthetic-backup.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(backup)) };
@@ -134,6 +146,23 @@ module.exports = async function checkWorkspace(browser, baseUrl) {
     assert.match(await page.locator('#restore-preview').textContent(), /新增 0 雙鞋、0 筆跑步/);
     await page.locator('#restore-apply').click(); await page.getByText('合併還原完成，現有內容已保留。', { exact: true }).waitFor();
     assert.equal((await api(b.token, '/runs')).length, 1);
+    const sourceShoe = (await api(a.token, '/shoes/active'))[0];
+    await api(a.token, `/shoes/${sourceShoe.id}`, { nickname: 'Updated cloud nickname', expected_version: sourceShoe.version }, 'PUT');
+    const sourceRun = (await api(a.token, '/runs'))[0];
+    await api(a.token, `/runs/${sourceRun.id}`, { date: '2026-02-02', km: 8, shoe_id: sourceShoe.id, expected_version: sourceRun.version }, 'PUT');
+    const newer = await api(a.token, '/export/account');
+    await page.locator('#restore-mode').selectOption('update');
+    await page.locator('#restore-file').setInputFiles({ ...file, buffer: Buffer.from(JSON.stringify(newer)) });
+    await page.waitForFunction(() => !document.getElementById('restore-apply').disabled);
+    assert.match(await page.locator('#restore-preview').textContent(), /將更新 1 雙鞋、1 筆跑步/);
+    assert.match(await page.locator('#workspace-owner').textContent(), /目前網站：/);
+    await page.locator('#restore-apply').click();
+    await page.getByText('資料匯入完成，同來源資料已更新，額外資料已保留。', { exact: true }).waitFor();
+    const targetShoes = await api(b.token, '/shoes/active');
+    assert.equal(targetShoes.length, 2);
+    assert.equal(targetShoes.find(row => row.nickname === 'Updated cloud nickname').mileage, 28);
+    const targetRuns = await api(b.token, '/runs');
+    assert.equal(targetRuns.length, 1); assert.equal(targetRuns[0].km, 8); assert.equal(targetRuns[0].date, '2026-02-02');
     assert.deepEqual(errors, []);
     console.log(`PASS ${browser.browserType().name()} SPEC-027: durable drafts, account isolation, offline restart/sync, recovery and deduplicated restore`);
   } catch (error) { await saveFailure(context, page, 'workspace', error); throw error; }
