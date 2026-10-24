@@ -611,6 +611,18 @@ def test_export_collection_capacity_is_shared_and_never_truncates(workspace, mon
         with pytest.raises(Invalid, match=r'鞋款.*1 筆.*完整資料庫備份'):
             exports.build_account_export(db, db.get(models.User, 1))
         assert db.query(models.Shoe).filter_by(user_id=1).count() == 2
+        from backend import backup_contract
+        monkeypatch.setitem(ARCHIVE_LIMITS, 'shoes', 5000)
+        monkeypatch.setattr(backup_contract, 'MAX_BACKUP_BYTES', 1)
+        serialized = []
+        original = exports._serialize_shoe
+        def observed(row):
+            serialized.append(row.id)
+            return original(row)
+        monkeypatch.setattr(exports, '_serialize_shoe', observed)
+        with pytest.raises(Invalid, match='未產生下載檔'):
+            exports.build_account_export(db, db.get(models.User, 1), include_history=False)
+        assert len(serialized) == 1, 'byte overflow stops before serializing the remaining rows'
 
 
 def test_import_diff_preview_matches_patches_and_preserves_local_runs(workspace):

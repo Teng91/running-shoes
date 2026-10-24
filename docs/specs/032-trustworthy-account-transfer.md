@@ -21,7 +21,7 @@
 
 ## Proposed design
 
-`backup_contract.py` 擁有所有集合限制與匯出驗證；export service 在同一讀取快照中以 cap+1 讀取，超限拒絕並提供不含歷史選項。`include_history=false` 由兩個下載入口的 checkbox 明確指定，預設 true，檔名與狀態揭露省略。
+`backup_contract.py` 擁有所有集合限制與匯出驗證；export service 在同一讀取快照中以 cap+1 分批讀取並逐筆檢查容量，超限拒絕並提供不含歷史選項。`include_history=false` 由兩個下載入口的 checkbox 明確指定，預設 true，檔名與狀態揭露省略。
 
 `account_import_changes.py` 根據 user-scoped 計畫產生純欄位 patch 與最終鞋款／月份里程；比較 UTC 時間與巢狀值。executor 只套用這份 patch，summary 以實際變更計數，保留額外本機跑步與刪除 tombstone。
 
