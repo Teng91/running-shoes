@@ -27,15 +27,24 @@ async function loadWorkspaceHistory(more = false) {
       if (event.can_restore) {
         const button = document.createElement('button'); button.className = 'btn btn-edit'; button.textContent = '復原誤刪';
         const operationId = newOperationKey();
+        let committed = false;
         button.onclick = async () => {
+          if (!isCurrentAuthSession(session)) return;
           button.disabled = true;
           try {
-            await apiPost('/operations', { operation_id: operationId, kind: 'history.restore', entity_id: event.id });
+            if (!committed) {
+              await apiPost('/operations', { operation_id: operationId, kind: 'history.restore', entity_id: event.id });
+              committed = true;
+            }
             if (!isCurrentAuthSession(session)) return;
-            await loadData(); await loadWorkspaceHistory();
+            await refreshCoreData();
+            if (!isCurrentAuthSession(session)) return;
+            await loadWorkspaceHistory();
           } catch (error) {
             if (!isCurrentAuthSession(session) || error.name === 'AbortError') return;
-            text.textContent += ' · ' + error.message; button.disabled = false;
+            text.textContent += committed ? ' · 已復原，但畫面更新失敗，請重新載入資料。' : ' · ' + error.message;
+            button.textContent = committed ? '重新載入資料' : '復原誤刪';
+            button.disabled = false;
           }
         };
         row.append(button);
