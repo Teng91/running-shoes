@@ -251,7 +251,7 @@ class AuditEvent(Base):
 class RestorePreview(Base):
     __tablename__ = "restore_previews"
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), primary_key=True)
-    token: Mapped[str] = mapped_column(String(36), nullable=False)
+    token: Mapped[str] = mapped_column(String(36), primary_key=True)
     revision: Mapped[int] = mapped_column(Integer, nullable=False)
     payload_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     payload_json: Mapped[dict] = mapped_column(JSON, nullable=False)

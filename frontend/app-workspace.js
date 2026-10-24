@@ -297,13 +297,27 @@ function closeWorkspaceModal() {
 
 async function clearLocalWorkspace() {
   if (!confirm('清除此帳號在這個裝置的草稿、快取與尚未同步紀錄？伺服器資料不會刪除。')) return;
+  const owner = getFormOperations('workspace-clear');
+  const forms = Object.fromEntries(Object.entries(workspaceForms).map(([name, ids]) => [name, readForm(ids)]));
+  const operation = owner.begin('clear', { forms, editors: localWorkspace.editors });
+  if (!operation) return;
   try {
-    await localWorkspace.controller.clear(); localWorkspace.editors = {};
-    document.getElementById('run-km').value = ''; document.getElementById('add-km').value = '';
-    getFormDraft('goal').reset(); prepareGoalForm();
+    await localWorkspace.controller.clear();
+    if (!owner.owns('clear', operation)) return;
+    let newerInput = false;
+    for (const [name, ids] of Object.entries(workspaceForms)) {
+      if (!formSnapshotMatches(operation.form.forms[name], readForm(ids))) { newerInput = true; continue; }
+      if (name === 'goal') { getFormDraft('goal').reset(); prepareGoalForm(); }
+      else document.getElementById(name === 'run' ? 'run-km' : 'add-km').value = '';
+    }
+    for (const [key, draft] of Object.entries(operation.form.editors)) {
+      if (JSON.stringify(localWorkspace.editors[key]) === JSON.stringify(draft)) delete localWorkspace.editors[key];
+    }
+    if (newerInput || Object.keys(localWorkspace.editors).length) persistWorkspaceDrafts();
     void renderWorkspaceQueue();
   }
-  catch (error) { workspaceStorageError(error); }
+  catch (error) { if (owner.owns('clear', operation)) workspaceStorageError(error); }
+  finally { owner.finish('clear', operation); }
 }
 
 registerFeatureReset('local-workspace', () => {

@@ -37,6 +37,9 @@ async function run() {
   const requests = [];
   const phase = value => { stage = value; console.log('PWA phase:', value); };
   const failedKinds = new Set();
+  // Background retries may still fetch an older candidate after the next phase.
+  // Keep each deliberately broken deployment broken for its own asset version.
+  const rejectedRevisions = new Map([['fixture-b', 'http'], ['fixture-c', 'mime'], ['fixture-e', 'disconnect'], ['fixture-f', 'html-version'], ['fixture-g', 'module-mime']]);
   const server = http.createServer(async (request, response) => {
     const url = new URL(request.url, 'http://127.0.0.1');
     requests.push({ path: url.pathname, version: url.searchParams.get('v'), release, failure, networkDown });
@@ -76,17 +79,18 @@ async function run() {
       response.setHeader('Content-Type', 'application/json');
       response.end('{"synthetic_private_data":true}'); return;
     }
-    if ((url.pathname === '/app-goals.js' && ['http', 'mime', 'disconnect'].includes(failure) ||
-         url.pathname === '/runtime/feature-lifecycle.mjs' && failure === 'module-mime') && url.searchParams.get('v') === release) {
+    const assetFailure = rejectedRevisions.get(url.searchParams.get('v'));
+    if (url.pathname === '/app-goals.js' && ['http', 'mime', 'disconnect'].includes(assetFailure) ||
+        url.pathname === '/runtime/feature-lifecycle.mjs' && assetFailure === 'module-mime') {
       failedAssets++;
-      failedKinds.add(failure);
-      if (failure === 'disconnect') {
+      failedKinds.add(assetFailure);
+      if (assetFailure === 'disconnect') {
         // Headers plus a truncated declared body avoid WebKit retrying a socket
         // dropped before an HTTP response, while Response.text() must still reject.
         response.writeHead(200, { 'Content-Type': 'text/javascript', 'Content-Length': '1000', 'Connection': 'close' });
         response.end('// interrupted asset'); return;
       }
-      response.statusCode = failure === 'http' ? 503 : 200;
+      response.statusCode = assetFailure === 'http' ? 503 : 200;
       response.setHeader('Content-Type', 'text/html');
       response.end('<html>not a JavaScript asset</html>'); return;
     }

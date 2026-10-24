@@ -84,3 +84,27 @@ def apply_run_mileage_deltas(
                 synchronize_session=False,
             )
     return round(total_delta, 2)
+
+
+def reconcile_account_mileage(db: Session, uid: int) -> None:
+    """Keep local-only runs while replacing source baseline/adjustment values."""
+    by_shoe = {shoe_id: float(km) for shoe_id, km in db.query(models.Run.shoe_id, func.sum(models.Run.km)).filter_by(user_id=uid).group_by(models.Run.shoe_id).all()}
+    for shoe in db.query(models.Shoe).filter_by(user_id=uid).all():
+        total = round(shoe.baseline_mileage + float(by_shoe.get(shoe.id, 0)), 2)
+        if shoe.mileage != total:
+            shoe.mileage = total
+            shoe.version += 1
+    periods = {(row.year, row.month): row for row in db.query(models.MonthlyMileage).filter_by(user_id=uid).all()}
+    totals = {(int(year), int(month)): float(km) for year, month, km in db.query(
+        func.substr(models.Run.date, 1, 4), func.substr(models.Run.date, 6, 2), func.sum(models.Run.km),
+    ).filter_by(user_id=uid).group_by(func.substr(models.Run.date, 1, 7)).all()}
+    for period in periods.keys() | totals.keys():
+        row = periods.get(period)
+        if row is None:
+            row = models.MonthlyMileage(id=allocate_id(db, "monthly_mileages"), user_id=uid, year=period[0], month=period[1], adjustment_km=0)
+            db.add(row)
+        total = round(float(row.adjustment_km or 0) + totals.get(period, 0), 2)
+        if row.km != total:
+            row.km = total
+            row.version = (row.version or 0) + 1
+    db.flush()

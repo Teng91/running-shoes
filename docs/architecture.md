@@ -585,3 +585,11 @@ resource store 現在直接擁有年度／目標／洞察結果，已移除原�
 v3.10.0 保留上述所有權與 schema 5。`services/account_restore.py` 增加 `merge|update` 策略；預覽把 mode 與 backup 放入 hash 綁定的 envelope，舊預覽相容 merge。HTTP adapter 只解析模式、讀 body 並呼叫 service，apply 沿用 user-bound token／revision／receipt。v2 update 以來源 mapping 更新鞋款／跑步、以年月更新月份調整與月報、更新帳號目標；保留額外資料與跑步 tombstone。服務在同一交易中從該帳號完整日誌彙總鞋款／月份總里程，並撤銷匯入月報對應的舊生成。所有 query／write 沿用 user_id 範圍。
 
 `app-account-restore.js` 擁有檔案／模式／視窗版本，模式改變使舊預覽失效，提交期間鎖定選單。更新模式在確認前呈現來源、接收 origin／帳號、更新範圍；`app-exports.js` 在呼叫它的視窗顯示下載結果並拒絕舊 session。雲端與本機版的伺服器資料庫彼此獨立，瀏覽器 IDB 工作區仍只負責草稿／待送紀錄，兩者不混用。
+
+### SPEC-030：獨立預覽與最小寫入
+
+v3.10.1／schema 6 將預覽主鍵改為 `(user_id, token)`，交易保留舊預覽，不改動業務表。建立新預覽只清理過期項目並檢查本人 8 份／64 MiB 上限，DELETE 只捨棄指定本人 token；hash、資料 revision 與回執保護仍有效。
+
+`account_restore.py` 僅擁有解析、預覽、交易及回執；`account_import_plan.py` 在保留 SQLite writer 後載入本人快照、來源 mapping 與預先確定的 run targets，預覽和套用共用；`account_import.py` 依計畫寫入，不能自行 commit。`services/mileage.py` 擁有帳號日誌對帳，只有數值改變才更新版本。相同欄位不產生 ORM UPDATE，日期比較先統一 UTC 語意，額外紀錄不因 no-op 匯入而失效。
+
+原生 `runtime/account-restore-controller.mjs` 注入 session／transport／key，管理預覽、revision、提交所有權及 token 清理；`app-account-restore.js` 留作 DOM bridge。關窗不捨棄正在提交的 token；舊預覽成功只清理自己的 token，舊 apply 完成可刷新仍相同的帳號，但不能解鎖新提交。工作區清除沿用 form operation session／epoch，逐表單與編輯草稿比對快照，保留 await 期間的新輸入。決策見 [ADR-0011](adr/0011-independent-import-operations.md)。

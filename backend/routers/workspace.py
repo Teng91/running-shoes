@@ -54,6 +54,14 @@ class RestoreApply(BaseModel):
     token: str = Field(min_length=36, max_length=36)
 
 
+@router.delete("/account-restore/preview/{token}")
+def discard(
+    token: str, user: models.User = Depends(get_current_user), db: Session = Depends(get_db),
+):
+    with service_errors():
+        return account_restore.discard_preview(db, user.id, token)
+
+
 @router.post("/account-restore/apply")
 def apply(
     payload: RestoreApply,
