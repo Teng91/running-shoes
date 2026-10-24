@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
 <meta charset="UTF-8">
-<meta name="app-asset-version" content="3.10.1">
+<meta name="app-asset-version" content="3.10.2">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>跑鞋追蹤 Dashboard</title>
 <meta name="theme-color" content="#0f1117">
@@ -34,8 +34,8 @@ body { margin: 0; opacity: 1 !important; }
 @keyframes app-boot-critical-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .app-boot { transition: none; } .app-boot-spinner { animation: none; } }
 </style>
-<link id="app-styles" rel="preload" href="/styles.css?v=3.10.1" as="style" onload="this.onload=null;this.rel='stylesheet';this.dataset.ready='true';window.dispatchEvent(new Event('appstylesready'))">
-<noscript><link rel="stylesheet" href="/styles.css?v=3.10.1"></noscript>
+<link id="app-styles" rel="preload" href="/styles.css?v=3.10.2" as="style" onload="this.onload=null;this.rel='stylesheet';this.dataset.ready='true';window.dispatchEvent(new Event('appstylesready'))">
+<noscript><link rel="stylesheet" href="/styles.css?v=3.10.2"></noscript>
 </head>
 <body>
 
@@ -577,9 +577,10 @@ window.__appBootLegacyPoll = window.setInterval(function () {
         <option value="csv">CSV (.csv)</option>
       </select>
     </div>
+    <label><input id="export-account-history" type="checkbox" checked> 帳號 JSON 包含異動歷史</label>
     <div class="auth-error" id="export-error"></div>
     <div class="modal-actions">
-      <div class="modal-actions-secondary"><button class="btn btn-edit" onclick="exportAccountData()">完整備份 JSON</button></div>
+      <div class="modal-actions-secondary"><button class="btn btn-edit" onclick="exportAccountData()">帳號資料 JSON</button></div>
       <div class="modal-actions-primary">
         <button class="btn btn-cancel" onclick="closeExportModal()">取消</button>
         <button class="btn btn-primary" onclick="doExport()">匯出</button>
@@ -614,6 +615,7 @@ window.__appBootLegacyPoll = window.setInterval(function () {
       <h3 id="restore-title">帳號資料下載與匯入</h3>
       <p class="workspace-help">JSON 是目前帳號已存到伺服器的資料副本，包含鞋款、跑步、月跑量、目標、月報、Strava 匯入摘要與異動歷史；不含密碼、本機草稿或待同步紀錄。請先同步完成再下載，將檔案保存在自己的安全位置。</p>
       <p class="workspace-help">搬到本機版：① 在雲端下載 JSON。② 開啟電腦上執行的本機版並登入。③ 在本機版選檔、選匯入模式、檢查預覽，再按「確認匯入」。資料只寫入上方顯示的網站／帳號，不會覆寫整個資料庫。選檔預覽尚未寫入；預覽後有新異動時需重新預覽。</p>
+      <label><input id="workspace-export-history" type="checkbox" checked> 下載時包含異動歷史（最多 50,000 筆）</label>
       <button id="workspace-export" class="btn btn-edit" onclick="exportAccountData(true)">下載目前帳號資料 JSON</button>
       <p id="workspace-export-status" role="status" aria-live="polite"></p>
       <div class="form-group"><label for="restore-mode">匯入模式</label><select id="restore-mode" onchange="previewAccountRestore()"><option value="merge">只新增，保留既有內容</option><option value="update">新增並更新同來源資料（v2）</option></select></div>
@@ -621,6 +623,7 @@ window.__appBootLegacyPoll = window.setInterval(function () {
       <div class="form-group"><label for="restore-file">選擇備份 JSON（最多 20 MB）</label><input id="restore-file" type="file" accept=".json,application/json" onchange="previewAccountRestore()"></div>
       <p id="restore-preview" role="status" aria-live="polite"></p>
       <button class="btn btn-edit" onclick="previewAccountRestore()">重新預覽</button>
+      <button id="restore-refresh" class="btn btn-edit" hidden onclick="refreshAccountRestoreView()">重新載入資料</button>
       <button id="restore-apply" class="btn btn-primary" disabled onclick="applyAccountRestore()">確認匯入</button>
     </section>
     <section aria-labelledby="history-title"><h3 id="history-title">異動歷史與誤刪復原</h3>
@@ -638,38 +641,38 @@ window.__appBootLegacyPoll = window.setInterval(function () {
 
 <script src="/vendor/chart.umd.min.js"></script>
 <script src="/vendor/marked.min.js"></script>
-<script src="/app-boot.js?v=3.10.1"></script>
-<script src="/app-lifecycle.js?v=3.10.1"></script>
-<script src="/app-state.js?v=3.10.1"></script>
-<script src="/app-api.js?v=3.10.1"></script>
-<script src="/app-auth.js?v=3.10.1"></script>
-<script src="/app-streams.js?v=3.10.1"></script>
-<script src="/app-resources.js?v=3.10.1"></script>
-<script src="/app-inline-editors.js?v=3.10.1"></script>
-<script src="/app-local-store.js?v=3.10.1"></script>
-<script src="/app-workspace.js?v=3.10.1"></script>
-<script src="/app-account-restore.js?v=3.10.1"></script>
-<script src="/app-history.js?v=3.10.1"></script>
-<script src="/app-core.js?v=3.10.1"></script>
-<script src="/app-models.js?v=3.10.1"></script>
-<script src="/app-markdown.js?v=3.10.1"></script>
-<script src="/app-agent.js?v=3.10.1"></script>
-<script src="/app-reports.js?v=3.10.1"></script>
-<script src="/app-runs.js?v=3.10.1"></script>
-<script src="/app-dates.js?v=3.10.1"></script>
-<script src="/app-strava.js?v=3.10.1"></script>
-<script src="/app-run-insights.js?v=3.10.1"></script>
-<script src="/app-shoes.js?v=3.10.1"></script>
-<script src="/app-dashboard.js?v=3.10.1"></script>
-<script src="/app-monthly.js?v=3.10.1"></script>
-<script src="/app-exports.js?v=3.10.1"></script>
-<script src="/app-goals.js?v=3.10.1"></script>
-<script src="/app-charts.js?v=3.10.1"></script>
-<script src="/app-shoe-charts.js?v=3.10.1"></script>
-<script src="/app-monthly-charts.js?v=3.10.1"></script>
-<script src="/app-spending.js?v=3.10.1"></script>
-<script src="/app-dialogs.js?v=3.10.1"></script>
-<script src="/app-updates.js?v=3.10.1"></script>
-<script src="/app.js?v=3.10.1"></script>
+<script src="/app-boot.js?v=3.10.2"></script>
+<script src="/app-lifecycle.js?v=3.10.2"></script>
+<script src="/app-state.js?v=3.10.2"></script>
+<script src="/app-api.js?v=3.10.2"></script>
+<script src="/app-auth.js?v=3.10.2"></script>
+<script src="/app-streams.js?v=3.10.2"></script>
+<script src="/app-resources.js?v=3.10.2"></script>
+<script src="/app-inline-editors.js?v=3.10.2"></script>
+<script src="/app-local-store.js?v=3.10.2"></script>
+<script src="/app-workspace.js?v=3.10.2"></script>
+<script src="/app-account-restore.js?v=3.10.2"></script>
+<script src="/app-history.js?v=3.10.2"></script>
+<script src="/app-core.js?v=3.10.2"></script>
+<script src="/app-models.js?v=3.10.2"></script>
+<script src="/app-markdown.js?v=3.10.2"></script>
+<script src="/app-agent.js?v=3.10.2"></script>
+<script src="/app-reports.js?v=3.10.2"></script>
+<script src="/app-runs.js?v=3.10.2"></script>
+<script src="/app-dates.js?v=3.10.2"></script>
+<script src="/app-strava.js?v=3.10.2"></script>
+<script src="/app-run-insights.js?v=3.10.2"></script>
+<script src="/app-shoes.js?v=3.10.2"></script>
+<script src="/app-dashboard.js?v=3.10.2"></script>
+<script src="/app-monthly.js?v=3.10.2"></script>
+<script src="/app-exports.js?v=3.10.2"></script>
+<script src="/app-goals.js?v=3.10.2"></script>
+<script src="/app-charts.js?v=3.10.2"></script>
+<script src="/app-shoe-charts.js?v=3.10.2"></script>
+<script src="/app-monthly-charts.js?v=3.10.2"></script>
+<script src="/app-spending.js?v=3.10.2"></script>
+<script src="/app-dialogs.js?v=3.10.2"></script>
+<script src="/app-updates.js?v=3.10.2"></script>
+<script src="/app.js?v=3.10.2"></script>
 </body>
 </html>

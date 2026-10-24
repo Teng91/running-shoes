@@ -24,10 +24,15 @@ module.exports = async function checkWorkspace(browser, baseUrl) {
   await api(b.token, '/shoes', { brand: 'Other', model: 'Existing', date: '2026-01-01', mileage: 3 });
   // WebKit's native emulation rejects SW navigations internally. As in the PWA
   // harness, disconnect the origin itself and let the installed SW serve the shell.
-  let networkDown = false, disconnectedApi = 0, holdPreview = null;
+  let networkDown = false, disconnectedApi = 0, holdPreview = null, failRefreshReads = false, applyRequests = 0;
   const origin = http.createServer(async (request, response) => {
     if (holdPreview && request.url === '/api/account-restore/preview?mode=merge') {
       const held = holdPreview; holdPreview = null; held.started(); await held.gate;
+    }
+    if (request.method === 'POST' && request.url === '/api/account-restore/apply') applyRequests++;
+    if (failRefreshReads && request.url === '/api/shoes/active') {
+      response.writeHead(500, { 'Content-Type': 'application/json' });
+      response.end(JSON.stringify({ detail: 'Synthetic refresh failure' })); return;
     }
     if (networkDown) {
       if (request.url.startsWith('/service-worker.js')) { response.writeHead(503); response.end('// offline'); return; }
@@ -134,6 +139,16 @@ module.exports = async function checkWorkspace(browser, baseUrl) {
     const download = await downloaded;
     const backup = JSON.parse(await fs.readFile(await download.path(), 'utf8'));
     assert.equal(backup.username, a.username);
+    assert.ok(backup.history.length > 0);
+    await page.locator('#workspace-export-history').uncheck();
+    const omittedDownload = page.waitForEvent('download');
+    await page.locator('#workspace-export').click();
+    const omitted = await omittedDownload;
+    assert.match(omitted.suggestedFilename(), /_without_history.json$/);
+    const withoutHistory = JSON.parse(await fs.readFile(await omitted.path(), 'utf8'));
+    assert.deepEqual(withoutHistory.history, []);
+    assert.equal(withoutHistory.runs.length, backup.runs.length);
+    await page.locator('#workspace-export-history').check();
     await page.waitForFunction(() => document.getElementById('workspace-export-status').textContent.includes('查看下載項目'));
     await page.evaluate(() => closeWorkspaceModal()); await login(b);
     await page.getByRole('button', { name: '資料與同步', exact: true }).click();
@@ -159,7 +174,16 @@ module.exports = async function checkWorkspace(browser, baseUrl) {
     await page.waitForFunction(() => !document.getElementById('restore-apply').disabled);
     assert.match(await page.locator('#restore-preview').textContent(), /將更新 1 雙鞋、1 筆跑步/);
     assert.match(await page.locator('#workspace-owner').textContent(), /目前網站：/);
+    failRefreshReads = true;
     await page.locator('#restore-apply').click();
+    await page.locator('#restore-refresh').waitFor({ state: 'visible' });
+    await page.waitForFunction(() => !accountRestore.state.pending);
+    assert.equal(await page.locator('#restore-apply').isDisabled(), true);
+    const committedRequests = applyRequests;
+    failRefreshReads = false;
+    await page.locator('#restore-refresh').click();
+    await page.locator('#restore-refresh').waitFor({ state: 'hidden' });
+    assert.equal(applyRequests, committedRequests, 'refresh retry never submits import again');
     await page.getByText('資料匯入完成，同來源資料已更新，額外資料已保留。', { exact: true }).waitFor();
     const targetShoes = await api(b.token, '/shoes/active');
     assert.equal(targetShoes.length, 2);
@@ -177,6 +201,8 @@ module.exports = async function checkWorkspace(browser, baseUrl) {
     await page.locator('#restore-mode').selectOption('update');
     await page.waitForFunction(() => !document.getElementById('restore-apply').disabled);
     const newestToken = await page.evaluate(() => accountRestore.state.preview.token);
+    assert.match(await page.locator('#restore-preview').textContent(), /將更新 0 雙鞋、0 筆跑步/);
+    assert.match(await page.locator('#restore-preview').textContent(), /內容相同：1 雙鞋、1 筆跑步/);
     const oldResponse = page.waitForResponse(response => response.url().endsWith('/api/account-restore/preview?mode=merge'));
     const discarded = page.waitForResponse(response => response.request().method() === 'DELETE' && response.url().includes('/account-restore/preview/'));
     releaseOld(); await oldResponse; await discarded;

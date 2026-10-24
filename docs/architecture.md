@@ -593,3 +593,12 @@ v3.10.1／schema 6 將預覽主鍵改為 `(user_id, token)`，交易保留舊預
 `account_restore.py` 僅擁有解析、預覽、交易及回執；`account_import_plan.py` 在保留 SQLite writer 後載入本人快照、來源 mapping 與預先確定的 run targets，預覽和套用共用；`account_import.py` 依計畫寫入，不能自行 commit。`services/mileage.py` 擁有帳號日誌對帳，只有數值改變才更新版本。相同欄位不產生 ORM UPDATE，日期比較先統一 UTC 語意，額外紀錄不因 no-op 匯入而失效。
 
 原生 `runtime/account-restore-controller.mjs` 注入 session／transport／key，管理預覽、revision、提交所有權及 token 清理；`app-account-restore.js` 留作 DOM bridge。關窗不捨棄正在提交的 token；舊預覽成功只清理自己的 token，舊 apply 完成可刷新仍相同的帳號，但不能解鎖新提交。工作區清除沿用 form operation session／epoch，逐表單與編輯草稿比對快照，保留 await 期間的新輸入。決策見 [ADR-0011](adr/0011-independent-import-operations.md)。
+
+
+## SPEC-032：備份契約、實際差異與提交後讀取
+
+`backup_contract.py` 同時擁有匯出／匯入的集合、UTF-8 位元組及結構檢查；export service 在一致快照中以 cap+1 讀取並在產檔前驗證契約。HTTP 僅處理本人 include_history 選項與下載回應，不靜默裁切。
+
+`account_import_plan.py` 保留 user-scoped 來源辨識與配額；query-free `account_import_changes.py` 以快照投影最終跑步、鞋款及月份，產生欄位 patch；preview 由 patch 計數，executor 套用同一 patch，交易／回執仍由 account_restore 擁有。移除 executor 內第二套對帳及欄位比較。
+
+restore controller 擁有 committed／refreshRequired／refreshing 與原操作身分。bridge 將 loadData 的 resource errors 轉為可重試的讀取失敗，不把提交成功誤報成可再次提交；重新載入檢查 session／revision／owner。詳見 [ADR-0012](adr/0012-account-transfer-contract-and-diffs.md)。

@@ -285,7 +285,8 @@ def test_update_import_refreshes_existing_data_and_recalculates_totals(workspace
         run = db.get(models.Run, imported_run_id)
         runs.delete_run(db, 2, run.id, run.version)
         preview = account_restore.preview_restore(db, 2, raw, workspace.config, 'update')
-        assert preview['summary']['updated_runs'] == 1
+        assert preview['summary']['updated_runs'] == 0
+        assert preview['summary']['unchanged_runs'] == preview['summary']['preserved_deleted_runs'] == 1
         account_restore.apply_restore(db, 2, preview['token'], 'preserve-run-deletion', workspace.config)
         assert db.query(models.Run).filter_by(user_id=2).count() == 2
 
@@ -539,3 +540,125 @@ def test_preview_schema_rollback_preserves_business_rows(workspace):
         assert db.query(models.RestorePreview).count() == 0
     run_startup_migrations(workspace.engine, workspace.sessions)
     assert schema_version(workspace.engine) == 6
+
+
+def test_export_contract_limits_and_explicit_history_omission(workspace):
+    from fastapi.testclient import TestClient
+
+    from backend.app_factory import create_app
+    from backend.auth import create_access_token
+    from backend.backup_contract import ARCHIVE_LIMITS
+    with workspace.sessions() as db:
+        history = {'user_id': 1, 'operation_id': 'synthetic-export-boundary', 'reason': 'shoe.update',
+                   'entity': 'shoes', 'entity_id': 1, 'action': 'update', 'before_json': None,
+                   'after_json': None, 'created_at': '2026-10-24T00:00:00Z', 'restored': False, 'imported': False}
+        db.bulk_insert_mappings(models.AuditEvent, [history] * ARCHIVE_LIMITS['history'])
+        db.commit()
+        payload, _ = exports.build_account_export(db, db.get(models.User, 1))
+        assert len(parse_backup(json.dumps(payload).encode()).history) == 50_000
+        db.bulk_insert_mappings(models.AuditEvent, [history, {**history, 'user_id': 2}])
+        db.commit()
+        with pytest.raises(Invalid, match=r'異動歷史.*50,000.*取消包含異動歷史'):
+            exports.build_account_export(db, db.get(models.User, 1))
+        payload, name = exports.build_account_export(db, db.get(models.User, 1), include_history=False)
+        assert parse_backup(json.dumps(payload).encode()).history == []
+        assert name.endswith('_without_history.json')
+        other, _ = exports.build_account_export(db, db.get(models.User, 2))
+        assert len(other['history']) == 1
+    app = create_app(workspace.config, db_engine=workspace.engine, session_factory=workspace.sessions)
+    headers = {'Authorization': 'Bearer ' + create_access_token({'sub': 'one'}, secret_key=workspace.config.secret_key or None)}
+    with TestClient(app) as client:
+        failure = client.get('/api/export/account', headers=headers)
+        assert failure.status_code == 400 and '取消包含異動歷史' in failure.json()['detail']
+        response = client.get('/api/export/account?include_history=false', headers=headers)
+        assert response.status_code == 200
+        assert parse_backup(response.content).history == []
+        assert '_without_history.json' in response.headers['Content-Disposition']
+        assert client.get('/api/export/account?include_history=false').status_code in (401, 403)
+    with workspace.sessions() as db:
+        assert db.query(models.AuditEvent).filter_by(user_id=1).count() == 50_001
+
+
+def test_export_uses_import_byte_budget_and_rejects_unsafe_content(workspace, monkeypatch):
+    from datetime import UTC, datetime
+
+    from backend import backup_contract
+    exported_at = datetime(2026, 10, 24, tzinfo=UTC)
+    with workspace.sessions() as db:
+        add_shoe(db, nickname='中文鞋款')
+        payload, _ = exports.build_account_export(db, db.get(models.User, 1), include_history=False, now=exported_at)
+        size = len(json.dumps(payload, ensure_ascii=False, separators=(',', ':'), allow_nan=False).encode())
+        monkeypatch.setattr(backup_contract, 'MAX_BACKUP_BYTES', size)
+        exports.build_account_export(db, db.get(models.User, 1), include_history=False, now=exported_at)
+        monkeypatch.setattr(backup_contract, 'MAX_BACKUP_BYTES', size - 1)
+        with pytest.raises(Invalid, match='未產生下載檔'):
+            exports.build_account_export(db, db.get(models.User, 1), include_history=False, now=exported_at)
+        monkeypatch.setattr(backup_contract, 'MAX_BACKUP_BYTES', 20 * 1024 * 1024)
+        db.add(models.MonthlyReport(user_id=1, year=2026, month=1, content_md='synthetic', model='mock',
+                                     stats_json={'api_key': 'synthetic-never-export'}))
+        db.commit()
+        with pytest.raises(Invalid, match='不符合匯入格式') as error:
+            exports.build_account_export(db, db.get(models.User, 1), include_history=False, now=exported_at)
+        assert 'synthetic-never-export' not in str(error.value)
+
+
+def test_export_collection_capacity_is_shared_and_never_truncates(workspace, monkeypatch):
+    from backend.backup_contract import ARCHIVE_LIMITS
+    with workspace.sessions() as db:
+        add_shoe(db)
+        add_shoe(db)
+        monkeypatch.setitem(ARCHIVE_LIMITS, 'shoes', 1)
+        with pytest.raises(Invalid, match=r'鞋款.*1 筆.*完整資料庫備份'):
+            exports.build_account_export(db, db.get(models.User, 1))
+        assert db.query(models.Shoe).filter_by(user_id=1).count() == 2
+
+
+def test_import_diff_preview_matches_patches_and_preserves_local_runs(workspace):
+    from backend.services import runs
+    with workspace.sessions() as db:
+        payload = archive(db)
+        payload['running_goal'] = {'start_year': 2026, 'monthly_km': 100, 'yearly_km': 1200}
+        payload['monthly_reports'] = [{'year': 2026, 'month': 1, 'content_md': 'same', 'model': 'mock', 'stats_json': {}}]
+        raw = json.dumps(payload).encode()
+        first = account_restore.preview_restore(db, 2, raw, workspace.config, 'update')
+        assert (first['summary']['new_shoes'], first['summary']['new_runs'], first['summary']['new_months'], first['summary']['new_reports']) == (1, 1, 1, 1)
+        assert first['summary']['new_goal']
+        account_restore.apply_restore(db, 2, first['token'], 'diff-initial-transfer', workspace.config)
+        target_shoe = db.query(models.Shoe).filter_by(user_id=2).one()
+        extra_shoe = add_shoe(db, uid=2, mileage=9)
+        extra_shoe_id, extra_version = extra_shoe.id, extra_shoe.version
+        add_run(db, target_shoe.id, uid=2, km=3)
+        same = account_restore.preview_restore(db, 2, raw, workspace.config, 'update')
+        summary = same['summary']
+        assert all(summary['updated_' + kind] == 0 for kind in ('shoes', 'runs', 'months', 'reports'))
+        assert all(summary['unchanged_' + kind] == 1 for kind in ('shoes', 'runs', 'months', 'reports'))
+        assert summary['unchanged_goal'] and not summary['updated_goal']
+        account_restore.apply_restore(db, 2, same['token'], 'diff-identical-transfer', workspace.config)
+        assert db.get(models.Shoe, target_shoe.id).mileage == 28
+        before = {kind.__tablename__: {row.id: row.version for row in db.query(kind).filter_by(user_id=2)}
+                  for kind in (models.Shoe, models.Run, models.MonthlyMileage)}
+        payload['runs'][0].update(date='2026-02-02', km=7)
+        payload['shoes'][0]['mileage'] = 27
+        payload['monthly_mileages'] = [{'year': 2026, 'month': 1, 'km': 0, 'adjustment_km': 0},
+                                       {'year': 2026, 'month': 2, 'km': 7, 'adjustment_km': 0}]
+        payload['running_goal'].update(monthly_km=180, yearly_km=2160)
+        payload['monthly_reports'][0]['content_md'] = 'changed'
+        changed = account_restore.preview_restore(db, 2, json.dumps(payload).encode(), workspace.config, 'update')
+        summary = changed['summary']
+        assert all(summary['updated_' + kind] == 1 for kind in ('shoes', 'runs', 'months', 'reports'))
+        assert summary['new_months'] == 1 and summary['updated_goal']
+        result = account_restore.apply_restore(db, 2, changed['token'], 'diff-changed-transfer', workspace.config)
+        assert result['summary'] == summary
+        db.expire_all()
+        for kind, key in ((models.Shoe, 'shoes'), (models.Run, 'runs'), (models.MonthlyMileage, 'months')):
+            actual = sum(row.version != before[kind.__tablename__][row.id] for row in db.query(kind).filter_by(user_id=2)
+                         if row.id in before[kind.__tablename__])
+            assert actual == summary['updated_' + key]
+        assert db.get(models.Shoe, extra_shoe_id).version == extra_version
+        assert db.get(models.Shoe, target_shoe.id).mileage == 30
+        assert {row.month: row.km for row in db.query(models.MonthlyMileage).filter_by(user_id=2)} == {1: 3, 2: 7}
+        target_run = db.query(models.Run).filter_by(user_id=2, date='2026-02-02').one()
+        runs.delete_run(db, 2, target_run.id, target_run.version)
+        deleted = account_restore.preview_restore(db, 2, json.dumps(payload).encode(), workspace.config, 'update')['summary']
+        assert deleted['updated_runs'] == deleted['unchanged_runs'] == 0
+        assert deleted['preserved_deleted_runs'] == 1

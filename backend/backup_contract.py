@@ -12,6 +12,8 @@ from backend.services.errors import Invalid
 from backend.services.run_requests import payload_hash
 
 MAX_BACKUP_BYTES = 20 * 1024 * 1024
+ARCHIVE_LIMITS = {"shoes": 5000, "runs": 50_000, "monthly_mileages": 2412,
+                  "monthly_reports": 2412, "strava_imports": 1000, "history": 50_000}
 
 
 class BackupShoe(schemas.ShoeCreate):
@@ -84,13 +86,13 @@ class AccountBackup(BaseModel):
     source_id: str | None = Field(default=None, min_length=16, max_length=80, pattern=r"^[A-Za-z0-9._:-]+$")
     exported_at: datetime
     username: str = Field(max_length=50)
-    shoes: list[BackupShoe] = Field(max_length=5000)
-    runs: list[BackupRun] = Field(max_length=50_000)
-    monthly_mileages: list[BackupMonth] = Field(max_length=2412)
+    shoes: list[BackupShoe] = Field(max_length=ARCHIVE_LIMITS["shoes"])
+    runs: list[BackupRun] = Field(max_length=ARCHIVE_LIMITS["runs"])
+    monthly_mileages: list[BackupMonth] = Field(max_length=ARCHIVE_LIMITS["monthly_mileages"])
     running_goal: BackupGoal | None = None
-    monthly_reports: list[BackupReport] = Field(default_factory=list, max_length=2412)
-    strava_imports: list[BackupImport] = Field(default_factory=list, max_length=1000)
-    history: list[BackupHistory] = Field(default_factory=list, max_length=50_000)
+    monthly_reports: list[BackupReport] = Field(default_factory=list, max_length=ARCHIVE_LIMITS["monthly_reports"])
+    strava_imports: list[BackupImport] = Field(default_factory=list, max_length=ARCHIVE_LIMITS["strava_imports"])
+    history: list[BackupHistory] = Field(default_factory=list, max_length=ARCHIVE_LIMITS["history"])
 
     @model_validator(mode="after")
     def validate_graph(self):
@@ -160,3 +162,13 @@ def _check_json(value, depth=0):
 
 def backup_fingerprint(backup: AccountBackup) -> str:
     return payload_hash(backup.model_dump(mode="json"))
+
+
+def validate_export(payload: dict) -> None:
+    """Accept only archives the same import contract can consume, without truncation."""
+    try:
+        # Match JSONResponse's UTF-8 wire encoding, including compact separators.
+        raw = json.dumps(payload, ensure_ascii=False, allow_nan=False, separators=(",", ":")).encode("utf-8")
+        parse_backup(raw)
+    except (Invalid, ValueError, TypeError, RecursionError) as exc:
+        raise Invalid("帳號資料超過 JSON 備份容量或不符合匯入格式，未產生下載檔。可取消包含異動歷史後再下載；若仍超限，請使用管理員完整資料庫備份。") from exc

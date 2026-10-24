@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from backend import models
 from backend.auth import get_current_user
 from backend.database import get_db
+from backend.routers.errors import service_errors
 from backend.services import exports as export_service
 
 router = APIRouter(tags=["exports"])
@@ -14,10 +15,12 @@ router = APIRouter(tags=["exports"])
 
 @router.get("/api/export/account")
 def export_account_data(
+    include_history: bool = Query(True),
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    payload, filename = export_service.build_account_export(db, current_user)
+    with service_errors():
+        payload, filename = export_service.build_account_export(db, current_user, include_history=include_history)
     return JSONResponse(
         payload,
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},

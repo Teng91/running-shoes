@@ -76,8 +76,12 @@ async function exportAccountData(fromWorkspace = false) {
   if (button) { button.disabled = true; button.textContent = '正在下載…'; }
   error.textContent = fromWorkspace ? '正在從目前網站下載此帳號的資料…' : '';
   try {
-    const res = await authenticatedFetch(API_BASE + '/export/account', { headers: authHeaders() });
-    if (!res.ok) throw new Error('完整備份失敗：' + res.status);
+    const includeHistory = document.getElementById(fromWorkspace ? 'workspace-export-history' : 'export-account-history')?.checked !== false;
+    const res = await authenticatedFetch(API_BASE + '/export/account?include_history=' + includeHistory, { headers: authHeaders() });
+    if (!res.ok) {
+      const detail = await readAuthenticatedError(res);
+      throw new Error(detail.detail || '帳號資料下載失敗：' + res.status);
+    }
     const disposition = res.headers.get('Content-Disposition') || '';
     const match = disposition.match(/filename="([^"]+)"/);
     const blob = await readAuthenticatedBody(res, 'blob');
@@ -90,7 +94,7 @@ async function exportAccountData(fromWorkspace = false) {
     link.click();
     link.remove();
     window.URL.revokeObjectURL(url);
-    if (fromWorkspace) error.textContent = '資料檔案已交給瀏覽器，請查看下載項目。可在本機版登入後選擇此 JSON 匯入。';
+    if (fromWorkspace) error.textContent = '資料檔案已交給瀏覽器，請查看下載項目。' + (includeHistory ? '已包含異動歷史。' : '此檔案不含異動歷史。') + '可在本機版登入後選擇此 JSON 匯入。';
     else closeExportModal();
   } catch (e) {
     if (e.name === 'AbortError' || !isCurrentAuthSession(session)) return;
