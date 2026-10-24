@@ -117,8 +117,12 @@ module.exports = async function checkWorkspace(browser, baseUrl) {
     await page.getByRole('button', { name: '立即同步', exact: true }).click();
     assert.match(await page.locator('#workspace-sync-status').textContent(), /目前離線/);
     await page.getByRole('button', { name: '關閉', exact: true }).click();
+    failRefreshReads = true;
     await setOffline(false);
     await page.evaluate(() => syncWorkspace());
+    assert.match(await page.locator('#workspace-sync-status').textContent(), /紀錄已送出，但畫面更新失敗/);
+    failRefreshReads = false;
+    await page.evaluate(() => refreshCoreData());
     await page.waitForFunction(async () => (await localWorkspace.controller.read('queue')).length === 0);
     let runs = await api(a.token, '/runs'); assert.equal(runs.length, 1); assert.equal(runs[0].km, 5);
     const deletedRunId = runs[0].id;
@@ -130,7 +134,11 @@ module.exports = async function checkWorkspace(browser, baseUrl) {
     await page.locator('#run-modal').waitFor({ state: 'hidden' });
     await page.waitForFunction(async () => !Object.keys((await localWorkspace.controller.read('drafts'))[0]?.value.editors || {}).some(key => key.startsWith('run:')), null);
     await page.getByRole('button', { name: '資料與同步', exact: true }).click();
+    failRefreshReads = true;
     await page.locator('#workspace-history').getByRole('button', { name: '復原誤刪' }).click();
+    await page.locator('#workspace-history').getByRole('button', { name: '重新載入資料' }).waitFor();
+    failRefreshReads = false;
+    await page.locator('#workspace-history').getByRole('button', { name: '重新載入資料' }).click();
     await page.waitForFunction(() => document.getElementById('workspace-history').textContent.includes('已復原'));
     runs = await api(a.token, '/runs'); assert.equal(runs.length, 1); assert.notEqual(runs[0].id, deletedRunId);
     assert.equal((await api(a.token, '/shoes/active'))[0].mileage, 25);

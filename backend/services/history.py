@@ -9,6 +9,7 @@ from backend import models
 from backend.services.errors import Conflict, Invalid, NotFound
 from backend.services.identifiers import allocate_id
 from backend.services.mileage import apply_run_mileage_deltas
+from backend.services.run_identity import relink_recovered_run
 from backend.services.transactions import write_transaction
 from backend.settings import Settings
 
@@ -60,6 +61,7 @@ def restore_deleted(db: Session, user_id: int, event_id: int, config: Settings) 
             row = models.Run(id=allocate_id(db, "runs"), user_id=user_id, shoe_id=shoe.id, date=data["date"], km=data["km"],
                              strava_id=data.get("strava_id"), version=data["version"] + 1)
             db.add(row)
+            relink_recovered_run(db, user_id, event.entity_id, row.id)
             apply_run_mileage_deltas(db, user_id, [(shoe.id, row.date, row.km)], 1)
         elif event.entity == "shoes":
             row = db.query(models.Shoe).filter_by(id=event.entity_id, user_id=user_id).first()

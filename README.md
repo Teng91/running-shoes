@@ -658,7 +658,7 @@ Schema 5→6 只以交易重建 `restore_previews` 的 `(user_id, token)` 主鍵
 
 ### 可靠帳號資料搬移（SPEC-032，v3.10.2）
 
-目前 v3.10.2 為 Asset 3.10.2／shell v37、schema 6、51 個 release assets。
+v3.10.2 使用 Asset 3.10.2／shell v37、schema 6、51 個 release assets。
 [SPEC-032](docs/specs/032-trustworthy-account-transfer.md) 將提交成功與畫面載入分開：若匯入已完成但讀取失敗，
 按「重新載入資料」只重新讀取，不會再次匯入；提交回應不確定時仍沿用原操作重試。
 預覽分別顯示新增、實際變更與內容相同，並保留已刪除跑步及額外本機資料。
@@ -672,6 +672,19 @@ Schema 5→6 只以交易重建 `restore_previews` 的 `(user_id, token)` 主鍵
 `registry.fly.io/running-shoes@sha256:ba35ff3051b2c627ebf3b59fdb091747e93db2c0fc3a91c14320ca8411bde804`，
 schema 6 保持相容，不還原舊業務快照。
 
+### 復原與同步身分（SPEC-033，v3.10.3）
+
+目前 v3.10.3 為 Asset 3.10.3／shell v38、schema 6、51 個 release assets。
+[SPEC-033](docs/specs/033-recovery-and-sync-identity.md) 補足刪除、復原與再次匯入的組合操作：
+同帳號舊備份不重建已刪跑步；明確復原後，原來源及舊 ID 的對應會跟隨復原紀錄，後續更新匯入仍可修改該筆資料。
+每次離線送出使用獨立租約，重新登入接手後不受舊請求的延遲結果影響。
+同步已送出而畫面讀取失敗時會明確提示重新整理；誤刪復原已成功而讀取失敗時，按「重新載入資料」只重試讀取。
+核心刷新驗證由 resource bridge 共用；跑步來源復原別名由 `backend/services/run_identity.py` 管理，服務仍由呼叫端持有交易。
+
+本版無 schema migration，回滾可使用 v3.10.2 immutable image
+`registry.fly.io/running-shoes@sha256:bac44457f12adfde6473e9d9a973b330e1bf69eac7e44feb3fb6ed1f5a55429a`，
+不還原業務資料快照。發布驗證涵蓋 verify、40 組版面、雙引擎 CRUD／PWA、main/tag CI 及正式站匿名 release-check。
+
 ### AI 開發規範與自動驗證
 
 `AGENTS.md` 是 Codex 等 Coding Agent 共用的專案規範；`CLAUDE.md` 會把同一份規範匯入
@@ -683,7 +696,7 @@ Playwright／Chromium／WebKit 齊全時，也會執行版面測試。
 避免每次停止都重跑。Hook 不會呼叫其他模型、外部 API，或傳送提示、diff、原始碼與測試輸出。
 GitHub Actions 仍會在 push／pull request 執行 `verify`，並以三個可獨立重跑的 browser jobs 執行完整版面矩陣、真實 CRUD E2E 與 PWA 升級／離線測試；Dependabot 每週檢查 Python 與 GitHub Actions 更新。
 
-本次驗證基線為 Python **523 passed**、前端回歸測試 **137 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
+本次驗證基線為 Python **528 passed**、前端回歸測試 **140 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
 版面檢查涵蓋 WebKit／Chromium、亮／暗模式與 10 組直橫向尺寸，共 40 組設定，檢查六個功能分頁、三個認證表單、圖表、全部彈窗、行內編輯、停用／錯誤及空資料狀態。
 
 主要表單、工具列與彈窗操作統一為 44px 控制項；桌面表格內的緊湊操作為 36px，手機至少 44px。

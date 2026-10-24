@@ -2,7 +2,6 @@
 // Storage and transport are injected; no browser globals or credentials are stored.
 export function createWorkspaceController({ storage, session, clock, newKey, send, changed = () => {} }) {
   let owner = null, generation = 0;
-  const consumer = newKey();
   const valid = ticket => owner === ticket && ticket && session.current(ticket.session);
   const key = (account, kind, id = 'current') => [account, kind, id];
   const notify = ticket => { if (valid(ticket)) changed(); };
@@ -19,20 +18,21 @@ export function createWorkspaceController({ storage, session, clock, newKey, sen
     for (const item of await storage.list(ticket.account, 'queue')) {
       if (!valid(ticket)) break;
       let acquired = false;
+      const lease = newKey();
       const claimed = await storage.update(item.key, current => {
         if (!current || current.status === 'blocked' || current.leaseUntil > clock()) return current;
         acquired = true;
-        return { ...current, lease: consumer, leaseUntil: clock() + 120000 };
+        return { ...current, lease, leaseUntil: clock() + 120000 };
       });
-      if (!acquired || !claimed || claimed.lease !== consumer || !valid(ticket)) continue;
+      if (!acquired || !claimed || claimed.lease !== lease || !valid(ticket)) continue;
       try {
         await send(claimed.operation);
         // A response can complete after account switch; deletion stays in A's partition.
-        await storage.update(item.key, current => current?.lease === consumer ? null : current);
+        await storage.update(item.key, current => current?.lease === lease ? null : current);
         synced++;
       } catch (error) {
         await storage.update(item.key, current => {
-          if (current?.lease !== consumer) return current;
+          if (current?.lease !== lease) return current;
           return { ...current, lease: null, leaseUntil: 0,
             status: [400, 403, 404, 409, 422].includes(error.status) ? 'blocked' : 'pending',
             message: error.message || '同步尚未完成', code: error.code || '', attempts: current.attempts + 1 };
