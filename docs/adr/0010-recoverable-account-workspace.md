@@ -17,6 +17,7 @@
 - Run／month 使用單調配置主鍵，刪除 trigger 同時推進序號；allocator 僅讀全域 PK floor 及 sequence metadata，所有業務讀寫仍 user-scoped。避免舊草稿的 ID 在刪除重建後指向不同內容。
 - 備份匯出以 SQLite 實體讀取快照保持所有集合一致；並行寫入不可產生鞋款／日誌里程互相矛盾的檔案。
 - 備份 v2 以穩定來源 ID＋entity/source key 建立 user-scoped mapping，不以鞋名猜測同一雙鞋。v1 以完整檔案 digest 命名空間去重。預覽有效 20 分鐘，apply 驗證本人、hash、revision、配額後一次合併；保留既有內容，mapping tombstone 防止重複匯入復活後續刪除。來源歷史保留唯讀；Strava 匯入摘要保留既有項目，僅於剩餘容量新增並預覽略過數，不清除既有摘要。
+- [SPEC-029](../specs/029-account-data-transfer.md) 擴充顯式 v2 update 模式，供雲端下載後更新本機帳號。預設 merge 不變，更新模式與內容一起綁定預覽 hash。明確確認後更新同來源鞋款／跑步、檔案內月份調整／目標／月報，保留額外內容與跑步 tombstone；鞋款刪除狀態可依來源更新。日誌總量以本人完整集合重算，匯入月報撤銷舊生成。此策略不是資料庫檔案還原，也不刪除來源缺少的接收端資料。
 - 誤刪復原只建立新的業務操作，不刪改原事件內容；要求目前狀態、原鞋款、版本、配額仍有效，正確累計里程且原事件只復原一次。
 - 年度、目標與洞察移除舊鏡像 Map，resource store 成為唯一讀取／pending／快取 owner。
 

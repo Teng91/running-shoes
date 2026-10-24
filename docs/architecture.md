@@ -579,3 +579,9 @@ flowchart LR
 `backup_contract.py` 驗證有界 v1/v2 graph；`services/account_restore.py` 擁有本人預覽、hash/revision、來源 mapping、完整交易與保留現有內容策略；router 不接管 commit。`services/history.py` 擁有可復原事件判斷、原鞋款／版本／配額檢查及里程重算，匯入事件只讀。
 
 resource store 現在直接擁有年度／目標／洞察結果，已移除原本診斷鏡像 Map。Service worker 只快取公開 shell，帳號資源快照由 IDB adapter 管理；新鮮網路結果及已修改欄位不被晚到本機快照覆蓋。v3.9.0 使用 asset 3.9.0、shell v34、schema 5；正式備份／rollback 見 README 與 SPEC-027。
+
+### SPEC-029：帳號資料搬移與顯式更新
+
+v3.10.0 保留上述所有權與 schema 5。`services/account_restore.py` 增加 `merge|update` 策略；預覽把 mode 與 backup 放入 hash 綁定的 envelope，舊預覽相容 merge。HTTP adapter 只解析模式、讀 body 並呼叫 service，apply 沿用 user-bound token／revision／receipt。v2 update 以來源 mapping 更新鞋款／跑步、以年月更新月份調整與月報、更新帳號目標；保留額外資料與跑步 tombstone。服務在同一交易中從該帳號完整日誌彙總鞋款／月份總里程，並撤銷匯入月報對應的舊生成。所有 query／write 沿用 user_id 範圍。
+
+`app-account-restore.js` 擁有檔案／模式／視窗版本，模式改變使舊預覽失效，提交期間鎖定選單。更新模式在確認前呈現來源、接收 origin／帳號、更新範圍；`app-exports.js` 在呼叫它的視窗顯示下載結果並拒絕舊 session。雲端與本機版的伺服器資料庫彼此獨立，瀏覽器 IDB 工作區仍只負責草稿／待送紀錄，兩者不混用。

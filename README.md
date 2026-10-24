@@ -6,6 +6,12 @@
 
 ## 使用方式
 
+完整操作說明見 [使用指南：日常記錄、資料與同步、備份及清理本機資料](docs/user-guide.md)。
+
+要把雲端資料帶到本機版：在雲端「資料與同步」按「下載目前帳號資料 JSON」，再於電腦執行的本機版登入、選檔、預覽並確認匯入。「只新增」保留既有內容；「新增並更新同來源資料（v2）」可更新先前匯入的鞋款與跑步、檔案內月份調整、目標和月報，並保留額外資料及已刪除跑步。預覽會顯示接收網站／帳號與新增／更新筆數；不會覆寫整個資料庫，也不會刪除檔案未包含的資料。
+
+「立即同步」只重送此裝置尚未同步的新增跑步，連線儲存成功的資料不必再按同步。JSON 不含草稿與待同步紀錄，請先完成同步再下載。「清除此帳號的本機資料」清理的是瀏覽器暫存，不是本機版資料庫；不刪除伺服器資料，但會丟失此裝置尚未同步的紀錄。
+
 ### 直接使用線上服務
 
 開啟 [running-shoes.fly.dev](https://running-shoes.fly.dev/)，註冊帳號即可開始使用，每個人的跑鞋資料完全隔離。
@@ -616,6 +622,15 @@ Schema 4 上線前，執行異地備份、checksum 與隔離還原驗證。回�
 
 Schema 5 增加 user metadata、回執、預覽、mapping、異動、context 與主鍵配置表；既有業務資料／里程不改寫。Run／month ID 不因刪除而重用，避免恢復草稿寫到新紀錄；allocator 僅讀全域最大主鍵與 sequence 這類配置 metadata，不讀取其他帳號的業務值。上線前必須建立、校驗正式備份並完成隔離還原演練。若回滾至 v3.8.0，先停止所有寫入、另備份 schema 5，保留新增表／欄位／triggers，將 `schema_metadata` marker 降至 4，再切回舊映像及通過 readiness／匿名 release-check；舊版不再保證離線操作回執與主鍵不重用，不能混跑新舊寫入。重新升級需保留本機 queue 並使用新 shell revision。
 
+### 雲端下載與本機匯入更新（SPEC-028／029，v3.10.0）
+
+目前 Asset 3.10.0／shell v35，仍為 schema 5、50 個資產。詳見 [使用指南](docs/user-guide.md) 與 [資料搬移規格](docs/specs/029-account-data-transfer.md)。
+
+- `POST /api/account-restore/preview?mode=merge|update` 預設只新增；update 僅接受 v2，明確更新同來源鞋款與跑步、檔案內月份調整、目標及月報。模式與資料一起綁定本人預覽 hash／revision，apply 不接受切換模式。
+- 更新保留接收端額外資料、已刪除跑步及不存在於檔案的內容；不是整個帳號的鏡像取代。鞋款刪除狀態依檔案更新，不按同品牌型號合併。所有總里程於後端重算，月報匯入會撤銷同月份舊生成的保存資格。
+- 同步按鈕與下載在目前視窗顯示明確結果；接收網站／帳號、來源與更新筆數在確認前可見。使用者確認匯入才修改目前網站的資料，部署驗證不執行正式帳號匯入。
+- 無 schema migration；回滾可直接部署 v3.9.0 image，維持 schema 5。新版已成功匯入的資料仍為既有格式；未完成的新預覽需重新預覽。部署前照常建立、校驗正式備份並完成隔離還原演練。
+
 ### Schema 2 上線與回滾
 
 v3.4.0 只新增 `run_creation_requests` 表與 user/key 唯一約束，沒有改寫既有鞋款、日誌或里程。
@@ -635,7 +650,7 @@ Playwright／Chromium／WebKit 齊全時，也會執行版面測試。
 避免每次停止都重跑。Hook 不會呼叫其他模型、外部 API，或傳送提示、diff、原始碼與測試輸出。
 GitHub Actions 仍會在 push／pull request 執行 `verify`，並以三個可獨立重跑的 browser jobs 執行完整版面矩陣、真實 CRUD E2E 與 PWA 升級／離線測試；Dependabot 每週檢查 Python 與 GitHub Actions 更新。
 
-本次驗證基線為 Python **508 passed**、前端回歸測試 **124 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
+本次驗證基線為 Python **513 passed**、前端回歸測試 **131 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
 版面檢查涵蓋 WebKit／Chromium、亮／暗模式與 10 組直橫向尺寸，共 40 組設定，檢查六個功能分頁、三個認證表單、圖表、全部彈窗、行內編輯、停用／錯誤及空資料狀態。
 
 主要表單、工具列與彈窗操作統一為 44px 控制項；桌面表格內的緊湊操作為 36px，手機至少 44px。

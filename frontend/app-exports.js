@@ -68,15 +68,20 @@ async function doExport() {
   }
 }
 
-async function exportAccountData() {
-  const error = document.getElementById('export-error');
-  error.textContent = '';
+async function exportAccountData(fromWorkspace = false) {
+  const error = document.getElementById(fromWorkspace ? 'workspace-export-status' : 'export-error');
+  const button = fromWorkspace ? document.getElementById('workspace-export') : null;
+  if (button?.disabled) return;
+  const session = captureAuthSession();
+  if (button) { button.disabled = true; button.textContent = '正在下載…'; }
+  error.textContent = fromWorkspace ? '正在從目前網站下載此帳號的資料…' : '';
   try {
     const res = await authenticatedFetch(API_BASE + '/export/account', { headers: authHeaders() });
     if (!res.ok) throw new Error('完整備份失敗：' + res.status);
     const disposition = res.headers.get('Content-Disposition') || '';
     const match = disposition.match(/filename="([^"]+)"/);
     const blob = await readAuthenticatedBody(res, 'blob');
+    if (!isCurrentAuthSession(session)) return;
     const url = window.URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
@@ -85,9 +90,18 @@ async function exportAccountData() {
     link.click();
     link.remove();
     window.URL.revokeObjectURL(url);
-    closeExportModal();
+    if (fromWorkspace) error.textContent = '資料檔案已交給瀏覽器，請查看下載項目。可在本機版登入後選擇此 JSON 匯入。';
+    else closeExportModal();
   } catch (e) {
-    if (e.name === 'AbortError') return;
+    if (e.name === 'AbortError' || !isCurrentAuthSession(session)) return;
     error.textContent = e.message || '完整備份失敗';
+  } finally {
+    if (button && isCurrentAuthSession(session)) { button.disabled = false; button.textContent = '下載目前帳號資料 JSON'; }
   }
 }
+
+registerFeatureReset('account-export', () => {
+  document.getElementById('workspace-export-status').textContent = '';
+  const button = document.getElementById('workspace-export');
+  button.disabled = false; button.textContent = '下載目前帳號資料 JSON';
+});
