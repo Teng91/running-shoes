@@ -27,6 +27,7 @@
 - `backend/services/operations.py`: operation identities, expected versions, transactional receipts.
 - `backend/services/account_restore.py`: user-bound preview, source mappings and atomic non-destructive merges.
 - `backend/services/account_import_plan.py`: user-scoped source matching and shared import previews/plans.
+- `backend/services/account_import_changes.py`: query-free field patches and projected mileage shared by preview and execution.
 - `backend/services/account_import.py`: plan execution inside the caller-owned transaction; no independent commits.
 - `backend/services/history.py`: user-scoped audit and conflict-aware deletion recovery.
 - `backend/services/identifiers.py`: monotonic run/month primary-key allocation metadata.

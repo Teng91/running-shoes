@@ -1,7 +1,7 @@
 // Session/revision ownership and transport; presentation stays in the bridge.
 export function createAccountRestoreController({ session, transport, newKey }) {
-  const state = { revision: 0, preview: null, operationId: null, pending: false };
-  let previewSession = null, applying = null;
+  const state = { revision: 0, preview: null, operationId: null, pending: false, refreshRequired: false, refreshing: false };
+  let previewSession = null, applying = null, committed = null, refreshing = null;
   const sessionCurrent = operation => !!operation && session.current(operation.session);
   const current = operation => sessionCurrent(operation) && operation.revision === state.revision;
   function release(preview, captured) {
@@ -13,6 +13,7 @@ export function createAccountRestoreController({ session, transport, newKey }) {
   function forget() {
     const previous = state.preview, captured = previewSession;
     state.preview = null; state.operationId = null; previewSession = null;
+    committed = null; refreshing = null; state.refreshRequired = false; state.refreshing = false;
     if (previous !== applying?.preview) release(previous, captured);
   }
   return Object.freeze({
@@ -42,8 +43,26 @@ export function createAccountRestoreController({ session, transport, newKey }) {
       await transport.apply(operation.preview.token, operation.operationId);
       if (applying === operation && current(operation)) {
         state.preview = null; state.operationId = null; previewSession = null;
+        committed = operation; state.refreshRequired = true;
       }
       return true;
+    },
+    beginRefresh() {
+      if (!state.refreshRequired || state.refreshing || !current(committed)) return null;
+      refreshing = committed; state.refreshing = true;
+      return refreshing;
+    },
+    ownsRefresh: operation => refreshing === operation && current(operation),
+    async refresh(operation) {
+      if (refreshing !== operation || !current(operation)) return false;
+      await transport.refresh();
+      if (refreshing !== operation || !current(operation)) return false;
+      state.refreshRequired = false;
+      return true;
+    },
+    finishRefresh(operation) {
+      if (refreshing !== operation) return;
+      refreshing = null; state.refreshing = false;
     },
     finishApply(operation) {
       if (applying !== operation) return false;

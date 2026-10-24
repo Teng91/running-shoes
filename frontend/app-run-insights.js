@@ -151,7 +151,7 @@ function renderRunCalendar(filtered, month) {
     const items = dayRuns.map(run => {
       if (run.shoes) return run.shoes.map(group => {
         const shoe = runShoe(group.shoe_id);
-        return `<button class="calendar-run" onclick="event.stopPropagation();filterRunDay('${date}')">${esc(shoe?.model || '歷史鞋款')} · ${group.count} 次</button>`;
+        return `<button class="calendar-run" onclick="event.stopPropagation();filterRunDay('${date}')">${esc(shoe?.model || '歷史鞋款')}</button>`;
       }).join('');
       const shoe = runShoe(run.shoe_id);
       return `<button class="calendar-run" onclick="event.stopPropagation();openRunModal(${run.id})">${esc(shoe?.model || '跑鞋')}</button>`;

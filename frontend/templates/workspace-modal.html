@@ -15,6 +15,7 @@
       <h3 id="restore-title">帳號資料下載與匯入</h3>
       <p class="workspace-help">JSON 是目前帳號已存到伺服器的資料副本，包含鞋款、跑步、月跑量、目標、月報、Strava 匯入摘要與異動歷史；不含密碼、本機草稿或待同步紀錄。請先同步完成再下載，將檔案保存在自己的安全位置。</p>
       <p class="workspace-help">搬到本機版：① 在雲端下載 JSON。② 開啟電腦上執行的本機版並登入。③ 在本機版選檔、選匯入模式、檢查預覽，再按「確認匯入」。資料只寫入上方顯示的網站／帳號，不會覆寫整個資料庫。選檔預覽尚未寫入；預覽後有新異動時需重新預覽。</p>
+      <label><input id="workspace-export-history" type="checkbox" checked> 下載時包含異動歷史（最多 50,000 筆）</label>
       <button id="workspace-export" class="btn btn-edit" onclick="exportAccountData(true)">下載目前帳號資料 JSON</button>
       <p id="workspace-export-status" role="status" aria-live="polite"></p>
       <div class="form-group"><label for="restore-mode">匯入模式</label><select id="restore-mode" onchange="previewAccountRestore()"><option value="merge">只新增，保留既有內容</option><option value="update">新增並更新同來源資料（v2）</option></select></div>
@@ -22,6 +23,7 @@
       <div class="form-group"><label for="restore-file">選擇備份 JSON（最多 20 MB）</label><input id="restore-file" type="file" accept=".json,application/json" onchange="previewAccountRestore()"></div>
       <p id="restore-preview" role="status" aria-live="polite"></p>
       <button class="btn btn-edit" onclick="previewAccountRestore()">重新預覽</button>
+      <button id="restore-refresh" class="btn btn-edit" hidden onclick="refreshAccountRestoreView()">重新載入資料</button>
       <button id="restore-apply" class="btn btn-primary" disabled onclick="applyAccountRestore()">確認匯入</button>
     </section>
     <section aria-labelledby="history-title"><h3 id="history-title">異動歷史與誤刪復原</h3>

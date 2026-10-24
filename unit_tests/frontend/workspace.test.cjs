@@ -2,11 +2,13 @@ const { test, assert, transportContext, vm, fs } = require('./helpers.cjs');
 const deferred = () => { let resolve; const promise = new Promise(r => { resolve = r; }); return { promise, resolve }; };
 async function bindRestoreController(context) {
   const { createAccountRestoreController } = await import('../../frontend/runtime/account-restore-controller.mjs');
+  context.resourceStore ||= { hasErrors: () => false };
   context.injectedRestore = createAccountRestoreController({
     session: { capture: context.captureAuthSession, current: context.isCurrentAuthSession },
     newKey: context.newOperationKey || (() => 'synthetic-restore-operation'),
     transport: { preview: (raw, mode) => context.jsonRequest('/account-restore/preview?mode=' + mode, { body: raw }),
       apply: (token, operationId) => context.apiPost('/account-restore/apply', { token }, { idempotencyKey: operationId }),
+      refresh: () => context.refreshAccountRestoreData(),
       discard: token => context.apiDelete?.('/account-restore/preview/' + token) || Promise.resolve() },
   });
   vm.runInContext('accountRestore = injectedRestore;', context);
@@ -431,4 +433,97 @@ test('SPEC-030 restore controller isolates windows and releases stale previews',
   session = {}; controller.reset(); previews[3].resolve({ token: 'account-A' }); await staleRead;
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(controller.state.preview, null); assert.deepEqual(discarded, ['old']);
+});
+
+
+test('SPEC-032 committed import refresh retries only reads and isolates replaced windows', async () => {
+  const elements = new Proxy({}, { get: (rows, id) => rows[id] ||= { disabled: false, hidden: true, value: '', textContent: '' } });
+  let posts = 0, reads = 0, failRead = true, failWrite = false;
+  const keys = [];
+  const session = {};
+  const context = vm.createContext({ document: { getElementById: id => elements[id] }, registerFeatureReset() {},
+    captureAuthSession: () => session, isCurrentAuthSession: value => value === session,
+    jsonRequest: async () => ({ token: 'synthetic-preview', summary: { mode: 'merge' } }),
+    apiPost: async (_, body, options) => { posts++; keys.push(options.idempotencyKey); if (failWrite) throw Error('lost response'); },
+    loadData: async () => { reads++; }, loadWorkspaceHistory() {},
+  });
+  context.resourceStore = { getError: resource => failRead && resource === 'shoes' ? Error('read failed') : undefined };
+  vm.runInContext(fs.readFileSync('frontend/app-account-restore.js', 'utf8'), context);
+  const controller = await bindRestoreController(context);
+  await controller.preview(controller.beginPreview(), '{}', 'merge');
+  await context.applyAccountRestore();
+  assert.equal(posts, 1); assert.equal(reads, 1);
+  assert.match(elements['restore-preview'].textContent, /匯入已完成.*重新載入資料/);
+  assert.equal(elements['restore-apply'].disabled, true);
+  assert.equal(elements['restore-refresh'].hidden, false);
+  assert.equal(controller.state.preview, null);
+  await context.applyAccountRestore(); assert.equal(posts, 1, 'committed import cannot be resent');
+  failRead = false; await context.refreshAccountRestoreView();
+  assert.equal(posts, 1); assert.equal(reads, 2);
+  assert.equal(elements['restore-refresh'].hidden, true);
+  assert.match(elements['restore-preview'].textContent, /合併還原完成/);
+  await context.refreshAccountRestoreView(); assert.equal(reads, 2);
+  await controller.preview(controller.beginPreview(), '{}', 'merge');
+  failWrite = true; await context.applyAccountRestore();
+  assert.equal(elements['restore-apply'].disabled, false);
+  assert.equal(reads, 2, 'failed submission does not refresh');
+  failWrite = false; await context.applyAccountRestore();
+  assert.equal(posts, 3); assert.equal(reads, 3);
+  assert.equal(keys[1], keys[2], 'uncertain submission keeps the same retry identity');
+});
+
+
+test('SPEC-032 late refresh cannot change a replacement preview or account', async () => {
+  for (const changeAccount of [false, true]) for (const fails of [false, true]) {
+    let session = {}, settle;
+    const elements = new Proxy({}, { get: (rows, id) => rows[id] ||= { disabled: false, hidden: true, value: '', textContent: '' } });
+    const context = vm.createContext({ document: { getElementById: id => elements[id] }, registerFeatureReset() {},
+      captureAuthSession: () => session, isCurrentAuthSession: value => value === session,
+      jsonRequest: async () => ({ token: 'first', summary: { mode: 'merge' } }), apiPost: async () => {},
+      loadData: () => new Promise((resolve, reject) => { settle = () => fails ? reject(Error('old read failed')) : resolve(); }),
+      loadWorkspaceHistory() { throw Error('stale refresh cannot reload history'); },
+    });
+    vm.runInContext(fs.readFileSync('frontend/app-account-restore.js', 'utf8'), context);
+    const controller = await bindRestoreController(context);
+    await controller.preview(controller.beginPreview(), '{}', 'merge');
+    const pending = context.applyAccountRestore();
+    await new Promise(resolve => setImmediate(resolve));
+    if (changeAccount) session = {};
+    context.resetAccountRestore();
+    await controller.preview(controller.beginPreview(), '{}', 'merge');
+    elements['restore-preview'].textContent = 'replacement preview';
+    elements['restore-apply'].disabled = false;
+    settle(); await pending;
+    assert.equal(elements['restore-preview'].textContent, 'replacement preview');
+    assert.equal(elements['restore-refresh'].hidden, true);
+    assert.equal(elements['restore-apply'].disabled, false);
+    assert.equal(controller.state.pending, false);
+  }
+});
+
+
+test('SPEC-032 downloads explicitly omit history and show capacity errors', async () => {
+  const elements = new Proxy({}, { get: (rows, id) => rows[id] ||= { disabled: false, checked: true, textContent: '' } });
+  let url, downloads = 0, ok = true, created;
+  const context = vm.createContext({ document: { getElementById: id => elements[id], body: { appendChild() {} },
+    createElement: () => created = { click() { downloads++; }, remove() {} } },
+    window: { URL: { createObjectURL: () => 'blob:synthetic', revokeObjectURL() {} } },
+    API_BASE: '/api', authHeaders: () => ({}), localDateISO: () => '2026-10-24',
+    captureAuthSession: () => ({}), isCurrentAuthSession: () => true, registerFeatureReset() {},
+    authenticatedFetch: async path => { url = path; return { ok, status: 400, headers: { get: () => 'attachment; filename="synthetic_without_history.json"' } }; },
+    readAuthenticatedBody: async () => ({}), readAuthenticatedError: async () => ({ detail: '異動歷史超過 50,000 筆，請取消包含異動歷史後再下載。' }),
+  });
+  vm.runInContext(fs.readFileSync('frontend/app-exports.js', 'utf8'), context);
+  elements['workspace-export-history'].checked = false;
+  await context.exportAccountData(true);
+  assert.equal(url, '/api/export/account?include_history=false');
+  assert.match(created.download, /without_history/);
+  assert.match(elements['workspace-export-status'].textContent, /不含異動歷史/);
+  assert.equal(downloads, 1);
+  elements['workspace-export-history'].checked = true; ok = false;
+  await context.exportAccountData(true);
+  assert.equal(url, '/api/export/account?include_history=true');
+  assert.match(elements['workspace-export-status'].textContent, /50,000.*取消包含異動歷史/);
+  assert.equal(downloads, 1, 'rejected archives do not create downloads');
+  assert.equal(elements['workspace-export'].disabled, false);
 });
