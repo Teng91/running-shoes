@@ -164,6 +164,27 @@ def backup_fingerprint(backup: AccountBackup) -> str:
     return payload_hash(backup.model_dump(mode="json"))
 
 
+def _export_error() -> Invalid:
+    return Invalid("帳號資料超過 JSON 備份容量或不符合匯入格式，未產生下載檔。可取消包含異動歷史後再下載；若仍超限，請使用管理員完整資料庫備份。")
+
+
+class ArchiveBudget:
+    """Bound rows accumulated for export before constructing the final envelope."""
+
+    def __init__(self) -> None:
+        self.bytes = 0
+
+    def add(self, value: Any) -> None:
+        try:
+            self.bytes += len(json.dumps(value, ensure_ascii=False, allow_nan=False, separators=(",", ":")).encode("utf-8"))
+        except (ValueError, TypeError, RecursionError) as exc:
+            raise _export_error() from exc
+        # This lower bound excludes envelope/array overhead; final validation checks
+        # the exact wire size. It never rejects an otherwise valid boundary file.
+        if self.bytes > MAX_BACKUP_BYTES:
+            raise _export_error()
+
+
 def validate_export(payload: dict) -> None:
     """Accept only archives the same import contract can consume, without truncation."""
     try:
@@ -171,4 +192,4 @@ def validate_export(payload: dict) -> None:
         raw = json.dumps(payload, ensure_ascii=False, allow_nan=False, separators=(",", ":")).encode("utf-8")
         parse_backup(raw)
     except (Invalid, ValueError, TypeError, RecursionError) as exc:
-        raise Invalid("帳號資料超過 JSON 備份容量或不符合匯入格式，未產生下載檔。可取消包含異動歷史後再下載；若仍超限，請使用管理員完整資料庫備份。") from exc
+        raise _export_error() from exc
