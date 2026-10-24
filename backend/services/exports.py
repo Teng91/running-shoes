@@ -10,7 +10,9 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from backend import models
+from backend.backup_contract import ARCHIVE_LIMITS, validate_export
 from backend.exporting import export_filename, generate_shoe_rows
+from backend.services.errors import Invalid
 
 
 class NoExportRowsError(Exception):
@@ -37,27 +39,31 @@ def build_account_export(
     user: models.User,
     *,
     now: datetime | None = None,
+    include_history: bool = True,
 ) -> tuple[dict[str, Any], str]:
     """Keep every collection in the same SQLite read snapshot, including legacy mode."""
     # SAVEPOINT establishes a physical transaction even when pysqlite does not
     # BEGIN for SELECT. Releasing it neither commits nor rolls back caller writes.
     with db.begin_nested():
-        return _account_export_snapshot(db, user, now=now)
+        return _account_export_snapshot(db, user, now=now, include_history=include_history)
 
 
-def _account_export_snapshot(db: Session, user: models.User, *, now: datetime | None) -> tuple[dict[str, Any], str]:
+def _account_export_snapshot(db: Session, user: models.User, *, now: datetime | None, include_history: bool) -> tuple[dict[str, Any], str]:
     exported_at = now or datetime.now(UTC)
-    shoes = db.query(models.Shoe).filter(models.Shoe.user_id == user.id).all()
-    runs = db.query(models.Run).filter(models.Run.user_id == user.id).all()
-    months = db.query(models.MonthlyMileage).filter(
-        models.MonthlyMileage.user_id == user.id
-    ).all()
-    reports = db.query(models.MonthlyReport).filter(
-        models.MonthlyReport.user_id == user.id
-    ).all()
-    imports = db.query(models.StravaImport).filter(
-        models.StravaImport.user_id == user.id
-    ).all()
+    def rows(model, collection):
+        limit = ARCHIVE_LIMITS[collection]
+        result = db.query(model).filter_by(user_id=user.id).order_by(model.id).limit(limit + 1).all()
+        if len(result) > limit:
+            label = {"shoes": "鞋款", "runs": "跑步", "monthly_mileages": "月跑量", "monthly_reports": "月報", "strava_imports": "匯入摘要", "history": "異動歷史"}[collection]
+            action = "取消包含異動歷史後再下載" if collection == "history" else "使用管理員完整資料庫備份"
+            raise Invalid(f"{label}超過 JSON 備份 {limit:,} 筆上限，未產生下載檔。請{action}。")
+        return result
+    shoes = rows(models.Shoe, "shoes")
+    runs = rows(models.Run, "runs")
+    months = rows(models.MonthlyMileage, "monthly_mileages")
+    reports = rows(models.MonthlyReport, "monthly_reports")
+    imports = rows(models.StravaImport, "strava_imports")
+    history = rows(models.AuditEvent, "history") if include_history else []
     goal = db.query(models.RunningGoal).filter(
         models.RunningGoal.user_id == user.id
     ).first()
@@ -76,9 +82,11 @@ def _account_export_snapshot(db: Session, user: models.User, *, now: datetime | 
         "history": [{key: getattr(row, key) for key in (
             "id", "operation_id", "reason", "entity", "entity_id", "action", "before_json",
             "after_json", "created_at", "restored", "imported",
-        )} for row in db.query(models.AuditEvent).filter_by(user_id=user.id).order_by(models.AuditEvent.id).all()],
+        )} for row in history],
     }
-    filename = f"running_shoes_account_{exported_at.astimezone():%Y%m%d_%H%M%S}.json"
+    validate_export(payload)
+    suffix = "" if include_history else "_without_history"
+    filename = f"running_shoes_account_{exported_at.astimezone():%Y%m%d_%H%M%S}{suffix}.json"
     return payload, filename
 
 

@@ -175,6 +175,26 @@ test('SPEC-017 paged run cards and calendar use the complete backend summary', (
   assert.equal(calendar[0].km, 205); assert.equal(nodes['run-next'].disabled, true);
 });
 
+test('SPEC-031 calendar shows shoe names and distance without run counts', () => {
+  const nodes = elements();
+  const context = vm.createContext({ document: { getElementById: id => nodes[id] },
+    localDateISO: () => '2026-08-05', runShoe: id => id === 1 ? { model: 'Daily Runner' } : null,
+    esc: value => String(value).replaceAll('<', '&lt;'),
+  });
+  vm.runInContext(extract('renderRunCalendar'), context);
+  context.renderRunCalendar([{ date: '2026-08-05', km: 12,
+    shoes: [{ shoe_id: 1, count: 2 }, { shoe_id: 99, count: 1 }] }], '2026-08');
+  const html = nodes['run-calendar'].innerHTML;
+  assert.match(html, /12\.00 km/);
+  assert.match(html, /filterRunDay\('2026-08-05'\)\">Daily Runner<\/button>/);
+  assert.match(html, />歷史鞋款<\/button>/);
+  assert.doesNotMatch(html, /\d+ 次/);
+  context.renderRunCalendar([], '2026-08');
+  assert.equal((nodes['run-calendar'].innerHTML.match(/class="calendar-number"/g) || []).length, 31);
+  assert.match(nodes['run-calendar'].innerHTML, /selectRunCalendarDate\('2026-08-31',event\)/);
+  assert.doesNotMatch(nodes['run-calendar'].innerHTML, /class="calendar-run"/);
+});
+
 test('SPEC-017 spending failures retry locally and late account responses are discarded', async () => {
   const nodes = elements(); let session = {}, finish;
   const context = vm.createContext({ registerFeatureReset() {},

@@ -322,7 +322,7 @@ LLM_MAX_OUTPUT_TOKENS=4096
 - 總里程、跑步次數與跑步天數
 - 平均每個跑步日的里程
 - 當月使用里程最高的主力鞋
-- 1 日到月底的完整互動月曆；空白日期可帶入新增表單，鞋款活動可篩選當日明細再編輯
+- 1 日到月底的完整互動月曆；顯示每日里程與鞋款名稱，不顯示次數。空白日期可帶入新增表單，鞋款活動可篩選當日明細再編輯
 - 跑步明細每頁 200 筆，月曆、總里程、跑步次數與鞋款分布不受目前明細頁影響
 - 依鞋款匯總的里程分布圓環圖，以及各鞋實際里程與使用比例明細
 - 每筆紀錄的來源標籤（手動或 Strava）
@@ -641,7 +641,7 @@ v3.4.0 只新增 `run_creation_requests` 表與 user/key 唯一約束，沒有�
 
 ### 匯入操作隔離（SPEC-030，v3.10.1）
 
-目前 v3.10.1 為 Asset 3.10.1／shell v36、schema 6、51 個 release assets。
+v3.10.1 使用 Asset 3.10.1／shell v36、schema 6、51 個 release assets。
 [SPEC-030](docs/specs/030-import-operation-isolation.md) 修正跨帳號清除、無變更匯入的假衝突及預覽完成順序問題。
 每份預覽獨立有效 20 分鐘，同帳號最多 8 份、合計 64 MiB；關閉／換檔會以本人
 `DELETE /api/account-restore/preview/{token}` 捨棄不用的 token，失敗由到期清理回收。其他分頁與晚到請求不會撤銷仍有效的預覽；業務資料變更仍需重新預覽。
@@ -656,6 +656,22 @@ Schema 5→6 只以交易重建 `restore_previews` 的 `(user_id, token)` 主鍵
 此程序只捨棄暫存預覽、恢復 schema 5 預覽主鍵及 marker，不以舊快照覆蓋跑步資料；不得混跑兩版。
 重新上線後需重新預覽並執行匿名 release-check。
 
+### 可靠帳號資料搬移（SPEC-032，v3.10.2）
+
+目前 v3.10.2 為 Asset 3.10.2／shell v37、schema 6、51 個 release assets。
+[SPEC-032](docs/specs/032-trustworthy-account-transfer.md) 將提交成功與畫面載入分開：若匯入已完成但讀取失敗，
+按「重新載入資料」只重新讀取，不會再次匯入；提交回應不確定時仍沿用原操作重試。
+預覽分別顯示新增、實際變更與內容相同，並保留已刪除跑步及額外本機資料。
+
+`GET /api/export/account?include_history=true` 預設包含全部異動歷史；兩個下載入口均可明確取消「包含異動歷史」，
+產生檔名以 `_without_history.json` 結尾的資料檔，業務資料不會省略。匯出與匯入共用集合、格式、秘密檢查及 20 MiB 上限，
+下載前驗證可重新匯入；超限會顯示原因，不產生檔案、不靜默截斷。每份最多 5,000 雙鞋、50,000 筆跑步、
+2,412 個月份／月報、1,000 筆 Strava 摘要及 50,000 筆異動歷史。取消歷史後仍超限時，需使用下方管理員完整資料庫備份流程。
+
+本版無 schema migration。部署前完成異地備份及隔離還原；若需回滾可直接使用 v3.10.1 immutable image
+`registry.fly.io/running-shoes@sha256:ba35ff3051b2c627ebf3b59fdb091747e93db2c0fc3a91c14320ca8411bde804`，
+schema 6 保持相容，不還原舊業務快照。
+
 ### AI 開發規範與自動驗證
 
 `AGENTS.md` 是 Codex 等 Coding Agent 共用的專案規範；`CLAUDE.md` 會把同一份規範匯入
@@ -667,7 +683,7 @@ Playwright／Chromium／WebKit 齊全時，也會執行版面測試。
 避免每次停止都重跑。Hook 不會呼叫其他模型、外部 API，或傳送提示、diff、原始碼與測試輸出。
 GitHub Actions 仍會在 push／pull request 執行 `verify`，並以三個可獨立重跑的 browser jobs 執行完整版面矩陣、真實 CRUD E2E 與 PWA 升級／離線測試；Dependabot 每週檢查 Python 與 GitHub Actions 更新。
 
-本次驗證基線為 Python **519 passed**、前端回歸測試 **133 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
+本次驗證基線為 Python **523 passed**、前端回歸測試 **137 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
 版面檢查涵蓋 WebKit／Chromium、亮／暗模式與 10 組直橫向尺寸，共 40 組設定，檢查六個功能分頁、三個認證表單、圖表、全部彈窗、行內編輯、停用／錯誤及空資料狀態。
 
 主要表單、工具列與彈窗操作統一為 44px 控制項；桌面表格內的緊湊操作為 36px，手機至少 44px。
