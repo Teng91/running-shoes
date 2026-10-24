@@ -31,7 +31,7 @@ function featureContext(globals = {}) {
     }));
     return owners.get(name);
   };
-  vm.runInContext(['beginInlineEdit', 'finishInlineEdit', 'preserveInlineTable', 'readForm', 'matchesForm', 'shoeLabel', 'invalidateDataResources', 'registerResourceCaches', 'goalFormValues', 'prepareGoalForm'].map(extract).join('\n'), context);
+  vm.runInContext(['beginInlineEdit', 'finishInlineEdit', 'preserveInlineTable', 'readForm', 'matchesForm', 'shoeLabel', 'invalidateDataResources', 'refreshCoreData', 'registerResourceCaches', 'goalFormValues', 'prepareGoalForm'].map(extract).join('\n'), context);
   context.registerResourceCaches();
   return context;
 }

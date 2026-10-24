@@ -28,3 +28,14 @@ function invalidateDataResources(resources) {
   document.getElementById('data-load-error').hidden = !resourceStore.hasErrors();
 }
 registerFeatureReset('data-resources', () => resourceStore?.reset());
+
+// loadData delivers resources progressively and records errors instead of rejecting.
+// Mutations need an explicit core-data check before reporting refreshed UI.
+async function refreshCoreData(options) {
+  const session = captureAuthSession();
+  await loadData(options);
+  if (!isCurrentAuthSession(session)) throw Object.assign(Error('登入狀態已變更'), { name: 'AbortError' });
+  if (resourceStore.policy(options?.mutation).resources.some(resource => resourceStore.getError(resource))) {
+    throw new Error('資料讀取尚未完成');
+  }
+}

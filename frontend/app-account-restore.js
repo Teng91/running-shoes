@@ -86,10 +86,7 @@ async function applyAccountRestore() {
   }
 }
 async function refreshAccountRestoreData() {
-  await loadData();
-  if (['shoes', 'monthly', 'runs', 'goal'].some(resource => resourceStore.getError(resource))) {
-    throw new Error('資料讀取尚未完成');
-  }
+  await refreshCoreData();
 }
 
 async function refreshAccountRestoreView() {

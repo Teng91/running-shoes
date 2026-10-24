@@ -30,6 +30,7 @@
 - `backend/services/account_import_changes.py`: query-free field patches and projected mileage shared by preview and execution.
 - `backend/services/account_import.py`: plan execution inside the caller-owned transaction; no independent commits.
 - `backend/services/history.py`: user-scoped audit and conflict-aware deletion recovery.
+- `backend/services/run_identity.py`: user-scoped deletion tombstones and recovered source aliases; caller-owned transactions.
 - `backend/services/identifiers.py`: monotonic run/month primary-key allocation metadata.
 - `backend/migrations.py`: ordered SQLite schema upgrades and the current schema version.
 - `backend/rate_limits.py`: shared authentication and AI request throttling.

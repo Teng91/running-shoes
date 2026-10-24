@@ -2,6 +2,17 @@
 
 本專案的重要變更依 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.1.0/) 分類，版本號遵循 [Semantic Versioning](https://semver.org/lang/zh-TW/)。完整部署說明另見各版本的 GitHub Release。
 
+## [3.10.3] - 2026-10-25
+
+### Fixed
+- 同帳號備份不再重建已刪除跑步；明確復原後保留所有來源別名，後續匯入可正確更新。
+- 離線佇列每次送出使用獨立租約，舊請求不再覆寫重新登入後的同步狀態。
+- 同步及誤刪復原區分提交成功與畫面刷新失敗，復原可單獨重試讀取。
+
+### Changed
+- 抽出跑步來源身分 service 與共用核心資料刷新驗證，補上組合流程回歸及使用指南。
+- Asset 3.10.3／shell v38；schema 6 不變。
+
 ## [Unreleased]
 
 ## [3.10.2] - 2026-10-24

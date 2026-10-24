@@ -222,7 +222,7 @@ async function performWorkspaceSync(session) {
       : synced ? `已同步 ${synced} 筆跑步紀錄，目前沒有待同步資料。`
         : '目前沒有待同步的跑步紀錄。已儲存的資料不需要再按同步。';
     if (synced) {
-      try { await loadData({ mutation: 'run' }); }
+      try { await refreshCoreData({ mutation: 'run' }); }
       catch { message += ' 紀錄已送出，但畫面更新失敗，請重新整理頁面。'; }
     }
     if (isCurrentAuthSession(session)) setWorkspaceSyncState(message);

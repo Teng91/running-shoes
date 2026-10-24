@@ -674,3 +674,90 @@ def test_import_diff_preview_matches_patches_and_preserves_local_runs(workspace)
         deleted = account_restore.preview_restore(db, 2, json.dumps(payload).encode(), workspace.config, 'update')['summary']
         assert deleted['updated_runs'] == deleted['unchanged_runs'] == 0
         assert deleted['preserved_deleted_runs'] == 1
+
+
+@pytest.mark.parametrize('mode', ['merge', 'update'])
+def test_own_archive_preserves_deleted_runs(workspace, mode):
+    from backend.services import runs
+    with workspace.sessions() as db:
+        payload = archive(db)
+        run = db.query(models.Run).filter_by(user_id=1).one()
+        runs.delete_run(db, 1, run.id)
+        preview = account_restore.preview_restore(db, 1, json.dumps(payload).encode(), workspace.config, mode)
+        assert preview['summary']['new_runs'] == 0
+        assert preview['summary']['preserved_deleted_runs'] == 1
+        account_restore.apply_restore(db, 1, preview['token'], 'own-deleted-restore', workspace.config)
+        assert db.query(models.Run).filter_by(user_id=1).count() == 0
+        assert db.query(models.Shoe).filter_by(user_id=1).one().mileage == 20
+
+
+def test_recovered_run_retains_all_source_aliases(workspace):
+    from backend import schemas
+    from backend.services import history, runs
+    with workspace.sessions() as db:
+        payload = archive(db)
+        def apply(data, uid, key):
+            preview = account_restore.preview_restore(db, uid, json.dumps(data).encode(), workspace.config, 'update')
+            account_restore.apply_restore(db, uid, preview['token'], key, workspace.config)
+            db.expire_all()
+            return preview['summary']
+        apply(payload, 2, 'initial-source-import')
+        local_backup = exports.build_account_export(db, db.get(models.User, 2))[0]
+        target = db.query(models.Run).filter_by(user_id=2).one()
+        old_id = target.id
+        db.add(models.RestoreMapping(user_id=1, source_id='other-account-source', entity='run', source_key='999', target_id=old_id))
+        db.commit()
+        # Two recovery cycles must keep every previous ID as an alias.
+        for _cycle in range(2):
+            target = db.query(models.Run).filter_by(user_id=2).one()
+            runs.delete_run(db, 2, target.id)
+            event = db.query(models.AuditEvent).filter_by(user_id=2, entity='runs', action='delete', imported=False, restored=False).one()
+            history.restore_deleted(db, 2, event.id, workspace.config)
+        source_run = db.query(models.Run).filter_by(user_id=1).one()
+        runs.update_run(db, 1, source_run.id, schemas.RunUpdate(km=9))
+        updated = exports.build_account_export(db, db.get(models.User, 1))[0]
+        summary = apply(updated, 2, 'update-recovered-source')
+        assert summary['updated_runs'] == 1 and summary['new_runs'] == summary['preserved_deleted_runs'] == 0
+        assert db.query(models.Run).filter_by(user_id=2).one().km == 9
+        summary = apply(local_backup, 2, 'update-recovered-own')
+        assert summary['updated_runs'] == 1 and summary['new_runs'] == 0
+        assert db.query(models.Run).filter_by(user_id=2).one().km == 5
+        assert db.query(models.RestoreMapping).filter_by(user_id=1, source_id='other-account-source').one().target_id == old_id
+
+
+def test_imported_history_cannot_create_local_tombstones(workspace):
+    from backend.services import runs
+    with workspace.sessions() as db:
+        payload = archive(db)
+        run = db.query(models.Run).filter_by(user_id=1).one()
+        runs.delete_run(db, 1, run.id)
+        event = db.query(models.AuditEvent).filter_by(user_id=1, entity='runs', action='delete').one()
+        event.imported = True
+        db.commit()
+        preview = account_restore.preview_restore(db, 1, json.dumps(payload).encode(), workspace.config)
+        assert preview['summary']['new_runs'] == 1
+        assert preview['summary']['preserved_deleted_runs'] == 0
+
+
+def test_recovery_source_aliases_roll_back_with_failed_commit(workspace, monkeypatch):
+    from backend.services import history, runs
+    with workspace.sessions() as db:
+        payload = archive(db)
+        preview = account_restore.preview_restore(db, 1, json.dumps(payload).encode(), workspace.config)
+        account_restore.apply_restore(db, 1, preview['token'], 'remember-own-source', workspace.config)
+        run = db.query(models.Run).filter_by(user_id=1).one()
+        old_id = run.id
+        db.add(models.RestoreMapping(user_id=1, source_id=payload['source_id'], entity='run', source_key=str(old_id), target_id=old_id))
+        db.commit()
+        runs.delete_run(db, 1, old_id)
+        event = db.query(models.AuditEvent).filter_by(user_id=1, entity='runs', action='delete', imported=False).one()
+        event_id = event.id
+        def fail():
+            raise RuntimeError('synthetic commit failure')
+        monkeypatch.setattr(db, 'commit', fail)
+        with pytest.raises(RuntimeError, match='synthetic'):
+            history.restore_deleted(db, 1, event_id, workspace.config)
+    with workspace.sessions() as db:
+        assert db.query(models.Run).filter_by(user_id=1).count() == 0
+        assert not db.get(models.AuditEvent, event_id).restored
+        assert db.query(models.RestoreMapping).filter_by(user_id=1, entity='run').one().target_id == old_id

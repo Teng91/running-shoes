@@ -9,6 +9,7 @@ from backend import models
 from backend.backup_contract import AccountBackup, BackupImport, backup_fingerprint
 from backend.services.account_import_changes import ImportChanges, build_changes
 from backend.services.errors import Conflict
+from backend.services.run_identity import add_local_tombstones
 from backend.services.run_requests import payload_hash
 from backend.settings import Settings
 
@@ -40,6 +41,7 @@ def build_import_plan(db: Session, uid: int, backup: AccountBackup, mode: Restor
     imports = db.query(models.StravaImport).filter_by(user_id=uid).all()
     mappings = {(row.entity, row.source_key): row.target_id for row in db.query(models.RestoreMapping).filter_by(user_id=uid, source_id=source).all()}
     if source == db.query(models.User.backup_id).filter_by(id=uid).scalar():
+        add_local_tombstones(db, uid, mappings)
         for name, identifiers in (("shoe", shoes), ("run", runs)):
             for identifier in identifiers:
                 mappings.setdefault((name, str(identifier)), identifier)

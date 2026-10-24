@@ -602,3 +602,9 @@ v3.10.1／schema 6 將預覽主鍵改為 `(user_id, token)`，交易保留舊預
 `account_import_plan.py` 保留 user-scoped 來源辨識與配額；query-free `account_import_changes.py` 以快照投影最終跑步、鞋款及月份，產生欄位 patch；preview 由 patch 計數，executor 套用同一 patch，交易／回執仍由 account_restore 擁有。移除 executor 內第二套對帳及欄位比較。
 
 restore controller 擁有 committed／refreshRequired／refreshing 與原操作身分。bridge 將 loadData 的 resource errors 轉為可重試的讀取失敗，不把提交成功誤報成可再次提交；重新載入檢查 session／revision／owner。詳見 [ADR-0012](adr/0012-account-transfer-contract-and-diffs.md)。
+
+## SPEC-033：跨刪除與復原的來源身分
+
+`run_identity.py` 集中 user-scoped 本機 tombstone 辨識與來源別名轉移。匯入計畫只把非 imported 的本機 delete audit 當同來源刪除證據；明確復原在同一業務交易內將全部來源別名轉到新 ID，並記錄原生舊 ID。history 與 import plan 不互相依賴。詳見 [ADR-0013](adr/0013-recovery-identities.md)。
+
+每次 queue claim 使用獨立 lease，舊請求無法解除重新登入後的新租約。`app-resources.js::refreshCoreData` 將核心資源錯誤轉成讀取失敗；匯入、同步及復原 bridge 共用。復原提交成功後保留完成身分，只允許重新讀取；session 變更使回呼失效。

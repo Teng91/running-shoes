@@ -447,7 +447,7 @@ test('SPEC-032 committed import refresh retries only reads and isolates replaced
     apiPost: async (_, body, options) => { posts++; keys.push(options.idempotencyKey); if (failWrite) throw Error('lost response'); },
     loadData: async () => { reads++; }, loadWorkspaceHistory() {},
   });
-  context.resourceStore = { getError: resource => failRead && resource === 'shoes' ? Error('read failed') : undefined };
+  context.resourceStore = { ...context.resourceStore, getError: resource => failRead && resource === 'shoes' ? Error('read failed') : undefined };
   vm.runInContext(fs.readFileSync('frontend/app-account-restore.js', 'utf8'), context);
   const controller = await bindRestoreController(context);
   await controller.preview(controller.beginPreview(), '{}', 'merge');
@@ -526,4 +526,57 @@ test('SPEC-032 downloads explicitly omit history and show capacity errors', asyn
   assert.match(elements['workspace-export-status'].textContent, /50,000.*取消包含異動歷史/);
   assert.equal(downloads, 1, 'rejected archives do not create downloads');
   assert.equal(elements['workspace-export'].disabled, false);
+});
+
+test('SPEC-033 expired send cannot release a replacement lease after reattach', async () => {
+  const first = deferred(), second = deferred(); let sends = 0;
+  const fixture = await setup(undefined, async () => {
+    if (++sends === 1) { await first.promise; throw Object.assign(Error('old failure'), { status: 404 }); }
+    await second.promise;
+  });
+  const controller = fixture.create(); await controller.attach('A');
+  await controller.enqueue({ km: 5 }, 'lease-recovery-operation');
+  const oldSend = controller.flush(); await new Promise(resolve => setImmediate(resolve));
+  controller.detach(); fixture.switch(); await controller.attach('A'); fixture.setTime(121001);
+  const newSend = controller.flush(); await new Promise(resolve => setImmediate(resolve));
+  assert.equal(sends, 2);
+  const lease = (await controller.read('queue'))[0].lease;
+  first.resolve(); await oldSend;
+  const current = (await controller.read('queue'))[0];
+  assert.equal(current.status, 'pending'); assert.equal(current.lease, lease);
+  await assert.rejects(controller.remove('lease-recovery-operation'), /正在同步/);
+  second.resolve(); await newSend; assert.deepEqual(await controller.read('queue'), []);
+});
+
+test('SPEC-033 sync reports committed writes when core refresh fails', async () => {
+  const fixture = workspaceSyncContext(), { context, controller, elements } = fixture;
+  controller.flush = async () => ({ synced: 1 });
+  context.resourceStore = { ...context.resourceStore, getError: resource => resource === 'shoes' ? Error('offline') : null };
+  await context.syncWorkspace({ manual: true });
+  assert.match(elements['workspace-sync-status'].textContent, /紀錄已送出，但畫面更新失敗/);
+  context.resourceStore = { ...context.resourceStore, getError: resource => ['goal', 'dashboard-analytics'].includes(resource) ? Error('not requested') : null };
+  await context.syncWorkspace({ manual: true });
+  assert.doesNotMatch(elements['workspace-sync-status'].textContent, /畫面更新失敗/);
+});
+
+test('SPEC-033 deletion recovery retries reads after a committed write', async () => {
+  const makeElement = () => ({ children: [], textContent: '', disabled: false,
+    append(...items) { this.children.push(...items); }, replaceChildren() { this.children = []; this.textContent = ''; } });
+  const elements = { 'workspace-history': makeElement(), 'history-more': makeElement() };
+  let posts = 0, reads = 0, fail = true;
+  const context = vm.createContext({
+    document: { getElementById: id => elements[id], createElement: makeElement },
+    captureAuthSession: () => ({}), isCurrentAuthSession: () => true, registerFeatureReset() {},
+    formatLocalTimestamp: value => value, newOperationKey: () => 'recover-operation',
+    apiPost: async () => { posts++; },
+    apiGet: async () => ({ rows: posts ? [] : [{ id: 1, entity: 'runs', entity_id: 2, action: 'delete', can_restore: true }], next_cursor: null }),
+    loadData: async () => { reads++; if (fail) throw Error('network'); },
+  });
+  vm.runInContext(fs.readFileSync('frontend/app-history.js', 'utf8'), context);
+  await context.loadWorkspaceHistory();
+  const button = elements['workspace-history'].children[0].children[1];
+  await button.onclick();
+  assert.equal(posts, 1); assert.equal(button.disabled, false); assert.equal(button.textContent, '重新載入資料');
+  fail = false; await button.onclick();
+  assert.equal(posts, 1); assert.equal(reads, 2);
 });
