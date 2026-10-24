@@ -10,7 +10,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from backend import models
-from backend.backup_contract import ARCHIVE_LIMITS, validate_export
+from backend.backup_contract import ARCHIVE_LIMITS, ArchiveBudget, validate_export
 from backend.exporting import export_filename, generate_shoe_rows
 from backend.services.errors import Invalid
 
@@ -50,20 +50,20 @@ def build_account_export(
 
 def _account_export_snapshot(db: Session, user: models.User, *, now: datetime | None, include_history: bool) -> tuple[dict[str, Any], str]:
     exported_at = now or datetime.now(UTC)
-    def rows(model, collection):
+    budget = ArchiveBudget()
+    def rows(model, collection, serialize):
         limit = ARCHIVE_LIMITS[collection]
-        result = db.query(model).filter_by(user_id=user.id).order_by(model.id).limit(limit + 1).all()
-        if len(result) > limit:
-            label = {"shoes": "鞋款", "runs": "跑步", "monthly_mileages": "月跑量", "monthly_reports": "月報", "strava_imports": "匯入摘要", "history": "異動歷史"}[collection]
-            action = "取消包含異動歷史後再下載" if collection == "history" else "使用管理員完整資料庫備份"
-            raise Invalid(f"{label}超過 JSON 備份 {limit:,} 筆上限，未產生下載檔。請{action}。")
+        result: list[dict[str, Any]] = []
+        query = db.query(model).filter_by(user_id=user.id).order_by(model.id).limit(limit + 1)
+        for row in query.yield_per(100):
+            if len(result) == limit:
+                label = {"shoes": "鞋款", "runs": "跑步", "monthly_mileages": "月跑量", "monthly_reports": "月報", "strava_imports": "匯入摘要", "history": "異動歷史"}[collection]
+                action = "取消包含異動歷史後再下載" if collection == "history" else "使用管理員完整資料庫備份"
+                raise Invalid(f"{label}超過 JSON 備份 {limit:,} 筆上限，未產生下載檔。請{action}。")
+            value = serialize(row)
+            budget.add(value)
+            result.append(value)
         return result
-    shoes = rows(models.Shoe, "shoes")
-    runs = rows(models.Run, "runs")
-    months = rows(models.MonthlyMileage, "monthly_mileages")
-    reports = rows(models.MonthlyReport, "monthly_reports")
-    imports = rows(models.StravaImport, "strava_imports")
-    history = rows(models.AuditEvent, "history") if include_history else []
     goal = db.query(models.RunningGoal).filter(
         models.RunningGoal.user_id == user.id
     ).first()
@@ -73,16 +73,13 @@ def _account_export_snapshot(db: Session, user: models.User, *, now: datetime | 
         "source_id": user.backup_id,
         "exported_at": exported_at.isoformat(),
         "username": user.username,
-        "shoes": [_serialize_shoe(shoe) for shoe in shoes],
-        "runs": [_serialize_run(run) for run in runs],
-        "monthly_mileages": [_serialize_month(row) for row in months],
+        "shoes": rows(models.Shoe, "shoes", _serialize_shoe),
+        "runs": rows(models.Run, "runs", _serialize_run),
+        "monthly_mileages": rows(models.MonthlyMileage, "monthly_mileages", _serialize_month),
         "running_goal": _serialize_goal(goal),
-        "monthly_reports": [_serialize_report(row) for row in reports],
-        "strava_imports": [_serialize_strava_import(row) for row in imports],
-        "history": [{key: getattr(row, key) for key in (
-            "id", "operation_id", "reason", "entity", "entity_id", "action", "before_json",
-            "after_json", "created_at", "restored", "imported",
-        )} for row in history],
+        "monthly_reports": rows(models.MonthlyReport, "monthly_reports", _serialize_report),
+        "strava_imports": rows(models.StravaImport, "strava_imports", _serialize_strava_import),
+        "history": rows(models.AuditEvent, "history", _serialize_history) if include_history else [],
     }
     validate_export(payload)
     suffix = "" if include_history else "_without_history"
@@ -222,3 +219,10 @@ def _serialize_strava_import(row: models.StravaImport) -> dict[str, Any]:
         "duplicate_count": row.duplicate_count, "unmapped_count": row.unmapped_count,
         "invalid_count": row.invalid_count,
     }
+
+
+def _serialize_history(row: models.AuditEvent) -> dict[str, Any]:
+    return {key: getattr(row, key) for key in (
+        "id", "operation_id", "reason", "entity", "entity_id", "action", "before_json",
+        "after_json", "created_at", "restored", "imported",
+    )}
