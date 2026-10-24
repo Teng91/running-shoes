@@ -1,5 +1,17 @@
 const { test, assert, transportContext, vm, fs } = require('./helpers.cjs');
 const deferred = () => { let resolve; const promise = new Promise(r => { resolve = r; }); return { promise, resolve }; };
+async function bindRestoreController(context) {
+  const { createAccountRestoreController } = await import('../../frontend/runtime/account-restore-controller.mjs');
+  context.injectedRestore = createAccountRestoreController({
+    session: { capture: context.captureAuthSession, current: context.isCurrentAuthSession },
+    newKey: context.newOperationKey || (() => 'synthetic-restore-operation'),
+    transport: { preview: (raw, mode) => context.jsonRequest('/account-restore/preview?mode=' + mode, { body: raw }),
+      apply: (token, operationId) => context.apiPost('/account-restore/apply', { token }, { idempotencyKey: operationId }),
+      discard: token => context.apiDelete?.('/account-restore/preview/' + token) || Promise.resolve() },
+  });
+  vm.runInContext('accountRestore = injectedRestore;', context);
+  return context.injectedRestore;
+}
 function memoryStore() {
   const rows = new Map(); let tail = Promise.resolve(), fail = false;
   function write(fn) {
@@ -168,17 +180,18 @@ test('SPEC-027 restore windows reject repreview during apply and stale completio
     loadData: async () => { loads++; }, loadWorkspaceHistory() {},
   });
   vm.runInContext(fs.readFileSync('frontend/app-account-restore.js', 'utf8'), context);
-  vm.runInContext("accountRestore.preview = { token: 'first' }; accountRestore.operationId = 'restore-operation-first';", context);
+  await bindRestoreController(context);
+  vm.runInContext("accountRestore.state.preview = { token: 'first' }; accountRestore.state.operationId = 'restore-operation-first';", context);
   const pending = context.applyAccountRestore();
   await context.previewAccountRestore();
-  assert.equal(vm.runInContext('accountRestore.revision', context), 0, 'pending apply owns its preview');
+  assert.equal(vm.runInContext('accountRestore.state.revision', context), 0, 'pending apply owns its preview');
   context.resetAccountRestore();
-  vm.runInContext("accountRestore.preview = { token: 'second' };", context);
+  vm.runInContext("accountRestore.state.preview = { token: 'second' };", context);
   elements['restore-preview'].textContent = 'new preview';
   gate.resolve({ ok: true }); await pending;
   assert.equal(elements['restore-preview'].textContent, 'new preview');
-  assert.equal(vm.runInContext('accountRestore.preview.token', context), 'second');
-  assert.equal(vm.runInContext('accountRestore.pending', context), false);
+  assert.equal(vm.runInContext('accountRestore.state.preview.token', context), 'second');
+  assert.equal(vm.runInContext('accountRestore.state.pending', context), false);
   assert.equal(loads, 1, 'committed old operation still refreshes server data');
 });
 
@@ -307,6 +320,7 @@ test('SPEC-029 import modes own their previews and confirmation', async () => {
     confirm: message => { assert.match(message, /localhost:8000.*local-user/); return accepted; },
   });
   vm.runInContext(fs.readFileSync('frontend/app-account-restore.js', 'utf8'), context);
+  await bindRestoreController(context);
   elements['restore-mode'].value = 'update';
   elements['restore-file'].files = [{ size: 4, text: async () => '{}' }];
   const reading = context.previewAccountRestore();
@@ -352,4 +366,69 @@ test('SPEC-029 workspace download reports results and ignores a replaced session
   gate.resolve({ ok: true, headers: { get: () => null } }); await stale;
   assert.equal(downloads, 1); assert.equal(elements['workspace-export-status'].textContent, 'next account');
   assert.equal(elements['workspace-export'].disabled, false);
+});
+
+test('SPEC-030 local clearing preserves replacement sessions and newer input', async () => {
+  for (const switched of [false, true]) for (const failed of [false, true]) {
+    let session = {}, complete, reject, persisted = 0, errors = 0, clears = 0;
+    const elements = new Proxy({}, { get: (rows, id) => rows[id] ||= { value: '', textContent: '' } });
+    const controller = { clear: () => { clears++; return new Promise((resolve, fail) => { complete = resolve; reject = fail; }); } };
+    const context = vm.createContext({ document: { getElementById: id => elements[id] },
+      captureAuthSession: () => session, isCurrentAuthSession: value => value === session,
+      registerFeatureReset() {}, confirm: () => true, controller,
+    });
+    vm.runInContext(fs.readFileSync('frontend/app-workspace.js', 'utf8'), context);
+    vm.runInContext("localWorkspace.controller = controller; localWorkspace.editors = { old: { value: 'A' } };", context);
+    context.prepareGoalForm = () => {};
+    context.persistWorkspaceDrafts = () => { persisted++; };
+    context.renderWorkspaceQueue = async () => {};
+    context.workspaceStorageError = () => { errors++; };
+    elements['run-km'].value = '5'; elements['add-km'].value = '120';
+    const pending = context.clearLocalWorkspace();
+    await context.clearLocalWorkspace(); assert.equal(clears, 1, 'duplicate clear stays locked');
+    if (switched) session = {};
+    elements['run-km'].value = switched ? '42' : '6';
+    elements['add-km'].value = switched ? '180' : '120';
+    vm.runInContext("localWorkspace.editors.new = { value: 'new input' };", context);
+    if (failed) reject(Error('old storage failure')); else complete();
+    await pending;
+    assert.equal(elements['run-km'].value, switched ? '42' : '6');
+    assert.equal(elements['add-km'].value, switched ? '180' : failed ? '120' : '');
+    assert.equal(vm.runInContext('localWorkspace.editors.new.value', context), 'new input');
+    assert.equal(errors, failed && !switched ? 1 : 0);
+    assert.equal(persisted, !failed && !switched ? 1 : 0);
+  }
+});
+
+test('SPEC-030 restore controller isolates windows and releases stale previews', async () => {
+  const { createAccountRestoreController } = await import('../../frontend/runtime/account-restore-controller.mjs');
+  let session = {}, key = 0;
+  const previews = [], applies = [], discarded = [];
+  const controller = createAccountRestoreController({ session: { capture: () => session, current: value => value === session },
+    newKey: () => 'restore-key-' + (++key), transport: {
+      preview: () => { const gate = deferred(); previews.push(gate); return gate.promise; },
+      apply: (token, operationId) => { const gate = deferred(); applies.push({ ...gate, token, operationId }); return gate.promise; },
+      discard: async token => { discarded.push(token); },
+    } });
+  const old = controller.beginPreview(), oldRead = controller.preview(old, '{}', 'merge');
+  const fresh = controller.beginPreview(), freshRead = controller.preview(fresh, '{}', 'update');
+  previews[1].resolve({ token: 'fresh' }); await freshRead;
+  previews[0].resolve({ token: 'old' }); assert.equal(await oldRead, null);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(discarded, ['old']); assert.equal(controller.state.preview.token, 'fresh');
+  const applying = controller.beginApply(), applied = controller.apply(applying);
+  assert.equal(controller.beginPreview(), null);
+  controller.reset();
+  const next = controller.beginPreview(), nextRead = controller.preview(next, '{}', 'merge');
+  previews[2].resolve({ token: 'next' }); await nextRead;
+  const nextApply = controller.beginApply(), nextApplied = controller.apply(nextApply);
+  applies[0].resolve({ ok: true }); assert.equal(await applied, true);
+  assert.equal(controller.finishApply(applying), false);
+  assert.equal(controller.state.pending, true); assert.equal(controller.state.preview.token, 'next');
+  assert.deepEqual(discarded, ['old'], 'closing does not delete a pending apply token');
+  applies[1].resolve({ ok: true }); await nextApplied; controller.finishApply(nextApply);
+  const stale = controller.beginPreview(), staleRead = controller.preview(stale, '{}', 'merge');
+  session = {}; controller.reset(); previews[3].resolve({ token: 'account-A' }); await staleRead;
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(controller.state.preview, null); assert.deepEqual(discarded, ['old']);
 });

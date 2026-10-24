@@ -4,6 +4,20 @@
 
 ## [Unreleased]
 
+## [3.10.1] - 2026-10-24
+
+### Fixed
+
+- 非同步本機清除綁定 session 與操作，舊成功／失敗不修改新帳號，等待期間新輸入與編輯草稿保留。
+- 匯入只更新有差異的欄位與里程，無變更／額外紀錄不增加版本、revision 或異動，避免假衝突。
+- 每份預覽使用獨立 token，較早請求晚完成不再覆蓋最新預覽。關窗／過期回收，最多每人 8 份、合計 64 MiB。
+
+### Changed
+
+- 匯入規劃／來源辨識與寫入分離，預覽與套用共用計畫；交易與回執仍由 application service 管理。
+- 原生 account restore controller 注入 session、transport 與 key，DOM bridge 只呈現；新增本人預覽 DELETE。
+- Asset 3.10.1／shell v36、51 個 release assets；schema 6 僅調整預覽主鍵，保留現有 token。備份、升級與回滾步驟見 README／SPEC-030。
+
 ## [3.10.0] - 2026-10-24
 
 ### Added

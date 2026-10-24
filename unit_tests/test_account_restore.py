@@ -297,7 +297,7 @@ def test_update_preview_binds_mode_rejects_legacy_and_rolls_back(workspace, monk
         preview = account_restore.preview_restore(db, 2, raw, workspace.config, 'update')
         with pytest.raises(Conflict):
             account_restore.apply_restore(db, 1, preview['token'], 'foreign-update-import', workspace.config)
-        stored = db.query(models.RestorePreview).filter_by(user_id=2).one()
+        stored = db.query(models.RestorePreview).filter_by(user_id=2, token=preview['token']).one()
         stored.payload_json = {**stored.payload_json, 'mode': 'merge'}
         db.commit()
         with pytest.raises(Conflict, match='內容已變更'):
@@ -335,9 +335,8 @@ def test_update_checks_resulting_shoe_quota_and_strava_conflicts(workspace):
         another_run.strava_id = 'conflicting-strava'
         db.commit()
         payload['runs'][0]['strava_id'] = 'conflicting-strava'
-        preview = account_restore.preview_restore(db, 2, json.dumps(payload).encode(), workspace.config, 'update')
         with pytest.raises(Conflict, match='Strava'):
-            account_restore.apply_restore(db, 2, preview['token'], 'strava-update-conflict', workspace.config)
+            account_restore.preview_restore(db, 2, json.dumps(payload).encode(), workspace.config, 'update')
         assert db.query(models.Shoe).filter_by(user_id=2, is_deleted=True).count() == 1
 
 
@@ -373,8 +372,170 @@ def test_update_rejects_two_source_runs_targeting_one_strava_record(workspace):
         payload['runs'].append(dict(payload['runs'][0], id=99, strava_id='stable-strava'))
         payload['shoes'][0]['mileage'] += 5
         payload['monthly_mileages'][0]['km'] += 5
-        preview = account_restore.preview_restore(db, 2, json.dumps(payload).encode(), workspace.config, 'update')
         with pytest.raises(Conflict, match='多筆來源'):
-            account_restore.apply_restore(db, 2, preview['token'], 'strava-collision-import', workspace.config)
+            account_restore.preview_restore(db, 2, json.dumps(payload).encode(), workspace.config, 'update')
         row = db.query(models.Run).filter_by(user_id=2).one()
         assert row.km == 5 and row.strava_id == 'stable-strava'
+
+
+def test_identical_update_preserves_versions_history_and_unrelated_edits(workspace):
+    from backend import schemas
+    from backend.services import monthly, shoes
+    with workspace.sessions() as db:
+        payload = archive(db)
+        payload['running_goal'] = {'start_year': 2026, 'monthly_km': 100, 'yearly_km': 1200}
+        payload['monthly_reports'] = [{'year': 2026, 'month': 1, 'content_md': 'unchanged', 'model': 'mock',
+                                      'stats_json': {}, 'created_at': '2026-01-01T00:00:00Z', 'updated_at': '2026-01-01T00:00:00Z'}]
+        raw = json.dumps(payload).encode()
+        preview = account_restore.preview_restore(db, 2, raw, workspace.config)
+        account_restore.apply_restore(db, 2, preview['token'], 'noop-initial-import', workspace.config)
+        extra = add_shoe(db, uid=2, mileage=7)
+        extra_id, extra_version = extra.id, extra.version
+        monthly.create_monthly_mileage(db, 2, schemas.MonthlyMileageCreate(year=2025, month=12, km=12))
+        def snapshot():
+            db.expire_all()
+            return ({kind.__tablename__: [(row.id, row.version) for row in db.query(kind).filter_by(user_id=2).order_by(kind.id)]
+                     for kind in (models.Shoe, models.Run, models.MonthlyMileage, models.RunningGoal)},
+                    db.query(models.AuditEvent).filter_by(user_id=2).count(), db.get(models.User, 2).data_revision)
+        before = snapshot()
+        preview = account_restore.preview_restore(db, 2, raw, workspace.config, 'update')
+        account_restore.apply_restore(db, 2, preview['token'], 'identical-import-noop', workspace.config)
+        assert snapshot() == before
+        shoes.update_shoe(db, 2, extra_id, schemas.ShoeUpdate(nickname='Local edit succeeds', expected_version=extra_version))
+        unrelated = db.query(models.MonthlyMileage).filter_by(user_id=2, year=2025).one()
+        old_month_version = unrelated.version
+        payload['runs'][0]['km'] = 8
+        payload['shoes'][0]['mileage'] = 28
+        payload['monthly_mileages'][0]['km'] = 8
+        preview = account_restore.preview_restore(db, 2, json.dumps(payload).encode(), workspace.config, 'update')
+        account_restore.apply_restore(db, 2, preview['token'], 'changed-import-mileage', workspace.config)
+        db.expire_all()
+        assert db.query(models.MonthlyMileage).filter_by(user_id=2, year=2025).one().version == old_month_version
+        assert db.query(models.Shoe).filter_by(user_id=2, nickname='').one().mileage == 28
+        assert db.get(models.Shoe, extra_id).version == extra_version + 1
+
+
+def test_late_preview_cannot_revoke_newer_token(workspace, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event, current_thread
+    with workspace.sessions() as db:
+        raw = json.dumps(archive(db)).encode()
+    started, finish = Event(), Event()
+    original = account_restore.parse_backup
+    def delayed(raw):
+        backup = original(raw)
+        if current_thread().name.startswith('older-preview'):
+            started.set()
+            assert finish.wait(10)
+        return backup
+    def preview(mode):
+        with workspace.sessions() as db:
+            return account_restore.preview_restore(db, 2, raw, workspace.config, mode)
+    monkeypatch.setattr(account_restore, 'parse_backup', delayed)
+    with ThreadPoolExecutor(max_workers=1, thread_name_prefix='older-preview') as pool:
+        old = pool.submit(preview, 'merge')
+        assert started.wait(10)
+        newer = preview('update')
+        finish.set()
+        older = old.result()
+    with workspace.sessions() as db:
+        assert db.query(models.RestorePreview).filter_by(user_id=2).count() == 2
+        account_restore.discard_preview(db, 1, older['token'])
+        assert db.query(models.RestorePreview).filter_by(user_id=2).count() == 2
+        result = account_restore.apply_restore(db, 2, newer['token'], 'late-preview-new-apply', workspace.config)
+        assert result['summary']['mode'] == 'update'
+        account_restore.discard_preview(db, 2, older['token'])
+        assert db.query(models.RestorePreview).filter_by(user_id=2).count() == 0
+
+
+def test_preview_limits_expiration_and_discard_are_user_scoped(workspace, monkeypatch):
+    from datetime import UTC, datetime, timedelta
+    with workspace.sessions() as db:
+        raw = json.dumps(archive(db)).encode()
+        monkeypatch.setattr(account_restore, 'MAX_ACTIVE_PREVIEWS', 2)
+        first = account_restore.preview_restore(db, 2, raw, workspace.config)
+        second = account_restore.preview_restore(db, 2, raw, workspace.config)
+        with pytest.raises(Conflict, match='上限'):
+            account_restore.preview_restore(db, 2, raw, workspace.config)
+        row = db.get(models.RestorePreview, (2, first['token']))
+        row.expires_at = datetime.now(UTC) - timedelta(seconds=1)
+        db.commit()
+        account_restore.preview_restore(db, 2, raw, workspace.config)
+        assert db.get(models.RestorePreview, (2, first['token'])) is None
+        account_restore.discard_preview(db, 2, second['token'])
+        monkeypatch.setattr(account_restore, 'MAX_PREVIEW_BYTES', 1)
+        with pytest.raises(Conflict, match='容量'):
+            account_restore.preview_restore(db, 2, raw, workspace.config)
+        assert db.query(models.RestorePreview).filter_by(user_id=2).count() == 1
+
+
+def test_schema_six_preserves_existing_preview_and_is_idempotent(workspace):
+    from sqlalchemy import inspect, text
+
+    from backend.migrations import run_startup_migrations, schema_version
+    with workspace.sessions() as db:
+        raw = json.dumps(archive(db)).encode()
+        preview = account_restore.preview_restore(db, 2, raw, workspace.config)
+        before = exports.build_account_export(db, db.get(models.User, 1))[0]
+    with workspace.engine.begin() as connection:
+        connection.exec_driver_sql('CREATE TABLE old_restore_previews (user_id INTEGER NOT NULL PRIMARY KEY REFERENCES users(id), token VARCHAR(36) NOT NULL, revision INTEGER NOT NULL, payload_hash VARCHAR(64) NOT NULL, payload_json JSON NOT NULL, expires_at DATETIME NOT NULL)')
+        connection.exec_driver_sql('INSERT INTO old_restore_previews SELECT * FROM restore_previews')
+        connection.exec_driver_sql('DROP TABLE restore_previews')
+        connection.exec_driver_sql('ALTER TABLE old_restore_previews RENAME TO restore_previews')
+        connection.execute(text("UPDATE schema_metadata SET value='5' WHERE key='schema_version'"))
+    run_startup_migrations(workspace.engine, workspace.sessions)
+    run_startup_migrations(workspace.engine, workspace.sessions)
+    assert schema_version(workspace.engine) == 6
+    assert inspect(workspace.engine).get_pk_constraint('restore_previews')['constrained_columns'] == ['user_id', 'token']
+    with workspace.sessions() as db:
+        after = exports.build_account_export(db, db.get(models.User, 1))[0]
+        assert {key: value for key, value in before.items() if key != 'exported_at'} == {key: value for key, value in after.items() if key != 'exported_at'}
+        second = account_restore.preview_restore(db, 2, raw, workspace.config)
+        assert second['token'] != preview['token']
+        account_restore.apply_restore(db, 2, preview['token'], 'schema-five-old-preview', workspace.config)
+
+
+def test_discard_preview_http_requires_its_account(workspace):
+    from fastapi.testclient import TestClient
+
+    from backend.app_factory import create_app
+    from backend.auth import create_access_token
+    with workspace.sessions() as db:
+        preview = account_restore.preview_restore(db, 2, json.dumps(archive(db)).encode(), workspace.config)
+    app = create_app(workspace.config, db_engine=workspace.engine, session_factory=workspace.sessions)
+    def headers(name):
+        return {'Authorization': 'Bearer ' + create_access_token({'sub': name}, secret_key=workspace.config.secret_key or None)}
+    with TestClient(app) as client:
+        path = '/api/account-restore/preview/' + preview['token']
+        assert client.delete(path).status_code in (401, 403)
+        assert client.delete(path, headers=headers('one')).status_code == 200
+        with workspace.sessions() as db:
+            assert db.get(models.RestorePreview, (2, preview['token'])) is not None
+        assert client.delete(path, headers=headers('two')).status_code == 200
+        assert client.delete(path, headers=headers('two')).status_code == 200
+
+
+def test_preview_schema_rollback_preserves_business_rows(workspace):
+    from pathlib import Path
+
+    from sqlalchemy import inspect
+
+    from backend.migrations import run_startup_migrations, schema_version
+    with workspace.sessions() as db:
+        raw = json.dumps(archive(db)).encode()
+        account_restore.preview_restore(db, 2, raw, workspace.config)
+        account_restore.preview_restore(db, 2, raw, workspace.config)
+        before = db.query(models.AuditEvent).count()
+    connection = workspace.engine.raw_connection()
+    try:
+        connection.executescript(Path('scripts/rollback_preview_schema.sql').read_text())
+    finally:
+        connection.close()
+    assert schema_version(workspace.engine) == 5
+    assert inspect(workspace.engine).get_pk_constraint('restore_previews')['constrained_columns'] == ['user_id']
+    with workspace.sessions() as db:
+        assert db.query(models.Shoe).filter_by(user_id=1).one().mileage == 25
+        assert db.query(models.AuditEvent).count() == before
+        assert db.query(models.RestorePreview).count() == 0
+    run_startup_migrations(workspace.engine, workspace.sessions)
+    assert schema_version(workspace.engine) == 6

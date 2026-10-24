@@ -2,7 +2,7 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const http = require('node:http');
-const { startArtifacts, saveFailure, closeBrowser } = require('../scripts/browser_artifacts.cjs');
+const { startArtifacts, saveFailure, closeBrowser, withDeadline } = require('../scripts/browser_artifacts.cjs');
 module.exports = async function checkWorkspace(browser, baseUrl) {
   const suffix = `${browser.browserType().name()}-${Date.now()}`;
   const password = 'Synthetic-workspace-91!';
@@ -24,8 +24,11 @@ module.exports = async function checkWorkspace(browser, baseUrl) {
   await api(b.token, '/shoes', { brand: 'Other', model: 'Existing', date: '2026-01-01', mileage: 3 });
   // WebKit's native emulation rejects SW navigations internally. As in the PWA
   // harness, disconnect the origin itself and let the installed SW serve the shell.
-  let networkDown = false, disconnectedApi = 0;
-  const origin = http.createServer((request, response) => {
+  let networkDown = false, disconnectedApi = 0, holdPreview = null;
+  const origin = http.createServer(async (request, response) => {
+    if (holdPreview && request.url === '/api/account-restore/preview?mode=merge') {
+      const held = holdPreview; holdPreview = null; held.started(); await held.gate;
+    }
     if (networkDown) {
       if (request.url.startsWith('/service-worker.js')) { response.writeHead(503); response.end('// offline'); return; }
       if (request.url.startsWith('/api/')) disconnectedApi++;
@@ -160,9 +163,47 @@ module.exports = async function checkWorkspace(browser, baseUrl) {
     await page.getByText('資料匯入完成，同來源資料已更新，額外資料已保留。', { exact: true }).waitFor();
     const targetShoes = await api(b.token, '/shoes/active');
     assert.equal(targetShoes.length, 2);
+    assert.equal(targetShoes.find(row => row.brand === 'Other').version, 0, 'unrelated shoe keeps its version');
     assert.equal(targetShoes.find(row => row.nickname === 'Updated cloud nickname').mileage, 28);
     const targetRuns = await api(b.token, '/runs');
     assert.equal(targetRuns.length, 1); assert.equal(targetRuns[0].km, 8); assert.equal(targetRuns[0].date, '2026-02-02');
+    let releaseOld, oldStarted;
+    const oldGate = new Promise(resolve => { releaseOld = resolve; });
+    const sawOld = new Promise(resolve => { oldStarted = resolve; });
+    // Delay at the origin: WebKit service-worker requests bypass page.route.
+    holdPreview = { started: oldStarted, gate: oldGate };
+    await page.locator('#restore-mode').selectOption('merge');
+    await withDeadline(() => sawOld, 10000, 'old restore preview reaches origin');
+    await page.locator('#restore-mode').selectOption('update');
+    await page.waitForFunction(() => !document.getElementById('restore-apply').disabled);
+    const newestToken = await page.evaluate(() => accountRestore.state.preview.token);
+    const oldResponse = page.waitForResponse(response => response.url().endsWith('/api/account-restore/preview?mode=merge'));
+    const discarded = page.waitForResponse(response => response.request().method() === 'DELETE' && response.url().includes('/account-restore/preview/'));
+    releaseOld(); await oldResponse; await discarded;
+    assert.equal(await page.evaluate(() => accountRestore.state.preview.token), newestToken);
+    await page.locator('#restore-apply').click();
+    await page.getByText('資料匯入完成，同來源資料已更新，額外資料已保留。', { exact: true }).waitFor();
+    assert.deepEqual((await api(b.token, '/shoes/active')).map(row => [row.id, row.version, row.mileage]), targetShoes.map(row => [row.id, row.version, row.mileage]));
+    assert.deepEqual((await api(b.token, '/runs')).map(row => [row.id, row.version]), targetRuns.map(row => [row.id, row.version]));
+    await page.evaluate(() => {
+      const original = localWorkspace.controller;
+      let release;
+      const gate = new Promise(resolve => { release = resolve; });
+      const wrapped = { ...original, async clear() {
+        await original.clear(); window.__clearStarted = true; await gate;
+      } };
+      Object.defineProperty(wrapped, 'account', { get: () => original.account });
+      localWorkspace.controller = wrapped;
+      window.__finishClear = () => { release(); localWorkspace.controller = original; };
+    });
+    await page.getByRole('button', { name: '清除此帳號的本機資料', exact: true }).click();
+    await page.waitForFunction(() => window.__clearStarted);
+    await page.getByRole('button', { name: '關閉', exact: true }).click();
+    await login(a);
+    await page.locator('.tab[data-tab="runs"]').click();
+    await page.locator('#run-km').fill('42');
+    await page.evaluate(async () => { window.__finishClear(); await new Promise(requestAnimationFrame); });
+    assert.equal(await page.locator('#run-km').inputValue(), '42', 'old account clear cannot erase new account input');
     assert.deepEqual(errors, []);
     console.log(`PASS ${browser.browserType().name()} SPEC-027: durable drafts, account isolation, offline restart/sync, recovery and deduplicated restore`);
   } catch (error) { await saveFailure(context, page, 'workspace', error); throw error; }
