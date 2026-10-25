@@ -199,12 +199,14 @@ test('SPEC-027 restore windows reject repreview during apply and stale completio
 
 function workspaceSyncContext() {
   let session = {}, reset, flushes = 0, loads = 0;
-  const elements = new Proxy({}, { get: (rows, id) => rows[id] ||= { disabled: false, textContent: '',
-    classList: { remove() {} }, replaceChildren() {} } });
+  const makeElement = () => ({ disabled: false, textContent: '', children: [], classList: { remove() {} },
+    append(child) { this.children.push(child); }, replaceChildren() { this.children = []; }, setAttribute() {} });
+  const elements = new Proxy({}, { get: (rows, id) => rows[id] ||= makeElement() });
   const controller = { account: 'synthetic-A', flush: async () => { flushes++; return { synced: 0 }; }, read: async () => [] };
-  const context = vm.createContext({ document: { getElementById: id => elements[id] }, navigator: { onLine: true },
+  const context = vm.createContext({ document: { getElementById: id => elements[id], createElement: makeElement }, navigator: { onLine: true },
     authToken: 'synthetic', captureAuthSession: () => session, isCurrentAuthSession: value => value === session,
     registerFeatureReset: (_, callback) => { reset = callback; }, loadData: async () => { loads++; },
+    allRunShoes: () => [], esc: value => value, shoeLabel: value => value,
   });
   vm.runInContext(fs.readFileSync('frontend/app-workspace.js', 'utf8'), context);
   context.controller = controller;
@@ -221,7 +223,7 @@ test('SPEC-028 manual sync explains empty offline and unavailable states', async
   const fixture = workspaceSyncContext(), { context, elements, controller } = fixture;
   const feedback = elements['workspace-sync-status'];
   await context.syncWorkspace({ manual: true });
-  assert.match(feedback.textContent, /目前沒有待同步/);
+  assert.match(feedback.textContent, /沒有待送跑步/);
   assert.equal(fixture.flushes(), 1);
   context.navigator.onLine = false;
   await context.syncWorkspace({ manual: true });
@@ -246,11 +248,11 @@ test('SPEC-028 sync shares pending work and reports uploaded runs', async () => 
   const automatic = context.syncWorkspace();
   const manual = context.syncWorkspace({ manual: true });
   assert.equal(elements['workspace-sync'].disabled, true);
-  assert.match(elements['workspace-sync-status'].textContent, /正在檢查並送出/);
+  assert.match(elements['workspace-sync-status'].textContent, /正在處理待送跑步並更新雲端資料/);
   assert.equal(calls, 1);
   gate.resolve({ synced: 2 });
   await Promise.all([automatic, manual]);
-  assert.match(elements['workspace-sync-status'].textContent, /已同步 2 筆.*沒有待同步/);
+  assert.match(elements['workspace-sync-status'].textContent, /已同步 2 筆.*沒有待送跑步/);
   assert.equal(elements['workspace-sync'].disabled, false);
   assert.equal(fixture.loads(), 1);
 });
@@ -258,7 +260,10 @@ test('SPEC-028 sync shares pending work and reports uploaded runs', async () => 
 test('SPEC-028 sync reports blocked pending and storage failures', async () => {
   const { context, elements, controller } = workspaceSyncContext();
   controller.flush = async () => ({ synced: 1 });
-  controller.read = async () => [{ status: 'blocked' }, { status: 'pending' }];
+  controller.read = async () => [
+    { status: 'blocked', operation: { operation_id: 'blocked-id', payload: { date: '2026-10-20', km: 1 } } },
+    { status: 'pending', operation: { operation_id: 'pending-id', payload: { date: '2026-10-21', km: 2 } } },
+  ];
   await context.syncWorkspace({ manual: true });
   assert.match(elements['workspace-sync-status'].textContent, /已同步 1 筆.*仍有 2 筆.*1 筆需要處理.*等待重試/);
   context.loadData = async () => { throw Error('refresh failed'); };
@@ -292,7 +297,7 @@ test('SPEC-028 stale sync cannot change the next account feedback', async () => 
     assert.equal(elements['workspace-sync'].disabled, true);
     assert.equal(fixture.loads(), 0);
     finishes[1].resolve({ synced: 0 }); await newAccount;
-    assert.match(elements['workspace-sync-status'].textContent, /目前沒有待同步/);
+    assert.match(elements['workspace-sync-status'].textContent, /沒有待送跑步/);
     assert.equal(elements['workspace-sync'].disabled, false);
   }
 });
@@ -302,12 +307,41 @@ test('SPEC-028 workspace guidance distinguishes server backup and local data', (
   assert.match(modal, /syncWorkspace\(\{ manual: true \}\)/);
   assert.match(modal, /id="workspace-sync-status" role="status" aria-live="polite"/);
   assert.match(modal, /不會覆寫整個資料庫/);
-  assert.match(modal, /不含密碼、本機草稿或待同步紀錄/);
-  assert.match(modal, /尚未同步的紀錄會遺失/);
+  assert.match(modal, /不含密碼、本機草稿或待同步跑步/);
+  assert.match(modal, /尚未同步的跑步會遺失/);
   assert.match(fs.readFileSync('README.md', 'utf8'), /\]\(docs\/user-guide.md\)/);
   const guide = fs.readFileSync('docs/user-guide.md', 'utf8');
-  assert.match(guide, /先連線，在每個有離線紀錄的裝置完成同步/);
+  assert.match(guide, /確認每個有離線紀錄的裝置都已完成同步/);
   assert.match(guide, /已合併後又刪除的跑步/);
+});
+
+test('SPEC-035 sync controls name the action for the current connection and queue state', async () => {
+  const fixture = workspaceSyncContext(), { context, elements, controller } = fixture;
+  await context.renderWorkspaceQueue();
+  assert.equal(elements['workspace-sync'].textContent, '更新雲端資料');
+  assert.equal(elements['workspace-sync'].disabled, false);
+  assert.match(elements['workspace-queue'].children[0].textContent, /新增成功的紀錄會直接存到雲端/);
+  controller.read = async () => [{ operation: { payload: { date: '2026-10-25', km: 5 } }, status: 'pending' }];
+  await context.renderWorkspaceQueue();
+  assert.equal(elements['workspace-sync'].textContent, '同步待送跑步（1）');
+  assert.match(elements['workspace-status'].textContent, /只存在這台裝置，尚未送到雲端/);
+  context.navigator.onLine = false;
+  await context.renderWorkspaceQueue();
+  assert.equal(elements['workspace-sync'].textContent, '等待網路連線');
+  assert.equal(elements['workspace-sync'].disabled, true);
+  assert.match(elements['workspace-status'].textContent, /跑步留在這台裝置，等待連線後送到雲端/);
+});
+
+test('SPEC-035 workspace hides detailed offline caveats behind a disclosure', () => {
+  const modal = fs.readFileSync('frontend/templates/workspace-modal.html', 'utf8');
+  assert.match(modal, /<summary>離線時如何記錄<\/summary>/);
+  assert.match(modal, /id="workspace-sync"[^>]*>更新雲端資料<\/button>/);
+  assert.match(modal, /沒有待送出的跑步時|清單為空時可用它重新載入雲端資料/);
+  assert.equal((modal.match(/<details class="workspace-section">/g) || []).length, 4);
+  assert.doesNotMatch(modal, /<details class="workspace-section" open/);
+  for (const label of ['未完成的編輯草稿', '備份／匯入帳號資料', '異動紀錄與誤刪復原', '清除此裝置的本機資料']) {
+    assert.match(modal, new RegExp(label));
+  }
 });
 
 test('SPEC-029 import modes own their previews and confirmation', async () => {
@@ -592,7 +626,7 @@ test('SPEC-034 manual empty sync refreshes cloud and rejects foreign notificatio
   await new Promise(resolve => setImmediate(resolve)); assert.equal(fixture.loads(), 2);
   context.loadData = async () => { throw Error('offline read'); };
   await context.syncWorkspace({ manual: true });
-  assert.match(elements['workspace-sync-status'].textContent, /雲端資料載入失敗.*立即同步重試/);
+  assert.match(elements['workspace-sync-status'].textContent, /雲端資料載入失敗.*更新雲端資料」重試/);
 });
 
 test('SPEC-034 commit notification failure never requeues a confirmed write', async () => {

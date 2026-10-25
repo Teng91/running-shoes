@@ -210,12 +210,12 @@ function setWorkspaceSyncState(message, busy = false) {
   document.getElementById('workspace-sync-status').textContent = message;
   const button = document.getElementById('workspace-sync');
   button.disabled = busy;
-  button.textContent = busy ? '同步中…' : '立即同步';
+  if (busy) button.textContent = '處理中…';
 }
 
 async function syncWorkspace({ manual = false, refresh = false } = {}) {
   const unavailable = !authToken ? '請先登入，再同步此帳號的跑步紀錄。'
-    : !navigator.onLine ? '目前離線，尚未送出的跑步紀錄會保留在此裝置；請連線後再按立即同步。'
+    : !navigator.onLine ? '目前離線；待送跑步會保留在這台裝置，連線後自動送出。'
     : !localWorkspace.controller?.account ? localWorkspace.error || '本機工作區尚未就緒，請稍後重試；若持續發生，請重新整理頁面。' : '';
   if (unavailable) {
     if (manual) setWorkspaceSyncState(unavailable);
@@ -226,11 +226,16 @@ async function syncWorkspace({ manual = false, refresh = false } = {}) {
   const pending = performWorkspaceSync(captureAuthSession());
   localWorkspace.syncing = pending;
   try { await pending; }
-  finally { if (localWorkspace.syncing === pending) localWorkspace.syncing = null; }
+  finally {
+    if (localWorkspace.syncing === pending) {
+      localWorkspace.syncing = null;
+      void renderWorkspaceQueue();
+    }
+  }
 }
 
 async function performWorkspaceSync(session) {
-  setWorkspaceSyncState('正在檢查並送出此裝置的待同步跑步紀錄…', true);
+  setWorkspaceSyncState('正在處理待送跑步並更新雲端資料…', true);
   try {
     const { synced } = await localWorkspace.controller.flush();
     if (!isCurrentAuthSession(session)) return;
@@ -241,8 +246,8 @@ async function performWorkspaceSync(session) {
       ? `本次已同步 ${synced} 筆跑步紀錄；仍有 ${queue.length} 筆留在此裝置。` +
         (blocked ? `${blocked} 筆需要處理，請查看下方原因並重新配對或移除。` : '') +
         (queue.length > blocked ? '其餘紀錄等待重試，請確認網路與登入狀態；其他分頁正在同步時請稍候。' : '')
-      : synced ? `已同步 ${synced} 筆跑步紀錄，目前沒有待同步資料。`
-        : '目前沒有待同步的跑步紀錄。已儲存的資料不需要再按同步。';
+      : synced ? `已同步 ${synced} 筆跑步紀錄，沒有待送跑步。`
+        : '沒有待送跑步；新增成功的紀錄會直接存到雲端。';
     if (synced || localWorkspace.syncRefreshRequested) {
       try {
         do {
@@ -251,17 +256,12 @@ async function performWorkspaceSync(session) {
         } while (isCurrentAuthSession(session) && localWorkspace.syncRefreshRequested);
         if (!synced) message += ' 已重新載入雲端資料。';
       } catch {
-        message += synced ? ' 紀錄已送出，但畫面更新失敗，請重新整理頁面。' : ' 雲端資料載入失敗，請再按立即同步重試。';
+        message += synced ? ' 紀錄已送出，但畫面更新失敗，請重新整理頁面。' : ' 雲端資料載入失敗，請按「更新雲端資料」重試。';
       }
     }
     if (isCurrentAuthSession(session)) setWorkspaceSyncState(message);
   } catch (error) {
     if (isCurrentAuthSession(session)) setWorkspaceSyncState('同步未完成，請重試：' + error.message);
-  } finally {
-    if (isCurrentAuthSession(session)) {
-      const button = document.getElementById('workspace-sync');
-      button.disabled = false; button.textContent = '立即同步';
-    }
   }
 }
 
@@ -269,15 +269,33 @@ async function renderWorkspaceQueue() {
   const status = document.getElementById('workspace-status');
   if (!status) return;
   const session = captureAuthSession();
-  const queue = await localWorkspace.controller?.read('queue') || [];
+  let queue;
+  try { queue = await localWorkspace.controller?.read('queue') || []; }
+  catch (error) {
+    if (!authToken || !isCurrentAuthSession(session)) return;
+    localWorkspace.error = '本機儲存讀取失敗：' + error.message;
+    status.textContent = localWorkspace.error;
+    const button = document.getElementById('workspace-sync');
+    if (button && !localWorkspace.syncing) { button.disabled = true; button.textContent = '本機儲存不可用'; }
+    return;
+  }
   if (!authToken || !isCurrentAuthSession(session)) return;
-  status.textContent = localWorkspace.error || (queue.length ? `${queue.length} 筆跑步已存本機，等待同步或處理` : navigator.onLine ? '本機草稿自動保存' : '離線：可新增跑步，連線後同步');
+  status.textContent = localWorkspace.error || (queue.length
+    ? navigator.onLine ? `${queue.length} 筆跑步只存在這台裝置，尚未送到雲端` : `${queue.length} 筆跑步留在這台裝置，等待連線後送到雲端`
+    : navigator.onLine ? '已連線；新增成功的跑步會直接存到雲端' : '離線：新增的跑步會暫存在這台裝置，連線後送出');
+  const button = document.getElementById('workspace-sync');
+  if (button && !localWorkspace.syncing) {
+    button.disabled = !navigator.onLine;
+    button.textContent = !navigator.onLine ? '等待網路連線'
+      : queue.length ? `同步待送跑步（${queue.length}）` : '更新雲端資料';
+  }
   const target = document.getElementById('workspace-queue');
   if (!target) return;
   target.replaceChildren();
   if (!queue.length) {
     const empty = document.createElement('p'); empty.className = 'workspace-help';
-    empty.textContent = '目前沒有待同步的跑步紀錄。'; target.append(empty);
+    empty.textContent = navigator.onLine ? '沒有待送出的跑步。新增成功的紀錄會直接存到雲端。'
+      : '目前沒有待送出的跑步；離線新增的跑步會留在這台裝置，連線後送出。'; target.append(empty);
   }
   for (const row of queue) {
     const card = document.createElement('div'); card.className = 'workspace-item';
