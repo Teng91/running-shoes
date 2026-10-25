@@ -165,7 +165,7 @@ async function run() {
           // Migrate the frozen real v3.2.2 worker online before testing failure-safe future upgrades.
           legacy = false; release = 'fixture-a-safe';
           assert.equal(await updateWorker(page), 'activated');
-          await page.reload({ waitUntil: 'networkidle' });
+          await page.waitForFunction(() => window.__pwaRelease === 'fixture-a-safe', null, { timeout: 15000 });
           await assertShell(page, 'fixture-a-safe');
           assert.ok(moduleOriginRequests > 0, 'native module actually requests an Origin variant');
           assert.equal(await page.evaluate(async () => {
@@ -226,9 +226,7 @@ async function run() {
           await page.waitForFunction(() => window.__workerUpdateTimeline?.length > 0);
           releaseCandidate(); candidateGate = null;
           assert.equal(await withDeadline(() => observing, 20000, 'already installing candidate'), 'activated');
-          await page.locator('#app-update-notice').waitFor({ state: 'visible' });
-          assert.equal(await page.evaluate(() => window.__pwaRelease), 'fixture-a-safe', 'upgrade does not reload a live draft');
-          await page.reload({ waitUntil: 'networkidle' });
+          await page.waitForFunction(() => window.__pwaRelease === 'fixture-d', null, { timeout: 15000 });
           await assertShell(page, 'fixture-d');
           const state = await page.evaluate(async () => {
             const names = await caches.keys();

@@ -170,7 +170,7 @@ async function run() {
       await page.locator('#run-date').fill(today);
       await page.locator('#run-km').fill('5.5');
       const shoeOption = page.locator('#run-shoe option').filter({ hasText: 'Morning pair' });
-      assert.match(await shoeOption.textContent(), new RegExp(`Morning pair · E2E Brand Browser Runner v2 · ${today} · #\\d+`));
+      assert.equal(await shoeOption.textContent(), `Morning pair · E2E Brand Browser Runner v2 · ${today}`);
       await page.locator('#run-shoe').selectOption(await shoeOption.getAttribute('value'));
       await page.locator('#add-run-btn').click();
       await page.locator('#run-table').getByText('5.50 km', { exact: true }).waitFor();
