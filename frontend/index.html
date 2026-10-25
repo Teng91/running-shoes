@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
 <meta charset="UTF-8">
-<meta name="app-asset-version" content="3.10.5">
+<meta name="app-asset-version" content="4.0.0">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>跑鞋追蹤 Dashboard</title>
 <meta name="theme-color" content="#0f1117">
@@ -34,8 +34,8 @@ body { margin: 0; opacity: 1 !important; }
 @keyframes app-boot-critical-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .app-boot { transition: none; } .app-boot-spinner { animation: none; } }
 </style>
-<link id="app-styles" rel="preload" href="/styles.css?v=3.10.5" as="style" onload="this.onload=null;this.rel='stylesheet';this.dataset.ready='true';window.dispatchEvent(new Event('appstylesready'))">
-<noscript><link rel="stylesheet" href="/styles.css?v=3.10.5"></noscript>
+<link id="app-styles" rel="preload" href="/styles.css?v=4.0.0" as="style" onload="this.onload=null;this.rel='stylesheet';this.dataset.ready='true';window.dispatchEvent(new Event('appstylesready'))">
+<noscript><link rel="stylesheet" href="/styles.css?v=4.0.0"></noscript>
 </head>
 <body>
 
@@ -75,7 +75,6 @@ window.__appBootLegacyPoll = window.setInterval(function () {
 <noscript><p class="app-boot-noscript">需要啟用 JavaScript 才能使用跑鞋追蹤。</p></noscript>
 
 <!-- Auth View -->
-<div id="app-update-notice" role="status" hidden>新版已準備好；請先儲存正在編輯的內容。<button class="btn btn-edit" onclick="applyAppUpdate()">重新載入套用</button></div>
 <div class="container" id="auth-view" style="display:none;">
 
   <!-- Login Form -->
@@ -653,38 +652,38 @@ window.__appBootLegacyPoll = window.setInterval(function () {
 
 <script src="/vendor/chart.umd.min.js"></script>
 <script src="/vendor/marked.min.js"></script>
-<script src="/app-boot.js?v=3.10.5"></script>
-<script src="/app-lifecycle.js?v=3.10.5"></script>
-<script src="/app-state.js?v=3.10.5"></script>
-<script src="/app-api.js?v=3.10.5"></script>
-<script src="/app-auth.js?v=3.10.5"></script>
-<script src="/app-streams.js?v=3.10.5"></script>
-<script src="/app-resources.js?v=3.10.5"></script>
-<script src="/app-inline-editors.js?v=3.10.5"></script>
-<script src="/app-local-store.js?v=3.10.5"></script>
-<script src="/app-workspace.js?v=3.10.5"></script>
-<script src="/app-account-restore.js?v=3.10.5"></script>
-<script src="/app-history.js?v=3.10.5"></script>
-<script src="/app-core.js?v=3.10.5"></script>
-<script src="/app-models.js?v=3.10.5"></script>
-<script src="/app-markdown.js?v=3.10.5"></script>
-<script src="/app-agent.js?v=3.10.5"></script>
-<script src="/app-reports.js?v=3.10.5"></script>
-<script src="/app-runs.js?v=3.10.5"></script>
-<script src="/app-dates.js?v=3.10.5"></script>
-<script src="/app-strava.js?v=3.10.5"></script>
-<script src="/app-run-insights.js?v=3.10.5"></script>
-<script src="/app-shoes.js?v=3.10.5"></script>
-<script src="/app-dashboard.js?v=3.10.5"></script>
-<script src="/app-monthly.js?v=3.10.5"></script>
-<script src="/app-exports.js?v=3.10.5"></script>
-<script src="/app-goals.js?v=3.10.5"></script>
-<script src="/app-charts.js?v=3.10.5"></script>
-<script src="/app-shoe-charts.js?v=3.10.5"></script>
-<script src="/app-monthly-charts.js?v=3.10.5"></script>
-<script src="/app-spending.js?v=3.10.5"></script>
-<script src="/app-dialogs.js?v=3.10.5"></script>
-<script src="/app-updates.js?v=3.10.5"></script>
-<script src="/app.js?v=3.10.5"></script>
+<script src="/app-boot.js?v=4.0.0"></script>
+<script src="/app-lifecycle.js?v=4.0.0"></script>
+<script src="/app-state.js?v=4.0.0"></script>
+<script src="/app-api.js?v=4.0.0"></script>
+<script src="/app-auth.js?v=4.0.0"></script>
+<script src="/app-streams.js?v=4.0.0"></script>
+<script src="/app-resources.js?v=4.0.0"></script>
+<script src="/app-inline-editors.js?v=4.0.0"></script>
+<script src="/app-local-store.js?v=4.0.0"></script>
+<script src="/app-workspace.js?v=4.0.0"></script>
+<script src="/app-account-restore.js?v=4.0.0"></script>
+<script src="/app-history.js?v=4.0.0"></script>
+<script src="/app-core.js?v=4.0.0"></script>
+<script src="/app-models.js?v=4.0.0"></script>
+<script src="/app-markdown.js?v=4.0.0"></script>
+<script src="/app-agent.js?v=4.0.0"></script>
+<script src="/app-reports.js?v=4.0.0"></script>
+<script src="/app-runs.js?v=4.0.0"></script>
+<script src="/app-dates.js?v=4.0.0"></script>
+<script src="/app-strava.js?v=4.0.0"></script>
+<script src="/app-run-insights.js?v=4.0.0"></script>
+<script src="/app-shoes.js?v=4.0.0"></script>
+<script src="/app-dashboard.js?v=4.0.0"></script>
+<script src="/app-monthly.js?v=4.0.0"></script>
+<script src="/app-exports.js?v=4.0.0"></script>
+<script src="/app-goals.js?v=4.0.0"></script>
+<script src="/app-charts.js?v=4.0.0"></script>
+<script src="/app-shoe-charts.js?v=4.0.0"></script>
+<script src="/app-monthly-charts.js?v=4.0.0"></script>
+<script src="/app-spending.js?v=4.0.0"></script>
+<script src="/app-dialogs.js?v=4.0.0"></script>
+<script src="/app-updates.js?v=4.0.0"></script>
+<script src="/app.js?v=4.0.0"></script>
 </body>
 </html>

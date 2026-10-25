@@ -49,7 +49,7 @@ function matchesForm(snapshot) {
 
 function shoeLabel(shoe) {
   const name = [shoe.brand, shoe.model].join(' ');
-  return `${shoe.nickname ? shoe.nickname + ' · ' : ''}${name} · ${shoe.date} · #${shoe.id}${shoe.is_retired ? ' · 已退役' : ''}`;
+  return `${shoe.nickname ? shoe.nickname + ' · ' : ''}${name} · ${shoe.date}${shoe.is_retired ? ' · 已退役' : ''}`;
 }
 
 function getFormDraft(name) {
