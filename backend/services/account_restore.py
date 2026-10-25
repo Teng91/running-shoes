@@ -22,8 +22,8 @@ MAX_PREVIEW_BYTES = 64 * 1024 * 1024
 
 def preview_restore(db: Session, user_id: int, raw: bytes, config: Settings, mode: RestoreMode = "merge") -> dict:
     backup = parse_backup(raw)
-    if mode not in {"merge", "update"} or (mode == "update" and backup.version != 2):
-        raise Invalid("更新匯入需要 v2 帳號資料檔；舊版檔案請選擇只新增")
+    if mode not in {"merge", "update"} or (mode == "update" and backup.version < 2):
+        raise Invalid("更新匯入需要 v2/v3 帳號資料檔；舊版檔案請選擇只新增")
     with write_transaction(db, user_id, reason="account.preview"):
         plan = build_import_plan(db, user_id, backup, mode)
         summary = summarize_import(plan, backup, config, mode)
@@ -60,7 +60,7 @@ def apply_restore(db: Session, user_id: int, token: str, operation_id: str, conf
         mode = payload.get("mode", "merge")
         backup = AccountBackup.model_validate(payload.get("backup", payload))
         fingerprint_matches = payload_hash(payload) == preview.payload_hash if "backup" in payload else backup_fingerprint(backup) == preview.payload_hash
-        if not fingerprint_matches or mode not in {"merge", "update"} or (mode == "update" and backup.version != 2):
+        if not fingerprint_matches or mode not in {"merge", "update"} or (mode == "update" and backup.version < 2):
             raise Conflict("還原預覽內容已變更")
         plan = build_import_plan(db, user_id, backup, mode)
         summary = summarize_import(plan, backup, config, mode)

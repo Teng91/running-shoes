@@ -1,6 +1,6 @@
 // Account partitions, durable drafts and an at-least-once queue with atomic leases.
 // Storage and transport are injected; no browser globals or credentials are stored.
-export function createWorkspaceController({ storage, session, clock, newKey, send, changed = () => {} }) {
+export function createWorkspaceController({ storage, session, clock, newKey, send, changed = () => {}, committed = () => {} }) {
   let owner = null, generation = 0;
   const valid = ticket => owner === ticket && ticket && session.current(ticket.session);
   const key = (account, kind, id = 'current') => [account, kind, id];
@@ -30,6 +30,8 @@ export function createWorkspaceController({ storage, session, clock, newKey, sen
         // A response can complete after account switch; deletion stays in A's partition.
         await storage.update(item.key, current => current?.lease === lease ? null : current);
         synced++;
+        // Notifications are best effort and cannot undo a confirmed server write.
+        try { committed(ticket.account); } catch { /* The next foreground/manual read recovers. */ }
       } catch (error) {
         await storage.update(item.key, current => {
           if (current?.lease !== lease) return current;

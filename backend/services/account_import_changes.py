@@ -21,9 +21,11 @@ class ImportChanges:
 
 
 def changed_fields(row: Any, values: dict[str, Any]) -> dict[str, Any]:
-    def comparable(value):
+    def comparable(name, value):
+        if name in {"mileage", "baseline_mileage", "km", "adjustment_km", "monthly_km", "yearly_km", "expected_mileage"} and isinstance(value, (int, float)):
+            return round(value, 2)
         return value.replace(tzinfo=UTC) if isinstance(value, datetime) and value.tzinfo is None else value
-    return {name: value for name, value in values.items() if comparable(getattr(row, name)) != comparable(value)}
+    return {name: value for name, value in values.items() if comparable(name, getattr(row, name)) != comparable(name, value)}
 
 
 def build_changes(plan: 'ImportPlan', backup: AccountBackup) -> ImportChanges:
@@ -38,7 +40,7 @@ def build_changes(plan: 'ImportPlan', backup: AccountBackup) -> ImportChanges:
             final_runs[('source', run_item.id)] = (shoe_key, run_item.date, run_item.km)
         elif target in plan.runs:
             run_row = plan.runs[target]
-            patch = changed_fields(run_row, run_item.model_dump(exclude={'id', 'shoe_id'}))
+            patch = changed_fields(run_row, run_item.model_dump(exclude={'id', 'shoe_id', 'aliases'}))
             if run_row.shoe_id != shoe_target:
                 # This field contains a source ID; execution resolves it after shoe creation.
                 patch['shoe_id'] = run_item.shoe_id
@@ -64,7 +66,7 @@ def build_changes(plan: 'ImportPlan', backup: AccountBackup) -> ImportChanges:
             baselines[target] = float(shoe_item.baseline_mileage or 0)
     for identifier, shoe_row in plan.shoes.items():
         total = round(baselines[identifier] + by_shoe.get(('existing', identifier), 0), 2)
-        if shoe_row.mileage != total:
+        if round(shoe_row.mileage, 2) != total:
             changes.shoes.setdefault(identifier, {})['mileage'] = total
     incoming_months = {(item.year, item.month): item for item in backup.monthly_mileages}
     for period in plan.months.keys() | incoming_months.keys() | by_month.keys():

@@ -1,6 +1,6 @@
 // DOM bridge for the injected account workspace; persistent records never contain auth tokens.
 const localWorkspace = { controller: null, session: null, account: null, activating: null,
-  runDraftId: null, consumedRunDraftId: null, fresh: new Set(), edited: new Set(), editors: {}, restoring: false, error: '', ready: false, syncing: null };
+  runDraftId: null, consumedRunDraftId: null, fresh: new Set(), edited: new Set(), editors: {}, restoring: false, error: '', ready: false, syncing: null, syncRefreshRequested: false, channel: null };
 const workspaceForms = {
   run: ['run-date', 'run-km', 'run-shoe'], monthly: ['add-year', 'add-month', 'add-km'],
   goal: ['goal-start-year', 'goal-monthly-km'],
@@ -16,7 +16,14 @@ async function initializeLocalWorkspace() {
       clock: () => Date.now(), newKey: newOperationKey,
       send: operation => apiPost('/runs', operation.payload, { idempotencyKey: operation.operation_id }),
       changed: () => { void renderWorkspaceQueue(); },
+      committed: notifyWorkspaceCommit,
     });
+    if (typeof BroadcastChannel !== 'undefined') {
+      try {
+        localWorkspace.channel = new BroadcastChannel('running-shoes-workspace');
+        localWorkspace.channel.onmessage = event => receiveWorkspaceCommit(event.data);
+      } catch { localWorkspace.channel = null; }
+    }
     localWorkspace.ready = true;
   } catch (error) {
     localWorkspace.error = '本機儲存不可用，離線記錄與草稿恢復暫停：' + error.message;
@@ -27,8 +34,22 @@ async function initializeLocalWorkspace() {
   window.addEventListener('online', () => { void syncWorkspace(); });
   window.addEventListener('offline', () => { void renderWorkspaceQueue(); });
   // Leases left by a closed tab are recovered on foreground or the next bounded tick.
-  window.addEventListener('focus', () => { void syncWorkspace(); });
+  window.addEventListener('focus', () => { void syncWorkspace({ refresh: true }); });
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') void syncWorkspace({ refresh: true });
+  });
   setInterval(() => { if (document.visibilityState === 'visible') void syncWorkspace(); }, 30000);
+}
+
+function notifyWorkspaceCommit(account) {
+  try { localWorkspace.channel?.postMessage({ type: 'run-committed', account }); }
+  catch { /* Manual/foreground sync also reloads cloud data. */ }
+}
+
+function receiveWorkspaceCommit(message) {
+  if (message?.type !== 'run-committed' || !authToken || !navigator.onLine ||
+      !localWorkspace.controller?.account || message.account !== localWorkspace.controller.account) return;
+  void syncWorkspace({ refresh: true });
 }
 
 function activateLocalWorkspace() {
@@ -192,7 +213,7 @@ function setWorkspaceSyncState(message, busy = false) {
   button.textContent = busy ? '同步中…' : '立即同步';
 }
 
-async function syncWorkspace({ manual = false } = {}) {
+async function syncWorkspace({ manual = false, refresh = false } = {}) {
   const unavailable = !authToken ? '請先登入，再同步此帳號的跑步紀錄。'
     : !navigator.onLine ? '目前離線，尚未送出的跑步紀錄會保留在此裝置；請連線後再按立即同步。'
     : !localWorkspace.controller?.account ? localWorkspace.error || '本機工作區尚未就緒，請稍後重試；若持續發生，請重新整理頁面。' : '';
@@ -200,6 +221,7 @@ async function syncWorkspace({ manual = false } = {}) {
     if (manual) setWorkspaceSyncState(unavailable);
     return;
   }
+  localWorkspace.syncRefreshRequested ||= manual || refresh;
   if (localWorkspace.syncing) return localWorkspace.syncing;
   const pending = performWorkspaceSync(captureAuthSession());
   localWorkspace.syncing = pending;
@@ -221,9 +243,16 @@ async function performWorkspaceSync(session) {
         (queue.length > blocked ? '其餘紀錄等待重試，請確認網路與登入狀態；其他分頁正在同步時請稍候。' : '')
       : synced ? `已同步 ${synced} 筆跑步紀錄，目前沒有待同步資料。`
         : '目前沒有待同步的跑步紀錄。已儲存的資料不需要再按同步。';
-    if (synced) {
-      try { await refreshCoreData({ mutation: 'run' }); }
-      catch { message += ' 紀錄已送出，但畫面更新失敗，請重新整理頁面。'; }
+    if (synced || localWorkspace.syncRefreshRequested) {
+      try {
+        do {
+          localWorkspace.syncRefreshRequested = false;
+          await refreshCoreData({ mutation: 'run' });
+        } while (isCurrentAuthSession(session) && localWorkspace.syncRefreshRequested);
+        if (!synced) message += ' 已重新載入雲端資料。';
+      } catch {
+        message += synced ? ' 紀錄已送出，但畫面更新失敗，請重新整理頁面。' : ' 雲端資料載入失敗，請再按立即同步重試。';
+      }
     }
     if (isCurrentAuthSession(session)) setWorkspaceSyncState(message);
   } catch (error) {
@@ -325,7 +354,7 @@ registerFeatureReset('local-workspace', () => {
   localWorkspace.controller?.detach();
   localWorkspace.runDraftId = null; localWorkspace.consumedRunDraftId = null;
   localWorkspace.session = null; localWorkspace.account = null; localWorkspace.editors = {};
-  localWorkspace.syncing = null;
+  localWorkspace.syncing = null; localWorkspace.syncRefreshRequested = false;
   setWorkspaceSyncState('');
   localWorkspace.fresh.clear();
   document.getElementById('workspace-modal').classList.remove('active');

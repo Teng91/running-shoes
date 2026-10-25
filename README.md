@@ -8,7 +8,7 @@
 
 完整操作說明見 [使用指南：日常記錄、資料與同步、備份及清理本機資料](docs/user-guide.md)。
 
-要把雲端資料帶到本機版：在雲端「資料與同步」按「下載目前帳號資料 JSON」，再於電腦執行的本機版登入、選檔、預覽並確認匯入。「只新增」保留既有內容；「新增並更新同來源資料（v2）」可更新先前匯入的鞋款與跑步、檔案內月份調整、目標和月報，並保留額外資料及已刪除跑步。預覽會顯示接收網站／帳號與新增／更新筆數；不會覆寫整個資料庫，也不會刪除檔案未包含的資料。
+要把雲端資料帶到本機版：在雲端「資料與同步」按「下載目前帳號資料 JSON」，再於電腦執行的本機版登入、選檔、預覽並確認匯入。「只新增」保留既有內容；「新增並更新同來源資料（v2/v3）」可更新先前匯入的鞋款與跑步、檔案內月份調整、目標和月報，並保留額外資料及已刪除跑步。預覽會顯示接收網站／帳號與新增／更新筆數；不會覆寫整個資料庫，也不會刪除檔案未包含的資料。
 
 「立即同步」只重送此裝置尚未同步的新增跑步，連線儲存成功的資料不必再按同步。JSON 不含草稿與待同步紀錄，請先完成同步再下載。「清除此帳號的本機資料」清理的是瀏覽器暫存，不是本機版資料庫；不刪除伺服器資料，但會丟失此裝置尚未同步的紀錄。
 
@@ -82,7 +82,7 @@ running-shoes/
 │   │   ├── strava_imports.py # Strava 匯入 transaction 與配對驗證
 │   │   └── mileage.py    # 跑步、鞋款、月份彙總的交易式里程同步
 │   ├── audit_schema.py   # 同交易異動事件及資料 revision triggers
-│   ├── backup_contract.py # 有界 v1／v2 備份格式與參照驗證
+│   ├── backup_contract.py # 有界 v1／v2／v3 備份格式與參照驗證
 │   ├── migrations.py     # 有版本的 SQLite schema upgrade
 │   ├── observability.py  # Request ID 與不含敏感內容的結構化 HTTP log
 │   ├── rate_limits.py    # Auth／AI process 與 SQLite shared rate limits
@@ -674,7 +674,7 @@ schema 6 保持相容，不還原舊業務快照。
 
 ### 復原與同步身分（SPEC-033，v3.10.3）
 
-目前 v3.10.3 為 Asset 3.10.3／shell v38、schema 6、51 個 release assets。
+v3.10.3 使用 Asset 3.10.3／shell v38、schema 6、51 個 release assets。
 [SPEC-033](docs/specs/033-recovery-and-sync-identity.md) 補足刪除、復原與再次匯入的組合操作：
 同帳號舊備份不重建已刪跑步；明確復原後，原來源及舊 ID 的對應會跟隨復原紀錄，後續更新匯入仍可修改該筆資料。
 每次離線送出使用獨立租約，重新登入接手後不受舊請求的延遲結果影響。
@@ -684,6 +684,23 @@ schema 6 保持相容，不還原舊業務快照。
 本版無 schema migration，回滾可使用 v3.10.2 immutable image
 `registry.fly.io/running-shoes@sha256:bac44457f12adfde6473e9d9a973b330e1bf69eac7e44feb3fb6ed1f5a55429a`，
 不還原業務資料快照。發布驗證涵蓋 verify、40 組版面、雙引擎 CRUD／PWA、main/tag CI 及正式站匿名 release-check。
+
+### 來源復原搬移與跨分頁同步（SPEC-034，v3.10.4）
+
+目前 v3.10.4 為 Asset 3.10.4／shell v39、schema 6、51 個 release assets。
+[SPEC-034](docs/specs/034-portable-recovery-and-sync-refresh.md) 修正來源網站復原後再次搬移的重複跑步、浮點尾差造成的假更新，以及其他分頁送出後畫面未刷新的問題。
+
+新下載使用 **備份 JSON v3**，每筆跑步的 `aliases` 保留同一來源復原前的 ID；省略異動歷史仍保留這項來源身分。
+單檔最多 50,000 個別名，共用 20 MiB 限制，超限拒絕下載，不靜默裁切。別名須唯一且不能指向不同跑步；若既有對應已衝突，預覽會拒絕，不會自動刪除或合併資料。
+新版仍接受 v1/v2；v1 指紋沿用舊算法，避免升版後重建舊檔。舊 App 不接受 v3，請先更新接收端再匯入，不能手動刪除別名或改版本以繞過檢查。
+
+里程累積與比較統一兩位精度，既有儲存浮點尾差不會觸發無意義的版本更新。
+「立即同步」即使沒有待送出紀錄也會讀取雲端；回到前景或同帳號另一分頁成功送出時同樣刷新，保留未送出的輸入。
+支援 BroadcastChannel 的瀏覽器會接收跨分頁提交通知；通知不可用時，回到前景或按立即同步仍可刷新。通知期間又收到提交會補做一次讀取，舊帳號通知不影響目前帳號。
+
+無 schema migration。部署前驗證正式異地備份及隔離還原；回滾可部署 v3.10.3 image
+`registry.fly.io/running-shoes@sha256:5def65ac422062ac5a7e4c932d5d8dd4c76c5e1a184e46d11759d9781e4af690`。
+回滾後 v3 檔案需保留至接收端重新升級才能匯入，DB 對應仍相容，不還原舊業務快照。
 
 ### AI 開發規範與自動驗證
 
@@ -696,7 +713,7 @@ Playwright／Chromium／WebKit 齊全時，也會執行版面測試。
 避免每次停止都重跑。Hook 不會呼叫其他模型、外部 API，或傳送提示、diff、原始碼與測試輸出。
 GitHub Actions 仍會在 push／pull request 執行 `verify`，並以三個可獨立重跑的 browser jobs 執行完整版面矩陣、真實 CRUD E2E 與 PWA 升級／離線測試；Dependabot 每週檢查 Python 與 GitHub Actions 更新。
 
-本次驗證基線為 Python **528 passed**、前端回歸測試 **140 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
+本次驗證基線為 Python **541 passed**、前端回歸測試 **144 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
 版面檢查涵蓋 WebKit／Chromium、亮／暗模式與 10 組直橫向尺寸，共 40 組設定，檢查六個功能分頁、三個認證表單、圖表、全部彈窗、行內編輯、停用／錯誤及空資料狀態。
 
 主要表單、工具列與彈窗操作統一為 44px 控制項；桌面表格內的緊湊操作為 36px，手機至少 44px。

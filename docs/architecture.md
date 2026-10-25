@@ -608,3 +608,9 @@ restore controller 擁有 committed／refreshRequired／refreshing 與原操作�
 `run_identity.py` 集中 user-scoped 本機 tombstone 辨識與來源別名轉移。匯入計畫只把非 imported 的本機 delete audit 當同來源刪除證據；明確復原在同一業務交易內將全部來源別名轉到新 ID，並記錄原生舊 ID。history 與 import plan 不互相依賴。詳見 [ADR-0013](adr/0013-recovery-identities.md)。
 
 每次 queue claim 使用獨立 lease，舊請求無法解除重新登入後的新租約。`app-resources.js::refreshCoreData` 將核心資源錯誤轉成讀取失敗；匯入、同步及復原 bridge 共用。復原提交成功後保留完成身分，只允許重新讀取；session 變更使回呼失效。
+
+## SPEC-034：可攜來源與同步讀取
+
+[ADR-0014](adr/0014-portable-run-aliases.md) 定義 archive v3 的原生來源別名與跨分頁讀取。`run_identity.py::export_run_aliases` 在一致匯出快照中只讀取本人原生 source_id、仍存在跑步的別名，集合有界；backup_contract 驗證 graph，import plan 共用多別名匹配並拒絕歧義，executor 在原交易記錄全部來源鍵。v1/v2 指紋不含新增欄位，DB schema 6 不變。
+
+`mileage.py` SQL 累加以 round 保持兩位，query-free patch 比較正規化同一精度，無需重寫既有資料。workspace controller 注入 best-effort committed callback；DOM bridge 管理 BroadcastChannel 的帳號 partition 通知，手動／前景／相同帳號通知要求讀取。同步中合併刷新需求，讀取期間的新通知形成 trailing read；session 更換撤銷舊 UI 所有權。

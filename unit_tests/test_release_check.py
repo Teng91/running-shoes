@@ -34,7 +34,7 @@ def fixture_fetcher():
 
 def test_release_check_accepts_only_matching_complete_public_shell():
     result = release_check.check_release(fixture_fetcher())
-    assert result["version"] == "3.10.3"
+    assert result["version"] == "3.10.4"
     assert result["assets"] == 51
 
 
@@ -58,7 +58,7 @@ def test_release_check_fails_closed_on_broken_deployments(failure):
         if failure == "auth" and path.startswith("/api/runs/year-summary"):
             status = 200
         if failure == "version" and path == "/":
-            body = body.replace(b'content="3.10.3"', b'content="0.0.0"')
+            body = body.replace(b'content="3.10.4"', b'content="0.0.0"')
         if failure == "module-mime" and path.startswith("/runtime/feature-lifecycle.mjs"):
             headers = {"Content-Type": "text/html"}
         return status, headers, body
@@ -90,7 +90,7 @@ def test_browser_gate_failure_makes_the_release_command_fail(monkeypatch):
     import subprocess
 
     monkeypatch.setattr("sys.argv", ["release_check", "--base-url", "http://127.0.0.1:8000"])
-    monkeypatch.setattr(release_check, "check_release", lambda fetcher: {"version": "3.10.3", "cache": "test", "assets": 51})
+    monkeypatch.setattr(release_check, "check_release", lambda fetcher: {"version": "3.10.4", "cache": "test", "assets": 51})
     run = Mock(side_effect=subprocess.CalledProcessError(1, ["node", "release_browser.cjs"]))
     monkeypatch.setattr(release_check.subprocess, "run", run)
     assert release_check.main() == 1
