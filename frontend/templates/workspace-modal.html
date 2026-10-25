@@ -2,18 +2,26 @@
   <div class="modal workspace-modal">
     <h2 id="workspace-modal-title">資料與同步</h2>
     <p id="workspace-owner" class="workspace-help"></p>
-    <p class="workspace-help">平常新增或編輯成功後，資料已存到伺服器，不用再按同步。這裡用來處理離線新增的跑步、恢復編輯草稿、下載／合併帳號備份，以及查看異動歷史。</p>
+    <p class="workspace-help">平常新增或編輯成功後，資料就會存到雲端。這裡可處理離線跑步、草稿、備份和已刪資料復原。</p>
     <section aria-labelledby="queue-title">
-      <h3 id="queue-title">本機待同步跑步</h3>
-      <p class="workspace-help">只有「新增跑步」支援離線送出；這些紀錄暫存於此裝置，尚未同步不計入統計，也不包含在備份 JSON。連線並開啟 App／回到前景會自動重試；「立即同步」可手動重試，不會送出未儲存的編輯草稿。關閉 App 後不保證背景同步；清除網站資料或瀏覽器回收空間會使本機紀錄遺失。</p>
-      <button id="workspace-sync" class="btn btn-edit" onclick="syncWorkspace({ manual: true })" aria-describedby="workspace-sync-status">立即同步</button>
+      <h3 id="queue-title">跑步同步</h3>
+      <p class="workspace-help">有待送出的跑步時，按下方按鈕送到雲端；清單為空時可用它重新載入雲端資料。</p>
+      <button id="workspace-sync" class="btn btn-edit" onclick="syncWorkspace({ manual: true })" aria-describedby="workspace-sync-status">更新雲端資料</button>
       <p id="workspace-sync-status" role="status" aria-live="polite"></p>
       <div id="workspace-queue" role="status" aria-live="polite"></div>
+      <details class="workspace-help">
+        <summary>離線時如何記錄</summary>
+        <p>只有新增跑步支援離線。紀錄會先保存在這台裝置，連線後自動送出；送出前不會計入雲端統計，也不包含在備份 JSON。清除網站資料或更換裝置前，請先確認沒有待送出的跑步。</p>
+      </details>
     </section>
-    <section aria-labelledby="drafts-title"><h3 id="drafts-title">未完成的編輯草稿</h3><p class="workspace-help">草稿只是保留輸入，尚未修改伺服器資料。按「繼續編輯」檢查後仍須儲存；「捨棄草稿」只移除本機輸入。新增跑步、月跑量與目標的表單輸入會自動帶回原表單。</p><div id="workspace-drafts"></div></section>
-    <section aria-labelledby="restore-title">
-      <h3 id="restore-title">帳號資料下載與匯入</h3>
-      <p class="workspace-help">JSON 是目前帳號已存到伺服器的資料副本，包含鞋款、跑步、月跑量、目標、月報、Strava 匯入摘要與異動歷史；不含密碼、本機草稿或待同步紀錄。請先同步完成再下載，將檔案保存在自己的安全位置。</p>
+    <details class="workspace-section">
+      <summary id="drafts-title">未完成的編輯草稿</summary>
+      <p class="workspace-help">草稿只是保留輸入，尚未修改雲端資料。繼續編輯後仍需按儲存；捨棄只移除草稿。</p>
+      <div id="workspace-drafts"></div>
+    </details>
+    <details class="workspace-section">
+      <summary id="restore-title">備份／匯入帳號資料</summary>
+      <p class="workspace-help">JSON 是目前帳號已存到伺服器的資料副本；不含密碼、本機草稿或待同步跑步。請先確認沒有待送出的跑步，再下載並將檔案保存在安全位置。</p>
       <p class="workspace-help">搬到本機版：① 在雲端下載 JSON。② 開啟電腦上執行的本機版並登入。③ 在本機版選檔、選匯入模式、檢查預覽，再按「確認匯入」。資料只寫入上方顯示的網站／帳號，不會覆寫整個資料庫。選檔預覽尚未寫入；預覽後有新異動時需重新預覽。</p>
       <label><input id="workspace-export-history" type="checkbox" checked> 下載時包含異動歷史（最多 50,000 筆）</label>
       <button id="workspace-export" class="btn btn-edit" onclick="exportAccountData(true)">下載目前帳號資料 JSON</button>
@@ -25,15 +33,19 @@
       <button class="btn btn-edit" onclick="previewAccountRestore()">重新預覽</button>
       <button id="restore-refresh" class="btn btn-edit" hidden onclick="refreshAccountRestoreView()">重新載入資料</button>
       <button id="restore-apply" class="btn btn-primary" disabled onclick="applyAccountRestore()">確認匯入</button>
-    </section>
-    <section aria-labelledby="history-title"><h3 id="history-title">異動歷史與誤刪復原</h3>
+    </details>
+    <details class="workspace-section">
+      <summary id="history-title">異動紀錄與誤刪復原</summary>
       <p class="workspace-help">查看已儲存的資料異動；可復原的刪除會顯示「復原誤刪」，需連線操作。這不是任意版本回溯，從備份帶入的歷史僅供查看。</p>
       <button class="btn btn-edit" onclick="loadWorkspaceHistory()">重新整理歷史</button>
       <div id="workspace-history"></div><button id="history-more" class="btn btn-edit" hidden onclick="loadWorkspaceHistory(true)">更多異動</button>
-    </section>
-    <p class="workspace-help">「清除此帳號的本機資料」只清除此瀏覽器／此裝置中，這個帳號的草稿、最近資料快取與待同步紀錄；不刪除伺服器資料或已下載的 JSON。尚未同步的紀錄會遺失，請先確認上方沒有待同步資料；共用裝置要清理時再使用。</p>
+    </details>
+    <details class="workspace-section">
+      <summary>清除此裝置的本機資料</summary>
+      <p class="workspace-help">只清除此瀏覽器中目前帳號的草稿、快取及待同步跑步，不會刪除雲端資料。尚未同步的跑步會遺失。</p>
+      <button class="btn btn-delete" onclick="clearLocalWorkspace()">清除此帳號的本機資料</button>
+    </details>
     <div class="modal-actions">
-      <div class="modal-actions-secondary"><button class="btn btn-delete" onclick="clearLocalWorkspace()">清除此帳號的本機資料</button></div>
       <div class="modal-actions-primary"><button class="btn btn-cancel" onclick="closeWorkspaceModal()">關閉</button></div>
     </div>
   </div>

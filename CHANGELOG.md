@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+- 資料與同步改為依狀態顯示操作；草稿、備份、歷史與本機清理區預設收合。
+- Asset 3.10.5／shell v40，schema 6 不變。
+
 本專案的重要變更依 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.1.0/) 分類，版本號遵循 [Semantic Versioning](https://semver.org/lang/zh-TW/)。完整部署說明另見各版本的 GitHub Release。
 
 ## [3.10.4] - 2026-10-25
