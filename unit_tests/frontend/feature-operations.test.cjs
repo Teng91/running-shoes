@@ -98,8 +98,10 @@ test('SPEC-023 shoe selectors distinguish duplicate models and escape nicknames'
   });
   vm.runInContext(extract('populateRunShoeSelects'), context); context.populateRunShoeSelects();
   const options = elements['run-shoe'].innerHTML;
-  assert.match(options, /&lt;new&gt; · Same Model · 2026-01-01 · #7/);
-  assert.match(options, /Same Model · 2026-02-01 · #8/); assert.match(options, /Same Model · 2026-01-01 · #9/); assert.doesNotMatch(options, /<new>/);
+  assert.match(options, /value="7">&lt;new&gt; · Same Model · 2026-01-01</);
+  assert.match(options, /value="8">Same Model · 2026-02-01</);
+  assert.match(options, /value="9">Same Model · 2026-01-01</);
+  assert.doesNotMatch(options, /#(?:7|8|9)|<new>/);
 });
 
 function refreshContext() {

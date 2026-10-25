@@ -142,21 +142,20 @@ test('SPEC-017 native lifecycle keeps cleaning after errors and rejects duplicat
   assert.doesNotMatch(extract('clearAuth'), /shoeModal|report-content|stravaPreview|resetAgentChat/);
 });
 
-test('SPEC-017 PWA update notification never refreshes a draft without confirmation', () => {
+test('SPEC-017 PWA automatically reloads when a newer shell takes control', () => {
   const nodes = elements(), handlers = {}; let reloads = 0;
   const context = vm.createContext({ document: { querySelector: () => ({ content: 'test-old' }), getElementById: id => nodes[id], readyState: 'loading' },
     navigator: { serviceWorker: { addEventListener: (name, fn) => handlers[name] = fn } },
-    window: { addEventListener() {}, location: { reload: () => reloads++ } }, confirm: () => false,
+    window: { addEventListener() {}, location: { reload: () => reloads++ } },
   });
-  nodes['app-update-notice'].hidden = true;
-  vm.runInContext(['initializeAppUpdates', 'applyAppUpdate'].map(extract).join('\n'), context);
+  vm.runInContext(extract('initializeAppUpdates'), context);
   context.initializeAppUpdates();
   handlers.message({ data: { type: 'SHELL_VERSION', version: 'test-old' } });
-  assert.equal(nodes['app-update-notice'].hidden, true);
+  assert.equal(reloads, 0);
   handlers.message({ data: { type: 'SHELL_VERSION', version: 'test-new' } });
-  assert.equal(nodes['app-update-notice'].hidden, false); assert.equal(reloads, 0);
-  context.applyAppUpdate(); assert.equal(reloads, 0);
-  context.confirm = () => true; context.applyAppUpdate(); assert.equal(reloads, 1);
+  assert.equal(reloads, 1);
+  handlers.message({ data: { type: 'SHELL_VERSION', version: 'test-new' } });
+  assert.equal(reloads, 1, 'a detected update triggers at most one reload');
 });
 
 test('SPEC-017 paged run cards and calendar use the complete backend summary', () => {
