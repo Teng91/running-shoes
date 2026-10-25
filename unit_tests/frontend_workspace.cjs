@@ -67,6 +67,10 @@ module.exports = async function checkWorkspace(browser, baseUrl) {
     }
     const errors = []; page.on('pageerror', error => errors.push(error.message));
     page.on('dialog', dialog => dialog.accept());
+    async function openWorkspaceSection(id) {
+      const summary = page.locator(`#${id}`);
+      if (!await summary.evaluate(element => element.parentElement.open)) await summary.click();
+    }
     await page.goto(browserUrl, { waitUntil: 'networkidle' });
     await page.waitForFunction(() => localWorkspace.controller?.account && shoes.length === 1);
     await page.evaluate(async () => { await navigator.serviceWorker.ready; });
@@ -84,8 +88,9 @@ module.exports = async function checkWorkspace(browser, baseUrl) {
     await page.reload({ waitUntil: 'networkidle' });
     await page.waitForFunction(() => document.getElementById('run-km').value === '5' && document.getElementById('add-km').value === '180');
     await page.getByRole('button', { name: '資料與同步', exact: true }).click();
-    await page.getByRole('button', { name: '立即同步', exact: true }).click();
-    await page.waitForFunction(() => document.getElementById('workspace-sync-status').textContent.includes('目前沒有待同步'));
+    await page.getByRole('button', { name: '更新雲端資料', exact: true }).click();
+    await page.waitForFunction(() => document.getElementById('workspace-sync-status').textContent.includes('沒有待送跑步'));
+    await openWorkspaceSection('drafts-title');
     await page.locator('#workspace-drafts').getByRole('button', { name: /繼續編輯 鞋款/ }).click();
     assert.equal(await page.locator('#f-nickname').inputValue(), 'Unfinished nickname');
     await page.evaluate(() => shoeModal.close());
@@ -114,8 +119,8 @@ module.exports = async function checkWorkspace(browser, baseUrl) {
     assert.equal(failedProbe, true, 'authenticated API is not served from shell cache');
     if (browser.browserType().name() === 'webkit') assert.ok(disconnectedApi > 0);
     await page.getByRole('button', { name: '資料與同步', exact: true }).click();
-    await page.getByRole('button', { name: '立即同步', exact: true }).click();
-    assert.match(await page.locator('#workspace-sync-status').textContent(), /目前離線/);
+    await page.waitForFunction(() => document.getElementById('workspace-sync').disabled && document.getElementById('workspace-sync').textContent === '等待網路連線');
+    assert.match(await page.locator('#workspace-status').textContent(), /跑步留在這台裝置，等待連線後送到雲端/);
     await page.getByRole('button', { name: '關閉', exact: true }).click();
     failRefreshReads = true;
     await setOffline(false);
@@ -134,6 +139,7 @@ module.exports = async function checkWorkspace(browser, baseUrl) {
     await page.locator('#run-modal').waitFor({ state: 'hidden' });
     await page.waitForFunction(async () => !Object.keys((await localWorkspace.controller.read('drafts'))[0]?.value.editors || {}).some(key => key.startsWith('run:')), null);
     await page.getByRole('button', { name: '資料與同步', exact: true }).click();
+    await openWorkspaceSection('history-title');
     failRefreshReads = true;
     await page.locator('#workspace-history').getByRole('button', { name: '復原誤刪' }).click();
     await page.locator('#workspace-history').getByRole('button', { name: '重新載入資料' }).waitFor();
@@ -142,6 +148,7 @@ module.exports = async function checkWorkspace(browser, baseUrl) {
     await page.waitForFunction(() => document.getElementById('workspace-history').textContent.includes('已復原'));
     runs = await api(a.token, '/runs'); assert.equal(runs.length, 1); assert.notEqual(runs[0].id, deletedRunId);
     assert.equal((await api(a.token, '/shoes/active'))[0].mileage, 25);
+    await openWorkspaceSection('restore-title');
     const downloaded = page.waitForEvent('download');
     await page.locator('#workspace-export').click();
     const download = await downloaded;
@@ -160,6 +167,7 @@ module.exports = async function checkWorkspace(browser, baseUrl) {
     await page.waitForFunction(() => document.getElementById('workspace-export-status').textContent.includes('查看下載項目'));
     await page.evaluate(() => closeWorkspaceModal()); await login(b);
     await page.getByRole('button', { name: '資料與同步', exact: true }).click();
+    await openWorkspaceSection('restore-title');
     const file = { name: 'synthetic-backup.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(backup)) };
     await page.locator('#restore-file').setInputFiles(file);
     await page.waitForFunction(() => !document.getElementById('restore-apply').disabled);
@@ -244,6 +252,7 @@ module.exports = async function checkWorkspace(browser, baseUrl) {
       localWorkspace.controller = wrapped;
       window.__finishClear = () => { release(); localWorkspace.controller = original; };
     });
+    await page.locator('summary').filter({ hasText: '清除此裝置的本機資料' }).click();
     await page.getByRole('button', { name: '清除此帳號的本機資料', exact: true }).click();
     await page.waitForFunction(() => window.__clearStarted);
     await page.getByRole('button', { name: '關閉', exact: true }).click();
