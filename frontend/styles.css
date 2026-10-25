@@ -437,6 +437,9 @@ td.editable { padding: 10px 8px; }
 /* Account recovery and local sync share the established modal controls. */
 .workspace-modal { width: 680px; max-height: 88dvh; overflow-y: auto; }
 .workspace-modal section { margin: 20px 0; }
+.workspace-modal .workspace-section { margin: 14px 0; border-top: 1px solid var(--border); padding-top: 12px; }
+.workspace-modal details > summary { cursor: pointer; font-weight: 600; }
+.workspace-modal .workspace-section[open] > summary { margin-bottom: 10px; }
 .workspace-help { color: var(--text-dim); font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
 .workspace-item { border-bottom: 1px solid var(--border); padding: 12px 0; overflow-wrap: anywhere; }
 .workspace-item p { white-space: pre-wrap; font-size: 13px; }
