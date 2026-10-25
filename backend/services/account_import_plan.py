@@ -54,7 +54,11 @@ def build_import_plan(db: Session, uid: int, backup: AccountBackup, mode: Restor
     targets = {}
     claimed: set[int] = set()
     for item in backup.runs:
-        target = mappings.get(("run", str(item.id)))
+        candidates = {mappings[("run", str(key))] for key in [item.id, *item.aliases]
+                      if ("run", str(key)) in mappings}
+        if len(candidates) > 1:
+            raise Conflict("跑步來源別名對應不同紀錄，請先核對資料；不會自動合併")
+        target = next(iter(candidates), None)
         if target is None and item.strava_id:
             target = strava.get(item.strava_id)
         if mode == "update" and target is not None and target in runs:

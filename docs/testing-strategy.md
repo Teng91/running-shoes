@@ -218,3 +218,7 @@ SPEC-032：合成資料驗證 50,000／50,001 筆歷史邊界、UTF-8 位元組�
 ## SPEC-033 復原與同步組合流程
 
 [規格與具名案例](specs/033-recovery-and-sync-identity.md) 覆蓋同帳號舊檔保留刪除、多次復原後外部及原生別名、跨帳號隔離、匯入歷史不可偽造本機刪除、commit 失敗原子 rollback，以及重新登入接手租約與已提交操作的讀取重試。雙引擎 workspace E2E 在 origin 注入核心 GET 失敗，驗證離線同步與刪除復原的成功提示及純讀取重試。
+
+## SPEC-034 可攜來源與跨分頁同步
+
+[規格與具名案例](specs/034-portable-recovery-and-sync-refresh.md) 驗證來源及接收者連續復原、省略歷史仍攜帶來源鍵、tombstone、別名衝突／全域容量／格式拒絕、v1/v2 指紋相容，以及小數累積與 legacy Float 尾差的 no-op 版本／audit 不變。Node 覆蓋手動空佇列讀取、通知失敗不重排已確認操作、刷新中的新通知及外帳號忽略；雙引擎 workspace E2E 操作 v3 來源復原檔及真實 BroadcastChannel／IndexedDB 多分頁，確認雲端讀取與表單草稿保留。

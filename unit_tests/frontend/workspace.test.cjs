@@ -580,3 +580,47 @@ test('SPEC-033 deletion recovery retries reads after a committed write', async (
   fail = false; await button.onclick();
   assert.equal(posts, 1); assert.equal(reads, 2);
 });
+
+test('SPEC-034 manual empty sync refreshes cloud and rejects foreign notifications', async () => {
+  const fixture = workspaceSyncContext(), { context, elements } = fixture;
+  await context.syncWorkspace({ manual: true });
+  assert.equal(fixture.loads(), 1); assert.match(elements['workspace-sync-status'].textContent, /已重新載入雲端/);
+  context.receiveWorkspaceCommit({ type: 'run-committed', account: 'synthetic-B' });
+  context.receiveWorkspaceCommit({ type: 'unknown', account: 'synthetic-A' });
+  await new Promise(resolve => setImmediate(resolve)); assert.equal(fixture.loads(), 1);
+  context.receiveWorkspaceCommit({ type: 'run-committed', account: 'synthetic-A' });
+  await new Promise(resolve => setImmediate(resolve)); assert.equal(fixture.loads(), 2);
+  context.loadData = async () => { throw Error('offline read'); };
+  await context.syncWorkspace({ manual: true });
+  assert.match(elements['workspace-sync-status'].textContent, /雲端資料載入失敗.*立即同步重試/);
+});
+
+test('SPEC-034 commit notification failure never requeues a confirmed write', async () => {
+  const { createWorkspaceController } = await import('../../frontend/runtime/workspace-controller.mjs');
+  const storage = memoryStore(), notifications = [], session = {};
+  const controller = createWorkspaceController({ storage, clock: () => 1, newKey: () => 'notification-lease-key',
+    session: { capture: () => session, current: value => value === session }, send: async () => {},
+    committed: account => { notifications.push(account); throw Error('channel closed'); } });
+  await controller.attach('A'); await controller.enqueue({ km: 5 }, 'notification-operation');
+  assert.deepEqual(await controller.flush(), { synced: 1 });
+  assert.deepEqual(await controller.read('queue'), []); assert.deepEqual(notifications, ['A']);
+});
+
+test('SPEC-034 manual refresh joins an automatic empty queue check', async () => {
+  const fixture = workspaceSyncContext(), { context, controller } = fixture;
+  const gate = deferred(); controller.flush = () => gate.promise;
+  const automatic = context.syncWorkspace(); const manual = context.syncWorkspace({ manual: true });
+  gate.resolve({ synced: 0 }); await Promise.all([automatic, manual]);
+  assert.equal(fixture.loads(), 1);
+});
+
+test('SPEC-034 a commit during cloud refresh schedules a fresh trailing read', async () => {
+  const fixture = workspaceSyncContext(), { context } = fixture;
+  const gate = deferred(); let reads = 0;
+  context.loadData = async () => { if (++reads === 1) await gate.promise; };
+  const pending = context.syncWorkspace({ manual: true });
+  await new Promise(resolve => setImmediate(resolve));
+  context.receiveWorkspaceCommit({ type: 'run-committed', account: 'synthetic-A' });
+  gate.resolve(); await pending;
+  assert.equal(reads, 2, 'a read begun before another commit cannot acknowledge that commit');
+});

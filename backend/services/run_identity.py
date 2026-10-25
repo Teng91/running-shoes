@@ -4,9 +4,11 @@ The caller owns the transaction. Imported audit rows are display-only and cannot
 establish a local deletion identity.
 """
 
+from sqlalchemy import String, cast
 from sqlalchemy.orm import Session
 
 from backend import models
+from backend.services.errors import Invalid
 
 
 def add_local_tombstones(db: Session, user_id: int, mappings: dict[tuple[str, str], int]) -> None:
@@ -29,3 +31,19 @@ def relink_recovered_run(db: Session, user_id: int, old_id: int, new_id: int) ->
         db.add(models.RestoreMapping(user_id=user_id, source_id=source, entity="run", source_key=str(old_id), target_id=new_id))
     else:
         alias.target_id = new_id
+
+
+def export_run_aliases(db: Session, user_id: int, source: str, limit: int) -> dict[int, list[int]]:
+    """Export only this account's native lineage for runs still in the archive."""
+    rows = db.query(models.RestoreMapping.target_id, models.RestoreMapping.source_key).join(
+        models.Run, models.Run.id == models.RestoreMapping.target_id,
+    ).filter(models.RestoreMapping.user_id == user_id, models.Run.user_id == user_id,
+             models.RestoreMapping.source_id == source, models.RestoreMapping.entity == "run",
+             models.RestoreMapping.source_key != cast(models.RestoreMapping.target_id, String)
+    ).order_by(models.RestoreMapping.target_id, models.RestoreMapping.source_key).limit(limit + 1)
+    result: dict[int, list[int]] = {}
+    for count, (target, key) in enumerate(rows.yield_per(100)):
+        if count == limit or not key.isascii() or not key.isdecimal() or int(key) <= 0:
+            raise Invalid("跑步來源別名超過備份容量或格式不正確，請使用管理員完整資料庫備份")
+        result.setdefault(target, []).append(int(key))
+    return result

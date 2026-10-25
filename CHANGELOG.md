@@ -2,6 +2,17 @@
 
 本專案的重要變更依 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.1.0/) 分類，版本號遵循 [Semantic Versioning](https://semver.org/lang/zh-TW/)。完整部署說明另見各版本的 GitHub Release。
 
+## [3.10.4] - 2026-10-25
+
+### Fixed
+- 來源網站復原手動跑步後再搬移，保留同一紀錄身分，不再重複計算跑量。
+- 相同小數里程備份不因浮點尾差誤判更新；新的累積值保持兩位精度。
+- 手動同步、前景與另一分頁提交後重新讀取雲端，保持未送出輸入與帳號隔離。
+
+### Changed
+- 帳號下載使用 archive v3，附有界、原生來源的跑步 aliases；仍讀取 v1/v2 並保留舊指紋。舊 App 需更新才能匯入 v3。
+- Asset 3.10.4／shell v39，schema 6 不變。
+
 ## [3.10.3] - 2026-10-25
 
 ### Fixed

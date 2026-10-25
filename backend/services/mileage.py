@@ -38,7 +38,7 @@ def apply_run_mileage_deltas(
                 models.Shoe.version: models.Shoe.version + 1,
                 models.Shoe.mileage: func.max(
                     0,
-                    func.coalesce(models.Shoe.mileage, 0) + round(delta, 2),
+                    func.round(func.coalesce(models.Shoe.mileage, 0) + round(delta, 2), 2),
                 ),
             },
             synchronize_session=False,
@@ -62,7 +62,7 @@ def apply_run_mileage_deltas(
                 set_={
                     "km": func.max(
                         0,
-                        func.coalesce(models.MonthlyMileage.km, 0) + rounded_delta,
+                        func.round(func.coalesce(models.MonthlyMileage.km, 0) + rounded_delta, 2),
                     ),
                     "version": models.MonthlyMileage.version + 1,
                 },
@@ -78,7 +78,7 @@ def apply_run_mileage_deltas(
                     models.MonthlyMileage.version: models.MonthlyMileage.version + 1,
                     models.MonthlyMileage.km: func.max(
                         0,
-                        func.coalesce(models.MonthlyMileage.km, 0) + rounded_delta,
+                        func.round(func.coalesce(models.MonthlyMileage.km, 0) + rounded_delta, 2),
                     ),
                 },
                 synchronize_session=False,

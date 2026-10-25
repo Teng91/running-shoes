@@ -72,7 +72,8 @@ def execute_import(db: Session, uid: int, backup: AccountBackup, config: Setting
                 values["shoe_id"] = shoes[values["shoe_id"]]
             _update_fields(plan.runs[target], values)
             db.flush()
-        _remember(db, plan, "run", run_item.id, target)
+        for source_key in [run_item.id, *run_item.aliases]:
+            _remember(db, plan, "run", source_key, target)
     if not update_existing:
         apply_run_mileage_deltas(db, uid, deltas, 1)
         db.expire_all()
