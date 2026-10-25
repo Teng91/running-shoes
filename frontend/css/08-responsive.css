@@ -102,5 +102,4 @@ input::-webkit-datetime-edit { padding: 0; }
 [hidden] { display: none !important; }
 body.dialog-open { overflow: hidden; }
 .app-version { color: var(--text-dim); font-size: 11px; text-align: right; margin-bottom: 8px; }
-#app-update-notice { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; max-width: calc(100% - 32px); padding: 12px; margin: 12px auto; border: 1px solid var(--accent); border-radius: 10px; background: var(--card); }
 #run-paging { justify-content: flex-end; margin-top: 12px; }

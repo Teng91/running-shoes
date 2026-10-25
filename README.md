@@ -685,6 +685,10 @@ v3.10.3 使用 Asset 3.10.3／shell v38、schema 6、51 個 release assets。
 `registry.fly.io/running-shoes@sha256:bac44457f12adfde6473e9d9a973b330e1bf69eac7e44feb3fb6ed1f5a55429a`，
 不還原業務資料快照。發布驗證涵蓋 verify、40 組版面、雙引擎 CRUD／PWA、main/tag CI 及正式站匿名 release-check。
 
+### 穩定測試版（v4.0.0）
+
+目前上線測試的穩定版，預期不再特別調整。PWA 在部署新版後會自動載入最新版；跑步紀錄和鞋款選單不再顯示內部數字編號。
+
 ### 資料與同步操作簡化（SPEC-035，v3.10.5）
 
 目前前端使用 Asset 3.10.5／shell v40、schema 6。同步區依待送跑步及網路狀態顯示動作；草稿、備份／匯入、歷史和本機清理預設收合。
