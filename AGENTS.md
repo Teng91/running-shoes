@@ -23,7 +23,7 @@
 - `backend/report_llm.py`, `backend/report_protocol.py`: model and SSE adapters; neither owns persistence.
 - `backend/services/run_requests.py`: user-scoped transactional run-creation receipts; operation keys never replace authentication.
 - `backend/audit_schema.py`: same-transaction domain audit and revision triggers; never audit credentials.
-- `backend/backup_contract.py`: bounded, credential-free v1/v2 account archives.
+- `backend/backup_contract.py`: bounded, credential-free v1/v2/v3 account archives.
 - `backend/services/operations.py`: operation identities, expected versions, transactional receipts.
 - `backend/services/account_restore.py`: user-bound preview, source mappings and atomic non-destructive merges.
 - `backend/services/account_import_plan.py`: user-scoped source matching and shared import previews/plans.

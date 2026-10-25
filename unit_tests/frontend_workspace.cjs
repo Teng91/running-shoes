@@ -219,6 +219,20 @@ module.exports = async function checkWorkspace(browser, baseUrl) {
     await page.getByText('資料匯入完成，同來源資料已更新，額外資料已保留。', { exact: true }).waitFor();
     assert.deepEqual((await api(b.token, '/shoes/active')).map(row => [row.id, row.version, row.mileage]), targetShoes.map(row => [row.id, row.version, row.mileage]));
     assert.deepEqual((await api(b.token, '/runs')).map(row => [row.id, row.version]), targetRuns.map(row => [row.id, row.version]));
+    // The source recovers its own run before sending the next archive.
+    const cloudRun = (await api(a.token, '/runs'))[0];
+    await api(a.token, '/runs/' + cloudRun.id + '?expected_version=' + cloudRun.version, undefined, 'DELETE');
+    const cloudDeleted = (await api(a.token, '/history')).rows.find(row => row.entity === 'runs' && row.entity_id === cloudRun.id && row.action === 'delete');
+    await api(a.token, '/operations', { operation_id: 'portable-recovery-' + suffix, kind: 'history.restore', entity_id: cloudDeleted.id });
+    const recoveredArchive = await api(a.token, '/export/account?include_history=false');
+    assert.equal(recoveredArchive.version, 3);
+    assert.ok(recoveredArchive.runs[0].aliases.includes(cloudRun.id));
+    await page.locator('#restore-file').setInputFiles({ ...file, buffer: Buffer.from(JSON.stringify(recoveredArchive)) });
+    await page.waitForFunction(() => !document.getElementById('restore-apply').disabled);
+    assert.match(await page.locator('#restore-preview').textContent(), /新增 0 雙鞋、0 筆跑步/);
+    await page.locator('#restore-apply').click();
+    await page.getByText('資料匯入完成，同來源資料已更新，額外資料已保留。', { exact: true }).waitFor();
+    assert.equal((await api(b.token, '/runs')).length, 1, 'source recovery keeps the receiver run identity');
     await page.evaluate(() => {
       const original = localWorkspace.controller;
       let release;
@@ -238,6 +252,32 @@ module.exports = async function checkWorkspace(browser, baseUrl) {
     await page.locator('#run-km').fill('42');
     await page.evaluate(async () => { window.__finishClear(); await new Promise(requestAnimationFrame); });
     assert.equal(await page.locator('#run-km').inputValue(), '42', 'old account clear cannot erase new account input');
+    // Real BroadcastChannel between two tabs; only the second tab consumes IDB.
+    const otherPage = await context.newPage();
+    await otherPage.goto(browserUrl, { waitUntil: 'networkidle' });
+    await otherPage.waitForFunction(() => localWorkspace.controller?.account && shoes.length === 1);
+    const queuedIdentity = 'cross-tab-' + suffix;
+    const date = await page.evaluate(() => localDateISO());
+    await page.evaluate(async ({ date, shoeId, identity }) => {
+      window.__originalQueueController = localWorkspace.controller;
+      const wrapped = { ...localWorkspace.controller, flush: async () => ({ synced: 0 }) };
+      Object.defineProperty(wrapped, 'account', { get: () => window.__originalQueueController.account });
+      localWorkspace.controller = wrapped;
+      await localWorkspace.controller.enqueue({ date, km: 1.23, shoe_id: shoeId }, identity);
+    }, { date, shoeId: shoe.id, identity: queuedIdentity });
+    await otherPage.evaluate(() => localWorkspace.controller.flush());
+    await page.waitForFunction(() => runController.state.rows.some(row => row.km === 1.23));
+    assert.equal(await page.locator('#run-km').inputValue(), '42', 'cross-tab refresh preserves unsent input');
+    const manualRun = await api(a.token, '/runs', { date, km: 1.24, shoe_id: shoe.id });
+    await page.evaluate(() => syncWorkspace({ manual: true }));
+    assert.equal(await page.evaluate(id => runController.state.rows.some(row => row.id === id), manualRun.id), true, 'manual empty sync still reloads cloud');
+    await page.bringToFront();
+    const foregroundRun = await api(a.token, '/runs', { date, km: 1.25, shoe_id: shoe.id });
+    await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+    await page.waitForFunction(id => runController.state.rows.some(row => row.id === id), foregroundRun.id);
+    assert.equal(await page.locator('#run-km').inputValue(), '42');
+    await page.evaluate(() => { localWorkspace.controller = window.__originalQueueController; });
+    await otherPage.close();
     assert.deepEqual(errors, []);
     console.log(`PASS ${browser.browserType().name()} SPEC-027: durable drafts, account isolation, offline restart/sync, recovery and deduplicated restore`);
   } catch (error) { await saveFailure(context, page, 'workspace', error); throw error; }

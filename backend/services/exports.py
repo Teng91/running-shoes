@@ -10,9 +10,10 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from backend import models
-from backend.backup_contract import ARCHIVE_LIMITS, ArchiveBudget, validate_export
+from backend.backup_contract import ARCHIVE_LIMITS, MAX_RUN_ALIASES, ArchiveBudget, validate_export
 from backend.exporting import export_filename, generate_shoe_rows
 from backend.services.errors import Invalid
+from backend.services.run_identity import export_run_aliases
 
 
 class NoExportRowsError(Exception):
@@ -67,14 +68,15 @@ def _account_export_snapshot(db: Session, user: models.User, *, now: datetime | 
     goal = db.query(models.RunningGoal).filter(
         models.RunningGoal.user_id == user.id
     ).first()
+    aliases = export_run_aliases(db, user.id, user.backup_id, MAX_RUN_ALIASES)
     payload = {
         "format": "running-shoes-account-backup",
-        "version": 2,
+        "version": 3,
         "source_id": user.backup_id,
         "exported_at": exported_at.isoformat(),
         "username": user.username,
         "shoes": rows(models.Shoe, "shoes", _serialize_shoe),
-        "runs": rows(models.Run, "runs", _serialize_run),
+        "runs": rows(models.Run, "runs", lambda run: {**_serialize_run(run), "aliases": aliases.get(run.id, [])}),
         "monthly_mileages": rows(models.MonthlyMileage, "monthly_mileages", _serialize_month),
         "running_goal": _serialize_goal(goal),
         "monthly_reports": rows(models.MonthlyReport, "monthly_reports", _serialize_report),

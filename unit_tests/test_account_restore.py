@@ -761,3 +761,163 @@ def test_recovery_source_aliases_roll_back_with_failed_commit(workspace, monkeyp
         assert db.query(models.Run).filter_by(user_id=1).count() == 0
         assert not db.get(models.AuditEvent, event_id).restored
         assert db.query(models.RestoreMapping).filter_by(user_id=1, entity='run').one().target_id == old_id
+
+
+def test_portable_source_recovery_aliases_roundtrip(workspace):
+    from backend import schemas
+    from backend.services import history, runs
+    with workspace.sessions() as db:
+        shoe = add_shoe(db)
+        add_run(db, shoe.id)
+        def export(uid):
+            return exports.build_account_export(db, db.get(models.User, uid), include_history=False)[0]
+        def apply(payload, key):
+            preview = account_restore.preview_restore(db, 2, json.dumps(payload).encode(), workspace.config, 'update')
+            account_restore.apply_restore(db, 2, preview['token'], key, workspace.config)
+            db.expire_all()
+            return preview['summary']
+        def recover(uid):
+            row = db.query(models.Run).filter_by(user_id=uid).one()
+            old_id = row.id
+            runs.delete_run(db, uid, old_id)
+            event = db.query(models.AuditEvent).filter_by(user_id=uid, entity='runs', action='delete', imported=False, restored=False).one()
+            history.restore_deleted(db, uid, event.id, workspace.config)
+            return old_id
+        original = export(1)
+        assert original['version'] == 3
+        apply(original, 'portable-first-import')
+        source_old = recover(1)
+        restored = export(1)
+        assert restored['runs'][0]['aliases'] == [source_old] and restored['history'] == []
+        summary = apply(restored, 'portable-restored-import')
+        assert summary['new_runs'] == summary['updated_runs'] == 0
+        assert db.query(models.Run).filter_by(user_id=2).count() == 1
+        target_old = recover(2)
+        target_archive = export(2)
+        assert target_archive['runs'][0]['aliases'] == [target_old], 'never export another source/account namespace'
+        source = db.query(models.Run).filter_by(user_id=1).one()
+        runs.update_run(db, 1, source.id, schemas.RunUpdate(km=7))
+        source_second = recover(1)
+        newer = export(1)
+        assert set(newer['runs'][0]['aliases']) == {source_old, source_second}
+        summary = apply(newer, 'portable-second-recovery')
+        assert summary['new_runs'] == 0 and summary['updated_runs'] == 1
+        assert db.query(models.Run).filter_by(user_id=2).one().km == 7
+        assert db.query(models.Shoe).filter_by(user_id=2).one().mileage == 7
+        unchanged = apply(newer, 'portable-repeat-import')
+        assert unchanged['updated_shoes'] == unchanged['updated_runs'] == unchanged['updated_months'] == 0
+        local = db.query(models.Run).filter_by(user_id=2).one()
+        runs.delete_run(db, 2, local.id)
+        deleted = apply(newer, 'portable-preserve-target-deletion')
+        assert deleted['new_runs'] == 0 and deleted['preserved_deleted_runs'] == 1
+        assert db.query(models.Run).filter_by(user_id=2).count() == 0
+
+
+@pytest.mark.parametrize('problem', ['duplicate', 'self', 'other', 'negative', 'string', 'legacy', 'budget'])
+def test_portable_alias_contract_rejects_ambiguous_graphs(workspace, monkeypatch, problem):
+    from backend import backup_contract
+    with workspace.sessions() as db:
+        payload = archive(db)
+    run = payload['runs'][0]
+    run['aliases'] = [99, 99] if problem == 'duplicate' else [run['id']] if problem == 'self' else [99]
+    if problem == 'other':
+        payload['runs'].append({**run, 'id': 99, 'aliases': []})
+    elif problem == 'negative':
+        run['aliases'] = [-1]
+    elif problem == 'string':
+        run['aliases'] = ['99']
+    elif problem == 'legacy':
+        payload['version'] = 2
+    elif problem == 'budget':
+        monkeypatch.setattr(backup_contract, 'MAX_RUN_ALIASES', 1)
+        run['aliases'] = [98, 99]
+    with pytest.raises(Invalid):
+        parse_backup(json.dumps(payload).encode())
+
+
+def test_portable_alias_conflicts_reject_without_merging_local_rows(workspace):
+    with workspace.sessions() as db:
+        payload = archive(db)
+        preview = account_restore.preview_restore(db, 2, json.dumps(payload).encode(), workspace.config)
+        account_restore.apply_restore(db, 2, preview['token'], 'portable-conflict-initial', workspace.config)
+        own_shoe = db.query(models.Shoe).filter_by(user_id=2).one()
+        other_run = add_run(db, own_shoe.id, uid=2)
+        old_id = payload['runs'][0]['id']
+        payload['runs'][0].update(id=999, aliases=[old_id])
+        db.add(models.RestoreMapping(user_id=2, source_id=payload['source_id'], entity='run', source_key='999', target_id=other_run.id))
+        db.commit()
+        before = db.query(models.AuditEvent).filter_by(user_id=2).count()
+        for mode in ('merge', 'update'):
+            with pytest.raises(Conflict, match='別名'):
+                account_restore.preview_restore(db, 2, json.dumps(payload).encode(), workspace.config, mode)
+        assert db.query(models.Run).filter_by(user_id=2).count() == 2
+        assert db.query(models.AuditEvent).filter_by(user_id=2).count() == before
+
+
+def test_portable_alias_export_capacity_and_legacy_readers(workspace, monkeypatch):
+    from backend.services import history, runs
+    with workspace.sessions() as db:
+        payload = archive(db)
+        for version in (1, 2):
+            legacy = {**payload, 'version': version}
+            for row in legacy['runs']:
+                row.pop('aliases', None)
+            assert parse_backup(json.dumps(legacy).encode()).version == version
+        for _cycle in range(2):
+            row = db.query(models.Run).filter_by(user_id=1).one()
+            runs.delete_run(db, 1, row.id)
+            event = db.query(models.AuditEvent).filter_by(user_id=1, entity='runs', action='delete', imported=False, restored=False).one()
+            history.restore_deleted(db, 1, event.id, workspace.config)
+        monkeypatch.setattr(exports, 'MAX_RUN_ALIASES', 1)
+        with pytest.raises(Invalid, match='別名'):
+            exports.build_account_export(db, db.get(models.User, 1), include_history=False)
+        assert exports.build_account_export(db, db.get(models.User, 2))[0]['runs'] == []
+
+
+def test_fractional_import_ignores_legacy_noise_and_preserves_real_changes(workspace):
+    with workspace.sessions() as db:
+        shoe = add_shoe(db)
+        add_run(db, shoe.id, km=0.1)
+        add_run(db, shoe.id, km=0.2)
+        db.expire_all()
+        shoe = db.query(models.Shoe).filter_by(user_id=1).one()
+        month = db.query(models.MonthlyMileage).filter_by(user_id=1).one()
+        assert shoe.mileage == month.km == 0.3
+        # Simulate legacy accumulated Float storage without a production migration.
+        shoe.mileage = month.km = 0.30000000000000004
+        db.commit()
+        versions = shoe.version, month.version
+        before = db.query(models.AuditEvent).filter_by(user_id=1).count()
+        payload = exports.build_account_export(db, db.get(models.User, 1))[0]
+        preview = account_restore.preview_restore(db, 1, json.dumps(payload).encode(), workspace.config, 'update')
+        assert preview['summary']['updated_shoes'] == preview['summary']['updated_months'] == 0
+        account_restore.apply_restore(db, 1, preview['token'], 'fractional-identical-import', workspace.config)
+        db.expire_all()
+        assert (shoe.version, month.version) == versions
+        assert db.query(models.AuditEvent).filter_by(user_id=1).count() == before
+        payload['runs'][0]['km'] = 0.11
+        payload['shoes'][0]['mileage'] = payload['monthly_mileages'][0]['km'] = 0.31
+        preview = account_restore.preview_restore(db, 1, json.dumps(payload).encode(), workspace.config, 'update')
+        assert preview['summary']['updated_shoes'] == preview['summary']['updated_runs'] == preview['summary']['updated_months'] == 1
+        account_restore.apply_restore(db, 1, preview['token'], 'fractional-real-change-import', workspace.config)
+        db.expire_all()
+        assert shoe.mileage == month.km == 0.31
+        assert (shoe.version, month.version) == (versions[0] + 1, versions[1] + 1)
+
+
+@pytest.mark.parametrize('version', [1, 2])
+def test_legacy_archive_fingerprint_excludes_v3_defaults(workspace, version):
+    from backend.backup_contract import backup_fingerprint
+    from backend.services.run_requests import payload_hash
+    with workspace.sessions() as db:
+        payload = archive(db)
+    payload['version'] = version
+    if version == 1:
+        payload.pop('source_id')
+    for row in payload['runs']:
+        row.pop('aliases', None)
+    parsed = parse_backup(json.dumps(payload).encode())
+    original = parsed.model_dump(mode='json')
+    for row in original['runs']:
+        row.pop('aliases')
+    assert backup_fingerprint(parsed) == payload_hash(original)

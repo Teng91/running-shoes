@@ -1,9 +1,9 @@
-"""Bounded, credential-free account archive contract (v1 and v2)."""
+"""Bounded, credential-free account archive contract (v1, v2 and v3)."""
 
 import json
 import math
 from datetime import datetime
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
@@ -11,6 +11,7 @@ from backend import schemas
 from backend.services.errors import Invalid
 from backend.services.run_requests import payload_hash
 
+MAX_RUN_ALIASES = 50_000
 MAX_BACKUP_BYTES = 20 * 1024 * 1024
 ARCHIVE_LIMITS = {"shoes": 5000, "runs": 50_000, "monthly_mileages": 2412,
                   "monthly_reports": 2412, "strava_imports": 1000, "history": 50_000}
@@ -27,6 +28,7 @@ class BackupRun(schemas.RunCreate):
     model_config = ConfigDict(extra="forbid")
     id: int = Field(gt=0)
     strava_id: str | None = Field(default=None, max_length=128)
+    aliases: list[Annotated[int, Field(gt=0, strict=True)]] = Field(default_factory=list, max_length=MAX_RUN_ALIASES)
 
 
 class BackupMonth(schemas.MonthlyMileageCreate):
@@ -82,7 +84,7 @@ class BackupHistory(BaseModel):
 class AccountBackup(BaseModel):
     model_config = ConfigDict(extra="forbid")
     format: Literal["running-shoes-account-backup"]
-    version: Literal[1, 2]
+    version: Literal[1, 2, 3]
     source_id: str | None = Field(default=None, min_length=16, max_length=80, pattern=r"^[A-Za-z0-9._:-]+$")
     exported_at: datetime
     username: str = Field(max_length=50)
@@ -96,8 +98,8 @@ class AccountBackup(BaseModel):
 
     @model_validator(mode="after")
     def validate_graph(self):
-        if self.version == 2 and not self.source_id:
-            raise ValueError("備份 v2 缺少 source_id")
+        if self.version >= 2 and not self.source_id:
+            raise ValueError("備份 v2/v3 缺少 source_id")
         collections: list[tuple[list[Any], Any]] = [(self.shoes, lambda row: row.id), (self.runs, lambda row: row.id),
                             (self.monthly_mileages, lambda row: (row.year, row.month)),
                             (self.monthly_reports, lambda row: (row.year, row.month)),
@@ -106,6 +108,15 @@ class AccountBackup(BaseModel):
             values = [keys(row) for row in items]
             if len(values) != len(set(values)):
                 raise ValueError("備份含有重複識別碼或月份")
+        identities = {row.id for row in self.runs}
+        alias_count = sum(len(row.aliases) for row in self.runs)
+        if alias_count > MAX_RUN_ALIASES or (self.version < 3 and alias_count):
+            raise ValueError("跑步來源別名版本或容量不正確")
+        for row in self.runs:
+            for alias in row.aliases:
+                if alias in identities:
+                    raise ValueError("跑步來源別名重複或指向不同紀錄")
+                identities.add(alias)
         shoe_ids = {row.id for row in self.shoes}
         strava_ids = [row.strava_id for row in self.runs if row.strava_id]
         if len(strava_ids) != len(set(strava_ids)) or any(row.shoe_id not in shoe_ids for row in self.runs):
@@ -161,7 +172,11 @@ def _check_json(value, depth=0):
 
 
 def backup_fingerprint(backup: AccountBackup) -> str:
-    return payload_hash(backup.model_dump(mode="json"))
+    payload = backup.model_dump(mode="json")
+    if backup.version < 3:
+        for run in payload["runs"]:
+            run.pop("aliases", None)
+    return payload_hash(payload)
 
 
 def _export_error() -> Invalid:
