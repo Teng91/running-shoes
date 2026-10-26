@@ -81,6 +81,7 @@ def import_runs(
                 models.Run.strava_id.isnot(None),
             )
             .all()
+            if value[0] is not None
         }
         runs, duplicate_count, unmapped_count = _prepare_runs(
             rows, user_id, normalized_mapping, existing_ids
