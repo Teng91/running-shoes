@@ -1943,9 +1943,9 @@ truststore==0.10.5 \
     # via
     #   httpcore2
     #   httpx2
-types-openpyxl==3.1.5.20260807 \
-    --hash=sha256:1a0a42b125f8023d3ae83cc057e379d301a87f45e60b6160917824fef28ab015 \
-    --hash=sha256:e64e9342cdac8a2d7b09f992d3606c532b75da43874f8107b6b5a122dc9d5681
+types-openpyxl==3.1.5.20261017 \
+    --hash=sha256:3315cfebad290cc7ade1fccaf3a46ee820b3a8e7df726ff4f18d30ab7f383d68 \
+    --hash=sha256:3deb3b6279b65ab379c126df0ee1fd27500c9628edb8d9667d73f637462917dc
     # via -r requirements-dev.in
 typing-extensions==4.16.0 \
     --hash=sha256:481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8 \
