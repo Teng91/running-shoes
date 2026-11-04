@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+## [4.0.1] - 2026-11-04
+
+### Security
+- AI 回覆與月報的 Markdown 改在 inert document 解析並以屬性 allowlist 清理，修正 `<img onerror>` 可在清理前執行的 XSS（SPEC-036）。
+- 已超過自身上限的 IP／帳號不再消耗全站登入與 AI 額度，避免單一來源讓所有人無法登入。
+- 新密碼至少 8 字元；同一帳號 15 分鐘內密碼錯誤 10 次後暫停登入與改密碼；不存在的帳號也執行 bcrypt，避免以回應時間推知帳號。
+- 非預期的模型錯誤不再把例外原文傳給瀏覽器。
+
+### Fixed
+- 鎖定檔改為跨平台編譯：`uvloop` 只在非 Windows 安裝，並鎖定 Windows 需要的 `colorama`；Windows 可直接執行 `task.py setup`。
+- Asset 4.0.1／shell v42，schema 6 不變。
+
 ## [4.0.0] - 2026-10-25
 
 ### Changed

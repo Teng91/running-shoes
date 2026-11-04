@@ -8,38 +8,45 @@ const MARKDOWN_ALLOWED_TAGS = new Set([
   'table', 'thead', 'tbody', 'tr', 'th', 'td', 'span', 'div',
 ]);
 
+// Attributes are allowlisted too: ids, names and classes from untrusted text
+// could clobber globals or reuse application styles.
+const MARKDOWN_ALLOWED_ATTRIBUTES = new Set(['href', 'title', 'colspan', 'rowspan', 'align', 'start']);
+
 function sanitizeMarkdownHtml(raw) {
-  const div = document.createElement('div');
-  div.innerHTML = raw;
+  // Parse in an inert document. Assigning innerHTML on an element owned by the
+  // live document starts resource loads (e.g. <img onerror>) before scrubbing.
+  const parsed = new DOMParser().parseFromString(String(raw), 'text/html');
+  const root = parsed.body;
   const scrub = (el) => {
-    // Strip event-handler attributes (onclick, onerror, …) from every
-    // allowed tag — marked passes raw HTML through unchanged.
     for (const attr of [...el.attributes]) {
-      if (/^on/i.test(attr.name)) el.removeAttribute(attr.name);
+      if (!MARKDOWN_ALLOWED_ATTRIBUTES.has(attr.name.toLowerCase())) el.removeAttribute(attr.name);
     }
-    if (el.tagName === 'A' && el.href) {
+    if (el.hasAttribute('href')) {
+      if (el.tagName !== 'A') {
+        el.removeAttribute('href');
+        return;
+      }
       // Only allow http(s) links; neutralise javascript: etc.
       try {
         const u = new URL(el.getAttribute('href'), window.location.origin);
         if (u.protocol !== 'http:' && u.protocol !== 'https:') {
           el.removeAttribute('href');
+        } else {
+          el.setAttribute('rel', 'noopener noreferrer');
         }
       } catch { el.removeAttribute('href'); }
-      el.removeAttribute('target');
     }
-    el.removeAttribute('style');
   };
-  const all = div.querySelectorAll('*');
-  for (const el of all) {
+  for (const el of [...root.querySelectorAll('*')]) {
+    if (!el.isConnected) continue;
     if (!MARKDOWN_ALLOWED_TAGS.has(el.tagName.toLowerCase())) {
       // Replace disallowed elements with their text content.
-      const parent = el.parentNode;
-      if (parent) parent.replaceChild(document.createTextNode(el.textContent), el);
+      el.replaceWith(parsed.createTextNode(el.textContent));
     } else {
       scrub(el);
     }
   }
-  return div.innerHTML;
+  return root.innerHTML;
 }
 
 function renderMarkdown(text) {

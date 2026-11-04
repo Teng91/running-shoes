@@ -1,4 +1,6 @@
 """Account use cases; transport adapters supply configuration and credentials."""
+from functools import cache
+
 from sqlalchemy.orm import Session
 
 from backend import models
@@ -6,10 +8,19 @@ from backend.credentials import create_access_token, get_password_hash, verify_p
 from backend.services.errors import CapacityExceeded, Conflict, Invalid, Unauthorized
 from backend.services.transactions import write_transaction
 
+MIN_PASSWORD_LENGTH = 8
+
+
+@cache
+def _unknown_user_hash() -> str:
+    # Unknown usernames still pay one bcrypt check, so response time does not
+    # reveal which accounts exist.
+    return get_password_hash("unknown-user-timing-equalizer")
+
 
 def register(db: Session, username: str, password: str, *, max_users: int):
-    if len(password) < 4:
-        raise Invalid("Password must be at least 4 characters")
+    if len(password) < MIN_PASSWORD_LENGTH:
+        raise Invalid(f"Password must be at least {MIN_PASSWORD_LENGTH} characters")
     username = username.strip()
     if not username:
         raise Invalid("Username cannot be empty")
@@ -30,7 +41,10 @@ def register(db: Session, username: str, password: str, *, max_users: int):
 
 def login(db: Session, username: str, password: str, *, secret_key: str):
     user = db.query(models.User).filter(models.User.username == username).first()
-    if not user or not verify_password(password, user.hashed_password):
+    if user is None:
+        verify_password(password, _unknown_user_hash())
+        raise Unauthorized("Incorrect username or password")
+    if not verify_password(password, user.hashed_password):
         raise Unauthorized("Incorrect username or password")
     token = create_access_token(
         {"sub": user.username, "token_version": user.token_version}, secret_key=secret_key,
@@ -39,10 +53,13 @@ def login(db: Session, username: str, password: str, *, secret_key: str):
 
 
 def change_password(db: Session, username: str, old_password: str, new_password: str):
-    if len(new_password) < 4:
-        raise Invalid("Password must be at least 4 characters")
+    if len(new_password) < MIN_PASSWORD_LENGTH:
+        raise Invalid(f"Password must be at least {MIN_PASSWORD_LENGTH} characters")
     user = db.query(models.User).filter(models.User.username == username).first()
-    if not user or not verify_password(old_password, user.hashed_password):
+    if user is None:
+        verify_password(old_password, _unknown_user_hash())
+        raise Unauthorized("Incorrect username or old password")
+    if not verify_password(old_password, user.hashed_password):
         raise Unauthorized("Incorrect username or old password")
     user_id, previous_hash, previous_version = user.id, user.hashed_password, user.token_version
     hashed_password = get_password_hash(new_password)

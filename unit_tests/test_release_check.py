@@ -92,7 +92,7 @@ def test_browser_gate_failure_makes_the_release_command_fail(monkeypatch):
     import subprocess
 
     monkeypatch.setattr("sys.argv", ["release_check", "--base-url", "http://127.0.0.1:8000"])
-    monkeypatch.setattr(release_check, "check_release", lambda fetcher: {"version": "4.0.0", "cache": "test", "assets": 51})
+    monkeypatch.setattr(release_check, "check_release", lambda fetcher: {"version": "4.0.1", "cache": "test", "assets": 51})
     run = Mock(side_effect=subprocess.CalledProcessError(1, ["node", "release_browser.cjs"]))
     monkeypatch.setattr(release_check.subprocess, "run", run)
     assert release_check.main() == 1
