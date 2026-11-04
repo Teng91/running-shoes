@@ -32,7 +32,7 @@ def test_register_success(client):
 def test_register_short_password(client):
     res = client.post("/api/auth/register", json={"username": "alice", "password": "ab"})
     assert res.status_code == 400
-    assert "4 characters" in res.json()["detail"]
+    assert "8 characters" in res.json()["detail"]
 
 
 @pytest.mark.parametrize("password", ["a" * 73, "密" * 25])
@@ -100,10 +100,10 @@ def test_login_wrong_password(client, db):
 
 
 def test_change_password(client, db):
-    db.add(User(username="alice", hashed_password=get_password_hash("oldpass")))
+    db.add(User(username="alice", hashed_password=get_password_hash("oldpass1")))
     db.commit()
     res = client.post("/api/auth/change-password", json={
-        "username": "alice", "old_password": "oldpass", "new_password": "newpass1",
+        "username": "alice", "old_password": "oldpass1", "new_password": "newpass1",
     })
     assert res.status_code == 200
     # Verify new password works
@@ -113,13 +113,13 @@ def test_change_password(client, db):
 
 def test_change_password_user_not_found(client):
     res = client.post("/api/auth/change-password", json={
-        "username": "nobody", "old_password": "oldpass", "new_password": "newpass1",
+        "username": "nobody", "old_password": "oldpass1", "new_password": "newpass1",
     })
     assert res.status_code == 401
 
 
 def test_change_password_wrong_old(client, db):
-    db.add(User(username="alice", hashed_password=get_password_hash("oldpass")))
+    db.add(User(username="alice", hashed_password=get_password_hash("oldpass1")))
     db.commit()
     res = client.post("/api/auth/change-password", json={
         "username": "alice", "old_password": "wrong", "new_password": "newpass1",
@@ -129,17 +129,17 @@ def test_change_password_wrong_old(client, db):
 
 
 def test_change_password_short_new(client, db):
-    db.add(User(username="alice", hashed_password=get_password_hash("oldpass")))
+    db.add(User(username="alice", hashed_password=get_password_hash("oldpass1")))
     db.commit()
     res = client.post("/api/auth/change-password", json={
-        "username": "alice", "old_password": "oldpass", "new_password": "ab",
+        "username": "alice", "old_password": "oldpass1", "new_password": "ab",
     })
     assert res.status_code == 400
 
 
 def test_change_password_empty_old(client, db):
     """Empty old_password should be treated as wrong password (401), not crash."""
-    db.add(User(username="alice", hashed_password=get_password_hash("oldpass")))
+    db.add(User(username="alice", hashed_password=get_password_hash("oldpass1")))
     db.commit()
     res = client.post("/api/auth/change-password", json={
         "username": "alice", "old_password": "", "new_password": "newpass1",
@@ -150,41 +150,41 @@ def test_change_password_empty_old(client, db):
 
 def test_change_password_empty_new(client, db):
     """Empty new_password should fail the length check (400)."""
-    db.add(User(username="alice", hashed_password=get_password_hash("oldpass")))
+    db.add(User(username="alice", hashed_password=get_password_hash("oldpass1")))
     db.commit()
     res = client.post("/api/auth/change-password", json={
-        "username": "alice", "old_password": "oldpass", "new_password": "",
+        "username": "alice", "old_password": "oldpass1", "new_password": "",
     })
     assert res.status_code == 400
-    assert "4 characters" in res.json()["detail"]
+    assert "8 characters" in res.json()["detail"]
 
 
 def test_change_password_same_as_old(client, db):
     """Changing to the same password is allowed (no-op effectively)."""
-    db.add(User(username="alice", hashed_password=get_password_hash("oldpass")))
+    db.add(User(username="alice", hashed_password=get_password_hash("oldpass1")))
     db.commit()
     res = client.post("/api/auth/change-password", json={
-        "username": "alice", "old_password": "oldpass", "new_password": "oldpass",
+        "username": "alice", "old_password": "oldpass1", "new_password": "oldpass1",
     })
     assert res.status_code == 200
 
 
 def test_change_password_chained(client, db):
     """After changing password, the new password works as old_password for subsequent changes."""
-    db.add(User(username="alice", hashed_password=get_password_hash("pass1")))
+    db.add(User(username="alice", hashed_password=get_password_hash("password1")))
     db.commit()
     # First change
     res = client.post("/api/auth/change-password", json={
-        "username": "alice", "old_password": "pass1", "new_password": "pass2",
+        "username": "alice", "old_password": "password1", "new_password": "password2",
     })
     assert res.status_code == 200
     # Second change must use pass2 as old_password
     res = client.post("/api/auth/change-password", json={
-        "username": "alice", "old_password": "pass1", "new_password": "pass3",
+        "username": "alice", "old_password": "password1", "new_password": "password3",
     })
     assert res.status_code == 401  # pass1 no longer valid
     res = client.post("/api/auth/change-password", json={
-        "username": "alice", "old_password": "pass2", "new_password": "pass3",
+        "username": "alice", "old_password": "password2", "new_password": "password3",
     })
     assert res.status_code == 200
 
@@ -601,3 +601,9 @@ def test_monthly_mileage_isolation_between_users(client, db):
 def test_monthly_mileage_unauthenticated(client):
     res = client.get("/api/monthly-mileage")
     assert res.status_code == 401
+
+
+@pytest.mark.parametrize(("password", "status"), [("1234567", 400), ("12345678", 200)])
+def test_register_requires_eight_character_passwords(client, password, status):
+    res = client.post("/api/auth/register", json={"username": "boundary", "password": password})
+    assert res.status_code == status

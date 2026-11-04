@@ -122,9 +122,12 @@ def test_drill_rejects_a_restore_that_loses_rows_or_schema(tmp_path, monkeypatch
 
     def corrupt_restore(backup, destination, **kwargs):
         import sqlite3
+        from contextlib import closing
 
         restore(backup, destination, **kwargs)
-        with sqlite3.connect(destination) as connection:
+        # sqlite3's context manager only commits; close explicitly so Windows can
+        # delete the drill's temporary directory.
+        with closing(sqlite3.connect(destination)) as connection, connection:
             connection.execute("DELETE FROM users" if damage == "rows" else "DROP INDEX idx_runs_user_date")
 
     monkeypatch.setattr(database_backup, "restore_backup", corrupt_restore)

@@ -232,7 +232,14 @@ Terminal、忘記 activate，或 IDE 使用另一個 shell 而誤用系統 Pytho
 - `requirements.txt`／`requirements-dev.txt`：完整鎖定所有間接依賴並附下載雜湊；Docker、Fly.io 與 CI 都使用 `--require-hashes` 安裝，避免不同時間解析出不同套件。
 
 如果只想執行服務、不需要跑測試或程式碼檢查，也可以只安裝
-`requirements.txt`。更新 `.in` 後，使用 `pip-tools` 重新編譯兩份鎖定檔，不要直接手改鎖定內容。
+`requirements.txt`。更新 `.in` 後，使用 `uv pip compile` 以跨平台（universal）模式重新編譯兩份鎖定檔，不要直接手改鎖定內容：
+
+```bash
+uv pip compile --universal --generate-hashes --python-version 3.11 --no-header requirements.in -o requirements.txt
+uv pip compile --universal --generate-hashes --python-version 3.11 --no-header requirements-dev.in -o requirements-dev.txt
+```
+
+跨平台模式會保留平台條件，例如 `uvloop` 只在非 Windows 安裝、`colorama` 只在 Windows 安裝；只在單一平台編譯會遺失這些條件，使其他作業系統的 `setup` 失敗。
 
 若偏好先啟用虛擬環境，也可以使用以下等效方式：
 
@@ -685,6 +692,13 @@ v3.10.3 使用 Asset 3.10.3／shell v38、schema 6、51 個 release assets。
 `registry.fly.io/running-shoes@sha256:bac44457f12adfde6473e9d9a973b330e1bf69eac7e44feb3fb6ed1f5a55429a`，
 不還原業務資料快照。發布驗證涵蓋 verify、40 組版面、雙引擎 CRUD／PWA、main/tag CI 及正式站匿名 release-check。
 
+### 安全強化與跨平台安裝（SPEC-036，v4.0.1）
+
+[SPEC-036](docs/specs/036-security-hardening-and-portable-locks.md) 修正 AI／月報 Markdown 的 XSS，
+被自身上限拒絕的請求不再消耗全站額度。新註冊與改密碼需至少 8 個字元；同一帳號 15 分鐘內密碼錯誤 10 次後，
+該帳號的登入與改密碼會暫停 15 分鐘（其他帳號不受影響）。鎖定檔改為跨平台編譯，Windows 可直接執行 setup。
+Asset 4.0.1／shell v42、schema 6 不變，可回滾至 v4.0.0 image。
+
 ### 穩定測試版（v4.0.0）
 
 目前上線測試的穩定版，預期不再特別調整。PWA 在部署新版後會自動載入最新版；跑步紀錄和鞋款選單不再顯示內部數字編號。
@@ -721,7 +735,7 @@ Playwright／Chromium／WebKit 齊全時，也會執行版面測試。
 避免每次停止都重跑。Hook 不會呼叫其他模型、外部 API，或傳送提示、diff、原始碼與測試輸出。
 GitHub Actions 仍會在 push／pull request 執行 `verify`，並以三個可獨立重跑的 browser jobs 執行完整版面矩陣、真實 CRUD E2E 與 PWA 升級／離線測試；Dependabot 每週檢查 Python 與 GitHub Actions 更新。
 
-本次驗證基線為 Python **541 passed**、前端回歸測試 **146 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
+本次驗證基線為 Python **550 passed**、前端回歸測試 **147 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
 版面檢查涵蓋 WebKit／Chromium、亮／暗模式與 10 組直橫向尺寸，共 40 組設定，檢查六個功能分頁、三個認證表單、圖表、全部彈窗、行內編輯、停用／錯誤及空資料狀態。
 
 主要表單、工具列與彈窗操作統一為 44px 控制項；桌面表格內的緊湊操作為 36px，手機至少 44px。
