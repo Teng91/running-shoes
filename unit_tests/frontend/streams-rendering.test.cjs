@@ -219,3 +219,64 @@ test('persisted page restoration selects home without resetting ordinary visibil
   assert.equal(resets, 2); assert.equal(renders, 1);
   assert.doesNotMatch(bootstrap, /visibilitychange/);
 });
+
+function fakeMarkdownDocument(tree) {
+  // Minimal inert DOM: enough for the sanitizer's traversal and serialization.
+  const doc = { createTextNode: text => ({ text, parent: null }) };
+  const build = (spec, parent) => {
+    if (typeof spec === 'string') return { text: spec, parent };
+    const [tag, attrs = {}, ...children] = spec;
+    const el = {
+      tagName: tag.toUpperCase(), parent, attrs: new Map(Object.entries(attrs)),
+      get attributes() { return [...this.attrs.keys()].map(name => ({ name })); },
+      hasAttribute(name) { return this.attrs.has(name); },
+      getAttribute(name) { return this.attrs.get(name); },
+      setAttribute(name, value) { this.attrs.set(name, value); },
+      removeAttribute(name) { this.attrs.delete(name); },
+      get isConnected() { let node = this; while (node.parent) node = node.parent; return node === doc.body; },
+      get textContent() { return this.children.map(child => child.text ?? child.textContent).join(''); },
+      replaceWith(node) { const list = this.parent.children; node.parent = this.parent; list[list.indexOf(this)] = node; this.parent = null; },
+    };
+    el.children = children.map(child => build(child, el));
+    return el;
+  };
+  const serialize = node => node.text !== undefined ? node.text
+    : `<${node.tagName.toLowerCase()}${[...node.attrs].map(([k, v]) => ` ${k}="${v}"`).join('')}>${node.children.map(serialize).join('')}</${node.tagName.toLowerCase()}>`;
+  doc.body = build(['body', {}, ...tree], null);
+  doc.body.querySelectorAll = () => {
+    const out = [];
+    const walk = node => node.children?.forEach(child => { if (child.tagName) { out.push(child); walk(child); } });
+    walk(doc.body);
+    return out;
+  };
+  Object.defineProperty(doc.body, 'innerHTML', { get: () => doc.body.children.map(serialize).join('') });
+  return doc;
+}
+
+test('markdown sanitizer parses untrusted HTML in an inert document and allowlists attributes', () => {
+  const markdownSource = fs.readFileSync('frontend/app-markdown.js', 'utf8');
+  const parsed = [];
+  const tree = [
+    ['p', { id: 'authToken', class: 'modal active', style: 'x', onclick: 'steal()' }, 'hi'],
+    ['img', { src: 'x', onerror: 'steal()' }],
+    ['a', { href: 'javascript:steal()', target: '_blank' }, 'bad'],
+    ['a', { href: 'https://example.com/a', name: 'marked' }, 'ok'],
+    ['div', {}, ['svg', {}, ['script', {}, 'steal()']]],
+    ['td', { colspan: '2', align: 'center', href: 'https://example.com' }, 'cell'],
+  ];
+  const context = vm.createContext({
+    window: { location: { origin: 'http://test.local' } }, URL,
+    DOMParser: class { parseFromString(raw, type) { parsed.push([raw, type]); return fakeMarkdownDocument(tree); } },
+  });
+  // No `document` global: touching the live document would throw.
+  require('node:vm').runInContext(markdownSource, context);
+  const html = context.sanitizeMarkdownHtml('<raw>');
+  assert.deepEqual(parsed, [['<raw>', 'text/html']]);
+  assert.doesNotMatch(markdownSource, /\.innerHTML\s*=/);
+  assert.doesNotMatch(html, /onclick|onerror|style=|class=|id=|name=|target=|javascript:|<img|<svg|<script/);
+  assert.match(html, /<p>hi<\/p>/);
+  assert.match(html, /<a href="https:\/\/example.com\/a" rel="noopener noreferrer">ok<\/a>/);
+  assert.match(html, /<a>bad<\/a>/);
+  assert.match(html, /<div>steal\(\)<\/div>/);
+  assert.match(html, /<td colspan="2" align="center">cell<\/td>/);
+});

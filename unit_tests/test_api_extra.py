@@ -358,6 +358,82 @@ def test_auth_global_limit_rejects_before_creating_new_ip_bucket(
     rate_limits._auth_global_rate_events.clear()
 
 
+def test_throttled_client_does_not_consume_global_auth_budget(client, db, monkeypatch):
+    # Regression: an address over its own limit used to spend the global budget
+    # on every rejected request, letting one client lock everyone out of login.
+    rate_limits._auth_rate_events.clear()
+    rate_limits._auth_global_rate_events.clear()
+    monkeypatch.setattr(rate_limits, "AUTH_RATE_LIMIT_PER_MINUTE", 1)
+    monkeypatch.setattr(rate_limits, "AUTH_GLOBAL_RATE_LIMIT_PER_MINUTE", 3)
+    monkeypatch.setattr(rate_limits, "IS_FLY_RUNTIME", True)
+    payload = {"username": "nobody", "password": "pass1234"}
+    attacker = {"Fly-Client-IP": "198.51.100.31"}
+    responses = [client.post("/api/auth/login", headers=attacker, json=payload) for _ in range(5)]
+    assert [r.status_code for r in responses] == [401, 429, 429, 429, 429]
+    global_bucket = db.query(models.RateLimitBucket).filter_by(
+        scope="auth-global", bucket_key="global"
+    ).one()
+    assert global_bucket.event_count == 1
+    other = client.post("/api/auth/login", headers={"Fly-Client-IP": "198.51.100.32"}, json=payload)
+    assert other.status_code == 401
+    rate_limits._auth_rate_events.clear()
+    rate_limits._auth_global_rate_events.clear()
+
+
+def test_throttled_account_does_not_consume_global_agent_budget(db, monkeypatch):
+    rate_limits._agent_rate_events.clear()
+    rate_limits._agent_ip_rate_events.clear()
+    rate_limits._agent_global_rate_events.clear()
+    monkeypatch.setattr(rate_limits, "AGENT_RATE_LIMIT_PER_MINUTE", 1)
+    request = SimpleNamespace(headers={}, client=SimpleNamespace(host="198.51.100.41"))
+    rate_limits.enforce_agent_request_limits(request, 4242, db)
+    for _ in range(3):
+        with pytest.raises(HTTPException) as exc_info:
+            rate_limits.enforce_agent_request_limits(request, 4242, db)
+        assert exc_info.value.status_code == 429
+    global_bucket = db.query(models.RateLimitBucket).filter_by(
+        scope="agent-global", bucket_key="global"
+    ).one()
+    assert global_bucket.event_count == 1
+    assert len(rate_limits._agent_global_rate_events["global"]) == 1
+    rate_limits._agent_rate_events.clear()
+    rate_limits._agent_ip_rate_events.clear()
+    rate_limits._agent_global_rate_events.clear()
+
+
+def test_repeated_password_failures_lock_only_that_account(client, db, monkeypatch):
+    rate_limits._auth_rate_events.clear()
+    rate_limits._auth_global_rate_events.clear()
+    monkeypatch.setattr(rate_limits, "LOGIN_FAILURE_LIMIT", 2)
+    db.add(models.User(username="victim", hashed_password=get_password_hash("correct-horse")))
+    db.add(models.User(username="bystander", hashed_password=get_password_hash("correct-horse")))
+    db.commit()
+    wrong = {"username": "victim", "password": "wrong-pass"}
+    assert client.post("/api/auth/login", json=wrong).status_code == 401
+    assert client.post("/api/auth/login", json=wrong).status_code == 401
+    locked = client.post("/api/auth/login", json={"username": "victim", "password": "correct-horse"})
+    assert locked.status_code == 429
+    assert int(locked.headers["Retry-After"]) > 60
+    change = client.post("/api/auth/change-password", json={
+        "username": "victim", "old_password": "correct-horse", "new_password": "new-password",
+    })
+    assert change.status_code == 429
+    other = client.post("/api/auth/login", json={"username": "bystander", "password": "correct-horse"})
+    assert other.status_code == 200
+    rate_limits._auth_rate_events.clear()
+    rate_limits._auth_global_rate_events.clear()
+
+
+def test_unknown_username_still_runs_a_password_hash_check(client, monkeypatch):
+    from backend.services import accounts
+    calls = []
+    original = accounts.verify_password
+    monkeypatch.setattr(accounts, "verify_password", lambda *args: calls.append(args) or original(*args))
+    response = client.post("/api/auth/login", json={"username": "ghost", "password": "pass1234"})
+    assert response.status_code == 401
+    assert len(calls) == 1
+
+
 def test_shoe_record_quota_is_enforced(client, db, user_with_token, monkeypatch):
     user, token = user_with_token
     monkeypatch.setattr(app.state, "settings", replace(app.state.settings, max_shoes_per_user=1))
@@ -689,7 +765,7 @@ def test_static_asset_and_non404_http_errors(client):
 
     service_worker = client.get("/service-worker.js")
     assert service_worker.status_code == 200
-    assert "running-shoes-shell-v41" in service_worker.text
+    assert "running-shoes-shell-v42" in service_worker.text
 
     agent_script = client.get("/app-agent.js")
     assert agent_script.status_code == 200

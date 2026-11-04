@@ -154,7 +154,7 @@ function hideChangeError() { document.getElementById('change-error').style.displ
 const ERROR_ZH = {
   'User not found': '帳號不存在', 'Incorrect password': '密碼不正確',
   'Username already registered': '帳號已被註冊',
-  'Password must be at least 4 characters': '密碼至少 4 個字元',
+  'Password must be at least 8 characters': '密碼至少 8 個字元',
   'Shoe not found': '跑鞋不存在',
 };
 function translateError(detail) { return ERROR_ZH[detail] || detail; }
@@ -210,7 +210,7 @@ async function handleRegister() {
   const password = document.getElementById('reg-password').value;
   const password2 = document.getElementById('reg-password2').value;
   if (!username || !password) { showRegError('請輸入帳號和密碼'); return; }
-  if (password.length < 4) { showRegError('密碼至少 4 個字元'); return; }
+  if (password.length < 8) { showRegError('密碼至少 8 個字元'); return; }
   if (password !== password2) { showRegError('兩次密碼不一致'); return; }
   const operation = beginAuthOperation();
   let authenticatedSession = null;
@@ -269,7 +269,7 @@ async function handleChangePassword() {
   if (!username) { showChangeError('請輸入帳號'); return; }
   if (!oldPassword) { showChangeError('請輸入舊密碼'); return; }
   if (!password) { showChangeError('請輸入新密碼'); return; }
-  if (password.length < 4) { showChangeError('密碼至少 4 個字元'); return; }
+  if (password.length < 8) { showChangeError('密碼至少 8 個字元'); return; }
   if (password !== password2) { showChangeError('兩次密碼不一致'); return; }
   const operation = beginAuthOperation();
   try {

@@ -141,7 +141,54 @@ def _enforce_shared_window_limit(
         )
 
 
+def _reject_if_window_full(
+    buckets: dict, key, limit: int, detail: str, now: float | None = None
+) -> None:
+    """Read-only check of an in-memory window; never records an event."""
+    current = time.monotonic() if now is None else now
+    with _agent_rate_lock:
+        events = buckets.get(key)
+        while events and events[0] <= current - 60:
+            events.popleft()
+        if events and len(events) >= limit:
+            raise HTTPException(
+                status_code=429,
+                detail=detail,
+                headers={"Retry-After": str(max(1, int(60 - (current - events[0]))))},
+            )
+
+
+def _reject_if_shared_window_full(
+    db: Session, scope: str, key: str, limit: int, detail: str,
+    window_seconds: int = 60, now: float | None = None,
+) -> None:
+    """Read-only check of a shared window; never creates or increments a bucket."""
+    current = time.time() if now is None else now
+    bucket = db.query(models.RateLimitBucket).filter(
+        models.RateLimitBucket.scope == scope,
+        models.RateLimitBucket.bucket_key == key[:128],
+    ).first()
+    if (
+        bucket is not None
+        and bucket.window_started > current - window_seconds
+        and bucket.event_count >= limit
+    ):
+        raise HTTPException(
+            status_code=429,
+            detail=detail,
+            headers={"Retry-After": str(
+                max(1, int(window_seconds - (current - bucket.window_started)))
+            )},
+        )
+
+
 def enforce_auth_rate_limit(request: Request, db: Session) -> None:
+    # A client already over its own limit must not consume the shared global
+    # budget; otherwise one address can lock every account out of login.
+    client_key = _client_key(request)
+    ip_detail = "驗證請求過於頻繁，請稍後再試。"
+    _reject_if_window_full(_auth_rate_events, client_key, AUTH_RATE_LIMIT_PER_MINUTE, ip_detail)
+    _reject_if_shared_window_full(db, "auth-ip", client_key, AUTH_RATE_LIMIT_PER_MINUTE, ip_detail)
     _enforce_shared_window_limit(
         db, "auth-global", "global", AUTH_GLOBAL_RATE_LIMIT_PER_MINUTE,
         "驗證服務目前忙碌，請稍後再試。",
@@ -150,7 +197,6 @@ def enforce_auth_rate_limit(request: Request, db: Session) -> None:
         _auth_global_rate_events, "global", AUTH_GLOBAL_RATE_LIMIT_PER_MINUTE,
         "驗證服務目前忙碌，請稍後再試。",
     )
-    client_key = _client_key(request)
     _enforce_window_limit(
         _auth_rate_events, client_key, AUTH_RATE_LIMIT_PER_MINUTE,
         "驗證請求過於頻繁，請稍後再試。",
@@ -162,6 +208,14 @@ def enforce_auth_rate_limit(request: Request, db: Session) -> None:
 
 
 def enforce_agent_request_limits(request: Request, user_id: int, db: Session) -> None:
+    # Reject a throttled network or account before it spends shared AI budget.
+    client_key = _client_key(request)
+    ip_detail = "此網路的 AI 請求過於頻繁，請稍後再試。"
+    user_detail = "AI 請求過於頻繁，請稍後再試。"
+    _reject_if_window_full(_agent_ip_rate_events, client_key, AGENT_IP_RATE_LIMIT_PER_MINUTE, ip_detail)
+    _reject_if_window_full(_agent_rate_events, user_id, AGENT_RATE_LIMIT_PER_MINUTE, user_detail)
+    _reject_if_shared_window_full(db, "agent-ip", client_key, AGENT_IP_RATE_LIMIT_PER_MINUTE, ip_detail)
+    _reject_if_shared_window_full(db, "agent-user", str(user_id), AGENT_RATE_LIMIT_PER_MINUTE, user_detail)
     _enforce_shared_window_limit(
         db, "agent-global", "global", AGENT_GLOBAL_RATE_LIMIT_PER_MINUTE,
         "AI 服務目前忙碌，請稍後再試。",
@@ -170,7 +224,6 @@ def enforce_agent_request_limits(request: Request, user_id: int, db: Session) ->
         _agent_global_rate_events, "global", AGENT_GLOBAL_RATE_LIMIT_PER_MINUTE,
         "AI 服務目前忙碌，請稍後再試。",
     )
-    client_key = _client_key(request)
     _enforce_window_limit(
         _agent_ip_rate_events, client_key, AGENT_IP_RATE_LIMIT_PER_MINUTE,
         "此網路的 AI 請求過於頻繁，請稍後再試。",
@@ -238,3 +291,28 @@ def _enforce_model_refresh_cooldown(user_id: int, now: float | None = None) -> N
                 headers={"Retry-After": str(retry_after)},
             )
         _model_refresh_times[user_id] = current
+
+
+# Failed password checks per username. The per-IP window alone still allows
+# distributed guessing against one account; this bounds guesses per account.
+LOGIN_FAILURE_LIMIT = 10
+LOGIN_FAILURE_WINDOW_SECONDS = 15 * 60
+_LOGIN_FAILURE_DETAIL = "此帳號登入失敗次數過多，請 15 分鐘後再試。"
+
+
+def reject_locked_account(db: Session, username: str) -> None:
+    _reject_if_shared_window_full(
+        db, "auth-user-failure", username, LOGIN_FAILURE_LIMIT, _LOGIN_FAILURE_DETAIL,
+        window_seconds=LOGIN_FAILURE_WINDOW_SECONDS,
+    )
+
+
+def record_login_failure(db: Session, username: str) -> None:
+    try:
+        _enforce_shared_window_limit(
+            db, "auth-user-failure", username, LOGIN_FAILURE_LIMIT, _LOGIN_FAILURE_DETAIL,
+            window_seconds=LOGIN_FAILURE_WINDOW_SECONDS,
+        )
+    except HTTPException:
+        # Already at the limit; the next attempt is rejected by reject_locked_account.
+        pass

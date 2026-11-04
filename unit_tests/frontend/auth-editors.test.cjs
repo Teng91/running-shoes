@@ -33,7 +33,7 @@ test('register and password-change callbacks cannot mutate a replacement session
   for (const action of ['handleRegister', 'handleChangePassword']) {
     const { context, elements, state } = authOperationContext();
     for (const id of ['reg-username', 'change-username']) elements[id].value = 'A';
-    for (const id of ['reg-password', 'reg-password2', 'change-old-password', 'change-new-password', 'change-new-password2']) elements[id].value = 'pass';
+    for (const id of ['reg-password', 'reg-password2', 'change-old-password', 'change-new-password', 'change-new-password2']) elements[id].value = 'password';
     let finish, calls = 0;
     context.fetch = () => { calls++; return new Promise(resolve => { finish = resolve; }); };
     const request = context[action](); await context[action]();

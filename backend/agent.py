@@ -1,6 +1,7 @@
 """Agent runner coordinating deterministic planning, tools, LLM, and SSE."""
 
 import json
+import logging
 from collections.abc import Generator
 from typing import Any
 
@@ -9,6 +10,8 @@ from sqlalchemy.orm import Session
 from backend import agent_planner, agent_protocol, agent_tools, llm
 from backend.tools import db_tools
 from backend.tools.search_tool import is_failure, run_web_search
+
+logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = """你是「跑鞋推薦助手」，服務一位熱愛跑步的使用者。
 
@@ -266,8 +269,10 @@ def run_agent_stream(
         except llm.LLMError as exc:
             yield _sse({"type": "error", "text": str(exc)})
             break
-        except Exception as exc:  # noqa: BLE001
-            yield _sse({"type": "error", "text": f"模型呼叫發生錯誤：{exc}"})
+        except Exception:
+            # Unexpected exception text may contain provider URLs or internal state.
+            logger.exception("Unexpected model stream failure")
+            yield _sse({"type": "error", "text": "模型呼叫發生錯誤，請稍後再試或更換模型。"})
             break
 
         native_tool_calls = llm_result.get("tool_calls", [])

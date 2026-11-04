@@ -493,6 +493,9 @@ def test_model_errors_are_reported_and_stream_finishes(monkeypatch, exception, e
 
     assert _event_types(events) == ["error", "done"]
     assert expected in events[0]["text"]
+    if not isinstance(exception, llm.LLMError):
+        # Internal exception text is logged, never streamed to the browser.
+        assert "broken generator" not in events[0]["text"]
 
 
 def test_tool_round_executes_tool_then_returns_final_answer(monkeypatch):
