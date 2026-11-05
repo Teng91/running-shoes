@@ -137,18 +137,21 @@ async function run() {
       release = 'fixture-a'; failure = null; failedAssets = 0; networkDown = false; legacy = true;
       moduleOriginRequests = 0; offlineApiFailures = 0; offlineWorkerFailures = 0;
       failedKinds.clear(); requests.length = 0; phase(engine.name() + ': launch');
-      let browser, context, page;
+      let browser, context, page, webkitQueueStalls = 0;
+      const errors = [];
+      const openBrowser = async () => {
+        browser = await engine.launch({ headless: true, timeout: 30000 });
+        context = await browser.newContext({ serviceWorkers: 'allow', locale: 'zh-TW' });
+        await startArtifacts(context);
+        page = await context.newPage();
+        page.setDefaultTimeout(15000);
+        page.setDefaultNavigationTimeout(15000);
+        page.on('pageerror', error => errors.push(error.message));
+        page.on('console', message => { if (process.env.PWA_DEBUG && message.type() === 'error') console.error('PWA fixture console:', message.text()); });
+      };
       try {
         await withDeadline(async () => {
-          browser = await engine.launch({ headless: true, timeout: 30000 });
-          context = await browser.newContext({ serviceWorkers: 'allow', locale: 'zh-TW' });
-          await startArtifacts(context);
-          page = await context.newPage();
-          page.setDefaultTimeout(15000);
-          page.setDefaultNavigationTimeout(15000);
-          const errors = [];
-          page.on('pageerror', error => errors.push(error.message));
-          page.on('console', message => { if (process.env.PWA_DEBUG && message.type() === 'error') console.error('PWA fixture console:', message.text()); });
+          await openBrowser();
           const setOffline = async offline => {
             // WebKit's network-emulation switch also prevents cached SW navigations.
             // A dropped fixture transport tests actual network failure without disabling SW itself.
@@ -156,14 +159,67 @@ async function run() {
             networkDown = offline;
             if (engine === chromium) await context.setOffline(offline);
           };
+          const recoverFromWebKitQueueStall = async () => {
+            // Fresh browser with the installed safe release, back in the offline state the
+            // interrupted check expected (sentinel cache included).
+            await closeBrowser(context, browser);
+            await openBrowser();
+            legacy = false; release = 'fixture-a-safe'; failure = null; networkDown = false;
+            await page.goto(origin, { waitUntil: 'networkidle' });
+            await waitForAsync(page, async () => (await navigator.serviceWorker.getRegistration())?.active?.state === 'activated', null, { timeout: 15000 });
+            await page.waitForFunction(() => navigator.serviceWorker.controller !== null);
+            await assertShell(page, 'fixture-a-safe');
+            await page.evaluate(async () => { await (await caches.open('unrelated-cache')).put('/sentinel', new Response('keep')); });
+            await setOffline(true);
+            await page.reload({ waitUntil: 'networkidle' });
+            await assertShell(page, 'fixture-a-safe');
+          };
           const assertOfflineUpdate = async () => {
             phase(`PWA ${engine.name()}: offline worker update rejects`);
-            const failed = await withDeadline(() => page.evaluate(async () => {
-              const registration = await navigator.serviceWorker.getRegistration();
+            const dispatchedBefore = offlineWorkerFailures;
+            const evaluation = page.evaluate(async () => {
+              // WebKit can briefly resolve getRegistration() to undefined right after an offline
+              // reload of a controlled page; ready waits for the active registration instead.
+              const registration = await navigator.serviceWorker.ready;
               return registration.update().then(() => false, () => true);
-            }), 10000, engine.name() + ' offline worker update');
+            });
+            evaluation.catch(() => {});
+            let failed;
+            try {
+              failed = await withDeadline(() => evaluation, 10000, engine.name() + ' offline worker update');
+            } catch (error) {
+              // In roughly 1 of 70 CI updates WebKit's registration job queue stalls permanently
+              // without ever requesting the worker script, so no application code runs. Only that
+              // exact signature is recovered, once per engine; a dispatched-but-unsettled update
+              // (an application bug) still fails.
+              const neverDispatched = offlineWorkerFailures === dispatchedBefore;
+              if (engine !== webkit || error.name !== 'BrowserDeadlineError' || !neverDispatched || webkitQueueStalls > 0) throw error;
+              webkitQueueStalls++;
+              console.warn(`PWA ${stage}: WebKit never dispatched the update job; retrying once in a fresh browser`);
+              await recoverFromWebKitQueueStall();
+              return assertOfflineUpdate();
+            }
             assert.equal(failed, true, 'offline update must settle as a failure, not hold the scope job queue');
             if (engine === webkit) assert.ok(offlineWorkerFailures > 0, 'WebKit update reached the HTTP failure fixture');
+          };
+          const settleBackgroundUpdates = async () => {
+            // A navigation schedules a background update check. While a broken deployment is
+            // live, WebKit may start reinstalling it after any fixed delay; cutting the transport
+            // mid-install makes WebKit retry those fetches and hold the scope job queue. Roll the
+            // fixture back to the installed release (byte-identical worker, so no new install can
+            // start) and wait until no candidate is installing and fixture traffic has drained.
+            release = 'fixture-a-safe'; failure = null;
+            const noCandidate = async () => {
+              const registration = await navigator.serviceWorker.ready;
+              return !registration.installing && !registration.waiting;
+            };
+            // Require two consecutive idle checks around a quiet window, so a candidate whose
+            // worker script was fetched just before the rollback is also observed and settled.
+            for (let settled = 0; settled < 2;) {
+              await waitForAsync(page, noCandidate, null, { timeout: 15000 });
+              await waitForFixtureQuiet();
+              settled = await page.evaluate(noCandidate) ? settled + 1 : 0;
+            }
           };
           phase(`PWA ${engine.name()}: first offline / online install`);
           // Without a previously installed shell, an offline first visit cannot load.
@@ -218,6 +274,7 @@ async function run() {
             // A navigation while a newer deployment exists must not rewrite old HTML.
             await page.reload({ waitUntil: 'networkidle' });
             await assertShell(page, 'fixture-a-safe');
+            await settleBackgroundUpdates();
             await setOffline(true);
             await page.reload({ waitUntil: 'networkidle' });
             await assertShell(page, 'fixture-a-safe');

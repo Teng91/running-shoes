@@ -9,7 +9,7 @@
 
 ### Fixed
 - 瀏覽器測試的非同步等待改用 `waitForAsync`：Playwright `waitForFunction` 不會等待 async predicate，造成 WebKit 離線佇列測試間歇失敗；新增防回歸檢查。
-- PWA 測試在失敗升級後與模擬斷線前，先等候 fixture 流量結束，修正 WebKit 更新逾時與 reload 內部錯誤。
+- PWA 測試：失敗升級後先把 fixture 回復到已安裝版本並等候背景更新與流量結束才模擬斷線；改用 `serviceWorker.ready`；WebKit 偶發（約 1/70）更新佇列永久卡住且未送出請求時，於新瀏覽器重試一次（第二次或已送出未完成仍失敗）。
 - 僅測試與依賴變更；Asset 4.0.1／shell v42 與 schema 6 不變，無資料 migration。
 
 ## [4.0.2] - 2026-11-05

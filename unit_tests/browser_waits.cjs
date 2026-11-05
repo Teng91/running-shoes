@@ -14,7 +14,12 @@ async function waitForAsync(page, predicate, arg = null, { timeout = 30000, inte
       lastError = error;
     }
     if (Date.now() >= deadline) {
-      throw new Error(`waitForAsync: Timeout ${timeout}ms exceeded` + (lastError ? ` (${lastError.message})` : ''));
+      let state = '';
+      if (describe) {
+        try { state = ' state=' + JSON.stringify(await page.evaluate(describe, arg)); }
+        catch (error) { state = ' state unavailable: ' + error.message; }
+      }
+      throw new Error(`waitForAsync: Timeout ${timeout}ms exceeded` + (lastError ? ` (${lastError.message})` : '') + state);
     }
     await new Promise(resolve => setTimeout(resolve, interval));
   }
