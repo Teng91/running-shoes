@@ -1,7 +1,7 @@
 // Playwright's page.waitForFunction does not await a Promise returned by the predicate:
 // an async predicate is a truthy Promise, so the wait resolves immediately. Poll with
 // page.evaluate (which awaits) for page state that needs IndexedDB, service workers, etc.
-async function waitForAsync(page, predicate, arg = null, { timeout = 30000, interval = 50 } = {}) {
+async function waitForAsync(page, predicate, arg = null, { timeout = 30000, interval = 50, describe = null } = {}) {
   const deadline = Date.now() + timeout;
   let lastError = null;
   for (;;) {
