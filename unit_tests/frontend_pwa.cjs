@@ -5,6 +5,7 @@ const fs = require('node:fs');
 const http = require('node:http');
 const path = require('node:path');
 const { startArtifacts, saveFailure, closeBrowser, withDeadline } = require('../scripts/browser_artifacts.cjs');
+const { waitForAsync } = require('./browser_waits.cjs');
 
 const frontend = path.resolve(__dirname, '../frontend');
 const htmlSource = fs.readFileSync(path.join(frontend, 'index.html'), 'utf8');
@@ -158,7 +159,7 @@ async function run() {
           await setOffline(false);
           phase(`PWA ${engine.name()}: fetching initial online document`);
           await page.goto(origin, { waitUntil: 'networkidle' });
-          await page.waitForFunction(async () => (await navigator.serviceWorker.getRegistration())?.active?.state === 'activated', null, { timeout: 15000 });
+          await waitForAsync(page, async () => (await navigator.serviceWorker.getRegistration())?.active?.state === 'activated', null, { timeout: 15000 });
           await page.evaluate(() => navigator.serviceWorker.ready);
           await page.waitForFunction(() => navigator.serviceWorker.controller !== null);
           await assertShell(page, 'fixture-a');

@@ -87,6 +87,7 @@
 - `frontend/app-run-insights.js`: run cards, calendar, charts, and shoe analytics UI.
 - `frontend/app-shoes.js`: shoe editing and modal interactions.
 - `unit_tests/frontend/`: feature-oriented Node regressions through `frontend_regressions.cjs`.
+- `unit_tests/browser_waits.cjs`: `waitForAsync` for page conditions that need `await`; never pass async predicates to Playwright `waitForFunction` (it does not await them).
 - `unit_tests/`: backend, frontend, security, migration, and agent regression tests.
 
 ## Working rules
