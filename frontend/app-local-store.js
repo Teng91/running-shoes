@@ -1,21 +1,42 @@
 // IndexedDB transactions resolve only after commit, including lease compare/update.
+// Browsers may close a live connection (WebKit/iOS Safari after backgrounding or under memory
+// pressure, or a versionchange); the next operation reopens instead of failing until reload.
 async function openLocalWorkspaceStore() {
-  const database = await new Promise((resolve, reject) => {
-    const request = indexedDB.open('running-shoes-workspace', 1);
-    request.onupgradeneeded = () => {
-      const store = request.result.createObjectStore('records', { keyPath: 'key' });
-      store.createIndex('account', 'account');
-    };
-    let settled = false;
-    const timer = setTimeout(() => { settled = true; reject(Error('本機資料庫開啟逾時')); }, 5000);
-    request.onsuccess = () => { clearTimeout(timer); if (settled) request.result.close(); else { settled = true; resolve(request.result); } };
-    request.onerror = () => { settled = true; clearTimeout(timer); reject(request.error); };
-    request.onblocked = () => { settled = true; clearTimeout(timer); reject(Error('本機資料庫正在升級，請關閉其他舊分頁後重試')); };
-  });
-  database.onversionchange = () => database.close();
-  function transaction(mode, job) {
+  let database = null, opening = null;
+  function open() {
+    opening ||= new Promise((resolve, reject) => {
+      const request = indexedDB.open('running-shoes-workspace', 1);
+      request.onupgradeneeded = () => {
+        const store = request.result.createObjectStore('records', { keyPath: 'key' });
+        store.createIndex('account', 'account');
+      };
+      let settled = false;
+      const timer = setTimeout(() => { settled = true; reject(Error('本機資料庫開啟逾時')); }, 5000);
+      request.onsuccess = () => { clearTimeout(timer); if (settled) request.result.close(); else { settled = true; resolve(request.result); } };
+      request.onerror = () => { settled = true; clearTimeout(timer); reject(request.error); };
+      request.onblocked = () => { settled = true; clearTimeout(timer); reject(Error('本機資料庫正在升級，請關閉其他舊分頁後重試')); };
+    }).then(connection => {
+      const forget = () => { if (database === connection) database = null; };
+      connection.onversionchange = () => { connection.close(); forget(); };
+      connection.onclose = forget;
+      database = connection;
+      return connection;
+    }).finally(() => { opening = null; });
+    return opening;
+  }
+  await open();
+  async function transaction(mode, job) {
+    let tx;
+    for (let attempt = 0; !tx; attempt++) {
+      const connection = database || await open();
+      try { tx = connection.transaction('records', mode); }
+      catch (error) {
+        // A closing connection cannot start transactions; nothing ran, so reopen and retry once.
+        if (error?.name !== 'InvalidStateError' || attempt > 0) throw error;
+        if (database === connection) database = null;
+      }
+    }
     return new Promise((resolve, reject) => {
-      const tx = database.transaction('records', mode);
       const store = tx.objectStore('records');
       let result, failure;
       tx.oncomplete = () => resolve(result);
