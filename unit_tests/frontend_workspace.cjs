@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const http = require('node:http');
 const { startArtifacts, saveFailure, closeBrowser, withDeadline } = require('../scripts/browser_artifacts.cjs');
+const { waitForAsync } = require('./browser_waits.cjs');
 module.exports = async function checkWorkspace(browser, baseUrl) {
   const suffix = `${browser.browserType().name()}-${Date.now()}`;
   const password = 'Synthetic-workspace-91!';
@@ -84,7 +85,7 @@ module.exports = async function checkWorkspace(browser, baseUrl) {
     await page.evaluate(() => { shoeModal.openForEdit(shoes[0], false); });
     await page.locator('#f-nickname').fill('Unfinished nickname');
     await page.evaluate(() => { shoeModal.close(); });
-    await page.waitForFunction(async () => (await localWorkspace.controller.read('drafts'))[0]?.value.editors['shoe:' + shoes[0].id]?.values['f-nickname'] === 'Unfinished nickname');
+    await waitForAsync(page, async () => (await localWorkspace.controller.read('drafts'))[0]?.value.editors['shoe:' + shoes[0].id]?.values['f-nickname'] === 'Unfinished nickname');
     await page.reload({ waitUntil: 'networkidle' });
     await page.waitForFunction(() => document.getElementById('run-km').value === '5' && document.getElementById('add-km').value === '180');
     await page.getByRole('button', { name: '資料與同步', exact: true }).click();
@@ -110,10 +111,10 @@ module.exports = async function checkWorkspace(browser, baseUrl) {
     await page.locator('.tab[data-tab="runs"]').click();
     await setOffline(true);
     await page.locator('#add-run-btn').click();
-    await page.waitForFunction(async () => document.getElementById('run-km').value === '' && (await localWorkspace.controller.read('queue')).length === 1);
+    await waitForAsync(page, async () => document.getElementById('run-km').value === '' && (await localWorkspace.controller.read('queue')).length === 1);
     assert.equal((await api(a.token, '/runs')).length, 0, 'offline acceptance does not write server');
     await page.reload({ waitUntil: 'domcontentloaded' });
-    await page.waitForFunction(async () => localWorkspace.controller?.account && shoes.length === 1 && (await localWorkspace.controller.read('queue')).length === 1);
+    await waitForAsync(page, async () => localWorkspace.controller?.account && shoes.length === 1 && (await localWorkspace.controller.read('queue')).length === 1);
     assert.equal(await page.locator('#run-km').inputValue(), '', 'consumed draft never reappears on offline restart');
     const failedProbe = await page.evaluate(async () => { try { await fetch('/api/runs'); return false; } catch { return true; } });
     assert.equal(failedProbe, true, 'authenticated API is not served from shell cache');
@@ -128,7 +129,7 @@ module.exports = async function checkWorkspace(browser, baseUrl) {
     assert.match(await page.locator('#workspace-sync-status').textContent(), /紀錄已送出，但畫面更新失敗/);
     failRefreshReads = false;
     await page.evaluate(() => refreshCoreData());
-    await page.waitForFunction(async () => (await localWorkspace.controller.read('queue')).length === 0);
+    await waitForAsync(page, async () => (await localWorkspace.controller.read('queue')).length === 0);
     let runs = await api(a.token, '/runs'); assert.equal(runs.length, 1); assert.equal(runs[0].km, 5);
     const deletedRunId = runs[0].id;
     assert.equal((await api(a.token, '/shoes/active'))[0].mileage, 25);
@@ -137,7 +138,7 @@ module.exports = async function checkWorkspace(browser, baseUrl) {
     await page.locator('#run-table tr').filter({ hasText: '5.00 km' }).getByRole('button', { name: '編輯' }).click();
     await page.locator('#run-modal').getByRole('button', { name: '刪除', exact: true }).click();
     await page.locator('#run-modal').waitFor({ state: 'hidden' });
-    await page.waitForFunction(async () => !Object.keys((await localWorkspace.controller.read('drafts'))[0]?.value.editors || {}).some(key => key.startsWith('run:')), null);
+    await waitForAsync(page, async () => !Object.keys((await localWorkspace.controller.read('drafts'))[0]?.value.editors || {}).some(key => key.startsWith('run:')), null);
     await page.getByRole('button', { name: '資料與同步', exact: true }).click();
     await openWorkspaceSection('history-title');
     failRefreshReads = true;
