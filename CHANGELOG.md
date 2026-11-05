@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [4.0.2] - 2026-11-05
+
+### Changed
+- 應用時區與「今天」集中於 `backend/clock.py`，取代 8 處各自寫死的 UTC+8；行為不變。
+- 統計用四捨五入集中為 `backend/read_models/rounding.py` 的 `round_metric`，取代 4 份重複的 `_round`；輸出數值不變。
+- Asset 4.0.1／shell v42 與 schema 6 不變，前端無需更新，無資料 migration。
+
 ## [4.0.1] - 2026-11-04
 
 ### Security

@@ -1,11 +1,12 @@
 """Per-user running goals and deterministic progress calculations."""
 
 from calendar import monthrange
-from datetime import date, datetime, timedelta, timezone
+from datetime import date
 
 from sqlalchemy.orm import Session
 
 from backend import models
+from backend.clock import local_today
 from backend.read_models.run_statistics import period_distances, run_period
 
 DEFAULT_GOAL_START_YEAR = 2026
@@ -41,7 +42,7 @@ def goal_progress(
     """Return goal progress through the requested report month."""
     goal = goal_values(db, user_id)
     active = year >= goal["start_year"]
-    today = as_of or datetime.now(timezone(timedelta(hours=8))).date()
+    today = as_of or local_today()
     selected = (year, month)
     current = (today.year, today.month)
     totals = distances if distances is not None else period_distances(

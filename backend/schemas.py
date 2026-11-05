@@ -1,5 +1,5 @@
 import math
-from datetime import UTC, datetime, timedelta, timezone
+from datetime import UTC, datetime
 from datetime import date as calendar_date
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Annotated, Literal
@@ -12,6 +12,8 @@ from pydantic import (
     field_validator,
     model_validator,
 )
+
+from backend.clock import local_today
 
 # All valid shoe purpose/function categories.
 SHOE_CATEGORIES = ["Daily", "Speed", "Tempo", "Race"]
@@ -64,8 +66,8 @@ def _validate_iso_date(value: str) -> str:
 
 def _validate_completed_run_date(value: str) -> str:
     value = _validate_iso_date(value)
-    taipei_today = datetime.now(timezone(timedelta(hours=8))).date()
-    if calendar_date.fromisoformat(value) > taipei_today:
+    today = local_today()
+    if calendar_date.fromisoformat(value) > today:
         raise ValueError("run date must not be in the future")
     return value
 

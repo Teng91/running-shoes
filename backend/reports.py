@@ -7,20 +7,18 @@
 """
 
 import json
-from datetime import date, datetime, timedelta, timezone
+from datetime import date
 
 from sqlalchemy.orm import Session
 
 from backend import goals, models
+from backend.clock import local_today
 from backend.read_models import mileage as mileage_stats
 from backend.read_models import shoes as shoe_stats
+from backend.read_models.rounding import round_metric
 from backend.read_models.run_statistics import month_bounds, period_distances, run_period
 
 REPORT_SECTIONS = ["本月總覽", "趨勢解讀", "鞋款壽命與退役提醒", "下月建議"]
-
-
-def _round(value: float | None, digits: int = 2) -> float:
-    return round(float(value or 0), digits)
 
 
 def _month_run_stats(
@@ -40,7 +38,7 @@ def _month_run_stats(
     if through_date is not None:
         query = query.filter(models.Run.date <= through_date)
     runs = query.all()
-    total_km = _round(sum(r.km for r in runs))
+    total_km = round_metric(sum(r.km for r in runs))
     run_days = len({r.date for r in runs})
     per_shoe: dict[int, float] = {}
     per_shoe_count: dict[int, int] = {}
@@ -63,7 +61,7 @@ def _month_run_stats(
     shoe_breakdown = [
         {
             "shoe": shoe_names[shoe_id],
-            "km": _round(km),
+            "km": round_metric(km),
             "wear_count": per_shoe_count[shoe_id],
         }
         for shoe_id, km in totals
@@ -114,7 +112,7 @@ def build_report_stats(
     today: date | None = None,
 ) -> dict:
     """組出餵給 LLM 與存入 stats_json 的精簡統計快照。"""
-    as_of = today or datetime.now(timezone(timedelta(hours=8))).date()
+    as_of = today or local_today()
     period = run_period(year, month, as_of)
     distances = period_distances(db, user_id, period)
     month_stats = _month_run_stats(db, user_id, year, month, through_date=period.month_end)
@@ -151,7 +149,7 @@ def build_report_stats(
         "report_month": {"year": year, "month": month},
         "month_run_stats": month_stats,
         "prev_month_run_km": prev_km,
-        "prev_month_delta_km": _round(month_stats["month_km"] - prev_km),
+        "prev_month_delta_km": round_metric(month_stats["month_km"] - prev_km),
         "comparison_label": comparison_label,
         "comparison_through_day": comparison_through_day,
         "ytd_run_km": ytd_km,

@@ -4,19 +4,17 @@ from __future__ import annotations
 
 from calendar import monthrange
 from collections import defaultdict
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, timedelta
 
 from sqlalchemy.orm import Session
 
 from backend import goals, models
+from backend.clock import local_today
 from backend.forecasting import retirement_forecast
+from backend.read_models.rounding import round_metric
 from backend.read_models.run_statistics import month_bounds, run_period
 from backend.read_models.shoe_statistics import shoe_run_statistics
 from backend.shoe_metrics import shoe_metrics
-
-
-def _round(value: float | None, digits: int = 2) -> float:
-    return round(float(value or 0), digits)
 
 
 def _shift_month(year: int, month: int, delta: int) -> tuple[int, int]:
@@ -25,7 +23,7 @@ def _shift_month(year: int, month: int, delta: int) -> tuple[int, int]:
 
 
 def _run_metrics(runs: list[models.Run]) -> dict:
-    total_km = _round(sum(run.km for run in runs))
+    total_km = round_metric(sum(run.km for run in runs))
     return {
         "km": total_km,
         "count": len(runs),
@@ -41,7 +39,7 @@ def shoe_analytics(db: Session, user_id: int, shoe_id: int, *, today: date | Non
     if shoe is None:
         return None
 
-    as_of = today or datetime.now(timezone(timedelta(hours=8))).date()
+    as_of = today or local_today()
     return _shoe_analytics(shoe, shoe_run_statistics(db, user_id, [shoe.id], as_of)[shoe.id], as_of)
 
 
@@ -53,7 +51,7 @@ def batch_shoe_analytics(
     scoped = [shoe for shoe in shoes if shoe.user_id == user_id and not shoe.is_deleted]
     if not scoped:
         return []
-    as_of = today or datetime.now(timezone(timedelta(hours=8))).date()
+    as_of = today or local_today()
     statistics = shoe_run_statistics(
         db, user_id, [shoe.id for shoe in scoped], as_of, include_details=include_details
     )
@@ -63,9 +61,9 @@ def batch_shoe_analytics(
 def _shoe_analytics(shoe: models.Shoe, statistics: dict, as_of: date) -> dict:
     """One presentation policy for single-shoe API and batched tool read models."""
     metrics = {
-        "km": _round(statistics["km"]), "count": statistics["count"], "days": statistics["days"],
+        "km": round_metric(statistics["km"]), "count": statistics["count"], "days": statistics["days"],
     }
-    km_30, km_90 = _round(statistics["km_30"]), _round(statistics["km_90"])
+    km_30, km_90 = round_metric(statistics["km_30"]), round_metric(statistics["km_90"])
     forecast = retirement_forecast(shoe, km_90, as_of)
     costs = shoe_metrics(shoe)
 
@@ -76,7 +74,7 @@ def _shoe_analytics(shoe: models.Shoe, statistics: dict, as_of: date) -> dict:
         monthly_history.append({
             "year": year,
             "month": month,
-            "km": _round(float(values["km"])),
+            "km": round_metric(float(values["km"])),
             "count": int(values["count"]),
         })
 
@@ -90,13 +88,13 @@ def _shoe_analytics(shoe: models.Shoe, statistics: dict, as_of: date) -> dict:
             "purchase_date": shoe.date,
         },
         "lifecycle": {
-            "total_mileage_km": _round(shoe.mileage),
+            "total_mileage_km": round_metric(shoe.mileage),
             "logged_mileage_km": metrics["km"],
-            "historical_adjustment_km": _round(shoe.baseline_mileage),
-            "expected_mileage_km": _round(shoe.expected_mileage),
+            "historical_adjustment_km": round_metric(shoe.baseline_mileage),
+            "expected_mileage_km": round_metric(shoe.expected_mileage),
             "remaining_mileage_km": forecast["remaining_mileage_km"],
             "usage_percent": (
-                _round(costs["usage_percent"], 1)
+                round_metric(costs["usage_percent"], 1)
                 if shoe.expected_mileage > 0 else None
             ),
             "forecast_retirement_date": forecast["forecast_retirement_date"],
@@ -111,7 +109,7 @@ def _shoe_analytics(shoe: models.Shoe, statistics: dict, as_of: date) -> dict:
             "km_90_days": km_90,
             "actual_monthly_km_90_days": forecast["actual_monthly_km_90_days"],
             "cost_per_km": costs["cost_per_km"],
-            "cost_per_wear": _round(shoe.price / metrics["count"]) if metrics["count"] else None,
+            "cost_per_wear": round_metric(shoe.price / metrics["count"]) if metrics["count"] else None,
         },
         "monthly_history": monthly_history,
         "recent_runs": statistics["recent"],
@@ -126,7 +124,7 @@ def dashboard_analytics(
     *,
     today: date | None = None,
 ) -> dict:
-    as_of = today or datetime.now(timezone(timedelta(hours=8))).date()
+    as_of = today or local_today()
     selected = (year, month)
     current = (as_of.year, as_of.month)
     period = run_period(year, month, as_of)
@@ -172,13 +170,13 @@ def dashboard_analytics(
     shoe_usage: list[dict[str, float | int | str]] = []
     for shoe_id, values in sorted(per_shoe.items(), key=lambda item: float(item[1]["km"]), reverse=True):
         shoe = shoe_map.get(shoe_id)
-        km = _round(float(values["km"]))
+        km = round_metric(float(values["km"]))
         shoe_usage.append({
             "shoe_id": shoe_id,
             "name": f"{shoe.brand} {shoe.model}" if shoe else "鞋款已刪除",
             "km": km,
             "count": int(values["count"]),
-            "share_percent": _round(km / month_metrics["km"] * 100, 1)
+            "share_percent": round_metric(km / month_metrics["km"] * 100, 1)
             if month_metrics["km"] > 0 else 0.0,
         })
 
@@ -201,10 +199,10 @@ def dashboard_analytics(
             models.Run.date >= start_prev_7.isoformat(),
             models.Run.date <= end_7.isoformat(),
         ).all()
-        latest_7_km = _round(
+        latest_7_km = round_metric(
             sum(run.km for run in all_recent if run.date >= start_7.isoformat())
         )
-        previous_7_km = _round(
+        previous_7_km = round_metric(
             sum(run.km for run in all_recent if run.date < start_7.isoformat())
         )
 
@@ -228,10 +226,10 @@ def dashboard_analytics(
     goal = goals.goal_progress(db, user_id, year, month, as_of=as_of)
     days_in_month = monthrange(year, month)[1]
     if selected == current:
-        projected = _round(goal["month_km"] / max(1, as_of.day) * days_in_month)
+        projected = round_metric(goal["month_km"] / max(1, as_of.day) * days_in_month)
         forecast_state = "current"
     elif selected < current:
-        projected = _round(goal["month_km"])
+        projected = round_metric(goal["month_km"])
         forecast_state = "past"
     else:
         projected = 0.0
@@ -240,28 +238,28 @@ def dashboard_analytics(
         "state": forecast_state,
         "projected_month_km": projected,
         "daily_average_km": (
-            _round(goal["month_km"] / max(1, goal["elapsed_days"]))
+            round_metric(goal["month_km"] / max(1, goal["elapsed_days"]))
             if goal["elapsed_days"] else 0.0
         ),
         "required_daily_km": goal["required_daily_km"],
         "required_weekly_km": (
-            _round(float(goal["required_daily_km"]) * 7)
+            round_metric(float(goal["required_daily_km"]) * 7)
             if goal["required_daily_km"] is not None else None
         ),
-        "projected_goal_delta_km": _round(projected - goal["monthly_km"]),
+        "projected_goal_delta_km": round_metric(projected - goal["monthly_km"]),
     }
 
     return {
         "period": {"year": year, "month": month},
         "month": month_metrics,
         "previous_month": {"year": prev_year, "month": prev_month, **prev_metrics},
-        "month_delta_km": _round(comparison_current["km"] - comparison_previous["km"]),
+        "month_delta_km": round_metric(comparison_current["km"] - comparison_previous["km"]),
         "comparison": {
             "label": comparison_label,
             "through_day": comparison_day,
             "current_km": comparison_current["km"],
             "previous_km": comparison_previous["km"],
-            "delta_km": _round(comparison_current["km"] - comparison_previous["km"]),
+            "delta_km": round_metric(comparison_current["km"] - comparison_previous["km"]),
         },
         "recent_7_days": {
             "state": "future" if end_7 is None else "ready",
@@ -269,7 +267,7 @@ def dashboard_analytics(
             "end": end_7.isoformat() if end_7 else None,
             "km": latest_7_km,
             "previous_km": previous_7_km,
-            "delta_km": _round(latest_7_km - previous_7_km),
+            "delta_km": round_metric(latest_7_km - previous_7_km),
         },
         "goal": goal,
         "forecast": forecast,

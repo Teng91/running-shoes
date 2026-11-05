@@ -10,12 +10,12 @@ import pytest
 from fastapi import HTTPException, UploadFile
 from fastapi.testclient import TestClient
 
+from backend.clock import local_today
 from backend.database import get_db
 from backend.main import app
 from backend.middleware import StravaUploadLimitMiddleware
 from backend.models import MonthlyMileage, Run, Shoe, StravaImport
 from backend.routers import strava as strava_routes
-from backend.routers.reports import _local_today
 from backend.routers.strava import _parse_strava_csv
 from backend.services.strava_imports import ImportResult
 from unit_tests.test_api import _auth_header
@@ -107,7 +107,7 @@ def upload(
 
 
 def test_strava_parser_rejects_future_activities():
-    future = (_local_today() + timedelta(days=1)).isoformat()
+    future = (local_today() + timedelta(days=1)).isoformat()
     raw = (
         "活動 ID,活動日期,活動類型,活動裝備,距離\n"
         f"future-1,{future},跑步,Test Shoe,5000\n"

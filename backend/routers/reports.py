@@ -1,6 +1,5 @@
 """Monthly AI report HTTP endpoints."""
 
-from datetime import date, datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
@@ -9,6 +8,7 @@ from sqlalchemy.orm import Session
 from backend import llm, models, schemas
 from backend import reports as report_statistics
 from backend.auth import get_current_user
+from backend.clock import local_today
 from backend.database import get_db
 from backend.rate_limits import enforce_agent_request_limits
 from backend.report_llm import stream_report_text
@@ -16,12 +16,6 @@ from backend.report_protocol import report_sse
 from backend.services.reports import generate_report
 
 router = APIRouter(prefix="/api/reports", tags=["reports"])
-TAIPEI_TIMEZONE = timezone(timedelta(hours=8))
-
-
-def _local_today() -> date:
-    return datetime.now(TAIPEI_TIMEZONE).date()
-
 
 @router.post("/generate")
 def generate_monthly_report(
@@ -31,7 +25,7 @@ def generate_monthly_report(
     db: Session = Depends(get_db),
 ):
     enforce_agent_request_limits(request, current_user.id, db)
-    today = _local_today()
+    today = local_today()
     if (payload.year, payload.month) > (today.year, today.month):
         raise HTTPException(status_code=422, detail="未來月份無法產生報告")
     try:

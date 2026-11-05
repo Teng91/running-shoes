@@ -3,10 +3,7 @@
 from sqlalchemy.orm import Session
 
 from backend import models
-
-
-def _round(value: float | None, digits: int = 2) -> float:
-    return round(float(value or 0), digits)
+from backend.read_models.rounding import round_metric
 
 
 def monthly_mileage_stats(db: Session, user_id: int) -> dict:
@@ -41,15 +38,15 @@ def monthly_mileage_stats(db: Session, user_id: int) -> dict:
         status="available",
         recorded_month_count=len(recorded_rows),
         nonzero_month_count=len(rows),
-        total_mileage_km=_round(total),
-        overall_nonzero_month_average_km=_round(avg),
+        total_mileage_km=round_metric(total),
+        overall_nonzero_month_average_km=round_metric(avg),
         recent_period_definition="latest_6_months_with_positive_mileage",
         recent_period_month_count=len(recent),
-        recent_period_total_km=_round(recent_total),
-        recent_period_average_km=_round(recent_avg),
+        recent_period_total_km=round_metric(recent_total),
+        recent_period_average_km=round_metric(recent_avg),
         recent_vs_overall_trend=trend,
-        latest_record={"year": last.year, "month": last.month, "mileage_km": _round(last.km)},
+        latest_record={"year": last.year, "month": last.month, "mileage_km": round_metric(last.km)},
         recent_nonzero_months=[
-            {"year": row.year, "month": row.month, "mileage_km": _round(row.km)} for row in recent
+            {"year": row.year, "month": row.month, "mileage_km": round_metric(row.km)} for row in recent
         ],
     )
