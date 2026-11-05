@@ -8,9 +8,10 @@
 - 依賴升級：certifi 2026.10.23、python-dotenv 1.2.4、httpx2 2.16.0、ruff 0.17.2、types-openpyxl 3.1.5.20261017；鎖定檔以 `uv pip compile --universal` 重編，保留 Windows 條件（取代 Dependabot #17–#21）。
 
 ### Fixed
+- 本機工作區 IndexedDB 連線被瀏覽器關閉（iPhone Safari 背景、記憶體壓力或 versionchange）後，下一次讀寫自動重新連線，不再需要重新整理才能存取離線待送跑步與草稿（SPEC-037）。
 - 瀏覽器測試的非同步等待改用 `waitForAsync`：Playwright `waitForFunction` 不會等待 async predicate，造成 WebKit 離線佇列測試間歇失敗；新增防回歸檢查。
 - PWA 測試：失敗升級後先把 fixture 回復到已安裝版本並等候背景更新與流量結束才模擬斷線；改用 `serviceWorker.ready`；WebKit 偶發（約 1/70）更新佇列永久卡住且未送出請求時，於新瀏覽器重試一次（第二次或已送出未完成仍失敗）。
-- 僅測試與依賴變更；Asset 4.0.1／shell v42 與 schema 6 不變，無資料 migration。
+- Asset 4.0.3／shell v43；schema 6 不變，無資料 migration。
 
 ## [4.0.2] - 2026-11-05
 

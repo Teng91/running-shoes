@@ -692,6 +692,12 @@ v3.10.3 使用 Asset 3.10.3／shell v38、schema 6、51 個 release assets。
 `registry.fly.io/running-shoes@sha256:bac44457f12adfde6473e9d9a973b330e1bf69eac7e44feb3fb6ed1f5a55429a`，
 不還原業務資料快照。發布驗證涵蓋 verify、40 組版面、雙引擎 CRUD／PWA、main/tag CI 及正式站匿名 release-check。
 
+### 本機資料庫自動重新連線（SPEC-037，v4.0.3）
+
+[SPEC-037](docs/specs/037-reconnecting-local-workspace-store.md) 修正瀏覽器（特別是 iPhone Safari）在背景或記憶體壓力下關閉本機資料庫後，
+離線待送跑步與草稿無法讀寫直到重新整理的問題；下一次讀寫會自動重新連線。本版也更新依賴並穩定 WebKit 瀏覽器測試。
+Asset 4.0.3／shell v43、schema 6 不變，無資料 migration，可回滾至 v4.0.2 image。
+
 ### 安全強化與跨平台安裝（SPEC-036，v4.0.1）
 
 [SPEC-036](docs/specs/036-security-hardening-and-portable-locks.md) 修正 AI／月報 Markdown 的 XSS，
@@ -735,7 +741,7 @@ Playwright／Chromium／WebKit 齊全時，也會執行版面測試。
 避免每次停止都重跑。Hook 不會呼叫其他模型、外部 API，或傳送提示、diff、原始碼與測試輸出。
 GitHub Actions 仍會在 push／pull request 執行 `verify`，並以三個可獨立重跑的 browser jobs 執行完整版面矩陣、真實 CRUD E2E 與 PWA 升級／離線測試；Dependabot 每週檢查 Python 與 GitHub Actions 更新。
 
-本次驗證基線為 Python **554 passed**、前端回歸測試 **147 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
+本次驗證基線為 Python **554 passed**、前端回歸測試 **148 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
 版面檢查涵蓋 WebKit／Chromium、亮／暗模式與 10 組直橫向尺寸，共 40 組設定，檢查六個功能分頁、三個認證表單、圖表、全部彈窗、行內編輯、停用／錯誤及空資料狀態。
 
 主要表單、工具列與彈窗操作統一為 44px 控制項；桌面表格內的緊湊操作為 36px，手機至少 44px。

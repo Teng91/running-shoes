@@ -223,6 +223,10 @@ SPEC-032：合成資料驗證 50,000／50,001 筆歷史邊界、UTF-8 位元組�
 
 [規格與具名案例](specs/034-portable-recovery-and-sync-refresh.md) 驗證來源及接收者連續復原、省略歷史仍攜帶來源鍵、tombstone、別名衝突／全域容量／格式拒絕、v1/v2 指紋相容，以及小數累積與 legacy Float 尾差的 no-op 版本／audit 不變。Node 覆蓋手動空佇列讀取、通知失敗不重排已確認操作、刷新中的新通知及外帳號忽略；雙引擎 workspace E2E 操作 v3 來源復原檔及真實 BroadcastChannel／IndexedDB 多分頁，確認雲端讀取與表單草稿保留。
 
+## SPEC-037 本機工作區資料庫自動重新連線
+
+[規格與具名案例](specs/037-reconnecting-local-workspace-store.md) 以 Node 模擬 IndexedDB，驗證連線無 `close` 事件靜默關閉與有 `close` 事件兩種情況都會重新開啟並讀寫成功，應用程式驗證錯誤不重試；雙引擎 workspace E2E 以 `waitForAsync` 真正等待離線重新整理後的帳號、跑鞋與佇列恢復。
+
 ## SPEC-036 安全強化與跨平台鎖定檔
 
 [規格與具名案例](specs/036-security-hardening-and-portable-locks.md) 以無 `document` 的 Node context 驗證 Markdown 只經 `DOMParser` 解析並移除可執行標記與非 allowlist 屬性；API 測試確認被 IP／帳號上限拒絕的請求不增加全站 bucket、密碼錯誤只鎖定該帳號、未知帳號仍執行 bcrypt；鎖定檔測試確認 `uvloop` 與 `colorama` 的平台條件。

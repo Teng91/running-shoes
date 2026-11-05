@@ -1,4 +1,4 @@
-const { test, assert, transportContext, vm, fs } = require('./helpers.cjs');
+const { test, assert, transportContext, vm, fs, path } = require('./helpers.cjs');
 const deferred = () => { let resolve; const promise = new Promise(r => { resolve = r; }); return { promise, resolve }; };
 async function bindRestoreController(context) {
   const { createAccountRestoreController } = await import('../../frontend/runtime/account-restore-controller.mjs');
@@ -657,4 +657,62 @@ test('SPEC-034 a commit during cloud refresh schedules a fresh trailing read', a
   context.receiveWorkspaceCommit({ type: 'run-committed', account: 'synthetic-A' });
   gate.resolve(); await pending;
   assert.equal(reads, 2, 'a read begun before another commit cannot acknowledge that commit');
+});
+
+function fakeIndexedDB() {
+  // Minimal IndexedDB for app-local-store.js; a closed connection throws like WebKit's.
+  const rows = new Map(), connections = []; let opens = 0;
+  function connect() {
+    const connection = { closing: false, onclose: null, onversionchange: null,
+      close() { this.closing = true; },
+      createObjectStore: () => ({ createIndex() {} }),
+      transaction() {
+        if (this.closing) { const error = Error('The database connection is closing.'); error.name = 'InvalidStateError'; throw error; }
+        let pending = 0;
+        const tx = { aborted: false, error: null, abort() { this.aborted = true; queueMicrotask(() => tx.onabort?.()); } };
+        const request = run => {
+          const handle = {}; pending++;
+          queueMicrotask(() => {
+            handle.result = run(); handle.onsuccess?.();
+            if (--pending === 0 && !tx.aborted) queueMicrotask(() => tx.oncomplete?.());
+          });
+          return handle;
+        };
+        tx.objectStore = () => ({
+          index: () => ({ getAll: account => request(() => [...rows.values()].filter(row => row.account === account).map(row => structuredClone(row))) }),
+          get: key => request(() => structuredClone(rows.get(JSON.stringify(key)))),
+          put: value => { rows.set(JSON.stringify(value.key), structuredClone(value)); },
+          delete: key => { rows.delete(JSON.stringify(key)); },
+        });
+        return tx;
+      } };
+    connections.push(connection);
+    return connection;
+  }
+  const indexedDB = { open() {
+    const request = {}, first = ++opens === 1;
+    setTimeout(() => { request.result = connect(); if (first) request.onupgradeneeded?.(); request.onsuccess?.(); });
+    return request;
+  } };
+  return { indexedDB, connections, opens: () => opens };
+}
+
+test('local workspace store reopens a connection the browser closed', async () => {
+  const fake = fakeIndexedDB();
+  const context = require('node:vm').createContext({ indexedDB: fake.indexedDB, setTimeout, clearTimeout, queueMicrotask, structuredClone });
+  require('node:vm').runInContext(fs.readFileSync(path.join(__dirname, '../../frontend/app-local-store.js'), 'utf8'), context);
+  const store = await context.openLocalWorkspaceStore();
+  await store.update(['synthetic-A', 'queue', 'op-1'], () => ({ status: 'pending' }));
+  // WebKit (iOS Safari) may close a live connection with no versionchange and a late close event.
+  fake.connections[0].close();
+  assert.equal((await store.list('synthetic-A', 'queue')).length, 1, 'queued run stays readable after a silent close');
+  assert.equal(fake.opens(), 2);
+  // With a close event the store reopens up front, and writes still commit.
+  fake.connections[1].close(); fake.connections[1].onclose();
+  await store.update(['synthetic-A', 'queue', 'op-1'], () => null);
+  assert.equal((await store.list('synthetic-A', 'queue')).length, 0);
+  assert.equal(fake.opens(), 3);
+  // Application validation failures are never retried as connection loss.
+  await assert.rejects(store.update(['synthetic-A', 'queue', 'op-2'], () => { throw Error('操作識別碼與內容不符'); }), /操作識別碼與內容不符/);
+  assert.equal(fake.opens(), 3);
 });
