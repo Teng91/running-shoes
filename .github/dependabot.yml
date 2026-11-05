@@ -1,12 +1,21 @@
 version: 2
 updates:
+  # Dependabot writes single-platform pip lockfiles, which drop the Windows markers that
+  # unit_tests/test_lockfiles.py requires. Routine pip upgrades are done by hand with
+  # `uv pip compile --universal` (see README). A limit of 0 stops version-update PRs;
+  # security-advisory PRs still open when Dependabot security updates are enabled.
   - package-ecosystem: pip
     directory: "/"
     schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
+      interval: monthly
+    open-pull-requests-limit: 0
+  # GitHub Actions updates arrive as one grouped PR per month instead of one per action.
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
+      interval: monthly
+    open-pull-requests-limit: 1
+    groups:
+      github-actions:
+        patterns:
+          - "*"
