@@ -360,6 +360,7 @@ ARIA 與 `agent-mode` 狀態，不以 inline style 決定 shell 幾何，因此�
 | `backend/main.py` | 最小 ASGI entry point | `app_factory` | routers、database、業務邏輯 |
 | `backend/app_factory.py` | app 組裝、lifecycle、router/middleware 與 SPA fallback | settings、routers、database | domain 計算 |
 | `backend/settings.py` | typed environment configuration | Python stdlib | routers、database、FastAPI |
+| `backend/clock.py` | 唯一的應用時區與 `local_today()` | Python stdlib | routers、database、FastAPI |
 | `backend/dependencies.py`、`routers/errors.py` | app settings dependency 與 domain error 的 HTTP mapping | FastAPI、settings、service errors | 業務 transaction |
 | `backend/seeding.py`、`middleware.py` | 可選 seed 與 request body guard | settings、models／ASGI | `backend.main` |
 | `backend/rate_limits.py` | auth／AI 的 process 與 SQLite shared limits | models、database session | routers、`backend.main` |

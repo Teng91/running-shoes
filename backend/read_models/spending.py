@@ -5,7 +5,7 @@ from datetime import date
 from sqlalchemy.orm import Session
 
 from backend import models
-from backend.forecasting import local_today
+from backend.clock import local_today
 
 
 def spending_summary(db: Session, user_id: int, *, today: date | None = None) -> dict:

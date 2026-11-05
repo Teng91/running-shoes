@@ -8,6 +8,7 @@ from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from backend.models import Run
+from backend.read_models.rounding import round_metric
 
 
 @dataclass(frozen=True)
@@ -57,7 +58,7 @@ def sum_run_distance(db: Session, user_id: int, start: str, end: str) -> float:
         )
         .scalar()
     )
-    return round(float(value or 0), 2)
+    return round_metric(value)
 
 
 def period_distances(db: Session, user_id: int, period: RunPeriod) -> dict[str, float]:

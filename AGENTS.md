@@ -5,6 +5,7 @@
 - `backend/main.py`: minimal ASGI entry point; it must only import `backend.app_factory`.
 - `backend/app_factory.py`: FastAPI composition, injectable lifecycle dependencies, routers, and SPA fallback.
 - `backend/settings.py`: immutable typed runtime configuration.
+- `backend/clock.py`: the single application timezone and `local_today()`; never hard-code UTC offsets elsewhere.
 - `backend/forecasting.py`: shared retirement policy and batched user-scoped forecasts.
 - `backend/shoe_metrics.py`: canonical shoe cost, discount and lifecycle arithmetic.
 - `backend/read_models/`: user-scoped native statistics shared by HTTP, reports and AI adapters; never import tools or HTTP frameworks.
@@ -16,6 +17,7 @@
 - `backend/services/runs.py`, `shoes.py`, `monthly.py`: user-scoped CRUD application use cases; HTTP routers must not own mutations or commits.
 - `backend/dependencies.py`: request-scoped app settings; CRUD/import quotas must not use import-time globals.
 - `backend/read_models/run_statistics.py`: shared calendar ranges and bounded distance aggregates for goals, dashboard and reports.
+- `backend/read_models/rounding.py`: shared aggregate rounding (`round_metric`); do not redefine local `_round` helpers.
 - `scripts/document_contracts.py`: Markdown links, feature-spec structure, AC completion and traceability path validation.
 - `backend/credentials.py`: HTTP-independent bcrypt/JWT primitives; runtime secrets are injected.
 - `backend/services/accounts.py`, `goals.py`: account and goal writes, domain errors, and transactions.

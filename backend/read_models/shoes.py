@@ -3,18 +3,15 @@
 from sqlalchemy.orm import Session
 
 from backend import analytics, models
+from backend.read_models.rounding import round_metric
 from backend.read_models.shoe_matching import resolve_shoe
 from backend.schemas import SHOE_CATEGORIES
 from backend.shoe_metrics import shoe_metrics
 
 
-def _round(value: float | None, digits: int = 2) -> float:
-    return round(float(value or 0), digits)
-
-
 def _lifecycle(shoe: models.Shoe) -> dict:
-    mileage = _round(shoe.mileage)
-    expected = _round(shoe.expected_mileage)
+    mileage = round_metric(shoe.mileage)
+    expected = round_metric(shoe.expected_mileage)
     if expected <= 0:
         return {
             "mileage_km": mileage,
@@ -24,7 +21,7 @@ def _lifecycle(shoe: models.Shoe) -> dict:
             "lifecycle_status": "lifespan_not_configured",
         }
 
-    usage_percent = _round(shoe_metrics(shoe)["usage_percent"], 1)
+    usage_percent = round_metric(shoe_metrics(shoe)["usage_percent"], 1)
     if usage_percent >= 90:
         lifecycle_status = "replace_soon"
     elif usage_percent >= 80:
@@ -34,7 +31,7 @@ def _lifecycle(shoe: models.Shoe) -> dict:
     return {
         "mileage_km": mileage,
         "expected_lifespan_km": expected,
-        "remaining_mileage_km": _round(max(0, expected - mileage)),
+        "remaining_mileage_km": round_metric(max(0, expected - mileage)),
         "usage_percent": usage_percent,
         "lifecycle_status": lifecycle_status,
     }
@@ -51,10 +48,10 @@ def _shoe_data(shoe: models.Shoe) -> dict:
         "status": "retired" if shoe.is_retired else "active",
         "purchase_date": shoe.date,
         "size": shoe.size,
-        "purchase_price_twd": _round(shoe.price),
-        "original_price_twd": _round(shoe.orig_price),
+        "purchase_price_twd": round_metric(shoe.price),
+        "original_price_twd": round_metric(shoe.orig_price),
         # This is a user-assigned allocation target, not accumulated mileage.
-        "assigned_monthly_km": _round(shoe.monthly_km),
+        "assigned_monthly_km": round_metric(shoe.monthly_km),
         **_lifecycle(shoe),
     }
 
@@ -99,9 +96,9 @@ def shoe_summary(db: Session, user_id: int) -> dict:
         total_shoe_count=len(shoes),
         active_shoe_count=len(active),
         retired_shoe_count=len(retired),
-        all_shoes_accumulated_mileage_km=_round(sum(s.mileage or 0 for s in shoes)),
-        active_shoes_purchase_price_twd=_round(sum(s.price or 0 for s in active)),
-        active_shoes_original_price_twd=_round(sum(s.orig_price or 0 for s in active)),
+        all_shoes_accumulated_mileage_km=round_metric(sum(s.mileage or 0 for s in shoes)),
+        active_shoes_purchase_price_twd=round_metric(sum(s.price or 0 for s in active)),
+        active_shoes_original_price_twd=round_metric(sum(s.orig_price or 0 for s in active)),
         active_shoes_lifecycle=active_lifecycle,
     )
 
@@ -163,8 +160,8 @@ def nearing_end_of_life(db: Session, user_id: int, threshold: float = 0.8) -> di
         )
     return dict(
         ok=True,
-        threshold_fraction=_round(threshold, 3),
-        threshold_percent=_round(threshold * 100, 1),
+        threshold_fraction=round_metric(threshold, 3),
+        threshold_percent=round_metric(threshold * 100, 1),
         matching_shoe_count=len(results),
         shoes=results,
     )

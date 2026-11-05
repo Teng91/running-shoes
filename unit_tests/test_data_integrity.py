@@ -4,10 +4,10 @@ from datetime import timedelta
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import sessionmaker
 
+from backend.clock import local_today
 from backend.database import get_db
 from backend.main import app
 from backend.models import MonthlyMileage, Run
-from backend.routers.reports import _local_today
 
 
 def _headers(token: str) -> dict[str, str]:
@@ -96,7 +96,7 @@ def test_numeric_inputs_are_two_decimal_and_future_runs_are_rejected(
     db, user_with_token
 ):
     _user, token = user_with_token
-    today = _local_today()
+    today = local_today()
     with _client(db) as client:
         shoe_response = client.post("/api/shoes", headers=_headers(token), json={
             "brand": "Round",

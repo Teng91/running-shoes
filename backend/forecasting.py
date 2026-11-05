@@ -1,13 +1,14 @@
 """One retirement forecast policy for shoe lists, charts, and analytics."""
 
 from collections.abc import Sequence
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, timedelta
 from typing import Literal, TypedDict
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from backend import models
+from backend.clock import local_today
 
 
 class ShoeForecast(TypedDict):
@@ -16,10 +17,6 @@ class ShoeForecast(TypedDict):
     forecast_monthly_km: float
     actual_monthly_km_90_days: float
     remaining_mileage_km: float
-
-
-def local_today() -> date:
-    return datetime.now(timezone(timedelta(hours=8))).date()
 
 
 def retirement_forecast(shoe: models.Shoe, km_90: float, as_of: date) -> ShoeForecast:

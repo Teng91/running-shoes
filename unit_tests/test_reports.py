@@ -296,7 +296,7 @@ def test_generate_report_uses_taipei_calendar_day(
     client, user_with_token, mock_llm, monkeypatch
 ):
     _user, token = user_with_token
-    monkeypatch.setattr(report_routes, "_local_today", lambda: date(2026, 11, 1))
+    monkeypatch.setattr(report_routes, "local_today", lambda: date(2026, 11, 1))
 
     response = client.post(
         "/api/reports/generate",
