@@ -114,7 +114,13 @@ module.exports = async function checkWorkspace(browser, baseUrl) {
     await waitForAsync(page, async () => document.getElementById('run-km').value === '' && (await localWorkspace.controller.read('queue')).length === 1);
     assert.equal((await api(a.token, '/runs')).length, 0, 'offline acceptance does not write server');
     await page.reload({ waitUntil: 'domcontentloaded' });
-    await waitForAsync(page, async () => localWorkspace.controller?.account && shoes.length === 1 && (await localWorkspace.controller.read('queue')).length === 1);
+    await waitForAsync(page, async () => localWorkspace.controller?.account && shoes.length === 1 && (await localWorkspace.controller.read('queue')).length === 1, null, {
+      describe: async () => ({ ready: localWorkspace.ready, account: localWorkspace.controller?.account ?? null, error: localWorkspace.error,
+        shoes: typeof shoes === 'undefined' ? 'undefined' : shoes.length, user: typeof currentUser === 'undefined' ? 'undefined' : currentUser,
+        queue: localWorkspace.controller ? (await localWorkspace.controller.read('queue')).length : 'no-controller',
+        onLine: navigator.onLine, sw: Boolean(navigator.serviceWorker?.controller), title: document.title,
+        bootText: document.getElementById('boot-status')?.textContent ?? null, body: document.body?.innerText.slice(0, 300) }),
+    });
     assert.equal(await page.locator('#run-km').inputValue(), '', 'consumed draft never reappears on offline restart');
     const failedProbe = await page.evaluate(async () => { try { await fetch('/api/runs'); return false; } catch { return true; } });
     assert.equal(failedProbe, true, 'authenticated API is not served from shell cache');

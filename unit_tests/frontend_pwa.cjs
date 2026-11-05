@@ -36,6 +36,17 @@ async function run() {
   let candidateGate = null, candidateStarted = null;
   let moduleOriginRequests = 0, offlineApiFailures = 0, offlineWorkerFailures = 0, stage = 'startup';
   const requests = [];
+  // A redundant candidate's sibling precache fetches can outlive install failure. WebKit retries
+  // those requests if the transport drops mid-flight, holding the scope job queue, so the
+  // fixture only disconnects once candidate traffic has drained.
+  let inFlight = 0, lastRequestAt = 0;
+  async function waitForFixtureQuiet(quietMs = 300, timeoutMs = 10000) {
+    const deadline = Date.now() + timeoutMs;
+    while (inFlight > 0 || Date.now() - lastRequestAt < quietMs) {
+      if (Date.now() >= deadline) throw Error(`fixture traffic did not drain (${inFlight} in flight)`);
+      await new Promise(resolve => setTimeout(resolve, 25));
+    }
+  }
   const phase = value => { stage = value; console.log('PWA phase:', value); };
   const failedKinds = new Set();
   // Background retries may still fetch an older candidate after the next phase.
@@ -44,6 +55,8 @@ async function run() {
   const server = http.createServer(async (request, response) => {
     const url = new URL(request.url, 'http://127.0.0.1');
     requests.push({ path: url.pathname, version: url.searchParams.get('v'), release, failure, networkDown });
+    inFlight++; lastRequestAt = Date.now();
+    response.once('close', () => { inFlight--; lastRequestAt = Date.now(); });
     if (requests.length > 100) requests.shift();
     if (networkDown) {
       if (url.pathname === '/service-worker.js') {
@@ -139,6 +152,7 @@ async function run() {
           const setOffline = async offline => {
             // WebKit's network-emulation switch also prevents cached SW navigations.
             // A dropped fixture transport tests actual network failure without disabling SW itself.
+            if (offline) await waitForFixtureQuiet();
             networkDown = offline;
             if (engine === chromium) await context.setOffline(offline);
           };
@@ -200,6 +214,7 @@ async function run() {
             phase(`PWA ${engine.name()}: reject ${problem} upgrade`);
             release = revision; failure = problem;
             assert.equal(await updateWorker(page), 'redundant', 'incomplete install must not activate');
+            await waitForFixtureQuiet();
             // A navigation while a newer deployment exists must not rewrite old HTML.
             await page.reload({ waitUntil: 'networkidle' });
             await assertShell(page, 'fixture-a-safe');
