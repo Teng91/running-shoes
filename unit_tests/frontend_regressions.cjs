@@ -15,3 +15,4 @@ require('./frontend/strava-resources.test.cjs');
 require('./frontend/resource-editing.test.cjs');
 require('./frontend/workspace.test.cjs');
 require('./frontend/trends.test.cjs');
+require('./frontend/monthly-records.test.cjs');

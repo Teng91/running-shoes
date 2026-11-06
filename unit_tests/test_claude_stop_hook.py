@@ -68,3 +68,13 @@ def test_main_reuses_a_cached_success(monkeypatch, tmp_path):
     monkeypatch.setattr(claude_stop_hook.sys, "stdin", io.StringIO('{"session_id":"cached"}'))
 
     assert claude_stop_hook.main() == 0
+
+
+def test_read_event_decodes_utf8_regardless_of_the_console_code_page(monkeypatch):
+    message = "已推上去 ✅ ⏸ 部署 \ \"引號\""
+    payload = json.dumps({"session_id": "utf8", "last_assistant_message": message}, ensure_ascii=False)
+    # Windows wraps stdin with the locale code page; the hook must still read UTF-8 bytes.
+    stdin = io.TextIOWrapper(io.BytesIO(payload.encode("utf-8")), encoding="cp950", errors="replace")
+    monkeypatch.setattr(claude_stop_hook.sys, "stdin", stdin)
+
+    assert claude_stop_hook.read_event()["last_assistant_message"] == message

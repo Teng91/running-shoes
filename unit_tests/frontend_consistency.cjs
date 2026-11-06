@@ -72,7 +72,7 @@ module.exports = async function checkConsistency(browser, baseUrl) {
     assert.equal(await page.locator('#run-date').inputValue(), '2026-10-18');
     assert.equal(await page.locator('#run-km').inputValue(), '7.50');
     assert.equal(await page.locator('#run-month').inputValue(), '2026-08');
-    await page.evaluate(() => switchTab('monthly'));
+    await page.evaluate(() => { switchTab('monthly'); document.getElementById('monthly-records').open = true; });
     await page.waitForFunction(() => document.getElementById('goal-cards').textContent.includes('40.0%'));
     assert.doesNotMatch(await page.locator('#goal-cards').textContent(), /120\.0%/);
     const edit = page.locator('#monthly-table .btn-edit').first();

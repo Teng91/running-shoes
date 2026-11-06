@@ -146,6 +146,7 @@ async function run() {
 
       // SPEC-023: delay a real persisted monthly response while editing the next draft.
       await page.locator('.tab[data-tab="monthly"]').click();
+      await page.locator('#monthly-records > summary').click();
       await page.locator('#add-year').selectOption(today.slice(0, 4));
       await page.locator('#add-month').selectOption('1');
       await page.locator('#add-km').fill('100');
