@@ -135,6 +135,22 @@ test('SPEC-023 mutation refresh limits requests and preserves unrelated caches',
   assert.equal(calls.length, 5); assert.equal(context.resourceStore.peek('goal-progress'), undefined); assert.equal(context.resourceStore.peek('annual-summary'), undefined);
 });
 
+test('SPEC-038 run changes refresh training trends and the rotation timeline; shoe edits refresh the timeline', async () => {
+  const { context } = refreshContext();
+  const prime = async () => {
+    await context.resourceStore.read('training-trends', { key: '2026', loader: () => 1 });
+    await context.resourceStore.read('shoe-timeline', { loader: () => 1 });
+  };
+  await prime(); await context.loadData({ mutation: 'monthly' });
+  assert.equal(context.resourceStore.peek('training-trends', '2026'), 1, 'monthly adjustments do not change daily runs');
+  assert.equal(context.resourceStore.peek('shoe-timeline'), 1);
+  await context.loadData({ mutation: 'run' });
+  assert.equal(context.resourceStore.peek('training-trends', '2026'), undefined);
+  assert.equal(context.resourceStore.peek('shoe-timeline'), undefined);
+  await prime(); await context.loadData({ mutation: 'shoe' });
+  assert.equal(context.resourceStore.peek('shoe-timeline'), undefined);
+});
+
 test('SPEC-023 overlapping full and mutation reloads reject stale resources and retain unrelated results', async () => {
   const { context } = refreshContext(), oldMonthly = deferred(); let count = 0;
   context.apiGet = async url => {

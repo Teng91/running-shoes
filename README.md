@@ -303,6 +303,7 @@ LLM_MAX_OUTPUT_TOKENS=4096
 - **智慧試算**：自動計算每 km／每次穿著成本、折數、生命進度，並依近 90 天實際使用預估退役日期
 - **一致的退役預估**：跑鞋清單、時間軸及單鞋分析共用後端預估；有近 90 天紀錄時使用實際月均，否則回退計畫月跑量。清單日期提示及分析卡片會標示依據；無法預估或已達壽命時不虛構日期
 - **圖表視覺化**：生命進度條、每 km 成本比較、退役時間軸、月跑量佔比（圓餅圖直接標示公里數與百分比，Chart.js）
+- **訓練趨勢**：月跑量分頁的年度跑步熱力圖與連續天數、近 16 週每週跑量（4 週平均線，比前 4 週平均多 30% 以上的週次標橘色）、年度累計跑量對照目標線；跑鞋分頁的輪替時間軸標出超過 30 天沒穿的現役鞋
 - **亮色 / 暗色主題切換**：右上角一鍵切換，全域 UI 元素與所有 Chart.js 圖表（網格線、刻度文字、數據標籤）皆自動對應色調，偏好透過 `localStorage` 自動記憶
 - **安全的里程統計**：跑鞋與月跑量都明確區分「逐筆跑步日誌」與「歷史／手動調整」，手動總數不能低於日誌合計；所有新輸入的里程與金額統一保存至小數點後兩位
 - **跑步日誌**：預設首頁，可記錄日期、公里數與鞋款並同步里程；完成日期不得晚於今天
@@ -354,6 +355,8 @@ LLM_MAX_OUTPUT_TOKENS=4096
 | `POST /api/runs/import/strava` | 依鞋款配對批次匯入 Strava 跑步活動 |
 | `GET /api/analytics/dashboard` | 取得指定月份的趨勢、目標、月底預測與壽命洞察 |
 | `GET /api/shoes/{shoe_id}/analytics` | 取得單雙鞋的使用、成本與退役預測 |
+| `GET /api/analytics/trends?year=` | 取得年度每日跑量、連續天數、近 16 週跑量與年度累計目標線 |
+| `GET /api/analytics/shoe-timeline` | 取得每雙鞋首次／最後跑步期間與閒置提醒 |
 | `GET /api/export/account` | 下載不含驗證秘密的完整 JSON 帳號備份 |
 
 ### Strava 歷史資料匯入
@@ -692,6 +695,13 @@ v3.10.3 使用 Asset 3.10.3／shell v38、schema 6、51 個 release assets。
 `registry.fly.io/running-shoes@sha256:bac44457f12adfde6473e9d9a973b330e1bf69eac7e44feb3fb6ed1f5a55429a`，
 不還原業務資料快照。發布驗證涵蓋 verify、40 組版面、雙引擎 CRUD／PWA、main/tag CI 及正式站匿名 release-check。
 
+### 訓練趨勢與跑鞋輪替（SPEC-038，v4.1.0）
+
+[SPEC-038](docs/specs/038-training-trends-and-shoe-rotation.md) 在月跑量分頁新增年度跑步熱力圖（含有跑天數、最長／目前連續天數）、
+近 16 週每週跑量與 4 週平均（比前 4 週平均多 30% 以上標示暴增），以及年度累計跑量對照目標線與全年推估；
+跑鞋分頁新增輪替時間軸，標出超過 30 天沒穿的現役鞋。全部由後端計算，只使用既有跑步日誌。
+Asset 4.1.0／shell v44、schema 6 不變，無資料 migration，可回滾至 v4.0.3 image。
+
 ### 本機資料庫自動重新連線（SPEC-037，v4.0.3）
 
 [SPEC-037](docs/specs/037-reconnecting-local-workspace-store.md) 修正瀏覽器（特別是 iPhone Safari）在背景或記憶體壓力下關閉本機資料庫後，
@@ -741,7 +751,7 @@ Playwright／Chromium／WebKit 齊全時，也會執行版面測試。
 避免每次停止都重跑。Hook 不會呼叫其他模型、外部 API，或傳送提示、diff、原始碼與測試輸出。
 GitHub Actions 仍會在 push／pull request 執行 `verify`，並以三個可獨立重跑的 browser jobs 執行完整版面矩陣、真實 CRUD E2E 與 PWA 升級／離線測試；Dependabot 每月以單一 PR 合併 GitHub Actions 更新；Python 只接收安全性更新 PR，例行升級依下方 `uv pip compile --universal` 步驟手動重編鎖定檔（Dependabot 產生的鎖定檔會遺失 Windows 條件）。
 
-本次驗證基線為 Python **554 passed**、前端回歸測試 **148 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
+本次驗證基線為 Python **560 passed**、前端回歸測試 **153 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
 版面檢查涵蓋 WebKit／Chromium、亮／暗模式與 10 組直橫向尺寸，共 40 組設定，檢查六個功能分頁、三個認證表單、圖表、全部彈窗、行內編輯、停用／錯誤及空資料狀態。
 
 主要表單、工具列與彈窗操作統一為 44px 控制項；桌面表格內的緊湊操作為 36px，手機至少 44px。

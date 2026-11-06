@@ -147,7 +147,7 @@ def run_check(check: Check) -> tuple[bool, str]:
             text=True,
             encoding="utf-8",
             errors="replace",
-            timeout=240,
+            timeout=540,  # verify takes ~4-5 min on Windows; keep below the 600 s hook limit
             check=False,
         )
     except (OSError, subprocess.TimeoutExpired) as error:
