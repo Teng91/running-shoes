@@ -3,6 +3,7 @@
 function populateYearSelect() {
   const sel = document.getElementById('year-select');
   const stackedSel = document.getElementById('stacked-year-select');
+  const trendsSel = document.getElementById('trends-year-select');
   const years = [...new Set([
     ...monthlyMileages.map(m => m.year),
     runningGoal.start_year,
@@ -11,8 +12,10 @@ function populateYearSelect() {
   if (years.length === 0) {
     sel.innerHTML = '<option value="">無資料</option>';
     if (stackedSel) stackedSel.innerHTML = '<option value="">無資料</option>';
+    if (trendsSel) trendsSel.innerHTML = '<option value="">無資料</option>';
     selectedYear = null;
     selectedStackedYear = null;
+    selectedTrendsYear = null;
     return;
   }
   if (!selectedYear || !years.includes(selectedYear)) {
@@ -20,6 +23,12 @@ function populateYearSelect() {
   }
   if (!selectedStackedYear || !years.includes(selectedStackedYear)) {
     selectedStackedYear = years[0];
+  }
+  if (!selectedTrendsYear || !years.includes(selectedTrendsYear)) {
+    selectedTrendsYear = years[0];
+  }
+  if (trendsSel) {
+    trendsSel.innerHTML = years.map(y => `<option value="${y}" ${y === selectedTrendsYear ? 'selected' : ''}>${y}</option>`).join('');
   }
   sel.innerHTML = years.map(y => `<option value="${y}" ${y === selectedYear ? 'selected' : ''}>${y}</option>`).join('');
   if (stackedSel) {
@@ -42,11 +51,13 @@ function renderMonthlyCharts() {
   if (chartInstances.monthlyYear) { chartInstances.monthlyYear.destroy(); delete chartInstances.monthlyYear; }
   if (chartInstances.shoeStacked) { chartInstances.shoeStacked.destroy(); delete chartInstances.shoeStacked; }
   if (chartInstances.yearlyTotal) { chartInstances.yearlyTotal.destroy(); delete chartInstances.yearlyTotal; }
+  ['weekly', 'cumulative'].forEach(key => { if (chartInstances[key]) { chartInstances[key].destroy(); delete chartInstances[key]; } });
   populateYearSelect();
   renderGoalProgress();
   renderMonthlyYearChart();
   renderShoeStackedChart();
   renderYearlyTotalChart();
+  renderTrends();
 }
 
 function onStackedYearChange() {
@@ -258,4 +269,216 @@ function renderMonthlyYearChart() {
       }
     }]
   });
+}
+
+// ====== Training trends: heatmap, streaks, weekly load and goal pace ======
+// The backend owns every aggregate (daily km, streaks, rolling averages, goal line);
+// these renderers only lay out the returned values.
+let trendsRequestId = 0;
+let selectedTrendsYear = null;
+
+function onTrendsYearChange() {
+  selectedTrendsYear = parseInt(document.getElementById('trends-year-select').value, 10) || null;
+  renderTrends();
+}
+
+async function renderTrends() {
+  if (document.querySelector('.tab-panel.active')?.dataset.panel !== 'monthly') return;
+  const year = parseInt(document.getElementById('trends-year-select')?.value, 10);
+  if (!year) return;
+  const requestId = ++trendsRequestId;
+  let trends;
+  try {
+    const result = await resourceStore.read('training-trends', {
+      key: String(year), refresh: false,
+      loader: async () => {
+        const value = await apiGet(`/analytics/trends?year=${year}`);
+        if (!Array.isArray(value.daily) || !Array.isArray(value.weekly) || !value.cumulative) {
+          throw new Error('訓練趨勢資料格式錯誤');
+        }
+        return value;
+      },
+    });
+    if (!resourceStore.current(result) || requestId !== trendsRequestId) return;
+    if (result.status === 'rejected') throw result.error;
+    trends = result.value;
+  } catch (error) {
+    console.error('載入訓練趨勢失敗:', error);
+    if (requestId === trendsRequestId) renderedPanels.delete('monthly');
+    return;
+  }
+  if (document.querySelector('.tab-panel.active')?.dataset.panel !== 'monthly') return;
+  renderRunHeatmap(trends);
+  renderWeeklyChart(trends);
+  renderCumulativeChart(trends);
+}
+
+function heatLevel(km) {
+  if (!(km > 0)) return 0;
+  if (km < 5) return 1;
+  if (km < 10) return 2;
+  if (km < 15) return 3;
+  return 4;
+}
+
+function renderRunHeatmap(trends) {
+  const target = document.getElementById('run-heatmap');
+  const stats = document.getElementById('streak-stats');
+  if (!target) return;
+  const { year } = trends;
+  document.getElementById('heatmap-title').textContent = `${year} 年跑步熱力圖`;
+  const kmByDate = new Map(trends.daily.map(row => [row.date, row.km]));
+  const offset = (new Date(year, 0, 1).getDay() + 6) % 7; // Monday-first rows
+  const days = Math.round((new Date(year + 1, 0, 1) - new Date(year, 0, 1)) / 86400000);
+  const pad = value => String(value).padStart(2, '0');
+  const cells = Array.from({ length: offset }, () => '<span class="heat-cell blank"></span>');
+  const months = [];
+  for (let index = 0; index < days; index++) {
+    const day = new Date(year, 0, 1 + index);
+    const key = `${year}-${pad(day.getMonth() + 1)}-${pad(day.getDate())}`;
+    if (day.getDate() === 1) {
+      months.push(`<span style="grid-column:${Math.floor((offset + index) / 7) + 1}">${day.getMonth() + 1}月</span>`);
+    }
+    if (!trends.end_date || key > trends.end_date) {
+      cells.push(`<span class="heat-cell future" title="${key}"></span>`);
+      continue;
+    }
+    const km = kmByDate.get(key) || 0;
+    const label = km > 0 ? `${key} · ${km.toFixed(2)} km` : `${key} · 未跑`;
+    cells.push(`<span class="heat-cell level-${heatLevel(km)}" title="${label}"></span>`);
+  }
+  target.style.setProperty('--heat-columns', Math.ceil((offset + days) / 7));
+  target.innerHTML = `<div class="heatmap-months">${months.join('')}</div>`
+    + '<div class="heatmap-weekdays"><span>一</span><span></span><span>三</span><span></span><span>五</span><span></span><span>日</span></div>'
+    + `<div class="heatmap-grid">${cells.join('')}</div>`;
+  // Narrow screens scroll the year; start at the most recent weeks.
+  const scroller = target.parentElement;
+  scroller.scrollLeft = scroller.scrollWidth;
+  const runDays = trends.daily.length;
+  const { longest_days: longest, current_days: current } = trends.streaks;
+  target.setAttribute('aria-label', `${year} 年跑步 ${runDays} 天，最長連續 ${longest} 天`);
+  const ongoing = trends.end_date && trends.end_date < `${year}-12-31`;
+  stats.innerHTML = [
+    `<span><strong>${runDays}</strong> 天有跑</span>`,
+    `<span>最長連續 <strong>${longest}</strong> 天</span>`,
+    ongoing ? `<span>目前連續 <strong>${current}</strong> 天</span>` : '',
+  ].join('');
+}
+
+function renderWeeklyChart(trends) {
+  if (chartInstances.weekly) { chartInstances.weekly.destroy(); delete chartInstances.weekly; }
+  const note = document.getElementById('weekly-note');
+  if (!trends.weekly.length) {
+    note.textContent = '這一年還沒開始，沒有每週資料。';
+    return;
+  }
+  const textColor = getThemeColor('--text-dim', '#8b8d9a');
+  const gridColor = getThemeColor('--chart-grid', '#f1f5f9');
+  const weeks = trends.weekly;
+  const threshold = trends.thresholds.spike_percent;
+  const labels = weeks.map(week => { const [, m, d] = week.week_start.split('-'); return `${Number(m)}/${Number(d)}`; });
+  const colors = weeks.map(week => week.spike ? '#f97316' : week.partial ? 'rgba(99,102,241,.45)' : '#6366f1');
+  chartInstances.weekly = new Chart(document.getElementById('chart-weekly'), {
+    data: {
+      labels,
+      datasets: [
+        { type: 'bar', label: '週跑量', data: weeks.map(week => week.km), backgroundColor: colors, borderRadius: 4, order: 2 },
+        { type: 'line', label: '4 週平均', data: weeks.map(week => week.average_km), borderColor: '#eab308',
+          backgroundColor: '#eab308', borderWidth: 2, pointRadius: 0, tension: .3, order: 1 },
+      ],
+    },
+    options: {
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: true, labels: { color: textColor, boxWidth: 12, font: { size: 11 } } },
+        tooltip: {
+          callbacks: {
+            title: items => `${weeks[items[0].dataIndex].week_start} 起的一週`,
+            label: ctx => `${ctx.dataset.label}: ${ctx.raw.toFixed(2)} km`,
+            afterBody: items => {
+              const week = weeks[items[0].dataIndex];
+              const lines = [];
+              if (week.change_percent !== null) {
+                lines.push(`較前 4 週平均 ${week.change_percent > 0 ? '+' : ''}${week.change_percent.toFixed(1)}%`);
+              }
+              if (week.spike) lines.push(`⚠ 比前 4 週平均多 ${threshold}% 以上`);
+              if (week.partial) lines.push('本週進行中');
+              return lines;
+            },
+          },
+        },
+      },
+      scales: {
+        x: { grid: { display: false }, ticks: { color: textColor, font: { size: 10 }, maxRotation: 0, autoSkip: true } },
+        y: { grid: { color: gridColor }, ticks: { color: textColor, callback: v => v + ' km' }, beginAtZero: true },
+      },
+    },
+  });
+  const spikes = weeks.filter(week => week.spike).length;
+  note.textContent = spikes
+    ? `橘色的 ${spikes} 週比前 4 週平均多 ${threshold}% 以上；跑量增加太快時注意恢復。`
+    : `近 16 週沒有比前 4 週平均多 ${threshold}% 以上的週次。`;
+}
+
+function renderCumulativeChart(trends) {
+  if (chartInstances.cumulative) { chartInstances.cumulative.destroy(); delete chartInstances.cumulative; }
+  const note = document.getElementById('cumulative-note');
+  const { year, cumulative } = trends;
+  document.getElementById('cumulative-title').textContent = `${year} 年累計跑量與目標`;
+  if (!trends.end_date) {
+    note.textContent = '這一年還沒開始。';
+    return;
+  }
+  const textColor = getThemeColor('--text-dim', '#8b8d9a');
+  const gridColor = getThemeColor('--chart-grid', '#f1f5f9');
+  const toPoints = values => values.map((km, index) => ({ x: index, y: km }));
+  const monthStarts = Array.from({ length: 12 }, (_, month) => Math.round((new Date(year, month, 1) - new Date(year, 0, 1)) / 86400000));
+  const datasets = [{
+    label: '實際累計', data: toPoints(cumulative.actual_km), borderColor: '#22c55e',
+    backgroundColor: 'rgba(34,197,94,.12)', fill: true, borderWidth: 2, pointRadius: 0, tension: .1,
+  }];
+  if (cumulative.goal_active) {
+    datasets.push({
+      label: '目標進度', data: toPoints(cumulative.goal_km), borderColor: '#94a3b8',
+      borderDash: [6, 4], borderWidth: 1.5, pointRadius: 0, fill: false,
+    });
+  }
+  chartInstances.cumulative = new Chart(document.getElementById('chart-cumulative'), {
+    type: 'line',
+    data: { datasets },
+    options: {
+      maintainAspectRatio: false,
+      parsing: false,
+      interaction: { mode: 'nearest', axis: 'x', intersect: false },
+      plugins: {
+        legend: { display: true, labels: { color: textColor, boxWidth: 12, font: { size: 11 } } },
+        tooltip: {
+          callbacks: {
+            title: items => { const day = new Date(year, 0, 1 + items[0].parsed.x); return `${day.getMonth() + 1}/${day.getDate()}`; },
+            label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y.toFixed(1)} km`,
+          },
+        },
+      },
+      scales: {
+        x: {
+          type: 'linear', min: 0, max: cumulative.goal_km.length - 1, grid: { color: gridColor },
+          afterBuildTicks: axis => { axis.ticks = monthStarts.map(value => ({ value })); },
+          ticks: { color: textColor, font: { size: 10 }, maxRotation: 0, autoSkip: true,
+            callback: value => `${monthStarts.indexOf(value) + 1}月` },
+        },
+        y: { grid: { color: gridColor }, ticks: { color: textColor, callback: v => v + ' km' }, beginAtZero: true },
+      },
+    },
+  });
+  const ongoing = trends.end_date < `${year}-12-31`;
+  if (!cumulative.goal_active) {
+    note.textContent = `累計 ${cumulative.ytd_km.toFixed(1)} km；跑步目標從 ${runningGoal.start_year} 年開始計算。`;
+  } else if (ongoing) {
+    const delta = cumulative.delta_km;
+    const pace = delta >= 0 ? `超前目標進度 ${delta.toFixed(1)} km` : `落後目標進度 ${Math.abs(delta).toFixed(1)} km`;
+    note.textContent = `累計 ${cumulative.ytd_km.toFixed(1)} km，${pace}；照目前速度全年約 ${cumulative.projected_km.toFixed(0)} km（目標 ${cumulative.yearly_goal_km.toFixed(0)} km）。`;
+  } else {
+    note.textContent = `全年累計 ${cumulative.ytd_km.toFixed(1)} km，目標 ${cumulative.yearly_goal_km.toFixed(0)} km。`;
+  }
 }

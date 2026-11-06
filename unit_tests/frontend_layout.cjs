@@ -250,6 +250,31 @@ async function run(engine, name) {
           shoes: Array.from({ length: 8 }, (_, index) => ({ shoe_id: index + 1,
             monthly_km: Array.from({ length: 12 }, (_, month) => month === 8 ? 18.67 : 0) })),
         } });
+        if (url.pathname === '/api/analytics/trends') {
+          const year = Number(url.searchParams.get('year'));
+          const days = Array.from({ length: 300 }, (_, index) => new Date(Date.UTC(year, 0, 1 + index)).toISOString().slice(0, 10));
+          return route.fulfill({ json: {
+            year, end_date: `${year}-10-27`, thresholds: { spike_percent: 30, spike_min_base_km: 5 },
+            daily: days.filter((_, index) => index % 3 !== 1).map((date, index) => ({ date, km: (index % 5) * 4.5 + 2 })),
+            streaks: { longest_days: 12, longest_end: `${year}-05-24`, current_days: 3 },
+            weekly: Array.from({ length: 16 }, (_, index) => ({
+              week_start: new Date(Date.UTC(year, 6, 13 + index * 7)).toISOString().slice(0, 10),
+              km: 20 + (index % 4) * 6, average_km: 26, baseline_km: 24, change_percent: index % 4 === 3 ? 42.5 : -4,
+              spike: index % 4 === 3, partial: index === 15,
+            })),
+            cumulative: { goal_active: true, yearly_goal_km: 1500,
+              actual_km: Array.from({ length: 300 }, (_, index) => index * 4.3),
+              goal_km: Array.from({ length: 365 }, (_, index) => (index + 1) * 1500 / 365),
+              ytd_km: 1285.7, expected_km: 1232.9, delta_km: 52.8, projected_km: 1564 },
+          } });
+        }
+        if (url.pathname === '/api/analytics/shoe-timeline') return route.fulfill({ json: {
+          as_of: '2026-10-27', idle_days: 30, shoes: Array.from({ length: 8 }, (_, index) => ({
+            shoe_id: index + 1, is_retired: index === 0, first_run_date: `2025-${String(index + 2).padStart(2, '0')}-01`,
+            last_run_date: index === 2 ? '2026-08-01' : '2026-10-20', km: 120 + index * 40, run_count: 10 + index,
+            days_since_last_run: index === 2 ? 87 : 7, idle: index === 2,
+          })),
+        } });
         const contentTypes = { '.html': 'text/html', '.js': 'application/javascript', '.mjs': 'application/javascript', '.css': 'text/css',
           '.json': 'application/json', '.webmanifest': 'application/manifest+json',
           '.svg': 'image/svg+xml', '.png': 'image/png' };
@@ -322,7 +347,10 @@ async function run(engine, name) {
             await selectTab(page, tab);
             await page.waitForTimeout(100);
             await assertLayout(page, `${name} ${theme} ${width} ${tab}`);
-            const expected = { runs: 1, shoes: 4, monthly: 3, spending: 2, agent: 0, report: 0 }[tab];
+            const expected = { runs: 1, shoes: 5, monthly: 5, spending: 2, agent: 0, report: 0 }[tab];
+            if (tab === 'monthly') {
+              assert.equal(await page.locator('#run-heatmap .heatmap-grid .heat-cell:not(.blank)').count(), 365, 'heatmap renders every day');
+            }
             assert.equal(await page.locator('.tab-panel.active canvas').count(), expected);
             assert.equal(await page.evaluate(() => Object.values(chartInstances).filter(c => c.canvas.getClientRects().length).length), expected, 'all charts initialized with data');
             await page.locator('.tab-panel.active .table-wrap').evaluateAll(wrappers => wrappers.forEach(wrapper => {

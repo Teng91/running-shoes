@@ -17,6 +17,7 @@
 - `backend/services/runs.py`, `shoes.py`, `monthly.py`: user-scoped CRUD application use cases; HTTP routers must not own mutations or commits.
 - `backend/dependencies.py`: request-scoped app settings; CRUD/import quotas must not use import-time globals.
 - `backend/read_models/run_statistics.py`: shared calendar ranges and bounded distance aggregates for goals, dashboard and reports.
+- `backend/read_models/trends.py`: user-scoped daily heatmap, streaks, weekly load, goal pace line and shoe rotation timeline.
 - `backend/read_models/rounding.py`: shared aggregate rounding (`round_metric`); do not redefine local `_round` helpers.
 - `scripts/document_contracts.py`: Markdown links, feature-spec structure, AC completion and traceability path validation.
 - `backend/credentials.py`: HTTP-independent bcrypt/JWT primitives; runtime secrets are injected.

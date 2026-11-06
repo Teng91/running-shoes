@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
 <meta charset="UTF-8">
-<meta name="app-asset-version" content="4.0.3">
+<meta name="app-asset-version" content="4.1.0">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>跑鞋追蹤 Dashboard</title>
 <meta name="theme-color" content="#0f1117">
@@ -34,8 +34,8 @@ body { margin: 0; opacity: 1 !important; }
 @keyframes app-boot-critical-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .app-boot { transition: none; } .app-boot-spinner { animation: none; } }
 </style>
-<link id="app-styles" rel="preload" href="/styles.css?v=4.0.3" as="style" onload="this.onload=null;this.rel='stylesheet';this.dataset.ready='true';window.dispatchEvent(new Event('appstylesready'))">
-<noscript><link rel="stylesheet" href="/styles.css?v=4.0.3"></noscript>
+<link id="app-styles" rel="preload" href="/styles.css?v=4.1.0" as="style" onload="this.onload=null;this.rel='stylesheet';this.dataset.ready='true';window.dispatchEvent(new Event('appstylesready'))">
+<noscript><link rel="stylesheet" href="/styles.css?v=4.1.0"></noscript>
 </head>
 <body>
 
@@ -201,6 +201,11 @@ window.__appBootLegacyPoll = window.setInterval(function () {
       <div class="chart-box"><h3>退役時間軸</h3><div class="chart-canvas"><canvas id="chart-retire"></canvas></div></div>
       <div class="chart-box"><h3>月跑量佔比</h3><div class="chart-canvas"><canvas id="chart-value"></canvas></div></div>
     </div>
+    <div class="chart-box timeline-box">
+      <h3>跑鞋輪替時間軸</h3>
+      <div class="chart-canvas timeline-canvas" id="shoe-timeline-canvas"><canvas id="chart-shoe-timeline"></canvas></div>
+      <p class="chart-note" id="timeline-note"></p>
+    </div>
 
     <div class="table-section">
       <div class="table-header">
@@ -303,6 +308,35 @@ window.__appBootLegacyPoll = window.setInterval(function () {
       <span id="goal-settings-status" class="goal-settings-status"></span>
     </div>
     <div class="cards" id="goal-cards"></div>
+
+    <section class="trends-section" aria-labelledby="trends-title">
+      <div class="trends-heading-row">
+        <h2 class="trends-heading" id="trends-title">訓練趨勢</h2>
+        <select id="trends-year-select" class="year-select" aria-label="訓練趨勢年份" onchange="onTrendsYearChange()"></select>
+      </div>
+      <div class="chart-box heatmap-box">
+        <div class="chart-title-row">
+          <h3 id="heatmap-title">年度跑步熱力圖</h3>
+          <div class="streak-stats" id="streak-stats"></div>
+        </div>
+        <div class="heatmap-scroll" tabindex="0" role="region" aria-label="可左右滑動的年度熱力圖">
+          <div class="heatmap" id="run-heatmap" role="img" aria-label="年度每日跑量"></div>
+        </div>
+        <div class="heatmap-legend" aria-hidden="true">少<span class="heat-cell level-0"></span><span class="heat-cell level-1"></span><span class="heat-cell level-2"></span><span class="heat-cell level-3"></span><span class="heat-cell level-4"></span>多<span class="heatmap-legend-note">（0／&lt;5／5–10／10–15／≥15 km）</span></div>
+      </div>
+      <div class="charts">
+        <div class="chart-box">
+          <div class="chart-title-row"><h3>每週跑量（近 16 週）</h3></div>
+          <div class="chart-canvas"><canvas id="chart-weekly"></canvas></div>
+          <p class="chart-note" id="weekly-note"></p>
+        </div>
+        <div class="chart-box">
+          <div class="chart-title-row"><h3 id="cumulative-title">年度目標進度</h3></div>
+          <div class="chart-canvas"><canvas id="chart-cumulative"></canvas></div>
+          <p class="chart-note" id="cumulative-note"></p>
+        </div>
+      </div>
+    </section>
 
     <div class="charts charts-3col">
       <div class="chart-box">
@@ -652,38 +686,38 @@ window.__appBootLegacyPoll = window.setInterval(function () {
 
 <script src="/vendor/chart.umd.min.js"></script>
 <script src="/vendor/marked.min.js"></script>
-<script src="/app-boot.js?v=4.0.3"></script>
-<script src="/app-lifecycle.js?v=4.0.3"></script>
-<script src="/app-state.js?v=4.0.3"></script>
-<script src="/app-api.js?v=4.0.3"></script>
-<script src="/app-auth.js?v=4.0.3"></script>
-<script src="/app-streams.js?v=4.0.3"></script>
-<script src="/app-resources.js?v=4.0.3"></script>
-<script src="/app-inline-editors.js?v=4.0.3"></script>
-<script src="/app-local-store.js?v=4.0.3"></script>
-<script src="/app-workspace.js?v=4.0.3"></script>
-<script src="/app-account-restore.js?v=4.0.3"></script>
-<script src="/app-history.js?v=4.0.3"></script>
-<script src="/app-core.js?v=4.0.3"></script>
-<script src="/app-models.js?v=4.0.3"></script>
-<script src="/app-markdown.js?v=4.0.3"></script>
-<script src="/app-agent.js?v=4.0.3"></script>
-<script src="/app-reports.js?v=4.0.3"></script>
-<script src="/app-runs.js?v=4.0.3"></script>
-<script src="/app-dates.js?v=4.0.3"></script>
-<script src="/app-strava.js?v=4.0.3"></script>
-<script src="/app-run-insights.js?v=4.0.3"></script>
-<script src="/app-shoes.js?v=4.0.3"></script>
-<script src="/app-dashboard.js?v=4.0.3"></script>
-<script src="/app-monthly.js?v=4.0.3"></script>
-<script src="/app-exports.js?v=4.0.3"></script>
-<script src="/app-goals.js?v=4.0.3"></script>
-<script src="/app-charts.js?v=4.0.3"></script>
-<script src="/app-shoe-charts.js?v=4.0.3"></script>
-<script src="/app-monthly-charts.js?v=4.0.3"></script>
-<script src="/app-spending.js?v=4.0.3"></script>
-<script src="/app-dialogs.js?v=4.0.3"></script>
-<script src="/app-updates.js?v=4.0.3"></script>
-<script src="/app.js?v=4.0.3"></script>
+<script src="/app-boot.js?v=4.1.0"></script>
+<script src="/app-lifecycle.js?v=4.1.0"></script>
+<script src="/app-state.js?v=4.1.0"></script>
+<script src="/app-api.js?v=4.1.0"></script>
+<script src="/app-auth.js?v=4.1.0"></script>
+<script src="/app-streams.js?v=4.1.0"></script>
+<script src="/app-resources.js?v=4.1.0"></script>
+<script src="/app-inline-editors.js?v=4.1.0"></script>
+<script src="/app-local-store.js?v=4.1.0"></script>
+<script src="/app-workspace.js?v=4.1.0"></script>
+<script src="/app-account-restore.js?v=4.1.0"></script>
+<script src="/app-history.js?v=4.1.0"></script>
+<script src="/app-core.js?v=4.1.0"></script>
+<script src="/app-models.js?v=4.1.0"></script>
+<script src="/app-markdown.js?v=4.1.0"></script>
+<script src="/app-agent.js?v=4.1.0"></script>
+<script src="/app-reports.js?v=4.1.0"></script>
+<script src="/app-runs.js?v=4.1.0"></script>
+<script src="/app-dates.js?v=4.1.0"></script>
+<script src="/app-strava.js?v=4.1.0"></script>
+<script src="/app-run-insights.js?v=4.1.0"></script>
+<script src="/app-shoes.js?v=4.1.0"></script>
+<script src="/app-dashboard.js?v=4.1.0"></script>
+<script src="/app-monthly.js?v=4.1.0"></script>
+<script src="/app-exports.js?v=4.1.0"></script>
+<script src="/app-goals.js?v=4.1.0"></script>
+<script src="/app-charts.js?v=4.1.0"></script>
+<script src="/app-shoe-charts.js?v=4.1.0"></script>
+<script src="/app-monthly-charts.js?v=4.1.0"></script>
+<script src="/app-spending.js?v=4.1.0"></script>
+<script src="/app-dialogs.js?v=4.1.0"></script>
+<script src="/app-updates.js?v=4.1.0"></script>
+<script src="/app.js?v=4.1.0"></script>
 </body>
 </html>

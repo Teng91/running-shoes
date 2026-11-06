@@ -46,6 +46,7 @@ function renderCharts() {
       delete chartInstances[key];
     }
   });
+  renderShoeTimeline();
 
   const textColor = getThemeColor('--text-dim', '#8b8d9a');
   const gridColor = getThemeColor('--chart-grid', '#2a2d3e');
@@ -232,4 +233,128 @@ function renderCharts() {
       }
     }]
   });
+}
+
+// ====== Shoe rotation timeline ======
+// One bar per shoe from its first to its last logged run; idle active shoes stand out.
+let shoeTimelineRequestId = 0;
+const DAY_MS = 86400000;
+
+async function renderShoeTimeline() {
+  if (chartInstances.timeline) { chartInstances.timeline.destroy(); delete chartInstances.timeline; }
+  const requestId = ++shoeTimelineRequestId;
+  let timeline;
+  try {
+    const result = await resourceStore.read('shoe-timeline', {
+      refresh: false,
+      loader: async () => {
+        const value = await apiGet('/analytics/shoe-timeline');
+        if (!Array.isArray(value.shoes)) throw new Error('跑鞋時間軸資料格式錯誤');
+        return value;
+      },
+    });
+    if (!resourceStore.current(result) || requestId !== shoeTimelineRequestId) return;
+    if (result.status === 'rejected') throw result.error;
+    timeline = result.value;
+  } catch (error) {
+    console.error('載入跑鞋時間軸失敗:', error);
+    if (requestId === shoeTimelineRequestId) renderedPanels.delete('shoes');
+    return;
+  }
+  if (document.querySelector('.tab-panel.active')?.dataset.panel !== 'shoes') return;
+  if (chartInstances.timeline) { chartInstances.timeline.destroy(); delete chartInstances.timeline; }
+
+  const note = document.getElementById('timeline-note');
+  const box = document.getElementById('shoe-timeline-canvas');
+  const rows = timeline.shoes;
+  if (!rows.length) {
+    box.style.height = '60px';
+    note.textContent = '還沒有跑步紀錄，記錄跑步後會顯示每雙鞋的使用期間。';
+    return;
+  }
+  const known = new Map([...shoes, ...retiredShoes].map(shoe => [shoe.id, shoe]));
+  const names = rows.map(row => {
+    const shoe = known.get(row.shoe_id);
+    if (!shoe) return `鞋款 #${row.shoe_id}`;
+    return `${shoe.brand} ${shoe.model}${shoe.nickname ? `（${shoe.nickname}）` : ''}`;
+  });
+  const brandSeq = {};
+  const colors = rows.map(row => {
+    if (row.is_retired) return '#64748b';
+    if (row.idle) return '#f97316';
+    const brand = known.get(row.shoe_id)?.brand || '';
+    brandSeq[brand] = brandSeq[brand] || 0;
+    return brandColor(brand, brandSeq[brand]++);
+  });
+  const toTime = iso => { const [y, m, d] = iso.split('-').map(Number); return new Date(y, m - 1, d).getTime(); };
+  const today = toTime(timeline.as_of);
+  // A single-day bar still needs visible width, so each bar ends after its last day.
+  const data = rows.map(row => [toTime(row.first_run_date), toTime(row.last_run_date) + DAY_MS]);
+  const textColor = getThemeColor('--text-dim', '#8b8d9a');
+  const gridColor = getThemeColor('--chart-grid', '#2a2d3e');
+  box.style.height = `${Math.max(140, rows.length * 34 + 48)}px`;
+
+  chartInstances.timeline = new Chart(document.getElementById('chart-shoe-timeline'), {
+    type: 'bar',
+    data: { labels: names, datasets: [{ data, backgroundColor: colors, borderRadius: 4, borderSkipped: false, barPercentage: .7 }] },
+    options: {
+      indexAxis: 'y',
+      maintainAspectRatio: false,
+      layout: { padding: { top: 16 } },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            title: items => names[items[0].dataIndex],
+            label: ctx => {
+              const row = rows[ctx.dataIndex];
+              return [
+                `${row.first_run_date.replaceAll('-', '/')} – ${row.last_run_date.replaceAll('-', '/')}`,
+                `${row.km.toFixed(1)} km · ${row.run_count} 次`,
+                row.is_retired ? '已退役' : `最後一次穿：${row.days_since_last_run} 天前`,
+              ];
+            },
+          },
+        },
+      },
+      scales: {
+        x: {
+          type: 'linear',
+          min: Math.min(...data.map(range => range[0])) - 7 * DAY_MS,
+          max: today + 7 * DAY_MS,
+          grid: { color: gridColor },
+          ticks: {
+            color: textColor, font: { size: 10 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 8,
+            callback: value => { const date = new Date(value); return `${date.getFullYear()}/${date.getMonth() + 1}`; },
+          },
+        },
+        y: {
+          grid: { display: false },
+          ticks: { color: textColor, font: { size: 11 }, callback: function(value) { return fitChartLabel(names[value], this.chart, 0.32); } },
+        },
+      },
+    },
+    plugins: [{
+      id: 'timelineToday',
+      afterDatasetsDraw(chart) {
+        const { ctx, chartArea, scales: { x } } = chart;
+        const position = x.getPixelForValue(today);
+        if (position < chartArea.left || position > chartArea.right) return;
+        ctx.save();
+        ctx.strokeStyle = '#22c55e';
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath(); ctx.moveTo(position, chartArea.top); ctx.lineTo(position, chartArea.bottom); ctx.stroke();
+        ctx.fillStyle = '#22c55e';
+        ctx.font = '10px "Segoe UI", system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText('今天', position, chartArea.top - 3);
+        ctx.restore();
+      },
+    }],
+  });
+  const idle = rows.filter(row => row.idle).map(row => names[rows.indexOf(row)]);
+  note.textContent = idle.length
+    ? `橘色：超過 ${timeline.idle_days} 天沒穿的現役鞋（${idle.join('、')}）。灰色為已退役。`
+    : `所有現役鞋近 ${timeline.idle_days} 天內都有穿；灰色為已退役。`;
 }

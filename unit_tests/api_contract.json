@@ -5,6 +5,8 @@
   "DELETE /api/shoes/{shoe_id}",
   "GET /api/agent/providers",
   "GET /api/analytics/dashboard",
+  "GET /api/analytics/shoe-timeline",
+  "GET /api/analytics/trends",
   "GET /api/auth/me",
   "GET /api/export",
   "GET /api/export/account",

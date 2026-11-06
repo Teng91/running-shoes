@@ -13,13 +13,14 @@ function registerResourceCaches() {
     spendingSummary = null; spendingLoadRequestId++; spendingLoadPending = false;
   });
   resourceStore.registerCache('goal', () => {
-    goalProgressRequestId++; resourceStore.invalidate(['goal-progress']);
+    goalProgressRequestId++; resourceStore.invalidate(['goal-progress', 'training-trends']);
   });
   resourceStore.registerCache('annual', () => {
-    runController.state.annualRequest++; resourceStore.invalidate(['annual-summary']);
+    runController.state.annualRequest++;
+    resourceStore.invalidate(['annual-summary', 'training-trends', 'shoe-timeline']);
   });
   resourceStore.registerCache('dashboard', () => {
-    dashboardAnalyticsRequest++; resourceStore.invalidate(['dashboard-analytics']);
+    dashboardAnalyticsRequest++; resourceStore.invalidate(['dashboard-analytics', 'shoe-timeline']);
   });
 }
 

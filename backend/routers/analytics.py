@@ -5,7 +5,9 @@ from sqlalchemy.orm import Session
 
 from backend import analytics, models
 from backend.auth import get_current_user
+from backend.clock import local_today
 from backend.database import get_db
+from backend.read_models import trends
 
 router = APIRouter(tags=["analytics"])
 
@@ -18,6 +20,23 @@ def dashboard_analytics(
     db: Session = Depends(get_db),
 ):
     return analytics.dashboard_analytics(db, current_user.id, year, month)
+
+
+@router.get("/api/analytics/trends")
+def training_trends(
+    year: int = Query(..., ge=1900, le=2100),
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return trends.training_trends(db, current_user.id, year, local_today())
+
+
+@router.get("/api/analytics/shoe-timeline")
+def shoe_timeline(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return trends.shoe_timeline(db, current_user.id, local_today())
 
 
 @router.get("/api/shoes/{shoe_id}/analytics")

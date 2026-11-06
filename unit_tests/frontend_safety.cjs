@@ -99,9 +99,16 @@ module.exports = async function checkFrontendSafety(browser, baseUrl) {
         return Reflect.construct(target, args);
       } });
       Chart.defaults.animation = false;
-      let annualReads = 0;
+      let annualReads = 0, trendReads = 0;
       window.fetch = async url => {
         if (String(url).includes('/runs/year-summary?')) { annualReads++; return json({ shoes: [] }); }
+        if (String(url).includes('/analytics/trends?')) {
+          trendReads++;
+          return json({ year: 2026, end_date: '2026-01-31', thresholds: { spike_percent: 30 }, daily: [],
+            streaks: { longest_days: 0, current_days: 0 }, weekly: [],
+            cumulative: { goal_active: false, actual_km: [], goal_km: [], ytd_km: 0 } });
+        }
+        if (String(url).includes('/analytics/shoe-timeline')) return json({ as_of: '2026-01-31', idle_days: 30, shoes: [] });
         return json({});
       };
       shoes = [{ id: 1, brand: 'Test', model: 'Safety', date: '2026-01-01', size: 'US 9',
@@ -116,7 +123,7 @@ module.exports = async function checkFrontendSafety(browser, baseUrl) {
       check(annualReads === 1 && created.includes('chart-shoe-stacked'), 'monthly lazily loads annual logs');
       const count = created.length;
       switchTab('runs'); await frame(); switchTab('monthly'); await frame();
-      check(created.length === count && annualReads === 1, 'unchanged tabs reuse charts and annual data');
+      check(created.length === count && annualReads === 1 && trendReads === 1, 'unchanged tabs reuse charts and annual data');
       switchTab('runs'); await frame();
       toggleTheme();
       check(created.slice(count).every(id => id === 'chart-run-shoes'), 'theme only redraws visible charts');
