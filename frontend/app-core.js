@@ -31,9 +31,7 @@ function renderActivePanel() {
   } else if (name === 'runs') {
     populateRunShoeSelects(); renderRunLog();
   } else if (name === 'monthly') {
-    // Charts first: they choose the selected year that also filters the table.
     if (typeof Chart !== 'undefined') renderMonthlyCharts();
-    renderMonthlyTable();
   } else if (name === 'spending') {
     renderSpendingCharts();
   }

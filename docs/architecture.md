@@ -228,7 +228,6 @@ flowchart LR
     RunCRUD --> RunInsights[app-run-insights.js]
     Core --> ShoesUI[app-shoes.js]
     Core --> Dashboard[app-dashboard.js]
-    Core --> Monthly[app-monthly.js<br/>月跑量 CRUD]
     Core --> ExportsUI[app-exports.js<br/>匯出下載]
     Core --> GoalsUI[app-goals.js<br/>目標設定與進度]
     Core --> Charts[app-charts.js<br/>共用 registry / utilities]

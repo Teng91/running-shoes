@@ -108,6 +108,11 @@ async function run() {
       response.setHeader('Content-Type', 'text/html');
       response.end('<html>not a JavaScript asset</html>'); return;
     }
+    if (legacy && url.pathname === '/app-monthly.js') {
+      // The frozen v3.2.2 worker still precaches this script; SPEC-039 removed it from the current shell.
+      response.setHeader('Content-Type', 'text/javascript');
+      response.end('// removed in SPEC-039'); return;
+    }
     if (url.pathname === '/release-marker.js') {
       response.setHeader('Content-Type', 'text/javascript');
       response.end('window.__pwaRelease=' + JSON.stringify(url.searchParams.get('v')) + ';'); return;

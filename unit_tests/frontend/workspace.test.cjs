@@ -419,17 +419,15 @@ test('SPEC-030 local clearing preserves replacement sessions and newer input', a
     context.persistWorkspaceDrafts = () => { persisted++; };
     context.renderWorkspaceQueue = async () => {};
     context.workspaceStorageError = () => { errors++; };
-    elements['run-km'].value = '5'; elements['add-km'].value = '120';
+    elements['run-km'].value = '5';
     const pending = context.clearLocalWorkspace();
     await context.clearLocalWorkspace(); assert.equal(clears, 1, 'duplicate clear stays locked');
     if (switched) session = {};
     elements['run-km'].value = switched ? '42' : '6';
-    elements['add-km'].value = switched ? '180' : '120';
     vm.runInContext("localWorkspace.editors.new = { value: 'new input' };", context);
     if (failed) reject(Error('old storage failure')); else complete();
     await pending;
     assert.equal(elements['run-km'].value, switched ? '42' : '6');
-    assert.equal(elements['add-km'].value, switched ? '180' : failed ? '120' : '');
     assert.equal(vm.runInContext('localWorkspace.editors.new.value', context), 'new input');
     assert.equal(errors, failed && !switched ? 1 : 0);
     assert.equal(persisted, !failed && !switched ? 1 : 0);

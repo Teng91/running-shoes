@@ -223,9 +223,9 @@ SPEC-032：合成資料驗證 50,000／50,001 筆歷史邊界、UTF-8 位元組�
 
 [規格與具名案例](specs/034-portable-recovery-and-sync-refresh.md) 驗證來源及接收者連續復原、省略歷史仍攜帶來源鍵、tombstone、別名衝突／全域容量／格式拒絕、v1/v2 指紋相容，以及小數累積與 legacy Float 尾差的 no-op 版本／audit 不變。Node 覆蓋手動空佇列讀取、通知失敗不重排已確認操作、刷新中的新通知及外帳號忽略；雙引擎 workspace E2E 操作 v3 來源復原檔及真實 BroadcastChannel／IndexedDB 多分頁，確認雲端讀取與表單草稿保留。
 
-## SPEC-039 精簡月跑量紀錄表
+## SPEC-039 移除月跑量紀錄表
 
-[規格與具名案例](specs/039-compact-monthly-records.md) 以 Node 驗證表格只列出選擇年份且按鈕仍指向完整清單的正確紀錄、未選年份時顯示最新年份、空年份與無資料的提示，以及區塊預設收合；`frontend-e2e`、`frontend-layout` 與瀏覽器編輯測試先展開區塊再操作。
+[規格與具名案例](specs/039-compact-monthly-records.md) 以 Node 驗證月跑量分頁沒有紀錄表、新增表單與編輯對話框且不載入 `app-monthly.js`，以及舊版本的月份新增／編輯草稿在恢復本機工作區時被捨棄、其他草稿保留、舊草稿鍵不開啟對話框；月份編輯相關的 Node 與瀏覽器案例隨功能移除，SPEC-023 AC-1 改由共用 operation owner 測試覆蓋。
 
 ## SPEC-038 訓練趨勢與跑鞋輪替
 

@@ -1,7 +1,4 @@
 // Application bootstrap and global dialog event wiring.
-document.getElementById('monthly-modal').addEventListener('click', e => {
-  if (e.target.id === 'monthly-modal') closeMonthlyModal();
-});
 document.getElementById('export-modal').addEventListener('click', e => {
   if (e.target.id === 'export-modal') closeExportModal();
 });
@@ -20,7 +17,6 @@ document.getElementById('workspace-modal').addEventListener('click', event => {
 async function init() {
   // Every new document starts at the home page, regardless of legacy saved tabs.
   resetAppLayout();
-  populateAddSelects();
   const today = localDateISO();
   document.getElementById('run-date').value = today;
   document.getElementById('run-date').max = today;

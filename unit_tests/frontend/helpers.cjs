@@ -100,14 +100,10 @@ function editContext() {
   } });
   const context = runContext({ document: { getElementById: id => elements[id] },
     captureAuthSession: () => ({ current: true }), isCurrentAuthSession: session => session.current,
-    refreshDateLimits() {}, populateRunShoeSelects() {}, populateMonthlyEditSelects(year, month) {
-      elements['m-year'].value = year; elements['m-month'].value = month;
-    }, localDateISO: () => '2026-10-19', loadData: async () => {},
+    refreshDateLimits() {}, populateRunShoeSelects() {}, localDateISO: () => '2026-10-19', loadData: async () => {},
     translateError: value => value, confirm: () => true, alert() {},
   });
-  vm.runInContext(`let editingMonthly = null;\n` +
-    ['openRunModal', 'closeRunModal', 'saveRun', 'deleteEditingRun',
-      'editMonthlyMileage', 'closeMonthlyModal', 'saveMonthlyMileage'].map(extract).join('\n'), context);
+  vm.runInContext(['openRunModal', 'closeRunModal', 'saveRun', 'deleteEditingRun'].map(extract).join('\n'), context);
   return { context, elements };
 }
 

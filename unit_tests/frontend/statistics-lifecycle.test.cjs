@@ -7,34 +7,6 @@ function elements() {
   } });
 }
 
-test('SPEC-017 monthly edit rejects blank/non-finite inputs but accepts explicit zero', async () => {
-  const nodes = elements(), writes = [];
-  const context = vm.createContext({ document: { getElementById: id => nodes[id] },
-    isCurrentAuthSession: () => true, translateError: value => value,
-    apiPut: async (_, payload) => writes.push(payload), closeMonthlyModal() {}, loadData: async () => {},
-  });
-  vm.runInContext('let editingMonthly = { id: 1, session: {}, version: 0 };\n' + extract('saveMonthlyMileage'), context);
-  nodes['m-year'].value = '2026'; nodes['m-month'].value = '8';
-  for (const invalid of ['', 'NaN', 'Infinity', '-1']) {
-    nodes['m-km'].value = invalid; await context.saveMonthlyMileage();
-    assert.equal(writes.length, 0); assert.equal(nodes['monthly-error'].style.display, 'block');
-  }
-  nodes['m-km'].value = '0'; await context.saveMonthlyMileage();
-  assert.equal(writes.length, 1); assert.equal(writes[0].km, 0);
-});
-
-test('SPEC-017 monthly add requires explicit distance including zero', async () => {
-  const nodes = elements(), writes = [];
-  const context = vm.createContext({ document: { getElementById: id => nodes[id] },
-    apiPost: async (_, payload) => writes.push(payload), loadData: async () => {}, translateError: v => v,
-  });
-  vm.runInContext('let monthlySaving = false;\n' + extract('addMonthlyMileage'), context);
-  nodes['add-year'].value = '2026'; nodes['add-month'].value = '8';
-  await context.addMonthlyMileage(); assert.equal(writes.length, 0);
-  nodes['add-km'].value = '0'; await context.addMonthlyMileage();
-  assert.equal(writes[0].km, 0);
-});
-
 test('SPEC-017 goal cards display server-only run totals, not manual monthly totals', () => {
   const nodes = elements();
   const context = vm.createContext({ document: { getElementById: id => nodes[id] },

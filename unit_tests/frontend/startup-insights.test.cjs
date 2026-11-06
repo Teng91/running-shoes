@@ -117,31 +117,7 @@ test('run edits send an optimistic concurrency version', () => {
   assert.match(fs.readFileSync('frontend/runtime/run-controller.mjs', 'utf8'), /expected_version=' \+ \(snapshot\.version \|\| 0\)/);
 });
 
-test('monthly inline edits commit once and include the loaded version', async () => {
-  const handlers = {};
-  const input = { addEventListener: (event, fn) => { handlers[event] = fn; }, focus() {} };
-  const writes = [];
-  const context = vm.createContext({
-    monthlyMileages: [{ id: 8, km: 50, version: 3 }],
-    document: { createElement: () => input },
-    apiPut: async (url, payload) => { writes.push({ url, payload }); },
-    loadData: async () => {}, render() {}, alert() {},
-  });
-  vm.runInContext(extract('inlineEditMonthly'), context);
-  await context.inlineEditMonthly(0, 'km', { innerHTML: '', appendChild() {}, querySelector: () => null });
-  input.value = '60';
-  handlers.keydown({ key: 'Enter' });
-  await handlers.blur();
-  await Promise.resolve();
-
-  assert.equal(writes.length, 1);
-  assert.equal(JSON.stringify(writes[0]), JSON.stringify({
-    url: '/monthly-mileage/8', payload: { km: 60, expected_version: 3 },
-  }));
-});
-
-test('monthly, run, and shoe deletes carry optimistic versions', () => {
-  assert.match(extract('deleteMonthlyMileage'), /expected_version=' \+ \(m\.version \|\| 0\)/);
+test('run and shoe deletes carry optimistic versions', () => {
   const modal = source.slice(source.indexOf('class ShoeModal {'), source.indexOf('// 初始化一次'));
   assert.match(modal, /expected_version=' \+ \(shoe\.version \|\| 0\)/);
 });

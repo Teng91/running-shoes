@@ -143,7 +143,6 @@ running-shoes/
 │   ├── app-history.js    # 異動分頁與誤刪復原 UI
 │   ├── app-core.js       # Shell、主題、分頁與聚合資料載入
 │   ├── app-dashboard.js  # 首頁卡片、提醒與跑鞋表格
-│   ├── app-monthly.js    # 月跑量 CRUD、inline 表單與編輯快照
 │   ├── app-exports.js    # 跑鞋匯出與帳號備份下載
 │   ├── app-goals.js      # 跑步目標設定與期間進度
 │   ├── app-charts.js     # 共用圖表 registry 與 label utilities
@@ -305,7 +304,7 @@ LLM_MAX_OUTPUT_TOKENS=4096
 - **圖表視覺化**：生命進度條、每 km 成本比較、退役時間軸、月跑量佔比（圓餅圖直接標示公里數與百分比，Chart.js）
 - **訓練趨勢**：月跑量分頁的年度跑步熱力圖與連續天數、近 16 週每週跑量（4 週平均線，比前 4 週平均多 30% 以上的週次標橘色）、年度累計跑量對照目標線；跑鞋分頁的輪替時間軸標出超過 30 天沒穿的現役鞋
 - **亮色 / 暗色主題切換**：右上角一鍵切換，全域 UI 元素與所有 Chart.js 圖表（網格線、刻度文字、數據標籤）皆自動對應色調，偏好透過 `localStorage` 自動記憶
-- **安全的里程統計**：跑鞋與月跑量都明確區分「逐筆跑步日誌」與「歷史／手動調整」，手動總數不能低於日誌合計；所有新輸入的里程與金額統一保存至小數點後兩位
+- **安全的里程統計**：跑鞋與月跑量都明確區分「逐筆跑步日誌」與「歷史／手動調整」（月跑量的手動調整自 v4.1.2 起不再提供網頁編輯，資料保留），手動總數不能低於日誌合計；所有新輸入的里程與金額統一保存至小數點後兩位
 - **跑步日誌**：預設首頁，可記錄日期、公里數與鞋款並同步里程；完成日期不得晚於今天
 - **跑步洞察首頁**：當月會以相同天數比較上月同期，並顯示近 7 天趨勢、月目標、月底里程預測及鞋款壽命提醒
 - **手機跑步摘要**：六張摘要卡片統一以兩欄三列排列，同列等高；分析載入／失敗訊息與鞋款提醒維持全寬
@@ -323,7 +322,7 @@ LLM_MAX_OUTPUT_TOKENS=4096
 
 登入後切換到「跑步日誌」頁籤，即可為每次跑步選擇日期、公里數與穿著的鞋款。日誌支援新增、編輯與刪除，現役與已退役鞋款都可使用。
 
-「跑步日誌」位於第一個分頁，也是固定首頁。每次登入、重新整理、重新開啟網站／PWA，或由瀏覽器 back-forward cache 還原文件時，都會回到此頁，不再記憶上次停留的分頁；登入狀態與主題偏好照常保留。單純切換 App／瀏覽器分頁後回到原畫面不會強制切頁。從此處新增的距離會同步累加到所選跑鞋的總里程，以及該年月的「月跑量紀錄」；如果該月份尚無紀錄，系統會自動建立。編輯距離、日期或鞋款時只套用前後差額，刪除時則同步扣回。既有歷史資料不會在升級時重新計算。
+「跑步日誌」位於第一個分頁，也是固定首頁。每次登入、重新整理、重新開啟網站／PWA，或由瀏覽器 back-forward cache 還原文件時，都會回到此頁，不再記憶上次停留的分頁；登入狀態與主題偏好照常保留。單純切換 App／瀏覽器分頁後回到原畫面不會強制切頁。從此處新增的距離會同步累加到所選跑鞋的總里程，以及該年月的月跑量；如果該月份尚無紀錄，系統會自動建立。編輯距離、日期或鞋款時只套用前後差額，刪除時則同步扣回。既有歷史資料不會在升級時重新計算。
 
 跑步日誌會即時計算：
 
@@ -450,7 +449,7 @@ python3 scripts/build_frontend.py --check
 
 ### 統計與操作規則（SPEC-017）
 
-- 月跑量空白或無效不會送出；清零必須明確輸入 `0`。歷史／手動調整與日誌里程分開保留。
+- 月跑量 API 空白或無效不會寫入；清零必須明確輸入 `0`。歷史／手動調整與日誌里程分開保留（網頁編輯介面已於 SPEC-039 移除）。
 - 月跑量頁、首頁、月報目標皆只計逐筆日誌；鞋款成本／壽命指標由 `shoe_metrics.py` 統一計算。
 - 刪鞋不移除日誌或年度堆疊里程；圖表保留「歷史鞋款／已刪除」群組。
 - AI 遇到同名鞋回傳含購買日期及狀態的候選，必須詢問後以 ID 選定；批次使用分析不逐鞋查詢。
@@ -539,7 +538,7 @@ CI 失敗／取消時嘗試上傳已有產物；引擎完全卡死時可能只�
 CI 的 `frontend-pwa` job 上傳獨立 `browser-diagnostics-roundtrip` artifact，另一個 job 下載並驗證 PNG、trace ZIP 與合成錯誤標記，缺檔／損毀會讓 pipeline 失敗。
 
 `frontend-e2e` 會對真實 FastAPI／CORS 與暫存 SQLite 執行同一個 `release-check`：檢查 readiness／schema、
-完整 API contract、manifest 對應的 51 個 shell／worker 資產雜湊與 MIME、四個統計 API 的匿名拒絕存取，
+完整 API contract、manifest 對應的 50 個 shell／worker 資產雜湊與 MIME、四個統計 API 的匿名拒絕存取，
 再驗證 Chromium／WebKit 匿名手機啟動與 native runtime cache，以及 Chromium 離線重開。
 WebKit 離線 shell 由 `frontend-pwa` 的 fixture transport 中斷驗證；API probe 在 HTTP headers 後截斷 response body，完整讀取 JSON 並檢查 server 請求計數，避免 headers 前 TCP 中斷讓裸 fetch 一直 pending。這些不取代引擎之外的實機驗證。
 這個 task 不登入、不送出資料、不發布或回滾；正式 origin 必須是 HTTPS，HTTP 只允許 loopback。
@@ -695,10 +694,11 @@ v3.10.3 使用 Asset 3.10.3／shell v38、schema 6、51 個 release assets。
 `registry.fly.io/running-shoes@sha256:bac44457f12adfde6473e9d9a973b330e1bf69eac7e44feb3fb6ed1f5a55429a`，
 不還原業務資料快照。發布驗證涵蓋 verify、40 組版面、雙引擎 CRUD／PWA、main/tag CI 及正式站匿名 release-check。
 
-### 精簡月跑量紀錄表（SPEC-039，v4.1.1）
+### 移除月跑量紀錄表（SPEC-039，v4.1.2）
 
-[SPEC-039](docs/specs/039-compact-monthly-records.md) 讓月跑量分頁底部的「月跑量紀錄」預設收合，展開後只列出「年度月跑量」圖表選擇的年份（最多 12 列）；
-補登月份與修正手動調整仍在這裡操作。Asset 4.1.1／shell v45、無 API 或 schema 變更，可回滾至 v4.1.0 image。
+[SPEC-039](docs/specs/039-compact-monthly-records.md) 移除月跑量分頁底部的「月跑量紀錄」表格、新增表單與月份編輯對話框（v4.1.1 曾先改為收合）。
+月跑量仍由跑步日誌自動累加，既有歷史／手動調整資料、圖表、目標、報告、備份與 `/api/monthly-mileage` 都保留。
+Asset 4.1.2／shell v46、50 個 release assets、schema 6 不變，可回滾至 v4.1.1 image。
 
 ### 訓練趨勢與跑鞋輪替（SPEC-038，v4.1.0）
 
@@ -756,7 +756,7 @@ Playwright／Chromium／WebKit 齊全時，也會執行版面測試。
 避免每次停止都重跑。Hook 不會呼叫其他模型、外部 API，或傳送提示、diff、原始碼與測試輸出。
 GitHub Actions 仍會在 push／pull request 執行 `verify`，並以三個可獨立重跑的 browser jobs 執行完整版面矩陣、真實 CRUD E2E 與 PWA 升級／離線測試；Dependabot 每月以單一 PR 合併 GitHub Actions 更新；Python 只接收安全性更新 PR，例行升級依下方 `uv pip compile --universal` 步驟手動重編鎖定檔（Dependabot 產生的鎖定檔會遺失 Windows 條件）。
 
-本次驗證基線為 Python **561 passed**、前端回歸測試 **155 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
+本次驗證基線為 Python **562 passed**、前端回歸測試 **149 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
 版面檢查涵蓋 WebKit／Chromium、亮／暗模式與 10 組直橫向尺寸，共 40 組設定，檢查六個功能分頁、三個認證表單、圖表、全部彈窗、行內編輯、停用／錯誤及空資料狀態。
 
 主要表單、工具列與彈窗操作統一為 44px 控制項；桌面表格內的緊湊操作為 36px，手機至少 44px。

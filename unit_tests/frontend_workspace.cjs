@@ -80,16 +80,12 @@ module.exports = async function checkWorkspace(browser, baseUrl) {
     await page.locator('#run-date').fill('2026-01-02');
     await page.locator('#run-shoe').selectOption(String(shoe.id));
     await page.locator('#run-km').fill('5');
-    await page.evaluate(() => { switchTab('monthly'); });
-    await page.locator('#monthly-records > summary').click();
-    await page.locator('#add-km').fill('180');
     await page.evaluate(() => { shoeModal.openForEdit(shoes[0], false); });
     await page.locator('#f-nickname').fill('Unfinished nickname');
     await page.evaluate(() => { shoeModal.close(); });
     await waitForAsync(page, async () => (await localWorkspace.controller.read('drafts'))[0]?.value.editors['shoe:' + shoes[0].id]?.values['f-nickname'] === 'Unfinished nickname');
     await page.reload({ waitUntil: 'networkidle' });
-    await page.waitForFunction(() => document.getElementById('run-km').value === '5' && document.getElementById('add-km').value === '180');
-    assert.equal(await page.evaluate(() => document.getElementById('monthly-records').open), true, 'restored monthly draft is visible');
+    await page.waitForFunction(() => document.getElementById('run-km').value === '5');
     await page.getByRole('button', { name: '資料與同步', exact: true }).click();
     await page.getByRole('button', { name: '更新雲端資料', exact: true }).click();
     await page.waitForFunction(() => document.getElementById('workspace-sync-status').textContent.includes('沒有待送跑步'));
@@ -106,7 +102,6 @@ module.exports = async function checkWorkspace(browser, baseUrl) {
     }
     await login(b);
     assert.equal(await page.locator('#run-km').inputValue(), '', 'B never sees A draft');
-    assert.equal(await page.locator('#add-km').inputValue(), '');
     assert.equal(await page.evaluate(() => Object.keys(localWorkspace.editors).length), 0);
     await login(a);
     await page.waitForFunction(() => document.getElementById('run-km').value === '5');

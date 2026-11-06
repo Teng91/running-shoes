@@ -146,19 +146,6 @@ module.exports = async function checkFrontendSafety(browser, baseUrl) {
       check(created.includes('chart-shoe-stacked') && resourceStore.peek('annual-summary'), 'return to monthly recovers from cached result');
       Chart = OriginalChart;
 
-      // A reordered list must not change the month captured by the modal.
-      editMonthlyMileage(0);
-      monthlyMileages = [{ id: 20, year: 2026, month: 2, km: 200, version: 4, adjustment_km: 200 }];
-      let write;
-      window.fetch = async (url, options) => {
-        write = { url: String(url), payload: JSON.parse(options.body) };
-        return new Response('{"detail":"deleted"}', { status: 404 });
-      };
-      await saveMonthlyMileage();
-      check(write.url.endsWith('/monthly-mileage/10') && write.payload.expected_version === 0, 'modal submitted original identity/version');
-      check(document.getElementById('monthly-error').textContent.includes('deleted'), 'deleted original remains a visible error');
-      closeMonthlyModal();
-
       setAuth('synthetic-stream', 'stream-user');
       const input = document.getElementById('agent-input');
       input.value = 'first question';

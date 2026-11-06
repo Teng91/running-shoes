@@ -361,31 +361,6 @@ window.__appBootLegacyPoll = window.setInterval(function () {
       </div>
     </div>
 
-    <details class="table-section monthly-records" id="monthly-records">
-      <summary class="table-header monthly-records-summary">
-        <h2>月跑量紀錄 <span class="monthly-records-year" id="monthly-records-year"></span></h2>
-        <span class="monthly-records-hint">補登或修正月跑量</span>
-      </summary>
-      <div class="inline-add">
-        <select id="add-year"></select>
-        <select id="add-month"></select>
-        <input id="add-km" type="number" min="0" step="0.01" placeholder="km">
-        <button class="btn btn-sm btn-primary" id="add-monthly-btn" onclick="addMonthlyMileage()">新增</button>
-        <span class="inline-error" id="add-error"></span>
-      </div>
-      <p class="table-scroll-hint">欄位較多時，可左右滑動表格查看。</p>
-      <div class="table-wrap" tabindex="0" role="region" aria-label="可左右滑動的資料表">
-        <table>
-          <thead>
-            <tr>
-              <th class="numeric">年份</th><th class="numeric">月份</th><th class="numeric">日誌里程</th><th class="numeric">歷史／手動調整</th><th class="numeric">合計 (km)</th><th></th>
-            </tr>
-          </thead>
-          <tbody id="monthly-table"></tbody>
-        </table>
-      </div>
-    </details>
-
   </div><!-- /tab-panel monthly -->
 
   <!-- Spending Tab -->
@@ -485,7 +460,6 @@ window.__appBootLegacyPoll = window.setInterval(function () {
 <!-- include:shoe-modal.html -->
 <!-- include:run-modal.html -->
 <!-- include:strava-modal.html -->
-<!-- include:monthly-modal.html -->
 <!-- include:export-modal.html -->
 <!-- include:shoe-analysis-modal.html -->
 <!-- include:workspace-modal.html -->

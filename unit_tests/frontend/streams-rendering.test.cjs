@@ -1,31 +1,9 @@
 const { runContext, test, assert, fs, path, vm, htmlSource, scriptPaths, scriptSource, styleSource, source, authOperationContext, streamContext, editContext, tableHeaders, extract, transportContext } = require('./helpers.cjs');
 
-test('monthly modal keeps its original ID/version after reorder or deletion and guards old callbacks', async () => {
-  const { context, elements } = editContext();
-  context.monthlyMileages = [{ id: 10, year: 2026, month: 1, km: 100, version: 0 }];
-  context.editMonthlyMileage(0);
-  context.monthlyMileages = [{ id: 20, year: 2026, month: 2, km: 200, version: 4 }];
-  let finish, calls = 0;
-  context.apiPut = (url, payload) => {
-    calls++; assert.equal(url, '/monthly-mileage/10'); assert.equal(payload.expected_version, 0);
-    return new Promise(resolve => { finish = resolve; });
-  };
-  const save = context.saveMonthlyMileage();
-  await context.saveMonthlyMileage();
-  assert.equal(calls, 1);
-  context.closeMonthlyModal(); context.editMonthlyMileage(0);
-  finish(); await save;
-  assert.equal(vm.runInContext('editingMonthly.id', context), 20);
-  assert.equal(elements['save-monthly-btn'].disabled, false);
-  context.apiPut = async () => { throw new Error('404 deleted'); };
-  await context.saveMonthlyMileage();
-  assert.equal(elements['monthly-error'].textContent, '404 deleted');
-});
-
 test('panel rendering is lazy, reused, and invalidated by data or theme changes', () => {
   const counts = {};
   const hooks = ['renderCards', 'renderAlerts', 'renderCategorySummary', 'renderTable', 'renderRetiredTable',
-    'renderCharts', 'populateRunShoeSelects', 'renderRunLog', 'renderMonthlyTable', 'renderMonthlyCharts', 'renderSpendingCharts'];
+    'renderCharts', 'populateRunShoeSelects', 'renderRunLog', 'renderMonthlyCharts', 'renderSpendingCharts'];
   let active = 'runs';
   const context = runContext({ document: { querySelector: () => ({ dataset: { panel: active } }) },
     Chart() {}, localDateISO: () => '2026-10-19', selectedRunMonth: () => '2026-10',
@@ -59,7 +37,7 @@ test('shoe retirement presentation uses only the backend date, including no fore
 });
 
 test('table numeric headers and shared component geometry have explicit presentation contracts', () => {
-  for (const [id, expected] of Object.entries({ 'shoe-table': [3,4,5,6,7,8], 'retired-table': [3,4,5,6,7], 'run-table': [1], 'monthly-table': [0,1,2,3,4], 'spending-table': [4,5,6] })) {
+  for (const [id, expected] of Object.entries({ 'shoe-table': [3,4,5,6,7,8], 'retired-table': [3,4,5,6,7], 'run-table': [1], 'spending-table': [4,5,6] })) {
     const before = htmlSource.slice(0, htmlSource.indexOf(`<tbody id="${id}"`));
     const heads = [...before.slice(before.lastIndexOf('<thead>')).matchAll(/<th\b([^>]*)>/g)];
     assert.deepEqual(heads.flatMap((head, index) => head[1].includes('numeric') ? [index] : []), expected);
@@ -177,7 +155,7 @@ test('every startup chooses the run-log home before authentication, ignoring leg
     const elements = new Proxy({}, { get: (target, id) => target[id] ||= { value: '' } });
     const context = vm.createContext({
       document: { getElementById: id => elements[id] }, authToken: mode === 'logged-out' ? null : 'synthetic',
-      refreshDateLimits() {}, resetAppLayout() { active = 'runs'; }, populateAddSelects() {},
+      refreshDateLimits() {}, resetAppLayout() { active = 'runs'; },
       localDateISO: () => '2026-10-20', previousMonthValue: () => '2026-09',
       captureAuthSession: () => ({}), isCurrentAuthSession: () => true,
       API_BASE: '/api', authHeaders: () => ({}),
