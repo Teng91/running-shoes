@@ -19,39 +19,34 @@ test('SPEC-026 new run keeps a removed shoe unselected until explicit replacemen
 });
 
 test('SPEC-026 inline editors defer table replacement and retain the original version', async () => {
-  for (const monthly of [false, true]) {
-    const handlers = {}, writes = [], table = monthly ? 'monthly-table' : 'shoe-table';
-    const input = { focus() {}, addEventListener: (name, fn) => { handlers[name] = fn; } };
-    const el = { querySelector: () => null, closest: () => ({ id: table }), appendChild() {}, innerHTML: '' };
-    const context = vm.createContext({ document: { createElement: () => input, getElementById: assert.fail },
-      monthlyMileages: [{ id: 7, km: 100, version: 3 }], loadData: async () => {}, render() {}, alert: assert.fail,
-      apiPut: async (url, payload) => writes.push({ url, ...payload }),
-    });
-    vm.runInContext([extract(monthly ? 'inlineEditMonthly' : 'inlineEditRow'), extract('renderMonthlyTable'),
-      extract('renderTable'), extract('renderRetiredTable')].join('\n'), context);
-    if (monthly) await context.inlineEditMonthly(0, 'km', el);
-    else await context.inlineEditRow([{ id: 7, mileage: 100, version: 3 }], 0, 'mileage', el);
-    input.value = '1';
-    assert.equal(context.preserveInlineTable(table), true);
-    if (monthly) { context.monthlyMileages = [{ id: 8, km: 200, version: 9 }]; context.renderMonthlyTable(); }
-    else context.renderTable();
-    assert.equal(input.value, '1'); assert.deepEqual(writes, []);
-    input.value = '180'; await handlers.blur();
-    assert.equal(writes.length, 1); assert.equal(writes[0].expected_version, 3);
-    assert.equal(writes[0][monthly ? 'km' : 'mileage'], 180); assert.match(writes[0].url, /\/7$/);
-    assert.equal(context.preserveInlineTable(table), false);
-    await handlers.blur(); assert.equal(writes.length, 1);
-  }
+  const handlers = {}, writes = [], table = 'shoe-table';
+  const input = { focus() {}, addEventListener: (name, fn) => { handlers[name] = fn; } };
+  const el = { querySelector: () => null, closest: () => ({ id: table }), appendChild() {}, innerHTML: '' };
+  const context = vm.createContext({ document: { createElement: () => input, getElementById: assert.fail },
+    loadData: async () => {}, render() {}, alert: assert.fail,
+    apiPut: async (url, payload) => writes.push({ url, ...payload }),
+  });
+  vm.runInContext([extract('inlineEditRow'), extract('renderTable'), extract('renderRetiredTable')].join('\n'), context);
+  await context.inlineEditRow([{ id: 7, mileage: 100, version: 3 }], 0, 'mileage', el);
+  input.value = '1';
+  assert.equal(context.preserveInlineTable(table), true);
+  context.renderTable();
+  assert.equal(input.value, '1'); assert.deepEqual(writes, []);
+  input.value = '180'; await handlers.blur();
+  assert.equal(writes.length, 1); assert.equal(writes[0].expected_version, 3);
+  assert.equal(writes[0].mileage, 180); assert.match(writes[0].url, /\/7$/);
+  assert.equal(context.preserveInlineTable(table), false);
+  await handlers.blur(); assert.equal(writes.length, 1);
 });
 
 test('SPEC-026 inline lifecycle cancels blur writes before removing account DOM', async () => {
   let reset, handler; const writes = [];
   const context = vm.createContext({ registerFeatureReset: (_, callback) => { reset = callback; },
     document: { createElement: () => ({ focus() {}, addEventListener: (name, callback) => { if (name === 'blur') handler = callback; } }) },
-    monthlyMileages: [{ id: 1, km: 100, version: 1 }], apiPut: (...args) => writes.push(args), render() {}, loadData() {},
+    apiPut: (...args) => writes.push(args), render() {}, loadData() {},
   });
-  vm.runInContext(fs.readFileSync('frontend/app-inline-editors.js', 'utf8') + '\n' + extract('inlineEditMonthly'), context);
-  await context.inlineEditMonthly(0, 'km', { querySelector: () => null, appendChild() {} });
+  vm.runInContext(fs.readFileSync('frontend/app-inline-editors.js', 'utf8') + '\n' + extract('inlineEditRow'), context);
+  await context.inlineEditRow([{ id: 1, mileage: 100, version: 1 }], 0, 'mileage', { querySelector: () => null, appendChild() {}, closest: () => ({ id: 'shoe-table' }) });
   reset(); await handler(); assert.deepEqual(writes, []);
 });
 

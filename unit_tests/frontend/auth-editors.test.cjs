@@ -103,8 +103,6 @@ test('saved and streamed report timestamps share local formatting', () => {
 });
 
 test('exports, goals and chart modules retain single responsibilities and startup order', () => {
-  const monthly = fs.readFileSync('frontend/app-monthly.js', 'utf8');
-  assert.doesNotMatch(monthly, /function (?:doExport|saveRunningGoal|renderMonthlyYearChart)\(/);
   assert.match(fs.readFileSync('frontend/app-exports.js', 'utf8'), /function exportAccountData\(/);
   assert.match(fs.readFileSync('frontend/app-goals.js', 'utf8'), /function saveRunningGoal\(/);
   assert.match(fs.readFileSync('frontend/app-shoe-charts.js', 'utf8'), /function renderCharts\(/);

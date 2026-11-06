@@ -33,13 +33,12 @@ async function inspect(browser,baseUrl,scenario){
   await page.clock.setFixedTime(new Date('2026-10-23T12:00:00Z'));
   await page.goto(baseUrl,{waitUntil:'networkidle'});await page.locator('#app-boot').waitFor({state:'hidden'});
   if(scenario.startsWith('inline-')){
-   await page.evaluate(tab=>{switchTab(tab);document.getElementById('monthly-records').open=true;},scenario==='inline-shoe'?'shoes':'monthly');
+   await page.evaluate(()=>switchTab('shoes'));
    holdGoal=true;await page.evaluate(()=>{window.__auditLoad=loadData();});await started.promise;
    await page.waitForFunction(()=>activeHttpRequests.size===1);
    await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
-   const selector=scenario==='inline-shoe'?'#shoe-table tr:first-child .editable:first-of-type':'#monthly-table tr:first-child .editable';
-   // Match the mileage cell by its inline edit target, independent of numeric sibling cells.
-   const target=scenario==='inline-shoe'?page.locator('#shoe-table td[ondblclick*="mileage"]').first():page.locator(selector);
+      // Match the mileage cell by its inline edit target, independent of numeric sibling cells.
+   const target=page.locator('#shoe-table td[ondblclick*="mileage"]').first();
    await target.dblclick();await page.locator('.inline-input').fill('1');
    assert.equal(await page.locator('.inline-input').inputValue(),'1');
    assert.equal(await page.locator('.inline-input').evaluate(node=>document.activeElement===node),true);
@@ -54,7 +53,7 @@ async function inspect(browser,baseUrl,scenario){
    await page.locator('.inline-input').fill('180'); await page.locator('.inline-input').press('Enter');
    await page.waitForFunction(()=>!document.querySelector('.inline-input'));
    assert.equal(writes.length,1); assert.equal(writes[0].payload.expected_version,0);
-   assert.equal(writes[0].payload[scenario==='inline-shoe'?'mileage':'km'],180);
+   assert.equal(writes[0].payload.mileage,180);
    console.log('PASS',browser.browserType().name(),'SPEC-026',scenario,'retains DOM until explicit commit');
   }else if(scenario==='new-run-shoe'){
    await page.locator('#run-date').fill('2026-10-01');await page.locator('#run-km').fill('5');await page.locator('#run-shoe').selectOption('1');
@@ -101,7 +100,7 @@ async function inspect(browser,baseUrl,scenario){
  finally{gate.resolve();await closeBrowser(context);}
 }
 module.exports = async function checkResourceEditing(browser, baseUrl) {
-  for (const scenario of ['inline-shoe', 'inline-monthly', 'new-run-shoe', 'mapping', 'mapping-error', 'annual-requests']) {
+  for (const scenario of ['inline-shoe', 'new-run-shoe', 'mapping', 'mapping-error', 'annual-requests']) {
     await withDeadline(() => inspect(browser, baseUrl, scenario), 25000, 'SPEC-026 ' + scenario);
   }
 };

@@ -4,7 +4,7 @@ function initializeDialogs() {
   const returnFocus = new Map();
   let lastTrigger = null;
   const closers = {
-    modal: closeModal, 'run-modal': closeRunModal, 'monthly-modal': closeMonthlyModal,
+    modal: closeModal, 'run-modal': closeRunModal,
     'strava-modal': closeStravaModal, 'export-modal': closeExportModal,
     'shoe-analysis-modal': closeShoeAnalytics, 'workspace-modal': closeWorkspaceModal,
   };

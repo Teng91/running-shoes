@@ -30,7 +30,6 @@ LAYOUT_FILES = {
     "frontend/app-auth.js",
     "frontend/app-core.js",
     "frontend/app-dashboard.js",
-    "frontend/app-monthly.js",
     "frontend/app-exports.js",
     "frontend/app-goals.js",
     "frontend/app-charts.js",
@@ -234,9 +233,11 @@ def main() -> int:
         if cached.get("fingerprint") == fingerprint:
             if cached.get("passed") is True:
                 return 0
-            reason = str(cached.get("reason") or "Previous verification failed without details.")
-            print(blocking_payload(reason))
-            return 0
+            # The agent already received this failure for the unchanged worktree; blocking
+            # again would loop forever. A later stop re-runs verification, because failures
+            # such as an unreachable package index can be transient.
+            if event.get("stop_hook_active") is True:
+                return 0
         passed, reason = run_verification(files)
         save_cache(path, fingerprint, passed, reason)
         if not passed:

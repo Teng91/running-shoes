@@ -42,7 +42,6 @@ function onYearChange() {
   selectedGoalMonth = null;
   renderGoalProgress();
   renderMonthlyYearChart();
-  renderMonthlyTable();
 }
 
 // ====== Monthly Mileage Charts ======

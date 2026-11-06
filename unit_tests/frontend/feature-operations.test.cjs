@@ -7,51 +7,6 @@ function nodes() {
 }
 function deferred() { let resolve, reject; const promise = new Promise((a, b) => { resolve = a; reject = b; }); return { promise, resolve, reject }; }
 
-function monthlyContext() {
-  const elements = nodes(), request = deferred(), reloads = [];
-  let session = { current: true };
-  const context = vm.createContext({ document: { getElementById: id => elements[id] },
-    captureAuthSession: () => session, isCurrentAuthSession: value => value.current,
-    apiPost: () => request.promise, loadData: async options => reloads.push(options), translateError: value => value,
-  });
-  vm.runInContext('let monthlySaving = false;\n' + extract('addMonthlyMileage'), context);
-  Object.assign(elements['add-year'], { value: '2026' });
-  elements['add-month'].value = '10'; elements['add-km'].value = '100';
-  return { context, elements, request, reloads, reset() {
-    session.current = false; session = { current: true };
-    context.getFormOperations('monthly').reset(); vm.runInContext('monthlySaving = false', context);
-  } };
-}
-
-test('SPEC-023 monthly save preserves changed month and distance but clears an unchanged draft', async () => {
-  for (const changed of [false, true]) {
-    const { context, elements, request, reloads } = monthlyContext();
-    const saving = context.addMonthlyMileage();
-    if (changed) { elements['add-month'].value = '11'; elements['add-km'].value = '180'; }
-    request.resolve({}); await saving;
-    assert.equal(elements['add-km'].value, changed ? '180' : '');
-    assert.equal(elements['add-month'].value, changed ? '11' : '10');
-    assert.equal(reloads[0].mutation, 'monthly');
-    assert.equal(elements['add-monthly-btn'].disabled, false);
-  }
-});
-
-test('SPEC-023 stale monthly completions cannot clear errors or unlock a replacement operation', async () => {
-  for (const failure of [false, true]) {
-    const { context, elements, request, reset, reloads } = monthlyContext();
-    const old = context.addMonthlyMileage(); reset();
-    const next = deferred(); context.apiPost = () => next.promise;
-    elements['add-km'].value = '180';
-    const replacement = context.addMonthlyMileage();
-    if (failure) request.reject(new Error('old failure')); else request.resolve({});
-    await old;
-    assert.equal(elements['add-km'].value, '180'); assert.equal(elements['add-monthly-btn'].disabled, true);
-    assert.equal(elements['add-error'].style.display, 'none'); assert.equal(reloads.length, 0);
-    next.resolve({}); await replacement;
-    assert.equal(elements['add-monthly-btn'].disabled, false);
-  }
-});
-
 test('SPEC-023 operation owners preserve identity after reset and isolate independent features', async () => {
   const { createFormOperations, matchesSnapshot } = await import('../../frontend/runtime/form-operations.mjs');
   let session = { current: true };

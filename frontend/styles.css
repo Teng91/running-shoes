@@ -431,14 +431,6 @@ body.light-theme .heat-cell.level-4 { background: #14532d; }
 .table-section { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 28px; }
 .table-header { display: flex; justify-content: space-between; align-items: center; min-height: var(--control-height); margin-bottom: 16px; }
 .table-header h2 { font-size: 16px; font-weight: 600; }
-.monthly-records-summary { cursor: pointer; list-style: none; gap: 12px; margin-bottom: 0; }
-.monthly-records-summary::-webkit-details-marker { display: none; }
-.monthly-records-summary h2::before { content: '▸'; display: inline-block; width: 1.2em; color: var(--text-dim); transition: transform .2s; }
-.monthly-records[open] > .monthly-records-summary { margin-bottom: 16px; }
-.monthly-records[open] > .monthly-records-summary h2::before { transform: rotate(90deg); }
-.monthly-records-summary:focus-visible { outline: 2px solid var(--accent-light); outline-offset: 4px; border-radius: 6px; }
-.monthly-records-year { color: var(--text-dim); font-weight: 500; }
-.monthly-records-hint { color: var(--text-dim); font-size: 13px; }
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: var(--control-height); padding: 10px 16px; border: 1px solid transparent; border-radius: 8px; cursor: pointer; font-size: 13px; line-height: var(--control-line-height); font-weight: 500; transition: background-color 0.2s, color 0.2s; }
 .btn:focus-visible { outline: 2px solid var(--accent-light); outline-offset: 2px; }
 .btn:disabled { opacity: .5; cursor: not-allowed; }

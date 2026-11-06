@@ -2,7 +2,7 @@
 const localWorkspace = { controller: null, session: null, account: null, activating: null,
   runDraftId: null, consumedRunDraftId: null, fresh: new Set(), edited: new Set(), editors: {}, restoring: false, error: '', ready: false, syncing: null, syncRefreshRequested: false, channel: null };
 const workspaceForms = {
-  run: ['run-date', 'run-km', 'run-shoe'], monthly: ['add-year', 'add-month', 'add-km'],
+  run: ['run-date', 'run-km', 'run-shoe'],
   goal: ['goal-start-year', 'goal-monthly-km'],
 };
 
@@ -81,10 +81,9 @@ function activateLocalWorkspace() {
         }
         const select = document.getElementById('run-shoe');
         if (draft.forms?.run?.['run-shoe'] && !select.value) select.dataset.requiresSelection = 'true';
-        // A restored monthly draft must not stay hidden inside the collapsed records section.
-        const records = document.getElementById('monthly-records');
-        if (records && document.getElementById('add-km').value) records.open = true;
-        localWorkspace.editors = { ...draft.editors, ...localWorkspace.editors };
+        // Monthly record editing was removed in SPEC-039; drafts saved by older versions are dropped.
+        const editors = Object.entries(draft.editors || {}).filter(([, editor]) => editor.kind !== 'monthly');
+        localWorkspace.editors = { ...Object.fromEntries(editors), ...localWorkspace.editors };
       }
     } finally { localWorkspace.restoring = false; }
     await renderWorkspaceQueue();
@@ -128,11 +127,6 @@ function captureWorkspaceEditor() {
     return { kind: 'run', base: { id, version, date, km, shoe_id },
       values: readForm(['edit-run-date', 'edit-run-km', 'edit-run-shoe']) };
   }
-  if (active('monthly-modal') && editingMonthly) {
-    const { id, version, year, month, km } = editingMonthly;
-    return { kind: 'monthly', base: { id, version, year, month, km },
-      values: readForm(['m-year', 'm-month', 'm-km']) };
-  }
   for (const editor of inlineEditors.values()) {
     if (editor.draft) return { kind: editor.draft.kind, base: editor.draft.base,
       inline: { field: editor.draft.field, value: editor.draft.input.value } };
@@ -149,7 +143,6 @@ function persistWorkspaceDrafts(event = null) {
   const forms = {};
   if (!localWorkspace.runDraftId) localWorkspace.runDraftId = newOperationKey();
   if (document.getElementById('run-km').value && localWorkspace.runDraftId !== localWorkspace.consumedRunDraftId) forms.run = readForm(workspaceForms.run);
-  if (document.getElementById('add-km').value) forms.monthly = readForm(workspaceForms.monthly);
   const goal = readForm(workspaceForms.goal);
   if (goal['goal-monthly-km'] && !formSnapshotMatches(goal, goalFormValues(runningGoal))) forms.goal = goal;
   const editor = captureWorkspaceEditor();
@@ -176,16 +169,10 @@ function resumeWorkspaceEditor(key) {
     document.getElementById('edit-run-km').value = draft.base.km;
     populateRunShoeSelects(draft.base.shoe_id);
     document.getElementById('run-modal').classList.add('active');
-  } else {
-    editingMonthly = { ...draft.base, ...getFormOperations('monthly').capture() };
-    populateMonthlyEditSelects(draft.base.year, draft.base.month);
-    document.getElementById('m-km').value = draft.base.km;
-    document.getElementById('monthly-error').style.display = 'none';
-    document.getElementById('monthly-modal').classList.add('active');
-  }
+  } else return;
   for (const [id, value] of Object.entries(draft.values || {})) document.getElementById(id).value = value;
   if (draft.inline) {
-    const fields = { mileage: 'f-mileage', expected_mileage: 'f-expected', monthly_km: 'f-monthly', km: 'm-km' };
+    const fields = { mileage: 'f-mileage', expected_mileage: 'f-expected', monthly_km: 'f-monthly' };
     document.getElementById(fields[draft.inline.field]).value = draft.inline.value;
   }
 }
@@ -327,7 +314,7 @@ async function renderWorkspaceQueue() {
   for (const [key, draft] of Object.entries(localWorkspace.editors)) {
     const row = document.createElement('div'); row.className = 'workspace-item';
     const button = document.createElement('button'); button.className = 'btn btn-edit';
-    button.textContent = `繼續編輯 ${ { shoe: '鞋款', run: '跑步', monthly: '月份' }[draft.kind] } ${draft.base?.id || '新增草稿'}`;
+    button.textContent = `繼續編輯 ${ { shoe: '鞋款', run: '跑步' }[draft.kind] } ${draft.base?.id || '新增草稿'}`;
     button.onclick = () => resumeWorkspaceEditor(key);
     const discard = document.createElement('button'); discard.className = 'btn btn-cancel'; discard.textContent = '捨棄草稿';
     discard.onclick = () => { delete localWorkspace.editors[key]; persistWorkspaceDrafts(); void renderWorkspaceQueue(); };
@@ -358,7 +345,7 @@ async function clearLocalWorkspace() {
     for (const [name, ids] of Object.entries(workspaceForms)) {
       if (!formSnapshotMatches(operation.form.forms[name], readForm(ids))) { newerInput = true; continue; }
       if (name === 'goal') { getFormDraft('goal').reset(); prepareGoalForm(); }
-      else document.getElementById(name === 'run' ? 'run-km' : 'add-km').value = '';
+      else document.getElementById('run-km').value = '';
     }
     for (const [key, draft] of Object.entries(operation.form.editors)) {
       if (JSON.stringify(localWorkspace.editors[key]) === JSON.stringify(draft)) delete localWorkspace.editors[key];

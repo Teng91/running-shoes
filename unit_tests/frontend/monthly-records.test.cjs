@@ -1,45 +1,46 @@
-const { test, assert, vm, extract, htmlSource } = require('./helpers.cjs');
+const { test, assert, vm, fs, htmlSource } = require('./helpers.cjs');
 
-function monthlyContext(rows, year) {
-  const nodes = { 'monthly-table': { innerHTML: '' }, 'monthly-records-year': { textContent: '' } };
-  const context = vm.createContext({
-    document: { getElementById: id => nodes[id] },
-    inlineTableRows: new Map(), preserveInlineTable: () => false,
-    monthlyMileages: rows, selectedYear: year,
-  });
-  vm.runInContext(extract('renderMonthlyTable'), context);
-  return { context, nodes };
-}
-
-const rows = [
-  { id: 3, year: 2026, month: 2, km: 120, adjustment_km: 20 },
-  { id: 2, year: 2026, month: 1, km: 100, adjustment_km: 0 },
-  { id: 1, year: 2025, month: 12, km: 80, adjustment_km: 80 },
-];
-
-test('SPEC-039 monthly records list only the selected year and keep full-list row indexes', () => {
-  const { context, nodes } = monthlyContext(rows, 2025);
-  context.renderMonthlyTable();
-  const html = nodes['monthly-table'].innerHTML;
-  assert.equal(html.match(/<tr>/g).length, 1);
-  assert.match(html, /editMonthlyMileage\(2\)/, 'actions address the unfiltered list');
-  assert.match(html, /inlineEditMonthly\(2,'km',this\)/);
-  assert.equal(nodes['monthly-records-year'].textContent, '· 2025');
-  assert.equal(context.inlineTableRows.get('monthly-table').length, 3);
-
-  vm.runInContext('selectedYear = null', context);
-  context.renderMonthlyTable();
-  assert.equal(nodes['monthly-table'].innerHTML.match(/<tr>/g).length, 2, 'defaults to the newest year');
-  assert.equal(nodes['monthly-records-year'].textContent, '· 2026');
+test('SPEC-039 the monthly tab has no records table, add form or edit dialog', () => {
+  for (const id of ['monthly-table', 'add-km', 'add-monthly-btn', 'monthly-modal', 'monthly-records']) {
+    assert.doesNotMatch(htmlSource, new RegExp(`id="${id}"`));
+  }
+  for (const id of ['goal-cards', 'trends-year-select', 'chart-monthly-year', 'chart-shoe-stacked']) {
+    assert.match(htmlSource, new RegExp(`id="${id}"`));
+  }
+  const assets = JSON.parse(fs.readFileSync('frontend/assets.json', 'utf8'));
+  assert.equal(JSON.stringify(assets).includes('app-monthly.js'), false);
+  assert.equal(fs.existsSync('frontend/app-monthly.js'), false);
 });
 
-test('SPEC-039 monthly records explain empty years and start collapsed', () => {
-  const { context, nodes } = monthlyContext(rows, 2027);
-  context.renderMonthlyTable();
-  assert.match(nodes['monthly-table'].innerHTML, /2027 年尚無月跑量紀錄/);
-  vm.runInContext('monthlyMileages = []', context);
-  context.renderMonthlyTable();
-  assert.match(nodes['monthly-table'].innerHTML, /尚無月跑量紀錄，使用上方表單新增/);
-  assert.match(htmlSource, /<details class="table-section monthly-records" id="monthly-records">/);
-  assert.doesNotMatch(htmlSource, /id="monthly-records" open/);
+function workspaceContext(draft) {
+  const elements = new Proxy({}, { get: (rows, id) => rows[id] ||= { value: '', dataset: {}, classList: { add() {} } } });
+  const context = vm.createContext({
+    document: { getElementById: id => elements[id] }, window: { location: { origin: 'https://app' } },
+    authToken: 'token', currentUser: 'runner', registerFeatureReset() {},
+    captureAuthSession: () => ({}), isCurrentAuthSession: () => true, newOperationKey: () => 'key',
+  });
+  vm.runInContext(fs.readFileSync('frontend/app-workspace.js', 'utf8'), context);
+  vm.runInContext(`localWorkspace.ready = true;
+    localWorkspace.controller = { attach: async () => records };`, Object.assign(context, {
+    records: [{ key: ['a', 'drafts', 'forms'], value: draft }],
+  }));
+  context.renderWorkspaceQueue = async () => {};
+  context.syncWorkspace = async () => {};
+  return { context, elements };
+}
+
+test('SPEC-039 drafts saved by older versions drop monthly editors and forms', async () => {
+  const { context, elements } = workspaceContext({
+    runDraftId: 'run', forms: { monthly: { 'add-year': '2026', 'add-month': '10', 'add-km': '180' } },
+    editors: { 'monthly:5': { kind: 'monthly', base: { id: 5 }, values: { 'm-km': '9' } },
+      'shoe:2': { kind: 'shoe', base: { id: 2 }, values: {} } },
+  });
+  await context.activateLocalWorkspace();
+  assert.deepEqual(Object.keys(vm.runInContext('localWorkspace.editors', context)), ['shoe:2']);
+  assert.equal(elements['add-km'].value, '', 'an old monthly add-form draft is not written into the page');
+  // A stale reference to an old monthly draft key is a no-op instead of opening a removed dialog.
+  vm.runInContext("localWorkspace.editors['monthly:5'] = { kind: 'monthly', base: { id: 5 }, values: { 'm-km': '9' } }", context);
+  context.closeWorkspaceModal = () => {};
+  context.resumeWorkspaceEditor('monthly:5');
+  assert.equal(elements['m-km'].value, '');
 });

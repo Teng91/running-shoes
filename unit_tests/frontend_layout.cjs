@@ -214,7 +214,7 @@ function alignmentIssues() {
       if (buttons.some(button => !near(box(button).height, innerWidth <= 760 ? 44 : 36))) issues.push('table action density');
     }
   }
-  for (const [id, numeric] of Object.entries({ 'shoe-table': [3,4,5,6,7,8], 'retired-table': [3,4,5,6,7], 'run-table': [1], 'monthly-table': [0,1,2,3,4], 'spending-table': [4,5,6] })) {
+  for (const [id, numeric] of Object.entries({ 'shoe-table': [3,4,5,6,7,8], 'retired-table': [3,4,5,6,7], 'run-table': [1], 'spending-table': [4,5,6] })) {
     const table = document.getElementById(id).closest('table');
     if (visible(table) && numeric.some(index => !table.rows[0].cells[index].classList.contains('numeric'))) issues.push(`${id} numeric column contract`);
   }
@@ -305,7 +305,6 @@ async function run(engine, name) {
         retiredShoes = [{ ...shoes[0], id: 20, is_retired: true }];
         runController.state.rows = shoes.map((shoe, i) => ({ id: i + 1, shoe_id: shoe.id, date: `2026-09-${String(i + 1).padStart(2, '0')}`, km: 18.67, source: 'manual' }));
         monthlyMileages = Array.from({ length: 12 }, (_, i) => ({ id: i + 1, year: 2026, month: i + 1, km: 120 + i }));
-        document.getElementById('monthly-records').open = true;
         monthlySpending = Array.from({ length: 12 }, (_, i) => ({ year: 2026, month: i + 1, total_paid: 4000, total_orig: 5000 }));
         spendingSummary = { total_paid: 48000, total_original: 60000, savings: 12000,
           average_discount_percent: 80, average_monthly_paid: 4000, month_span: 12,
@@ -397,7 +396,6 @@ async function run(engine, name) {
               document.getElementById('restore-preview').textContent = '預計新增 123 雙鞋、12345 筆跑步；略過 12 雙鞋、345 筆跑步。預覽後資料變更，請重新預覽。';
               document.getElementById('workspace-history').innerHTML = '<div class="workspace-item"><p>2026/10/24 · 跑步 #123 · 刪除 · run.delete</p><button class="btn btn-edit">復原誤刪</button></div>';
             });
-            if (id === 'monthly-modal') await page.evaluate(() => editMonthlyMileage(0));
             if (id === 'shoe-analysis-modal') await page.evaluate(() => renderShoeAnalytics({
               shoe: { brand: 'Mizuno', model: 'Wave Rider 29 非常長的鞋款名稱', categories: ['Daily'], purchase_date: '2026-01-01', is_retired: false },
               lifecycle: { total_mileage_km: 627.62, usage_percent: 78.5, remaining_mileage_km: 172.38, forecast_retirement_date: '2027-06-01', forecast_source: 'recent_90_days', forecast_monthly_km: 80 },
@@ -429,15 +427,10 @@ async function run(engine, name) {
             await page.evaluate(id => document.getElementById(id).classList.remove('active'), id);
             if (id === 'shoe-analysis-modal') await page.evaluate(() => closeShoeAnalytics());
           }
-          for (const tab of ['shoes', 'monthly']) {
-            await selectTab(page, tab);
-            await page.evaluate(tab => {
-              if (tab === 'shoes') inlineEditRow(shoes, 0, 'mileage', document.querySelector('#shoe-table .editable'));
-              else inlineEditMonthly(0, 'km', document.querySelector('#monthly-table .editable'));
-            }, tab);
-            await assertLayout(page, `${name} ${theme} ${width} ${tab} inline edit`);
-            await page.locator('.inline-input').press('Escape');
-          }
+          await selectTab(page, 'shoes');
+          await page.evaluate(() => inlineEditRow(shoes, 0, 'mileage', document.querySelector('#shoe-table .editable')));
+          await assertLayout(page, `${name} ${theme} ${width} shoes inline edit`);
+          await page.locator('.inline-input').press('Escape');
           await page.evaluate(() => { document.getElementById('app-view').style.display = 'none'; document.getElementById('auth-view').style.display = ''; });
           for (const action of ['showLoginForm', 'showRegisterForm', 'showChangeForm']) {
             await page.evaluate(action => window[action](), action);

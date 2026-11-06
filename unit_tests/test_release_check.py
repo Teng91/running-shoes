@@ -36,7 +36,7 @@ def test_release_check_accepts_only_matching_complete_public_shell():
     result = release_check.check_release(fixture_fetcher())
     expected_version = json.loads((FRONTEND / "assets.json").read_text())["version"]
     assert result["version"] == expected_version
-    assert result["assets"] == 51
+    assert result["assets"] == 50
 
 
 @pytest.mark.parametrize("failure", ["hash", "mime", "http", "schema", "api", "auth", "version", "module-mime"])

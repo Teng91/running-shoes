@@ -46,7 +46,7 @@
 
 ## Acceptance criteria
 
-- [x] AC-1：Given 延遲新增月跑量，When 表單改填或 session 切換，Then 舊回應不清除新草稿、不顯示舊錯誤或解鎖新操作。
+- [x] AC-1：Given 延遲新增月跑量，When 表單改填或 session 切換，Then 舊回應不清除新草稿、不顯示舊錯誤或解鎖新操作。（[SPEC-039](039-compact-monthly-records.md) 已移除月跑量新增表單；同一 operation owner 保證由下列共用測試持續覆蓋。）
 - [x] AC-2：Given 跑步／鞋款／月跑量寫入，When 重送、modal 替換或 session reset，Then 共用 operation owner 正確保護草稿與控制項。
 - [x] AC-3：Given 同款同日鞋或惡意暱稱，When 新增、編輯、選鞋或備份，Then 暱稱持久化、標籤可辨識且安全 escaping，其他帳號不可修改。
 - [x] AC-4：Given schema 2 資料庫，When 升級 schema 3 及重複啟動，Then 原資料／里程不變且 nickname 預設空字串。
@@ -59,7 +59,7 @@
 
 | AC | Named regression / gate |
 | --- | --- |
-| AC-1 | `unit_tests/frontend/feature-operations.test.cjs::SPEC-023 monthly save preserves changed month and distance but clears an unchanged draft`；`unit_tests/frontend/feature-operations.test.cjs::SPEC-023 stale monthly completions cannot clear errors or unlock a replacement operation` |
+| AC-1 | `unit_tests/frontend/feature-operations.test.cjs::SPEC-023 operation owners preserve identity after reset and isolate independent features`；`unit_tests/frontend/monthly-records.test.cjs::SPEC-039 the monthly tab has no records table, add form or edit dialog` |
 | AC-2 | `unit_tests/frontend/feature-operations.test.cjs::SPEC-023 operation owners preserve identity after reset and isolate independent features`；`unit_tests/frontend/feature-operations.test.cjs::SPEC-023 shoe save preserves an edited draft and rebases its optimistic version`；`unit_tests/frontend/draft-resources.test.cjs::SPEC-024 shoe transitions preserve only new edits and retain the server state`；`unit_tests/frontend/auth-editors.test.cjs::all shoe mutations lock their snapshot and leave replacement drafts and sessions untouched` |
 | AC-3 | `unit_tests/frontend/feature-operations.test.cjs::SPEC-023 shoe selectors distinguish duplicate models and escape nicknames`；`unit_tests/test_feature_boundaries.py::test_nickname_persists_is_scoped_and_survives_account_and_safe_csv_exports` |
 | AC-4 | `unit_tests/test_feature_boundaries.py::test_schema_three_nickname_upgrade_preserves_ids_mileage_versions_and_is_idempotent` |

@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [4.1.2] - 2026-11-07
+
+### Removed
+- 月跑量分頁的「月跑量紀錄」表格、新增表單與月份編輯對話框（`app-monthly.js`）。既有月跑量與歷史／手動調整資料保留，圖表、目標、報告、備份與 API 不變；舊裝置上的月份草稿升級後被忽略（SPEC-039）。Asset 4.1.2／shell v46，release asset 50 個。
+
+### Fixed
+- Claude Code Stop hook 不再對未變更的工作區重播快取的失敗：回應 hook 回饋時不重複阻擋，之後的停止點重新驗證，避免暫時性網路錯誤（例如 pip-audit 連不到 PyPI）造成無限循環。
+
 ## [4.1.1] - 2026-11-06
 
 ### Changed

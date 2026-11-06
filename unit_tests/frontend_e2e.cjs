@@ -144,29 +144,6 @@ async function run() {
       assert.equal(await page.locator('#shoe-table').getByText('US 9.5/27.5cm', { exact: true }).count(), 0);
       await assertPurchaseDetails(page, '使用中');
 
-      // SPEC-023: delay a real persisted monthly response while editing the next draft.
-      await page.locator('.tab[data-tab="monthly"]').click();
-      await page.locator('#monthly-records > summary').click();
-      await page.locator('#add-year').selectOption(today.slice(0, 4));
-      await page.locator('#add-month').selectOption('1');
-      await page.locator('#add-km').fill('100');
-      let releaseMonthly, monthlyStarted;
-      const monthlyGate = new Promise(resolve => { releaseMonthly = resolve; });
-      const startedMonthly = new Promise(resolve => { monthlyStarted = resolve; });
-      const holdMonthly = async route => {
-        if (route.request().method() !== 'POST') return route.continue();
-        const response = await route.fetch();
-        monthlyStarted(); await monthlyGate; await route.fulfill({ response });
-      };
-      await page.route('**/api/monthly-mileage', holdMonthly);
-      await page.locator('#add-monthly-btn').click(); await startedMonthly;
-      await page.locator('#add-month').selectOption('2'); await page.locator('#add-km').fill('180');
-      releaseMonthly();
-      await page.waitForFunction(() => !document.getElementById('add-monthly-btn').disabled);
-      assert.equal(await page.locator('#add-km').inputValue(), '180');
-      assert.equal(await page.locator('#add-month').inputValue(), '2');
-      await page.unroute('**/api/monthly-mileage', holdMonthly);
-
       await page.locator('.tab[data-tab="runs"]').click();
       await page.locator('#run-date').fill(today);
       await page.locator('#run-km').fill('5.5');

@@ -70,6 +70,29 @@ def test_main_reuses_a_cached_success(monkeypatch, tmp_path):
     assert claude_stop_hook.main() == 0
 
 
+def test_main_retries_a_cached_failure_and_never_reblocks_an_active_stop(monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr(claude_stop_hook, "CACHE_ROOT", tmp_path)
+    monkeypatch.setattr(claude_stop_hook, "changed_files", lambda: {"backend/main.py"})
+    monkeypatch.setattr(claude_stop_hook, "worktree_fingerprint", lambda _files: "same")
+    cache = claude_stop_hook.cache_path("retry")
+    claude_stop_hook.save_cache(cache, "same", False, "pip-audit could not reach PyPI")
+    runs: list[set[str]] = []
+
+    def verify(files: set[str]) -> tuple[bool, str]:
+        runs.append(files)
+        return True, ""
+
+    monkeypatch.setattr(claude_stop_hook, "run_verification", verify)
+    monkeypatch.setattr(claude_stop_hook.sys, "stdin", io.StringIO('{"session_id":"retry","stop_hook_active":true}'))
+    assert claude_stop_hook.main() == 0
+    assert capsys.readouterr().out == "" and runs == [], "an unchanged failure is not replayed in a loop"
+
+    monkeypatch.setattr(claude_stop_hook.sys, "stdin", io.StringIO('{"session_id":"retry"}'))
+    assert claude_stop_hook.main() == 0
+    assert capsys.readouterr().out == "" and len(runs) == 1, "a later stop re-runs a transient failure"
+    assert claude_stop_hook.load_cache(cache)["passed"] is True
+
+
 def test_read_event_decodes_utf8_regardless_of_the_console_code_page(monkeypatch):
     message = "已推上去 ✅ ⏸ 部署 \ \"引號\""
     payload = json.dumps({"session_id": "utf8", "last_assistant_message": message}, ensure_ascii=False)
