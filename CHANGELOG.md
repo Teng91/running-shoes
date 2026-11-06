@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [4.1.1] - 2026-11-06
+
+### Changed
+- 月跑量分頁的「月跑量紀錄」表格預設收合，只列出「年度月跑量」選擇的年份（最多 12 列），新增月份後切到該年份（SPEC-039）；Asset 4.1.1／shell v45。
+
+### Fixed
+- Claude Code Stop hook 以 UTF-8 讀取事件 JSON，不再因 Windows 主控台字碼頁（cp950）遇到中文或 emoji 時誤判為無效 JSON。
+
 ## [4.1.0] - 2026-11-06
 
 ### Added

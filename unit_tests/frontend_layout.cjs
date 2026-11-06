@@ -305,6 +305,7 @@ async function run(engine, name) {
         retiredShoes = [{ ...shoes[0], id: 20, is_retired: true }];
         runController.state.rows = shoes.map((shoe, i) => ({ id: i + 1, shoe_id: shoe.id, date: `2026-09-${String(i + 1).padStart(2, '0')}`, km: 18.67, source: 'manual' }));
         monthlyMileages = Array.from({ length: 12 }, (_, i) => ({ id: i + 1, year: 2026, month: i + 1, km: 120 + i }));
+        document.getElementById('monthly-records').open = true;
         monthlySpending = Array.from({ length: 12 }, (_, i) => ({ year: 2026, month: i + 1, total_paid: 4000, total_orig: 5000 }));
         spendingSummary = { total_paid: 48000, total_original: 60000, savings: 12000,
           average_discount_percent: 80, average_monthly_paid: 4000, month_span: 12,

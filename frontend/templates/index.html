@@ -361,10 +361,11 @@ window.__appBootLegacyPoll = window.setInterval(function () {
       </div>
     </div>
 
-    <div class="table-section">
-      <div class="table-header">
-        <h2>月跑量紀錄</h2>
-      </div>
+    <details class="table-section monthly-records" id="monthly-records">
+      <summary class="table-header monthly-records-summary">
+        <h2>月跑量紀錄 <span class="monthly-records-year" id="monthly-records-year"></span></h2>
+        <span class="monthly-records-hint">補登或修正月跑量</span>
+      </summary>
       <div class="inline-add">
         <select id="add-year"></select>
         <select id="add-month"></select>
@@ -383,7 +384,7 @@ window.__appBootLegacyPoll = window.setInterval(function () {
           <tbody id="monthly-table"></tbody>
         </table>
       </div>
-    </div>
+    </details>
 
   </div><!-- /tab-panel monthly -->
 

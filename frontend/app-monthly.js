@@ -10,11 +10,17 @@ function renderMonthlyTable() {
   if (preserveInlineTable('monthly-table')) return;
   const tbody = document.getElementById('monthly-table');
   inlineTableRows.set('monthly-table', monthlyMileages.map(entry => ({ ...entry })));
-  if (monthlyMileages.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--text-dim);padding:24px;">尚無月跑量紀錄，使用上方表單新增</td></tr>';
+  // Only the year chosen in the "年度月跑量" chart is listed; indexes still address the full list.
+  const year = selectedYear ?? Math.max(0, ...monthlyMileages.map(m => m.year));
+  const yearLabel = document.getElementById('monthly-records-year');
+  if (yearLabel) yearLabel.textContent = year ? `· ${year}` : '';
+  const rows = monthlyMileages.map((m, i) => [m, i]).filter(([m]) => m.year === year);
+  if (rows.length === 0) {
+    const empty = monthlyMileages.length === 0 ? '尚無月跑量紀錄，使用上方表單新增' : `${year} 年尚無月跑量紀錄`;
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--text-dim);padding:24px;">${empty}</td></tr>`;
     return;
   }
-  tbody.innerHTML = monthlyMileages.map((m, i) => `
+  tbody.innerHTML = rows.map(([m, i]) => `
     <tr>
       <td class="numeric">${m.year}</td>
       <td class="numeric">${m.month}</td>
@@ -141,6 +147,7 @@ async function addMonthlyMileage() {
     if (!operations.owns('create', operation)) return;
     if (matchesForm(operation.form)) document.getElementById('add-km').value = '';
     if (typeof persistWorkspaceDrafts === 'function') persistWorkspaceDrafts();
+    selectedYear = year; // show the year that was just added
     await loadData({ mutation: 'monthly' });
   } catch (e) {
     if (!operations.owns('create', operation) || e.name === 'AbortError' || !matchesForm(operation.form)) return;

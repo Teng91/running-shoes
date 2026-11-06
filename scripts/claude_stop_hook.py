@@ -210,9 +210,12 @@ def blocking_payload(reason: str) -> str:
 
 
 def read_event() -> dict[str, object]:
+    # Claude sends UTF-8; on Windows sys.stdin decodes with the locale code page
+    # (e.g. cp950), which mangles CJK/emoji text and can swallow JSON quotes.
+    raw = getattr(sys.stdin, "buffer", None)
     try:
-        event = json.load(sys.stdin)
-    except json.JSONDecodeError as error:
+        event = json.loads(raw.read().decode("utf-8") if raw is not None else sys.stdin.read())
+    except (json.JSONDecodeError, UnicodeDecodeError) as error:
         raise RuntimeError(f"Claude Stop hook received invalid JSON: {error}") from error
     if not isinstance(event, dict):
         raise RuntimeError("Claude Stop hook input must be a JSON object")

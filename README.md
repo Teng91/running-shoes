@@ -695,6 +695,11 @@ v3.10.3 使用 Asset 3.10.3／shell v38、schema 6、51 個 release assets。
 `registry.fly.io/running-shoes@sha256:bac44457f12adfde6473e9d9a973b330e1bf69eac7e44feb3fb6ed1f5a55429a`，
 不還原業務資料快照。發布驗證涵蓋 verify、40 組版面、雙引擎 CRUD／PWA、main/tag CI 及正式站匿名 release-check。
 
+### 精簡月跑量紀錄表（SPEC-039，v4.1.1）
+
+[SPEC-039](docs/specs/039-compact-monthly-records.md) 讓月跑量分頁底部的「月跑量紀錄」預設收合，展開後只列出「年度月跑量」圖表選擇的年份（最多 12 列）；
+補登月份與修正手動調整仍在這裡操作。Asset 4.1.1／shell v45、無 API 或 schema 變更，可回滾至 v4.1.0 image。
+
 ### 訓練趨勢與跑鞋輪替（SPEC-038，v4.1.0）
 
 [SPEC-038](docs/specs/038-training-trends-and-shoe-rotation.md) 在月跑量分頁新增年度跑步熱力圖（含有跑天數、最長／目前連續天數）、
@@ -751,7 +756,7 @@ Playwright／Chromium／WebKit 齊全時，也會執行版面測試。
 避免每次停止都重跑。Hook 不會呼叫其他模型、外部 API，或傳送提示、diff、原始碼與測試輸出。
 GitHub Actions 仍會在 push／pull request 執行 `verify`，並以三個可獨立重跑的 browser jobs 執行完整版面矩陣、真實 CRUD E2E 與 PWA 升級／離線測試；Dependabot 每月以單一 PR 合併 GitHub Actions 更新；Python 只接收安全性更新 PR，例行升級依下方 `uv pip compile --universal` 步驟手動重編鎖定檔（Dependabot 產生的鎖定檔會遺失 Windows 條件）。
 
-本次驗證基線為 Python **560 passed**、前端回歸測試 **153 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
+本次驗證基線為 Python **561 passed**、前端回歸測試 **155 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
 版面檢查涵蓋 WebKit／Chromium、亮／暗模式與 10 組直橫向尺寸，共 40 組設定，檢查六個功能分頁、三個認證表單、圖表、全部彈窗、行內編輯、停用／錯誤及空資料狀態。
 
 主要表單、工具列與彈窗操作統一為 44px 控制項；桌面表格內的緊湊操作為 36px，手機至少 44px。

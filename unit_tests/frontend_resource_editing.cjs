@@ -33,7 +33,7 @@ async function inspect(browser,baseUrl,scenario){
   await page.clock.setFixedTime(new Date('2026-10-23T12:00:00Z'));
   await page.goto(baseUrl,{waitUntil:'networkidle'});await page.locator('#app-boot').waitFor({state:'hidden'});
   if(scenario.startsWith('inline-')){
-   await page.evaluate(tab=>switchTab(tab),scenario==='inline-shoe'?'shoes':'monthly');
+   await page.evaluate(tab=>{switchTab(tab);document.getElementById('monthly-records').open=true;},scenario==='inline-shoe'?'shoes':'monthly');
    holdGoal=true;await page.evaluate(()=>{window.__auditLoad=loadData();});await started.promise;
    await page.waitForFunction(()=>activeHttpRequests.size===1);
    await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));

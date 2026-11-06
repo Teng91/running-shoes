@@ -81,6 +81,9 @@ function activateLocalWorkspace() {
         }
         const select = document.getElementById('run-shoe');
         if (draft.forms?.run?.['run-shoe'] && !select.value) select.dataset.requiresSelection = 'true';
+        // A restored monthly draft must not stay hidden inside the collapsed records section.
+        const records = document.getElementById('monthly-records');
+        if (records && document.getElementById('add-km').value) records.open = true;
         localWorkspace.editors = { ...draft.editors, ...localWorkspace.editors };
       }
     } finally { localWorkspace.restoring = false; }
