@@ -88,6 +88,9 @@ def test_browser_ci_pins_runtime_and_preserves_failure_diagnostics():
     for gate in ("frontend-layout", "frontend-e2e", "frontend-pwa"):
         browser_job = re.search(r'^  ' + gate + r':\n(.*?)(?=^  [a-z]|\Z)', workflow, re.M | re.S)[1]
         assert f"image: mcr.microsoft.com/playwright:v{version}-noble" in browser_job
+        # The runner tool-cache Python is mounted into the container; a newer host Ubuntu
+        # builds it against libraries the noble image lacks (pip then has no ssl module).
+        assert "runs-on: ubuntu-24.04" in browser_job
         assert "options: --ipc=host" in browser_job
         assert "--with-deps" not in browser_job
         assert f"python scripts/task.py {gate}" in browser_job
