@@ -1,4 +1,4 @@
-const { runContext, test, assert, vm, extract, htmlSource, styleSource } = require('./helpers.cjs');
+const { runContext, test, assert, vm, extract, htmlSource, styleSource, scriptSource } = require('./helpers.cjs');
 
 function elements() {
   return new Proxy({}, { get: (target, id) => target[id] ||= {
@@ -29,32 +29,20 @@ function context(nodes, globals = {}) {
 }
 
 const summary = {
-  as_of: '2026-05-10', week: { start: '2026-05-04', km: 23, runs: 4 }, streak_days: 3,
-  month_goal: { active: true, km: 23, goal_km: 100, percent: 23 },
-  total: { km: 244.5, reached_km: 100, next_km: 250, remaining_km: 5.5 },
-  records: { longest_run: { date: '2026-03-02', km: 30, shoe_id: 1 }, biggest_week: { week_start: '2026-03-02', km: 40 },
-    biggest_month: { year: 2026, month: 3, km: 120 } },
-  achievements: [{ kind: 'shoe', shoe_id: 3, km: 300 }, { kind: 'longest_run', km: 30, date: '2026-05-09' }],
+  as_of: '2026-05-10',
   suggestion: [{ shoe_id: 2, days_since_last_run: 90, remaining_km: 10, usage_percent: 99, near_end: true },
     { shoe_id: 4, days_since_last_run: 12, remaining_km: 600, usage_percent: 25, near_end: false }],
 };
 
-test('SPEC-040 run log summary shows week, streak, goal ring, milestones and the next shoe', async () => {
+test('SPEC-040 run log suggests the next shoe without summary tiles', async () => {
   const nodes = elements(); const urls = [];
   const ctx = context(nodes, { apiGet: async url => { urls.push(url); return summary; } });
-  vm.runInContext(`let homeSummaryRequestId = 0;\n${['brandColor', 'shoeColor', 'shoeName', 'goalRing', 'homeTile',
-    'achievementText', 'renderShoeSuggestion', 'renderHomeSummary'].map(extract).join('\n')}`, ctx);
+  vm.runInContext(`let homeSummaryRequestId = 0;\n${['brandColor', 'shoeColor', 'shoeName',
+    'renderShoeSuggestion', 'renderHomeSummary'].map(extract).join('\n')}`, ctx);
   await ctx.renderHomeSummary(); await ctx.renderHomeSummary();
-  assert.deepEqual(urls, ['/analytics/home'], 'the summary is cached for the day');
-  const tiles = nodes['home-tiles'].innerHTML;
-  assert.match(tiles, /本週<\/div><div class="home-tile-value">23\.0 km<\/div><div class="home-tile-sub">4 次跑步/);
-  assert.match(tiles, /連續跑步.*3 天/);
-  assert.match(tiles, /class="goal-ring".*本月目標.*23%.*23\.0 km \/ 100\.0 km/);
-  assert.match(tiles, /再 5\.5 km 就到 250 km/);
-  const chips = nodes['home-achievements'].innerHTML;
-  assert.match(chips, /👟 PUMA Nitro（&lt;b&gt;x&lt;\/b&gt;） 突破 300 km/, 'shoe names are escaped');
-  assert.match(chips, /🏅 新的最長距離 30\.0 km（5\/9）/);
-  assert.match(chips, /個人紀錄：最長 30\.0 km · 單週最高 40\.0 km · 單月最高 120\.0 km/);
+  assert.deepEqual(urls, ['/analytics/home'], 'the suggestion is cached for the day');
+  // SPEC-042: the week/streak/goal/total tiles and the records line were removed.
+  assert.doesNotMatch(htmlSource, /id="home-tiles"|id="home-achievements"|個人紀錄/);
   // The retired first choice is skipped: only shoes that can be selected are suggested.
   assert.equal(nodes['shoe-suggestion'].hidden, false);
   assert.match(nodes['shoe-suggestion'].innerHTML, /建議 <strong>Mizuno Neo<\/strong>（已經 12 天沒穿）/);
@@ -140,15 +128,19 @@ test('SPEC-040 the shared year selector redraws every year view and the comparis
 
 test('SPEC-040 distance mix stacks bucket counts per active shoe and names the long-run pair', async () => {
   const nodes = elements();
-  const ctx = context(nodes, { panel: 'shoes', apiGet: async () => ({ buckets: ['<5', '5–10', '10–15', '15–21', '≥21'], shoes: [
+  const ctx = context(nodes, { panel: 'shoes', apiGet: async () => ({ buckets: ['<5', '5–10', '10–15', '15–20', '≥20'], shoes: [
     { shoe_id: 1, counts: [2, 5, 1, 0, 0], runs: 8, km: 60, longest_km: 12, average_km: 7.5 },
     { shoe_id: 3, counts: [0, 0, 1, 2, 1], runs: 4, km: 70, longest_km: 30, average_km: 17.5 },
   ] }) });
-  vm.runInContext(`let distanceMixRequestId = 0;\nconst DISTANCE_COLORS = ['#1', '#2', '#3', '#4', '#5'];\n${['brandColor', 'shoeColor', 'shoeName', 'renderDistanceMix'].map(extract).join('\n')}`, ctx);
+  const colors = scriptSource.match(/const DISTANCE_COLORS = (\[[^\]]+\]);/)[1];
+  // SPEC-042: one clearly different hue per bucket: red, yellow, green, blue, purple.
+  assert.equal(colors, "['#ef4444', '#eab308', '#22c55e', '#3b82f6', '#a855f7']");
+  vm.runInContext(`let distanceMixRequestId = 0;\nconst DISTANCE_COLORS = ${colors};\n${['brandColor', 'shoeColor', 'shoeName', 'renderDistanceMix'].map(extract).join('\n')}`, ctx);
   await ctx.renderDistanceMix();
   const { config } = ctx.chartInstances.distanceMix;
   assert.deepEqual(config.data.labels, ['Mizuno Rider（日常）', 'PUMA Nitro（<b>x</b>）']);
-  assert.deepEqual(config.data.datasets.map(row => row.label), ['<5 km', '5–10 km', '10–15 km', '15–21 km', '≥21 km']);
+  assert.deepEqual(Array.from(config.data.datasets, row => row.label), ['<5 km', '5–10 km', '10–15 km', '15–20 km', '≥20 km']);
+  assert.deepEqual(Array.from(config.data.datasets, row => row.backgroundColor), ['#ef4444', '#eab308', '#22c55e', '#3b82f6', '#a855f7']);
   assert.deepEqual(config.data.datasets[3].data, [0, 2]);
   assert.equal(config.options.scales.x.stacked, true);
   assert.equal(nodes['distance-mix-canvas'].style.height, '140px');
@@ -161,6 +153,6 @@ test('SPEC-040 phones use a fixed bottom tab bar while the header menu keeps acc
   assert.ok(sidebar.indexOf('class="tabs"') < sidebar.indexOf('id="sidebar-navigation"'));
   assert.ok(sidebar.indexOf('id="user-label"') > sidebar.indexOf('id="sidebar-navigation"'));
   assert.match(sidebar, /<span aria-hidden="true">☰<\/span> 帳號<\/button>/);
-  assert.match(styleSource, /\.tabs \{\s*position: fixed;\s*right: 0;\s*bottom: 0;[\s\S]*?grid-template-columns: repeat\(6, minmax\(0, 1fr\)\);/);
+  assert.match(styleSource, /\.tabs \{\s*position: fixed;\s*right: 0;\s*bottom: 0;[\s\S]*?grid-template-columns: repeat\(5, minmax\(0, 1fr\)\);/);
   assert.match(styleSource, /calc\(84px \+ env\(safe-area-inset-bottom\)\)/, 'content clears the tab bar');
 });

@@ -350,7 +350,8 @@ async function renderShoeTimeline() {
 // ====== Distance mix per active shoe ======
 // The backend buckets every run; the chart shows how each pair is actually used.
 let distanceMixRequestId = 0;
-const DISTANCE_COLORS = ['#c7d2fe', '#a5b4fc', '#818cf8', '#6366f1', '#4338ca'];
+// Distinct hues per bucket: red <5, yellow 5–10, green 10–15, blue 15–20, purple ≥20 km.
+const DISTANCE_COLORS = ['#ef4444', '#eab308', '#22c55e', '#3b82f6', '#a855f7'];
 
 async function renderDistanceMix() {
   if (chartInstances.distanceMix) { chartInstances.distanceMix.destroy(); delete chartInstances.distanceMix; }

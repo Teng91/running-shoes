@@ -53,8 +53,13 @@ test('inline edits send only the changed field and guard duplicate commits', asy
 });
 
 test('the report tab wires its panel and only loads data after login', () => {
-  assert.match(source, /data-tab="report"/);
+  // SPEC-042: chat and report share one AI destination with an in-panel switch.
+  assert.doesNotMatch(source, /data-tab="report"/);
   assert.match(source, /data-panel="report"/);
+  assert.match(source, /class="ai-switch-btn active" aria-pressed="true" onclick="switchTab\('report'\)">月報/);
+  assert.match(source, /class="ai-switch-btn active" aria-pressed="true" onclick="switchTab\('agent'\)">對話/);
+  assert.match(source, /<span>AI<\/span><\/button>/);
+  assert.match(extract('switchTab'), /const destination = name === 'report' \? 'agent' : name;/);
   assert.match(source, /onchange="loadSavedReport\(\)"/);
   const switchTab = extract('switchTab');
   assert.match(switchTab, /name === 'report' && authToken/);

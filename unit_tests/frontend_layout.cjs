@@ -9,21 +9,25 @@ const { startArtifacts, saveFailure, closeBrowser, withDeadline } = require('../
 
 async function selectTab(page, name) {
   const toggle = page.locator('.mobile-menu-toggle');
+  // SPEC-042: the monthly report is reached through the AI destination's switch.
+  const destination = name === 'report' ? 'agent' : name;
   if (await toggle.isVisible()) {
     // SPEC-040: phones keep every destination in a fixed bottom tab bar; the menu holds account actions.
-    assert.equal(await page.locator('.tab:visible').count(), 6, 'bottom tab bar exposes all destinations');
+    assert.equal(await page.locator('.tab:visible').count(), 5, 'bottom tab bar exposes all destinations');
     if (await toggle.getAttribute('aria-expanded') !== 'true') await toggle.click();
     assert.equal(await page.locator('#user-label').isVisible(), true, 'expanded menu shows account actions');
     await assertLayout(page, 'expanded mobile menu');
   }
-  await page.locator(`.tab[data-tab="${name}"]`).click();
+  await page.locator(`.tab[data-tab="${destination}"]`).click();
+  if (name === 'report') await page.locator('#panel-agent .ai-switch-btn', { hasText: '月報' }).click();
+  assert.equal(await page.locator('.tab-panel.active').getAttribute('data-panel'), name);
   if (await toggle.isVisible()) {
     assert.equal(await toggle.getAttribute('aria-expanded'), 'false', 'selection closes mobile menu');
-    assert.equal(await page.locator('.tab:visible').count(), 6, 'the tab bar stays visible');
+    assert.equal(await page.locator('.tab:visible').count(), 5, 'the tab bar stays visible');
     const bar = await page.locator('.tabs').boundingBox();
     const viewport = page.viewportSize();
     assert.ok(Math.abs(bar.y + bar.height - viewport.height) <= 1, 'tab bar is pinned to the bottom');
-    const label = await page.locator(`.tab[data-tab="${name}"] > span:last-child`).textContent();
+    const label = await page.locator(`.tab[data-tab="${destination}"] > span:last-child`).textContent();
     assert.equal(await page.locator('#mobile-page-label').textContent(), label);
   }
   // switchTab schedules lazy rendering; let it finish before opening inline editors.
@@ -274,13 +278,7 @@ async function run(engine, name) {
           } });
         }
         if (url.pathname === '/api/analytics/home') return route.fulfill({ json: {
-          as_of: '2026-10-27', week: { start: '2026-10-26', km: 18.4, runs: 2 }, streak_days: 12,
-          month_goal: { active: true, km: 96.5, goal_km: 125, percent: 77.2 },
-          total: { km: 2468.9, reached_km: 2000, next_km: 3000, remaining_km: 531.1 },
-          records: { longest_run: { date: '2026-03-01', km: 42.2, shoe_id: 1 }, biggest_week: { week_start: '2026-03-02', km: 88.8 },
-            biggest_month: { year: 2026, month: 3, km: 301.5 } },
-          achievements: [{ kind: 'total', km: 2000 }, { kind: 'shoe', shoe_id: 2, km: 500 },
-            { kind: 'longest_run', km: 42.2, date: '2026-10-20' }, { kind: 'biggest_week', km: 88.8, week_start: '2026-10-19' }],
+          as_of: '2026-10-27',
           suggestion: [{ shoe_id: 3, days_since_last_run: 87, remaining_km: 500, usage_percent: 37.5, near_end: false }],
         } });
         if (url.pathname === '/api/analytics/year-review') {

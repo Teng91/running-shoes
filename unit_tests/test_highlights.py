@@ -11,7 +11,6 @@ from backend.main import app
 from backend.models import Run, RunningGoal, Shoe, User
 from backend.read_models.highlights import (
     home_summary,
-    next_total_milestone,
     shoe_distance_mix,
     shoe_suggestion,
     year_review,
@@ -43,13 +42,6 @@ def _runs(db, user_id, shoe_id, *rows):
     db.commit()
 
 
-def test_total_milestones_step_through_the_list_then_every_thousand_km():
-    assert next_total_milestone(0) == (None, 100.0)
-    assert next_total_milestone(260) == (250.0, 500.0)
-    assert next_total_milestone(1000) == (1000.0, 2000.0)
-    assert next_total_milestone(2345.6) == (2000.0, 3000.0)
-
-
 def test_suggestion_prefers_the_longest_rested_pair_and_demotes_worn_out_shoes(db, user_with_token):
     user, _ = user_with_token
     fresh = _shoe(db, user.id, model="Fresh", mileage=50)
@@ -73,24 +65,16 @@ def test_suggestion_prefers_the_longest_rested_pair_and_demotes_worn_out_shoes(d
     assert shoe_suggestion(db, user.id, date(2026, 5, 10))[0]["near_end"] is True
 
 
-def test_home_summary_reports_week_streak_goal_records_and_recent_achievements(db, user_with_token):
+def test_home_summary_only_carries_the_next_shoe_suggestion(db, user_with_token):
     user, _ = user_with_token
-    db.add(RunningGoal(user_id=user.id, start_year=2026, monthly_km=100))
     shoe = _shoe(db, user.id, mileage=310)
-    _runs(db, user.id, shoe.id, ("2026-01-10", 21.5), ("2026-03-02", 200), ("2026-05-04", 6),
-          ("2026-05-08", 4), ("2026-05-09", 10), ("2026-05-10", 3))
+    _runs(db, user.id, shoe.id, ("2026-05-04", 6), ("2026-05-10", 3))
 
     summary = home_summary(db, user.id, date(2026, 5, 10))
 
-    assert summary["week"] == {"start": "2026-05-04", "km": 23, "runs": 4}
-    assert summary["streak_days"] == 3
-    assert summary["month_goal"] == {"active": True, "km": 23, "goal_km": 100, "percent": 23}
-    assert summary["total"] == {"km": 244.5, "reached_km": 100, "next_km": 250, "remaining_km": 5.5}
-    assert summary["records"]["longest_run"] == {"date": "2026-03-02", "km": 200, "shoe_id": shoe.id}
-    assert summary["records"]["biggest_month"] == {"year": 2026, "month": 3, "km": 200}
-    kinds = [item["kind"] for item in summary["achievements"]]
-    # 310 km now and 23 km in the last 30 days: the shoe crossed 300 km recently.
-    assert kinds == ["shoe"] and summary["achievements"][0]["km"] == 300
+    # SPEC-042: the week, streak, goal, total and records tiles were removed from the run log.
+    assert set(summary) == {"as_of", "suggestion"}
+    assert [row["shoe_id"] for row in summary["suggestion"]] == [shoe.id]
 
 
 def test_year_review_summarizes_a_past_year_and_compares_the_previous_one(db, user_with_token):
@@ -125,16 +109,17 @@ def test_distance_mix_buckets_runs_for_active_shoes_only(db, user_with_token):
     long_pair = _shoe(db, user.id, model="Long")
     easy_pair = _shoe(db, user.id, model="Easy")
     retired = _shoe(db, user.id, model="Old", is_retired=True)
-    _runs(db, user.id, long_pair.id, ("2026-01-01", 4.99), ("2026-01-02", 21.1), ("2026-01-03", 30))
-    _runs(db, user.id, easy_pair.id, ("2026-01-04", 5), ("2026-01-05", 9.9))
-    _runs(db, user.id, retired.id, ("2026-01-06", 12))
+    _runs(db, user.id, long_pair.id, ("2026-01-01", 4.99), ("2026-01-02", 19.99), ("2026-01-03", 20), ("2026-01-04", 30))
+    _runs(db, user.id, easy_pair.id, ("2026-01-05", 5), ("2026-01-06", 9.9))
+    _runs(db, user.id, retired.id, ("2026-01-07", 12))
 
     mix = shoe_distance_mix(db, user.id)
 
-    assert mix["buckets"] == ["<5", "5–10", "10–15", "15–21", "≥21"]
+    # SPEC-042: 5 km steps, 20 km and longer share the last bucket.
+    assert mix["buckets"] == ["<5", "5–10", "10–15", "15–20", "≥20"]
     assert [row["shoe_id"] for row in mix["shoes"]] == [long_pair.id, easy_pair.id]
-    assert mix["shoes"][0] == {"shoe_id": long_pair.id, "counts": [1, 0, 0, 0, 2], "runs": 3,
-                               "km": 56.09, "longest_km": 30, "average_km": 18.7}
+    assert mix["shoes"][0] == {"shoe_id": long_pair.id, "counts": [1, 0, 0, 1, 2], "runs": 4,
+                               "km": 74.98, "longest_km": 30, "average_km": 18.74}
     assert mix["shoes"][1]["counts"] == [0, 2, 0, 0, 0]
 
 
@@ -152,12 +137,11 @@ def test_highlight_endpoints_are_user_scoped(client, db, user_with_token):
     review = client.get("/api/analytics/year-review?year=2026", headers=headers).json()
     mix = client.get("/api/analytics/shoe-distance-mix", headers=headers).json()
 
-    assert home["records"]["longest_run"]["km"] == 5
     assert [row["shoe_id"] for row in home["suggestion"]] == [mine.id]
     assert review["total_km"] == 5
     assert [row["shoe_id"] for row in mix["shoes"]] == [mine.id]
     other_headers = {"Authorization": f"Bearer {create_access_token(data={'sub': 'other'})}"}
-    assert client.get("/api/analytics/home", headers=other_headers).json()["records"]["longest_run"]["km"] == 42
+    assert [row["shoe_id"] for row in client.get("/api/analytics/home", headers=other_headers).json()["suggestion"]] == [theirs.id]
     for path in ("/api/analytics/home", "/api/analytics/year-review?year=2026", "/api/analytics/shoe-distance-mix"):
         assert client.get(path).status_code == 401
     assert client.get("/api/analytics/year-review?year=1800", headers=headers).status_code == 422
