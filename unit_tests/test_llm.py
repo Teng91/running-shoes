@@ -418,7 +418,7 @@ def test_build_client_requires_key_and_uses_openrouter_endpoint(monkeypatch):
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     client = object()
     constructor = MagicMock(return_value=client)
-    monkeypatch.setattr(llm, "OpenAI", constructor)
+    monkeypatch.setattr("openai.OpenAI", constructor)
 
     assert llm._build_client(llm.LLMProvider.openrouter) is client
     constructor.assert_called_once_with(

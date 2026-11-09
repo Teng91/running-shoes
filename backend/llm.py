@@ -11,11 +11,13 @@ import time
 from collections.abc import Generator
 from enum import StrEnum
 from threading import Lock
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import httpx
 from dotenv import load_dotenv
-from openai import OpenAI
+
+if TYPE_CHECKING:
+    from openai import OpenAI
 
 from backend.settings import settings
 
@@ -258,11 +260,15 @@ def list_providers(force: bool = False) -> list[dict[str, Any]]:
     return out
 
 
-def _build_client(provider: LLMProvider) -> OpenAI:
+def _build_client(provider: LLMProvider) -> "OpenAI":
     cfg = _PROVIDER_CONFIG[provider]
     api_key = os.environ.get(cfg["key_env"])
     if not api_key:
         raise LLMError(f"未設定 {cfg['key_label']}，無法使用 {provider.value}。")
+    # The SDK takes about a third of the backend import time; only AI requests need it,
+    # so a cold start skips it and the first AI call pays the one-time import.
+    from openai import OpenAI
+
     return OpenAI(
         base_url=cfg["base_url"],
         api_key=api_key,

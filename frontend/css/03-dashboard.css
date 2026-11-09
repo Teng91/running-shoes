@@ -92,6 +92,9 @@
 .inline-add input { width: 100px; }
 .inline-add select:focus, .inline-add input:focus { outline: none; border-color: var(--accent); }
 .inline-error { color: var(--red); font-size: 12px; width: 100%; }
+.run-date-warning, .strava-date-warning { margin: 0 0 10px; color: var(--orange); font-size: 12px; line-height: 1.5; }
+.run-date-warning[hidden], .strava-date-warning[hidden] { display: none; }
+.strava-date-warning { display: block; margin: 4px 0 0; }
 /* Training trends: year heatmap, streaks, weekly load, goal pace and shoe rotation */
 .trends-section { margin-bottom: 28px; }
 .trends-heading-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }

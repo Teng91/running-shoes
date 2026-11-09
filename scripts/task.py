@@ -9,6 +9,7 @@ on Windows.
 from __future__ import annotations
 
 import argparse
+import functools
 import os
 import shutil
 import subprocess
@@ -136,21 +137,40 @@ def verification_commands() -> tuple[Command, ...]:
     )
 
 
-def layout_dependencies_available() -> bool:
+BROWSER_SETUP_HINT = (
+    "Install them with 'npm ci' and 'npx playwright install chromium webkit'; on Linux also "
+    "add host libraries once with 'sudo npx playwright install-deps chromium webkit'."
+)
+
+
+@functools.lru_cache(maxsize=1)
+def browser_probe() -> tuple[bool, str]:
+    """Launch the pinned browsers once; downloaded binaries alone may not start."""
     if shutil.which("node") is None:
-        return False
-    script = (
-        "const fs=require('fs'),p=require('playwright');"
-        "process.exit(fs.existsSync(p.chromium.executablePath())"
-        "&&fs.existsSync(p.webkit.executablePath())?0:1)"
-    )
-    result = subprocess.run(
-        ("node", "-e", script),
-        cwd=ROOT,
-        capture_output=True,
-        check=False,
-    )
-    return result.returncode == 0
+        return False, "Node.js is not installed."
+    try:
+        result = subprocess.run(
+            ("node", "scripts/browser_probe.cjs"),
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=120,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        return False, f"browser probe could not run: {error}"
+    lines = [line.strip() for line in (result.stderr + result.stdout).splitlines() if line.strip()]
+    return result.returncode == 0, lines[-1] if lines else "Playwright browsers are unavailable."
+
+
+def layout_dependencies_available() -> bool:
+    return browser_probe()[0]
+
+
+def browser_unavailable_message(label: str) -> str:
+    return f"{label} needs Playwright Chromium/WebKit that can start here: {browser_probe()[1]} {BROWSER_SETUP_HINT}"
 
 
 def run_setup() -> None:
@@ -179,11 +199,7 @@ def browser_command(label: str, script: str, timeout: int, *, environment=()) ->
 
 def run_frontend_layout(*, optional: bool = False) -> None:
     if not layout_dependencies_available():
-        message = (
-            "Playwright or its Chromium/WebKit binaries are unavailable. Install them with "
-            "'npm ci' and "
-            "'npx playwright install chromium webkit'."
-        )
+        message = browser_unavailable_message("frontend-layout")
         if optional:
             print(f"\n==> Frontend layout tests\nWARNING: {message}\nWARNING: Skipped.")
             return
@@ -193,11 +209,7 @@ def run_frontend_layout(*, optional: bool = False) -> None:
 
 def run_frontend_e2e(*, optional: bool = False) -> None:
     if not layout_dependencies_available():
-        message = (
-            "Playwright browser binaries are unavailable. Install them with "
-            "'npm ci' and "
-            "'npx playwright install chromium webkit'."
-        )
+        message = browser_unavailable_message("frontend-e2e")
         if optional:
             print(f"\n==> Frontend browser E2E\nWARNING: {message}\nWARNING: Skipped.")
             return
@@ -210,7 +222,7 @@ def run_frontend_e2e(*, optional: bool = False) -> None:
 
 def run_frontend_pwa(*, optional: bool = False) -> None:
     if not layout_dependencies_available():
-        message = "Playwright Chromium/WebKit binaries are required for frontend-pwa."
+        message = browser_unavailable_message("frontend-pwa")
         if optional:
             print(f"\n==> PWA upgrade tests\nWARNING: {message}\nWARNING: Skipped.")
             return
@@ -276,7 +288,7 @@ def run_task(task: str, *, base_url: str | None = None) -> None:
         run_frontend_pwa(optional=True)
     elif task == "diagnostics-generate":
         if not layout_dependencies_available():
-            raise TaskError("diagnostics-generate requires the pinned Playwright browsers")
+            raise TaskError(browser_unavailable_message("diagnostics-generate"))
         run_checked(browser_command("Capture synthetic browser failure", "scripts/diagnostics_drill.cjs", 60))
         run_checked(Command("Verify captured diagnostics", (python, "scripts/verify_diagnostics.py")))
     elif task == "diagnostics-verify":
@@ -285,7 +297,7 @@ def run_task(task: str, *, base_url: str | None = None) -> None:
         if not base_url:
             raise TaskError("release-check requires --base-url (HTTPS or a loopback fixture)")
         if not layout_dependencies_available():
-            raise TaskError("release-check requires the pinned Playwright browsers; run npm ci and npx playwright install chromium webkit")
+            raise TaskError(browser_unavailable_message("release-check"))
         run_checked(Command("Generated frontend assets", (python, "scripts/build_frontend.py", "--check")))
         run_checked(Command("Read-only release verification", (python, "scripts/release_check.py", "--base-url", base_url)))
     else:

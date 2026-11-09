@@ -101,3 +101,17 @@ def test_read_event_decodes_utf8_regardless_of_the_console_code_page(monkeypatch
     monkeypatch.setattr(claude_stop_hook.sys, "stdin", stdin)
 
     assert claude_stop_hook.read_event()["last_assistant_message"] == message
+
+
+def test_layout_check_is_skipped_when_browsers_cannot_launch(monkeypatch):
+    import subprocess
+
+    commands = []
+    monkeypatch.setattr(claude_stop_hook.shutil, "which", lambda _name: "/usr/bin/node")
+    monkeypatch.setattr(claude_stop_hook.subprocess, "run", lambda command, **_kwargs: (
+        commands.append(command) or subprocess.CompletedProcess(command, 1)))
+    assert claude_stop_hook.layout_dependencies_available() is False
+    assert commands == [("node", "scripts/browser_probe.cjs")]
+
+    monkeypatch.setattr(claude_stop_hook, "run_check", lambda check: (True, ""))
+    assert claude_stop_hook.run_verification({"frontend/styles.css"}) == (True, "")

@@ -189,6 +189,7 @@ def test_strava_import_is_idempotent_and_syncs_totals(client, db, user_with_toke
             "gear": "",
             "count": 1,
             "km": 6.1,
+            "first_date": "2026-08-28",
             "suggested_shoe_id": None,
             "shoe_name": None,
             "ambiguous_match": False,
@@ -451,3 +452,19 @@ def test_run_model_declares_unique_strava_activity_index():
         if item.name == "idx_runs_user_strava_id"
     )
     assert index.unique is True
+
+
+def test_strava_preview_reports_each_gear_groups_earliest_importable_date(db, user_with_token):
+    """SPEC-046: the UI compares this date with the mapped shoe's purchase date."""
+    from backend.read_models.strava_preview import build_preview
+
+    user, _token = user_with_token
+    rows = [
+        {"strava_id": "a", "date": "2026-03-10", "km": 5.0, "gear": "Rider"},
+        {"strava_id": "b", "date": "2026-01-04", "km": 6.0, "gear": "Rider"},
+        {"strava_id": "c", "date": "2026-02-01", "km": 7.0, "gear": "Sky"},
+    ]
+    preview = build_preview(db, user.id, rows, 0, [])
+    groups = {group["gear"]: group for group in preview["gear_groups"]}
+    assert groups["Rider"]["first_date"] == "2026-01-04"
+    assert groups["Sky"]["first_date"] == "2026-02-01"

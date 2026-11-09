@@ -105,10 +105,12 @@ async function previewStravaFile() {
       (unknown ? `有 ${unknown} 個鞋款需要手動配對或略過。` : '待匯入鞋款已全部自動配對。');
     const shoeOptions = allRunShoes().map(shoe => `<option value="${shoe.id}">${esc(shoeLabel(shoe))}</option>`).join('');
     mapping.innerHTML = stravaController.state.preview.gear_groups.map((group, index) => `
-      <div class="strava-group"><div><strong>${esc(group.gear || '未指定鞋款')}</strong><small>${group.count} 次 · ${Number(group.km).toFixed(2)} km</small></div>
-        <select id="strava-map-${index}"><option value="">不匯入此鞋款</option>${shoeOptions}</select></div>`).join('');
+      <div class="strava-group"><div><strong>${esc(group.gear || '未指定鞋款')}</strong><small>${group.count} 次 · ${Number(group.km).toFixed(2)} km</small>
+        <small class="strava-date-warning" id="strava-warn-${index}" role="status" hidden></small></div>
+        <select id="strava-map-${index}" onchange="updateStravaDateWarning(${index})"><option value="">不匯入此鞋款</option>${shoeOptions}</select></div>`).join('');
     stravaController.state.preview.gear_groups.forEach((group, index) => {
       if (group.suggested_shoe_id) document.getElementById(`strava-map-${index}`).value = String(group.suggested_shoe_id);
+      updateStravaDateWarning(index);
     });
     setStravaMappingDisabled(stravaController.importing());
     document.getElementById('strava-import-btn').disabled = stravaController.importing() || stravaController.state.preview.importable_count === 0;
@@ -120,6 +122,17 @@ async function previewStravaFile() {
   } finally {
     stravaController.finishPreview(operation);
   }
+}
+
+// SPEC-046: flag a mapping whose earliest activity predates the chosen shoe's purchase.
+function updateStravaDateWarning(index) {
+  const group = stravaController.state.preview?.gear_groups[index];
+  const target = document.getElementById(`strava-warn-${index}`);
+  if (!group || !target) return;
+  const shoe = runShoe(parseInt(document.getElementById(`strava-map-${index}`).value, 10));
+  target.textContent = group.first_date && shoe?.date && group.first_date < shoe.date
+    ? `最早一筆 ${group.first_date.replace(/-/g, '/')} 早於這雙鞋的購買日 ${shoe.date.replace(/-/g, '/')}，請確認配對。` : '';
+  target.hidden = !target.textContent;
 }
 
 async function importStrava() {

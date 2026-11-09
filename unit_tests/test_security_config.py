@@ -67,6 +67,8 @@ def test_client_ip_header_is_only_trusted_on_fly(monkeypatch):
 def test_docker_enables_production_secret_checks():
     source = (PROJECT_ROOT / "Dockerfile").read_text(encoding="utf-8")
     assert "ENV ENVIRONMENT=production" in source
+    # SPEC-046: precompiled bytecode, since the runtime user cannot write __pycache__.
+    assert source.index("RUN python -m compileall -q backend") > source.index("COPY backend backend/")
 
 
 def test_sqlite_foreign_keys_are_enabled():

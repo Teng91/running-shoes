@@ -110,3 +110,18 @@ def test_importing_run_module_does_not_start_server(monkeypatch):
 
     importlib.reload(run_module)
     run.assert_not_called()
+
+
+def test_backend_import_does_not_load_the_openai_sdk():
+    """SPEC-046: the OpenAI SDK is loaded by the first AI request, not by a cold start."""
+    import subprocess
+
+    environment = {**os.environ, "SECRET_KEY": "import-path-test-only", "ENVIRONMENT": "development"}
+    result = subprocess.run(
+        (sys.executable, "-c", "import sys, backend.main; print('openai' in sys.modules)"),
+        capture_output=True,
+        text=True,
+        env=environment,
+        check=True,
+    )
+    assert result.stdout.strip().splitlines()[-1] == "False"
