@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
 <meta charset="UTF-8">
-<meta name="app-asset-version" content="4.5.1">
+<meta name="app-asset-version" content="4.6.0">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>跑鞋追蹤 Dashboard</title>
 <meta name="theme-color" content="#0f1117">
@@ -34,8 +34,8 @@ body { margin: 0; opacity: 1 !important; }
 @keyframes app-boot-critical-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .app-boot { transition: none; } .app-boot-spinner { animation: none; } }
 </style>
-<link id="app-styles" rel="preload" href="/styles.css?v=4.5.1" as="style" onload="this.onload=null;this.rel='stylesheet';this.dataset.ready='true';window.dispatchEvent(new Event('appstylesready'))">
-<noscript><link rel="stylesheet" href="/styles.css?v=4.5.1"></noscript>
+<link id="app-styles" rel="preload" href="/styles.css?v=4.6.0" as="style" onload="this.onload=null;this.rel='stylesheet';this.dataset.ready='true';window.dispatchEvent(new Event('appstylesready'))">
+<noscript><link rel="stylesheet" href="/styles.css?v=4.6.0"></noscript>
 </head>
 <body>
 
@@ -304,10 +304,11 @@ window.__appBootLegacyPoll = window.setInterval(function () {
       <form class="run-entry" onsubmit="addRun(); return false;">
         <h3>記下一次跑步</h3>
         <div class="run-entry-grid">
-          <div class="form-group"><label for="run-date">日期</label><input id="run-date" type="date" required></div>
+          <div class="form-group"><label for="run-date">日期</label><input id="run-date" type="date" required onchange="updateRunDateWarning('run')"></div>
           <div class="form-group"><label for="run-km">距離 (km)</label><input id="run-km" type="number" min="0.01" max="1000" step="0.01" placeholder="5.00" required></div>
-          <div class="form-group shoe-field"><label for="run-shoe">穿哪雙鞋</label><select id="run-shoe" required></select></div>
+          <div class="form-group shoe-field"><label for="run-shoe">穿哪雙鞋</label><select id="run-shoe" required onchange="updateRunDateWarning('run')"></select></div>
         </div>
+        <p class="run-date-warning" id="run-date-warning" role="status" hidden></p>
         <div class="shoe-suggestion" id="shoe-suggestion" hidden></div>
         <div class="inline-error" id="run-error"></div>
         <button class="btn btn-primary" id="add-run-btn" type="submit">+ 新增跑步紀錄</button>
@@ -545,10 +546,11 @@ window.__appBootLegacyPoll = window.setInterval(function () {
   <form class="modal" style="width: 520px;" onsubmit="saveRun(); return false;">
     <h2>編輯跑步紀錄</h2>
     <div class="form-row">
-      <div class="form-group"><label for="edit-run-date">日期</label><input id="edit-run-date" type="date" required></div>
+      <div class="form-group"><label for="edit-run-date">日期</label><input id="edit-run-date" type="date" required onchange="updateRunDateWarning('edit-run')"></div>
       <div class="form-group"><label for="edit-run-km">距離 (km)</label><input id="edit-run-km" type="number" min="0.01" max="1000" step="0.01" required></div>
     </div>
-    <div class="form-group"><label for="edit-run-shoe">穿哪雙鞋</label><select id="edit-run-shoe" required></select></div>
+    <div class="form-group"><label for="edit-run-shoe">穿哪雙鞋</label><select id="edit-run-shoe" required onchange="updateRunDateWarning('edit-run')"></select></div>
+    <p class="run-date-warning" id="edit-run-date-warning" role="status" hidden></p>
     <div class="auth-error" id="edit-run-error"></div>
     <div class="modal-actions">
       <div class="modal-actions-secondary"><button type="button" class="btn btn-delete" onclick="deleteEditingRun()">刪除</button></div>
@@ -672,37 +674,37 @@ window.__appBootLegacyPoll = window.setInterval(function () {
 
 <script src="/vendor/chart.umd.min.js"></script>
 <script src="/vendor/marked.min.js"></script>
-<script src="/app-boot.js?v=4.5.1"></script>
-<script src="/app-lifecycle.js?v=4.5.1"></script>
-<script src="/app-state.js?v=4.5.1"></script>
-<script src="/app-api.js?v=4.5.1"></script>
-<script src="/app-auth.js?v=4.5.1"></script>
-<script src="/app-streams.js?v=4.5.1"></script>
-<script src="/app-resources.js?v=4.5.1"></script>
-<script src="/app-inline-editors.js?v=4.5.1"></script>
-<script src="/app-local-store.js?v=4.5.1"></script>
-<script src="/app-workspace.js?v=4.5.1"></script>
-<script src="/app-account-restore.js?v=4.5.1"></script>
-<script src="/app-history.js?v=4.5.1"></script>
-<script src="/app-core.js?v=4.5.1"></script>
-<script src="/app-models.js?v=4.5.1"></script>
-<script src="/app-markdown.js?v=4.5.1"></script>
-<script src="/app-agent.js?v=4.5.1"></script>
-<script src="/app-reports.js?v=4.5.1"></script>
-<script src="/app-runs.js?v=4.5.1"></script>
-<script src="/app-dates.js?v=4.5.1"></script>
-<script src="/app-strava.js?v=4.5.1"></script>
-<script src="/app-run-insights.js?v=4.5.1"></script>
-<script src="/app-shoes.js?v=4.5.1"></script>
-<script src="/app-dashboard.js?v=4.5.1"></script>
-<script src="/app-exports.js?v=4.5.1"></script>
-<script src="/app-goals.js?v=4.5.1"></script>
-<script src="/app-charts.js?v=4.5.1"></script>
-<script src="/app-shoe-charts.js?v=4.5.1"></script>
-<script src="/app-monthly-charts.js?v=4.5.1"></script>
-<script src="/app-spending.js?v=4.5.1"></script>
-<script src="/app-dialogs.js?v=4.5.1"></script>
-<script src="/app-updates.js?v=4.5.1"></script>
-<script src="/app.js?v=4.5.1"></script>
+<script src="/app-boot.js?v=4.6.0"></script>
+<script src="/app-lifecycle.js?v=4.6.0"></script>
+<script src="/app-state.js?v=4.6.0"></script>
+<script src="/app-api.js?v=4.6.0"></script>
+<script src="/app-auth.js?v=4.6.0"></script>
+<script src="/app-streams.js?v=4.6.0"></script>
+<script src="/app-resources.js?v=4.6.0"></script>
+<script src="/app-inline-editors.js?v=4.6.0"></script>
+<script src="/app-local-store.js?v=4.6.0"></script>
+<script src="/app-workspace.js?v=4.6.0"></script>
+<script src="/app-account-restore.js?v=4.6.0"></script>
+<script src="/app-history.js?v=4.6.0"></script>
+<script src="/app-core.js?v=4.6.0"></script>
+<script src="/app-models.js?v=4.6.0"></script>
+<script src="/app-markdown.js?v=4.6.0"></script>
+<script src="/app-agent.js?v=4.6.0"></script>
+<script src="/app-reports.js?v=4.6.0"></script>
+<script src="/app-runs.js?v=4.6.0"></script>
+<script src="/app-dates.js?v=4.6.0"></script>
+<script src="/app-strava.js?v=4.6.0"></script>
+<script src="/app-run-insights.js?v=4.6.0"></script>
+<script src="/app-shoes.js?v=4.6.0"></script>
+<script src="/app-dashboard.js?v=4.6.0"></script>
+<script src="/app-exports.js?v=4.6.0"></script>
+<script src="/app-goals.js?v=4.6.0"></script>
+<script src="/app-charts.js?v=4.6.0"></script>
+<script src="/app-shoe-charts.js?v=4.6.0"></script>
+<script src="/app-monthly-charts.js?v=4.6.0"></script>
+<script src="/app-spending.js?v=4.6.0"></script>
+<script src="/app-dialogs.js?v=4.6.0"></script>
+<script src="/app-updates.js?v=4.6.0"></script>
+<script src="/app.js?v=4.6.0"></script>
 </body>
 </html>

@@ -78,7 +78,8 @@ def test_release_task_requires_explicit_origin_and_never_skips_browsers(monkeypa
     with pytest.raises(task.TaskError, match="requires --base-url"):
         task.run_task("release-check")
     monkeypatch.setattr(task, "layout_dependencies_available", lambda: False)
-    with pytest.raises(task.TaskError, match="requires the pinned"):
+    monkeypatch.setattr(task, "browser_probe", lambda: (False, "webkit cannot start"))
+    with pytest.raises(task.TaskError, match=r"release-check needs Playwright Chromium/WebKit .*webkit cannot start"):
         task.run_task("release-check", base_url="https://example.com")
     monkeypatch.setattr(task, "layout_dependencies_available", lambda: True)
     run = Mock()

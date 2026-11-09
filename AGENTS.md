@@ -128,7 +128,9 @@ on Windows use `py -3` with the same script and task arguments:
 - Everything at once before handing off a large change: `python3 scripts/task.py verify-all`
 
 `frontend-layout` is intentionally separate from `verify` because it requires Playwright browser binaries.
-`verify-all` includes layout, CRUD and PWA browser checks, but warns and skips instead of failing when those binaries are unavailable.
+`verify-all` includes layout, CRUD and PWA browser checks, but warns and skips instead of failing when
+`scripts/browser_probe.cjs` cannot launch Chromium and WebKit (missing binaries or Linux host libraries;
+add the latter once with `sudo npx playwright install-deps chromium webkit`).
 
 Claude Code imports this file through `CLAUDE.md`. Its project Stop hook runs the deterministic
 repository checks after a changed worktree reaches a stopping point and returns failures to the

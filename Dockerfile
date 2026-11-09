@@ -3,6 +3,8 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir --require-hashes -r requirements.txt
 COPY backend backend/
+# appuser cannot write __pycache__ under /app; compile once so cold starts skip it.
+RUN python -m compileall -q backend
 COPY frontend frontend/
 COPY scripts/database_backup.py scripts/rollback_preview_schema.sql scripts/
 RUN useradd --create-home appuser && mkdir -p /data && chown appuser:appuser /data

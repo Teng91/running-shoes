@@ -304,10 +304,11 @@ window.__appBootLegacyPoll = window.setInterval(function () {
       <form class="run-entry" onsubmit="addRun(); return false;">
         <h3>記下一次跑步</h3>
         <div class="run-entry-grid">
-          <div class="form-group"><label for="run-date">日期</label><input id="run-date" type="date" required></div>
+          <div class="form-group"><label for="run-date">日期</label><input id="run-date" type="date" required onchange="updateRunDateWarning('run')"></div>
           <div class="form-group"><label for="run-km">距離 (km)</label><input id="run-km" type="number" min="0.01" max="1000" step="0.01" placeholder="5.00" required></div>
-          <div class="form-group shoe-field"><label for="run-shoe">穿哪雙鞋</label><select id="run-shoe" required></select></div>
+          <div class="form-group shoe-field"><label for="run-shoe">穿哪雙鞋</label><select id="run-shoe" required onchange="updateRunDateWarning('run')"></select></div>
         </div>
+        <p class="run-date-warning" id="run-date-warning" role="status" hidden></p>
         <div class="shoe-suggestion" id="shoe-suggestion" hidden></div>
         <div class="inline-error" id="run-error"></div>
         <button class="btn btn-primary" id="add-run-btn" type="submit">+ 新增跑步紀錄</button>

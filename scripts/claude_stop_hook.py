@@ -118,19 +118,19 @@ def needs_layout_check(files: set[str]) -> bool:
 
 
 def layout_dependencies_available() -> bool:
+    """True only when Chromium and WebKit can launch; missing host libraries skip the check."""
     if shutil.which("node") is None:
         return False
-    script = (
-        "const fs=require('fs'),p=require('playwright');"
-        "process.exit(fs.existsSync(p.chromium.executablePath())"
-        "&&fs.existsSync(p.webkit.executablePath())?0:1)"
-    )
-    result = subprocess.run(
-        ("node", "-e", script),
-        cwd=ROOT,
-        capture_output=True,
-        check=False,
-    )
+    try:
+        result = subprocess.run(
+            ("node", "scripts/browser_probe.cjs"),
+            cwd=ROOT,
+            capture_output=True,
+            timeout=120,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
     return result.returncode == 0
 
 

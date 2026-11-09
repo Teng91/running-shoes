@@ -7,7 +7,7 @@ test('SPEC-026 new run keeps a removed shoe unselected until explicit replacemen
     insertAdjacentHTML(_, html) { this.html = html + this.html; this.value = ''; } }; }
   const elements = { 'run-shoe': select(), 'edit-run-shoe': select() };
   let shoes = [{ id: 1 }, { id: 2 }];
-  const context = vm.createContext({ document: { getElementById: id => elements[id] }, esc: String, allRunShoes: () => shoes });
+  const context = vm.createContext({ document: { getElementById: id => elements[id] }, esc: String, allRunShoes: () => shoes, updateRunDateWarning() {} });
   vm.runInContext(extract('populateRunShoeSelects'), context);
   context.populateRunShoeSelects(); assert.equal(elements['run-shoe'].value, '1');
   shoes = [{ id: 2 }]; context.populateRunShoeSelects(); context.populateRunShoeSelects();

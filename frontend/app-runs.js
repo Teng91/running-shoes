@@ -32,6 +32,21 @@ function localDateISO(date = new Date()) {
 function allRunShoes() { return [...shoes, ...retiredShoes]; }
 function runShoe(shoeId) { return allRunShoes().find(shoe => shoe.id === shoeId); }
 
+// A run dated before the shoe's purchase date is usually the wrong shoe (SPEC-046).
+// It stays a reminder: saving is still allowed (try-on runs, late-entered dates).
+function prePurchaseWarning(runDate, shoe) {
+  if (!shoe?.date || !/^\d{4}-\d{2}-\d{2}$/.test(runDate || '') || runDate >= shoe.date) return '';
+  return `這天早於這雙鞋的購買日（${shoe.date.replace(/-/g, '/')}），確定是穿這雙嗎？仍可儲存。`;
+}
+
+function updateRunDateWarning(prefix) {
+  const target = document.getElementById(`${prefix}-date-warning`);
+  if (!target) return;
+  const shoe = runShoe(parseInt(document.getElementById(`${prefix}-shoe`).value, 10));
+  target.textContent = prePurchaseWarning(document.getElementById(`${prefix}-date`).value, shoe);
+  target.hidden = !target.textContent;
+}
+
 function populateRunShoeSelects(selectedId = null) {
   const shoeList = allRunShoes();
   const options = shoeList.map(shoe =>
@@ -55,6 +70,8 @@ function populateRunShoeSelects(selectedId = null) {
       );
     }
   });
+  updateRunDateWarning('run');
+  updateRunDateWarning('edit-run');
 }
 
 function selectedRunMonth() {

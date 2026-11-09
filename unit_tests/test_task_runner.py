@@ -160,3 +160,31 @@ def test_browser_jobs_are_independent_and_keep_timeout_diagnostics():
     for command in commands:
         assert 'scripts/browser_runner.py' in command.arguments
         assert '--timeout' in command.arguments
+
+
+def test_browser_checks_require_browsers_that_launch(monkeypatch):
+    """Downloaded Playwright binaries without host libraries must skip, not fail, optional runs."""
+    import subprocess
+
+    calls = []
+
+    def fake_run(command, **_kwargs):
+        calls.append(command)
+        return subprocess.CompletedProcess(command, 1, stdout="", stderr=(
+            "chromium cannot start: host system libraries are missing; "
+            "run sudo npx playwright install-deps chromium webkit.\n"
+        ))
+
+    task.browser_probe.cache_clear()
+    monkeypatch.setattr(task.shutil, "which", lambda _name: "/usr/bin/node")
+    monkeypatch.setattr(task.subprocess, "run", fake_run)
+    try:
+        assert task.layout_dependencies_available() is False
+        assert task.layout_dependencies_available() is False
+        assert calls == [("node", "scripts/browser_probe.cjs")], "one launch probe per run"
+        message = task.browser_unavailable_message("frontend-layout")
+        assert "host system libraries are missing" in message
+        assert "install-deps" in message
+        task.run_frontend_layout(optional=True)  # warns and skips
+    finally:
+        task.browser_probe.cache_clear()

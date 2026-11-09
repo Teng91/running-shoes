@@ -223,6 +223,10 @@ SPEC-032：合成資料驗證 50,000／50,001 筆歷史邊界、UTF-8 位元組�
 
 [規格與具名案例](specs/034-portable-recovery-and-sync-refresh.md) 驗證來源及接收者連續復原、省略歷史仍攜帶來源鍵、tombstone、別名衝突／全域容量／格式拒絕、v1/v2 指紋相容，以及小數累積與 legacy Float 尾差的 no-op 版本／audit 不變。Node 覆蓋手動空佇列讀取、通知失敗不重排已確認操作、刷新中的新通知及外帳號忽略；雙引擎 workspace E2E 操作 v3 來源復原檔及真實 BroadcastChannel／IndexedDB 多分頁，確認雲端讀取與表單草稿保留。
 
+## SPEC-046 冷啟動加速、購買日前跑步提醒與瀏覽器偵測
+
+[規格與具名案例](specs/046-cold-start-purchase-date-warnings-and-browser-probe.md) 以子行程驗證匯入 `backend.main` 不載入 `openai`、Dockerfile 預先編譯 backend；Python 驗證 Strava 預覽回傳各群組最早日期；Node 驗證跑步表單與 Strava 配對在早於購買日時提醒、當天不提醒且不阻擋儲存；任務執行器與 Stop hook 以假的啟動探測驗證缺系統函式庫時只探測一次並跳過，release-check 仍拒絕。
+
 ## SPEC-045 清除舊空表與已刪除鞋款標籤
 
 [規格與具名案例](specs/045-legacy-tables-and-deleted-shoe-labels.md) 以記憶體資料庫驗證 migration 兩次執行後只刪除空的舊表與其索引、仍有資料的舊表保留、schema version 不變；Node 驗證已刪除鞋款合併為單一「已刪除的鞋款」系列、月合計不變且無內部編號，日曆標籤為「已刪除」。發布前另以正式備份的記憶體副本演練：19 → 17 張表，業務資料雜湊不變。

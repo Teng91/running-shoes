@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+## [4.6.0] - 2026-11-09
+
+### Added
+- 購買日前跑步提醒（SPEC-046）：新增／編輯跑步的日期早於所選鞋款購買日時提醒確認，仍可儲存；Strava 匯入預覽每個鞋款群組回傳最早日期，配對鞋款較晚購買時提醒。
+
+### Changed
+- 冷啟動加速（SPEC-046）：後端啟動不載入 OpenAI SDK（本機載入時間約 600 → 385 ms），Docker image 預先編譯 `backend/`。Asset 4.6.0／shell v53。
+- 瀏覽器檢查以 `scripts/browser_probe.cjs` 實際啟動 Chromium／WebKit 判斷；缺 Linux 系統函式庫時 `verify-all` 與 Stop hook 跳過並提示 `install-deps`，release-check 仍要求可用瀏覽器。
+
 ## [4.5.1] - 2026-11-09
 
 ### Changed

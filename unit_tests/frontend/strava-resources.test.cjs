@@ -9,7 +9,7 @@ test('SPEC-025 deleted shoe selection remains explicit across redraws', () => {
   function select() { return { value: '', dataset: {}, set innerHTML(html) { this.html = html; this.value = html.match(/value="([^"]*)"/)?.[1] || ''; },
     insertAdjacentHTML(_, html) { this.html = html + this.html; this.value = ''; } }; }
   const elements = { 'run-shoe': select(), 'edit-run-shoe': select() };
-  const context = vm.createContext({ document: { getElementById: id => elements[id] }, esc: String,
+  const context = vm.createContext({ document: { getElementById: id => elements[id] }, esc: String, updateRunDateWarning() {},
     allRunShoes: () => [{ id: 1, brand: 'Test', model: 'Runner' }] });
   vm.runInContext(extract('populateRunShoeSelects'), context);
   context.populateRunShoeSelects(999); context.populateRunShoeSelects();

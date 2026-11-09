@@ -46,7 +46,10 @@ def build_preview(
         seen.add(strava_id)
         importable_km += float(cast(float, row["km"]))
         gear = str(row["gear"])
-        group = groups.setdefault(gear, {"gear": gear, "count": 0, "km": 0.0})
+        group = groups.setdefault(
+            gear, {"gear": gear, "count": 0, "km": 0.0, "first_date": str(row["date"])}
+        )
+        group["first_date"] = min(str(group["first_date"]), str(row["date"]))
         group["count"] = int(cast(int, group["count"])) + 1
         group["km"] = round(float(cast(float, group["km"])) + float(cast(float, row["km"])), 2)
     for group in groups.values():

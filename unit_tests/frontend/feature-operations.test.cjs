@@ -1,4 +1,4 @@
-const { test, assert, vm, fs, extract, runContext, source } = require('./helpers.cjs');
+const { test, assert, vm, fs, extract, runContext, source, htmlSource } = require('./helpers.cjs');
 
 function nodes() {
   return new Proxy({}, { get: (target, id) => target[id] ||= { dataset: {}, value: '', style: {}, hidden: true,
@@ -45,7 +45,7 @@ test('SPEC-023 shoe save preserves an edited draft and rebases its optimistic ve
 
 test('SPEC-023 shoe selectors distinguish duplicate models and escape nicknames', () => {
   const elements = nodes();
-  const context = vm.createContext({ document: { getElementById: id => elements[id] },
+  const context = vm.createContext({ document: { getElementById: id => elements[id] }, updateRunDateWarning() {},
     allRunShoes: () => [{ id: 7, brand: 'Same', model: 'Model', date: '2026-01-01', nickname: '<new>' },
       { id: 8, brand: 'Same', model: 'Model', date: '2026-02-01', nickname: '' },
       { id: 9, brand: 'Same', model: 'Model', date: '2026-01-01', nickname: '' }],
@@ -134,4 +134,38 @@ test('SPEC-023 overlapping full and mutation reloads reject stale resources and 
   failed.apiGet = async () => [];
   await failed.loadData({ mutation: 'monthly' });
   assert.equal(failed.document.getElementById('data-load-error').hidden, true);
+});
+
+test('SPEC-046 runs dated before the shoe purchase show a non-blocking reminder', () => {
+  const elements = new Proxy({}, { get: (all, id) => all[id] ||= { value: '', textContent: '', hidden: true } });
+  const shoe = { id: 2, brand: 'Mizuno', model: 'Wave Rider 29', date: '2025-12-12' };
+  const context = vm.createContext({ document: { getElementById: id => elements[id] }, runShoe: id => (id === 2 ? shoe : undefined) });
+  vm.runInContext(['prePurchaseWarning', 'updateRunDateWarning'].map(extract).join('\n'), context);
+  assert.equal(context.prePurchaseWarning('2025-11-05', shoe), '這天早於這雙鞋的購買日（2025/12/12），確定是穿這雙嗎？仍可儲存。');
+  assert.equal(context.prePurchaseWarning('2025-12-12', shoe), '', 'the purchase day itself is fine');
+  assert.equal(context.prePurchaseWarning('', shoe), '');
+  assert.equal(context.prePurchaseWarning('2025-11-05', undefined), '');
+  elements['edit-run-date'].value = '2025-11-05'; elements['edit-run-shoe'].value = '2';
+  context.updateRunDateWarning('edit-run');
+  assert.equal(elements['edit-run-date-warning'].hidden, false);
+  assert.match(elements['edit-run-date-warning'].textContent, /2025\/12\/12/);
+  elements['edit-run-date'].value = '2026-01-02'; context.updateRunDateWarning('edit-run');
+  assert.equal(elements['edit-run-date-warning'].hidden, true);
+  assert.doesNotMatch(extract('addRun') + extract('saveRun'), /prePurchaseWarning/, 'the reminder never blocks saving');
+  for (const id of ['run-date-warning', 'edit-run-date-warning']) assert.match(htmlSource, new RegExp(`id="${id}" role="status" hidden`));
+});
+
+test('SPEC-046 Strava mapping flags gear whose first activity predates the chosen shoe', () => {
+  const elements = new Proxy({}, { get: (all, id) => all[id] ||= { value: '', textContent: '', hidden: true } });
+  const shoes = { 6: { id: 6, date: '2026-06-25' }, 1: { id: 1, date: '2025-07-15' } };
+  const context = vm.createContext({ document: { getElementById: id => elements[id] }, runShoe: id => shoes[id],
+    stravaController: { state: { preview: { gear_groups: [{ gear: 'Nitro', first_date: '2025-11-24' }] } } } });
+  vm.runInContext(extract('updateStravaDateWarning'), context);
+  elements['strava-map-0'].value = '6'; context.updateStravaDateWarning(0);
+  assert.equal(elements['strava-warn-0'].textContent, '最早一筆 2025/11/24 早於這雙鞋的購買日 2026/06/25，請確認配對。');
+  assert.equal(elements['strava-warn-0'].hidden, false);
+  elements['strava-map-0'].value = '1'; context.updateStravaDateWarning(0);
+  assert.equal(elements['strava-warn-0'].hidden, true);
+  elements['strava-map-0'].value = ''; context.updateStravaDateWarning(0);
+  assert.equal(elements['strava-warn-0'].hidden, true, 'skipped gear has no reminder');
 });
