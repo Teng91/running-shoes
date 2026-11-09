@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from calendar import isleap
 from datetime import date, timedelta
 
 from sqlalchemy import func
@@ -85,9 +84,9 @@ def _weekly(daily: dict[date, float], end: date) -> list[dict]:
 def training_trends(db: Session, user_id: int, year: int, as_of: date) -> dict:
     end = trends_end(year, as_of)
     goal = goals.goal_values(db, user_id)
-    days_in_year = 366 if isleap(year) else 365
+    days_in_year = goals.days_in_year(year)
     yearly_goal = goal["yearly_km"]
-    goal_line = [round_metric(yearly_goal * (day + 1) / days_in_year) for day in range(days_in_year)]
+    goal_line = [goals.yearly_goal_to_date(yearly_goal, year, day + 1) for day in range(days_in_year)]
     base = {
         "year": year,
         "end_date": end.isoformat() if end else None,

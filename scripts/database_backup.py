@@ -79,7 +79,11 @@ def create_backup(source: Path, output_dir: Path, *, keep: int = 14) -> Path:
     checksum_path.write_text(f"{metadata['sha256']}  {destination.name}\n", encoding="ascii")
     checksum_path.chmod(0o600)
 
-    backups = sorted(output_dir.glob("shoes-*.db"), key=lambda path: path.stat().st_mtime)
+    # Coarse filesystem clocks give back-to-back snapshots equal mtimes; the UTC
+    # timestamp in the managed name breaks the tie so the newest is never removed.
+    backups = sorted(
+        output_dir.glob("shoes-*.db"), key=lambda path: (path.stat().st_mtime_ns, path.name)
+    )
     for stale in backups[:-keep]:
         if stale.resolve() == source:
             continue

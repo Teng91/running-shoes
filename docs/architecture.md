@@ -283,6 +283,7 @@ Registry 繼續清理其他 feature，即使個別 reset 失敗；錯誤只記�
 `GET /api/runs/summary` 以日期／鞋款 grouping 供完整月曆與卡片；`GET /api/runs` 每頁最多取 201 筆判斷
 200 筆明細是否有下一頁，可加 day 篩選。切明細頁不截斷統計，日曆鞋款點選改為篩選當日明細。
 `/running-goal/progress` 與首頁／月報使用同一 `goals.goal_progress`，不混入手動歷史調整。
+`/running-goal/year` 的 `goals.year_goal_overview` 以同一 `goal_progress` 加上一次月份 group-by，今天應達里程與訓練趨勢共用 `yearly_goal_to_date`。
 `/spending/summary` 在後端依日曆年月計算平均，前端只排版；支出非首頁必要請求，失敗局部重試。
 `shoe_metrics` 統一 ShoeOut、分析、匯出與工具成本／壽命數值；前端只處理格式與比例單位。
 Run list reload 與 aggregate reload 共用 request identity，切月份時不讓晚到明細覆寫目前月份，其他彙總仍可更新。

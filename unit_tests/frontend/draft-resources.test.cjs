@@ -3,6 +3,7 @@ function deferred() { let resolve; const promise = new Promise(r => { resolve = 
 function nodes() {
   const primary = {};
   return new Proxy({}, { get: (all, id) => all[id] ||= { value: '', style: {}, hidden: false,
+    setAttribute() {}, contains: () => false, focus() {},
     parentElement: { style: {} }, querySelector: () => primary,
     classList: { add() {}, remove() {} } } });
 }
@@ -45,7 +46,7 @@ test('SPEC-024 shoe transitions preserve only new edits and retain the server st
 test('SPEC-024 goal drafts survive redraw and save acknowledgements', async () => {
   const elements = nodes(), pending = deferred(), writes = [];
   const context = vm.createContext({ document: { getElementById: id => elements[id] },
-    runningGoal: { version: 1, start_year: 2026, monthly_km: 125 }, selectedYear: 2026, selectedGoalMonth: 10,
+    runningGoal: { version: 1, start_year: 2026, monthly_km: 125 }, selectedYear: 2026,
     monthlyMileages: [], goalProgressCache: new Map(), loadGoalProgress() {}, invalidatePanels() {},
     apiPut: (_, payload) => { writes.push(payload); return writes.length === 1 ? pending.promise : Promise.resolve({ ...payload, version: 3 }); },
   });
@@ -53,14 +54,18 @@ test('SPEC-024 goal drafts survive redraw and save acknowledgements', async () =
     [extract('renderGoalProgress'), extract('saveRunningGoal')].join('\n'), context);
   context.renderActivePanel = () => context.renderGoalProgress();
   context.renderGoalProgress(); elements['goal-monthly-km'].value = '180';
+  elements['goal-settings'].hidden = true; // collapsed as in the template
   context.renderGoalProgress(); assert.equal(elements['goal-monthly-km'].value, '180');
+  assert.equal(elements['goal-settings'].hidden, false, 'SPEC-044 an unsaved goal draft reopens the editor');
   const saving = context.saveRunningGoal();
   elements['goal-monthly-km'].value = '200'; elements['goal-start-year'].value = '2027';
   pending.resolve({ version: 2, start_year: 2026, monthly_km: 180 }); await saving;
   assert.equal(elements['goal-monthly-km'].value, '200'); assert.equal(elements['goal-start-year'].value, '2027');
   assert.match(elements['goal-settings-status'].textContent, /尚未儲存/);
+  assert.equal(elements['goal-settings'].hidden, false, 'newer input keeps the editor open');
   await context.saveRunningGoal();
   assert.equal(writes[1].expected_version, 2); assert.equal(writes[1].monthly_km, 200);
+  assert.equal(elements['goal-settings'].hidden, true, 'SPEC-044 a clean save collapses the editor');
   context.runningGoal = { version: 4, start_year: 2027, monthly_km: 220 }; context.renderGoalProgress();
   assert.equal(elements['goal-monthly-km'].value, '220', 'clean form follows new server values');
   context.getFormDraft('goal').reset(); context.runningGoal = { version: 0, start_year: 2026, monthly_km: 100 };

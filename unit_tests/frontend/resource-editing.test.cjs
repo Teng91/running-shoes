@@ -63,21 +63,21 @@ test('SPEC-026 derived reads coalesce and reject invalidated responses', async (
   const elements = new Proxy({}, { get: (all, id) => all[id] ||= { innerHTML: '', value: '2026' } });
   const pending = deferred(), calls = [], rendered = [];
   const context = runContext({ document: { getElementById: id => elements[id], querySelector: () => ({ dataset: { panel: 'monthly' } }) },
-    authToken: 'synthetic', localDateISO: () => '2026-10-23', selectedYear: 2026, selectedGoalMonth: 10,
+    authToken: 'synthetic', localDateISO: () => '2026-10-23', selectedYear: 2026,
     runningGoal: { version: 1 }, goalProgressCache: new Map(), selectedRunMonth: () => '2026-10', chartInstances: {}, shoes: [], retiredShoes: [],
     renderedPanels: new Map(), getThemeColor: () => '#000', brandColor: () => '#000', shoeColor: () => '#000',
     Chart: function(_, config) { this.config = config; this.destroy = () => {}; },
     apiGet: url => { calls.push(url); return pending.promise; },
-    renderGoalCards: value => rendered.push(value), renderDashboardInsights: value => rendered.push(value), esc: String,
+    renderGoalOverview: value => rendered.push(value), renderDashboardInsights: value => rendered.push(value), esc: String,
   });
   vm.runInContext('let goalProgressRequestId = 0;\n' + ['loadGoalProgress', 'loadDashboardAnalytics', 'renderShoeStackedChart'].map(extract).join('\n'), context);
   const requests = [];
-  for (let index = 0; index < 5; index++) requests.push(context.loadGoalProgress(2026, 10), context.loadDashboardAnalytics('2026-10'), context.renderShoeStackedChart());
+  for (let index = 0; index < 5; index++) requests.push(context.loadGoalProgress(2026), context.loadDashboardAnalytics('2026-10'), context.renderShoeStackedChart());
   await flush(); assert.equal(calls.length, 3);
   context.resourceStore.invalidate(['goal-progress', 'dashboard-analytics', 'annual-summary']);
   pending.resolve({ shoes: [] }); await Promise.all(requests); assert.deepEqual(rendered, []);
-  context.apiGet = async url => { calls.push(url); return { shoes: [] }; };
-  await Promise.all([context.loadGoalProgress(2026, 10), context.loadDashboardAnalytics('2026-10'), context.renderShoeStackedChart()]);
+  context.apiGet = async url => { calls.push(url); return url.startsWith('/running-goal/year') ? { year: 2026, months: [] } : { shoes: [] }; };
+  await Promise.all([context.loadGoalProgress(2026), context.loadDashboardAnalytics('2026-10'), context.renderShoeStackedChart()]);
   assert.equal(calls.length, 6); assert.equal(rendered.length, 2);
   context.resourceStore.invalidate(['annual-summary']);
   context.console = { error() {} };

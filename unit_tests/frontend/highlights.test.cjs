@@ -115,11 +115,10 @@ test('SPEC-040 the shared year selector redraws every year view and the comparis
     ...Object.fromEntries(['renderGoalProgress', 'renderMonthlyYearChart', 'renderShoeStackedChart', 'renderYearReview', 'renderTrends']
       .map(name => [name, () => calls.push(name)])),
   });
-  vm.runInContext(`let selectedYear = null, selectedGoalMonth = 3;\nconst YEAR_LINE_COLORS = ['#a', '#b'];\n${['onYearChange', 'renderYearOverYearChart'].map(extract).join('\n')}`, ctx);
+  vm.runInContext(`let selectedYear = null;\nconst YEAR_LINE_COLORS = ['#a', '#b'];\n${['onYearChange', 'renderYearOverYearChart'].map(extract).join('\n')}`, ctx);
   ctx.onYearChange();
   assert.deepEqual(calls, ['renderGoalProgress', 'renderMonthlyYearChart', 'renderShoeStackedChart', 'renderYearReview', 'renderTrends']);
   assert.equal(vm.runInContext('selectedYear', ctx), 2026);
-  assert.equal(vm.runInContext('selectedGoalMonth', ctx), null);
   const { datasets } = ctx.chartInstances.yearOverYear.config.data;
   assert.deepEqual(Array.from(datasets, row => [row.label, row.borderWidth]), [['2025', 1.5], ['2026', 3]]);
   assert.deepEqual(Array.from(datasets[1].data.slice(0, 3)), [80, 90, null], 'missing months stay gaps');

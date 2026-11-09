@@ -143,7 +143,7 @@ function alignmentIssues() {
   const visible = node => node.getClientRects().length && getComputedStyle(node).visibility !== 'hidden';
   const box = node => node.getBoundingClientRect();
   const near = (a, b) => Math.abs(a - b) <= 1;
-  const controls = '.form-group input:not([type="checkbox"]):not([type="file"]), .form-group select, .year-select, .inline-add input, .inline-add select, .goal-settings button, .inline-add button, .agent-config select, .agent-config button, .strava-group select';
+  const controls = '.form-group input:not([type="checkbox"]):not([type="file"]), .form-group select, .year-select, .inline-add input, .inline-add select, .goal-settings button, .goal-heading-actions button, .inline-add button, .agent-config select, .agent-config button, .strava-group select';
   for (const node of document.querySelectorAll(controls)) {
     if (visible(node) && !near(box(node).height, 44)) issues.push(`44px control: ${node.id || node.className} is ${box(node).height}`);
   }
@@ -250,11 +250,20 @@ async function run(engine, name) {
         if (asset !== frontendRoot && !asset.startsWith(frontendRoot + path.sep)) {
           return route.abort();
         }
-        if (url.pathname === '/api/running-goal/progress') return route.fulfill({ json: {
-          active: true, start_year: 2026, monthly_km: 125, yearly_km: 1500,
-          month_km: 50, ytd_km: 150, month_achievement_percent: 40, year_achievement_percent: 10,
-          month_state: 'past', month_remaining_km: 75, year_remaining_km: 1350,
-        } });
+        if (url.pathname === '/api/running-goal/year') {
+          // SPEC-044: every month state (met, missed, current, future) in one fixture.
+          const kms = [132.4, 98.6, 140.2, 125, 87.3, 151.9, 126.4, 110.8, 133.1, 45.2, 0, 0];
+          return route.fulfill({ json: {
+            version: 1, start_year: 2026, monthly_km: 125, yearly_km: 1500,
+            year: Number(url.searchParams.get('year')), active: true, year_state: 'current', focus_month: 10,
+            month_km: 45.2, month_state: 'current', month_achievement_percent: 36.2, pace_delta_km: -46.29,
+            remaining_days: 8, required_daily_km: 9.98, ytd_km: 1150.9, year_achievement_percent: 76.7,
+            year_remaining_km: 349.1, year_expected_km_to_date: 1212.33, year_pace_delta_km: -61.43,
+            year_remaining_days: 69, required_weekly_km: 35.42, months_closed: 9, months_met: 6,
+            months: kms.map((km, index) => ({ month: index + 1, km, percent: Math.round(km / 1.25 * 10) / 10,
+              state: index < 9 ? 'past' : index === 9 ? 'current' : 'future', met: index < 10 && km >= 125 })),
+          } });
+        }
         if (url.pathname === '/api/runs/year-summary') return route.fulfill({ json: {
           shoes: Array.from({ length: 8 }, (_, index) => ({ shoe_id: index + 1,
             monthly_km: Array.from({ length: 12 }, (_, month) => month === 8 ? 18.67 : 0) })),
@@ -379,6 +388,16 @@ async function run(engine, name) {
             const expected = { runs: 1, shoes: 8, monthly: 6, agent: 0, report: 0 }[tab];
             if (tab === 'monthly') {
               assert.equal(await page.locator('#run-heatmap .heatmap-grid .heat-cell:not(.blank)').count(), 365, 'heatmap renders every day');
+              assert.equal(await page.locator('#goal-overview .goal-month').count(), 12, 'goal shows every month');
+              assert.equal(await page.locator('#goal-month-select').count(), 0, 'no separate month picker');
+              const columns = await page.locator('#goal-overview .goal-months').evaluate(node => getComputedStyle(node).gridTemplateColumns.split(' ').length);
+              assert.equal(columns, width <= 760 || (width > 800 && width <= 940) ? 6 : 12, 'monthly goal cells wrap to two rows when narrow');
+              assert.equal(await page.locator('#goal-overview .goal-month-km, #goal-overview .goal-month-name').evaluateAll(nodes => nodes.filter(node => node.scrollWidth > node.clientWidth + 1).length), 0, 'month numbers fit their cells');
+              await page.locator('#goal-edit-toggle').click();
+              await assertLayout(page, `${name} ${theme} ${width} goal editor`);
+              if (screenshots && [390, 1440].includes(width)) await page.locator('.goal-section').screenshot({ path: path.join(screenshots, `${name}-${theme}-goal-${width}.png`) });
+              await page.locator('#cancel-goal-btn').click();
+              assert.equal(await page.locator('#goal-settings').isHidden(), true, 'cancel closes the goal editor');
             }
             assert.equal(await page.locator('.tab-panel.active canvas').count(), expected);
             assert.equal(await page.evaluate(() => Object.values(chartInstances).filter(c => c.canvas.getClientRects().length).length), expected, 'all charts initialized with data');

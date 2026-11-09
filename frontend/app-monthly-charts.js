@@ -20,7 +20,6 @@ function populateYearSelect() {
 function onYearChange() {
   const sel = document.getElementById('year-select');
   selectedYear = parseInt(sel.value, 10) || null;
-  selectedGoalMonth = null;
   renderGoalProgress();
   renderMonthlyYearChart();
   renderShoeStackedChart();

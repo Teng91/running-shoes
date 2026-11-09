@@ -345,17 +345,36 @@ window.__appBootLegacyPoll = window.setInterval(function () {
     <div class="monthly-year-bar">
       <label for="year-select">年份</label>
       <select id="year-select" class="year-select" onchange="onYearChange()"></select>
-      <span class="monthly-year-hint">下方的回顧、趨勢與圖表都會切換到這一年</span>
+      <span class="monthly-year-hint">下方的目標、回顧、趨勢與圖表都會切換到這一年</span>
     </div>
 
-    <div class="goal-settings">
-      <div class="form-group"><label for="goal-start-year">目標開始年份</label><input id="goal-start-year" type="number" min="1900" max="2100"></div>
-      <div class="form-group"><label for="goal-monthly-km">每月目標 (km)</label><input id="goal-monthly-km" type="number" min="0.01" step="0.01"></div>
-      <div class="form-group"><label for="goal-month-select">查看月份</label><select id="goal-month-select" onchange="onGoalMonthChange()"></select></div>
-      <button class="btn btn-primary" id="save-goal-btn" onclick="saveRunningGoal()">儲存目標</button>
-      <span id="goal-settings-status" class="goal-settings-status"></span>
-    </div>
-    <div class="cards" id="goal-cards"></div>
+    <section class="goal-section" aria-labelledby="goal-title">
+      <div class="trends-heading-row">
+        <h2 class="trends-heading" id="goal-title">年度目標</h2>
+        <div class="goal-heading-actions">
+          <span class="goal-target-summary" id="goal-target-summary"></span>
+          <button type="button" class="btn btn-edit" id="goal-edit-toggle" aria-expanded="false" aria-controls="goal-settings" onclick="toggleGoalSettings(true)">調整目標</button>
+        </div>
+      </div>
+      <form class="goal-settings" id="goal-settings" hidden novalidate onsubmit="event.preventDefault(); saveRunningGoal();">
+        <div class="form-group">
+          <label for="goal-monthly-km">每月目標 (km)</label>
+          <input id="goal-monthly-km" type="number" min="0.01" step="0.01" inputmode="decimal" aria-describedby="goal-yearly-hint" oninput="updateGoalYearlyHint()">
+          <span class="goal-field-hint" id="goal-yearly-hint"></span>
+        </div>
+        <div class="form-group">
+          <label for="goal-start-year">從哪一年開始計算</label>
+          <select id="goal-start-year" aria-describedby="goal-start-hint"></select>
+          <span class="goal-field-hint" id="goal-start-hint">更早的年份只看跑量，不計算達成率</span>
+        </div>
+        <div class="goal-settings-actions">
+          <button type="button" class="btn btn-edit" id="cancel-goal-btn" onclick="toggleGoalSettings(false)">取消</button>
+          <button type="submit" class="btn btn-primary" id="save-goal-btn">儲存目標</button>
+        </div>
+      </form>
+      <p id="goal-settings-status" class="goal-settings-status" role="status"></p>
+      <div class="goal-overview" id="goal-overview"></div>
+    </section>
 
     <section class="review-section" aria-labelledby="year-review-title">
       <h2 class="trends-heading" id="year-review-title">年度回顧</h2>

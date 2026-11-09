@@ -83,3 +83,25 @@ def period_distances(db: Session, user_id: int, period: RunPeriod) -> dict[str, 
         .one()
     )
     return {key: round(float(value or 0), 2) for key, value in zip(windows, row, strict=True)}
+
+
+def monthly_run_distances(db: Session, user_id: int, year: int, through: date) -> list[float]:
+    """Twelve logged-run monthly totals for ``year``, ignoring runs dated after ``through``."""
+    end = min(date(year, 12, 31), through)
+    if end.year < year:
+        return [0.0] * 12
+    month = func.substr(Run.date, 6, 2)
+    rows = (
+        db.query(month, func.sum(Run.km))
+        .filter(
+            Run.user_id == user_id,
+            Run.date >= f"{year:04d}-01-01",
+            Run.date <= end.isoformat(),
+        )
+        .group_by(month)
+        .all()
+    )
+    totals = [0.0] * 12
+    for number, km in rows:
+        totals[int(number) - 1] = round_metric(km)
+    return totals

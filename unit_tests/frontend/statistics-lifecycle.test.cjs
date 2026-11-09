@@ -7,41 +7,51 @@ function elements() {
   } });
 }
 
-test('SPEC-017 goal cards display server-only run totals, not manual monthly totals', () => {
+function yearGoal(overrides = {}) {
+  return { active: true, year: 2026, start_year: 2026, monthly_km: 125, yearly_km: 1500, year_state: 'current',
+    focus_month: 10, month_km: 0, month_state: 'current', month_achievement_percent: 0, ytd_km: 50,
+    year_achievement_percent: 3.3, year_remaining_km: 1450, year_expected_km_to_date: 1195.89,
+    year_pace_delta_km: -1145.89, required_weekly_km: 139.04, months_closed: 9, months_met: 0,
+    months: Array.from({ length: 12 }, (_, index) => ({ month: index + 1, km: index === 7 ? 50 : 0,
+      percent: index === 7 ? 40 : 0, state: index < 9 ? 'past' : index === 9 ? 'current' : 'future', met: false })),
+    ...overrides };
+}
+
+test('SPEC-017 goal overview displays server-only run totals, not manual monthly totals', () => {
   const nodes = elements();
   const context = vm.createContext({ document: { getElementById: id => nodes[id] },
     runningGoal: { monthly_km: 125, yearly_km: 1500 },
-    monthlyMileages: [{ km: 150, adjustment_km: 100 }], dashboardGoalSummary: () => '月底結算',
+    monthlyMileages: [{ year: 2026, month: 8, km: 150, adjustment_km: 100 }], dashboardGoalSummary: () => '進行中',
   });
-  vm.runInContext(extract('renderGoalCards'), context);
-  context.renderGoalCards({ active: true, month_km: 50, ytd_km: 50, month_achievement_percent: 40,
-    year_achievement_percent: 3.3, year_remaining_km: 1450 }, 2026, 8);
-  assert.match(nodes['goal-cards'].innerHTML, /50\.00 \/ 125 km/);
-  assert.match(nodes['goal-cards'].innerHTML, /達成 40\.0%/);
-  assert.doesNotMatch(nodes['goal-cards'].innerHTML, /120\.0%|150\.00/);
+  vm.runInContext(['formatGoalKm', 'goalMonthCell', 'goalYearStatus', 'renderGoalOverview'].map(extract).join('\n'), context);
+  context.renderGoalOverview(yearGoal());
+  assert.match(nodes['goal-overview'].innerHTML, /8 月 50\.00 km，未達標，達成 40\.0%/);
+  assert.doesNotMatch(nodes['goal-overview'].innerHTML, /120\.0%|150\.00/);
 });
 
-test('SPEC-017 stale goal requests cannot replace a newer month or session', async () => {
+test('SPEC-017 stale goal requests cannot replace a newer year or session', async () => {
   const nodes = elements(), requests = [], renders = [];
   let current = true;
-  const context = vm.createContext({ document: { getElementById: id => nodes[id] },
+  const context = runContext({ document: { getElementById: id => nodes[id] },
     captureAuthSession: () => ({ generation: 1 }), isCurrentAuthSession: () => current,
-    localDateISO: () => '2026-10-20', runningGoal: { version: 0 },
-    selectedYear: 2026, selectedGoalMonth: 8, esc: v => v,
-    apiGet: () => new Promise(resolve => requests.push(resolve)),
-    renderGoalCards: data => renders.push(data.month_km),
+    localDateISO: () => '2026-10-20', runningGoal: { version: 0 }, selectedYear: 2025, esc: v => v,
+    apiGet: url => new Promise(resolve => requests.push({ url, resolve })),
+    renderGoalOverview: data => renders.push(data.year),
   });
-  vm.runInContext('const goalProgressCache = new Map(); let goalProgressRequestId = 0;\n' + extract('loadGoalProgress'), context);
-  const first = context.loadGoalProgress(2026, 8);
+  vm.runInContext('let goalProgressRequestId = 0;\n' + extract('loadGoalProgress'), context);
+  const first = context.loadGoalProgress(2025);
   await Promise.resolve();
-  context.selectedGoalMonth = 9;
-  const second = context.loadGoalProgress(2026, 9);
-  await Promise.resolve(); requests[1]({ month_km: 10 }); await second;
-  requests[0]({ month_km: 999 }); await first;
-  assert.deepEqual(renders, [10]);
-  const stale = context.loadGoalProgress(2026, 10);
-  await Promise.resolve(); current = false; requests[2]({ month_km: 123 }); await stale;
-  assert.deepEqual(renders, [10]);
+  context.selectedYear = 2026;
+  const second = context.loadGoalProgress(2026);
+  await Promise.resolve();
+  assert.equal(requests[1].url, '/running-goal/year?year=2026');
+  requests[1].resolve(yearGoal()); await second;
+  requests[0].resolve(yearGoal({ year: 2025 })); await first;
+  assert.deepEqual(renders, [2026]);
+  context.resourceStore.invalidate(['goal-progress']);
+  const stale = context.loadGoalProgress(2026);
+  await Promise.resolve(); current = false; requests[2].resolve(yearGoal()); await stale;
+  assert.deepEqual(renders, [2026]);
 });
 
 test('SPEC-017 cross-day limits advance without resetting drafts, month, or tab', () => {

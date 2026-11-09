@@ -41,7 +41,7 @@ module.exports = async function checkDrafts(browser, baseUrl) {
       else if (name === '/api/shoes/active') body = shoe.is_retired ? [] : [shoe];
       else if (name === '/api/shoes/retired') body = shoe.is_retired ? [shoe] : [];
       else if (name === '/api/running-goal') body = goal;
-      else if (name === '/api/running-goal/progress') body = { active: false, start_year: 2026 };
+      else if (name === '/api/running-goal/year') body = { year: Number(new URL(request.url()).searchParams.get('year')), active: false, start_year: 2026, months: [] };
       else if (name === '/api/runs/year-summary') body = { shoes: [] };
       else if (name === '/api/runs/summary') body = { calendar: [], shoe_usage: [], total_km: 0, run_count: 0, run_days: 0 };
       else if (name === '/api/analytics/dashboard') body = {};
@@ -57,6 +57,7 @@ module.exports = async function checkDrafts(browser, baseUrl) {
       const frames = [], original = window.requestAnimationFrame;
       window.requestAnimationFrame = callback => { frames.push(callback); return 0; };
       switchTab('monthly');
+      toggleGoalSettings(true);
       window.requestAnimationFrame = original;
       window.__resumeGoalPanel = () => frames.forEach(callback => callback(performance.now()));
     });
