@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+## [4.7.2] - 2026-11-09
+
+### Fixed
+- 帳號備份 JSON 的檔名改用台灣時間；Fly 主機在 UTC，原本晚上 0～8 點下載的備份會標成前一天（SPEC-047 修訂）。前端備用檔名也改用本地日期。
+
+### Security
+- AI 對話與月報不再把模型供應商的原始錯誤內容（可能含上游細節與帳號識別碼）顯示給使用者，改顯示依狀況整理的訊息（額度已滿、逾時、服務暫停等）；詳細內容只寫進伺服器 log。
+
+### Changed
+- 跑鞋清單、月跑量清單與已存月報的查詢從 router 移到 read model，`/health/ready` 的資料庫探測移到 `migrations.ready_schema_version()`；新增測試確保 router 不再自行查詢資料庫。Asset 4.7.2／shell v56，schema 7 不變。
+
 ## [4.7.1] - 2026-11-09
 
 ### Fixed

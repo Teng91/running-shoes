@@ -1,6 +1,6 @@
 # SPEC-047：程式審查修正、有界歷史與模組解耦
 
-- 狀態：Implemented（v4.7.1 修訂：AC-12～AC-16）
+- 狀態：Implemented（v4.7.1 修訂：AC-12～AC-16；v4.7.2 修訂：AC-17～AC-19）
 - Owner：Running Shoes maintainers
 - 關聯 issue／ADR：[ADR-0004](../adr/0004-request-reliability-and-release-gates.md)、[SPEC-019](019-reliable-requests-and-release-gates.md)、[SPEC-033](033-recovery-and-sync-identity.md)、[SPEC-036](036-security-hardening-and-portable-locks.md)
 
@@ -49,6 +49,14 @@ v4.7.0 上線後再審查發現：
 - 年目標 `monthly_km * 12` 沒有四捨五入，會寫進資料庫並出現在備份。
 - 模型刷新冷卻若設定超過限流紀錄保留時間（1 小時）會被提早清除。
 
+### v4.7.2 修訂
+
+第三次審查發現：
+
+- 帳號備份 JSON 的檔名仍用伺服器時區（v4.7.0 只修了跑鞋匯出）。
+- OpenAI SDK 把供應商的完整錯誤內容放進例外訊息，AI 對話與月報再原樣顯示給使用者。
+- 跑鞋、月跑量、月報清單與 readiness 探測仍由 router 直接查詢資料庫。
+
 ## Non-goals
 
 - 不把 30 個前端 classic script 全面改成 ES modules；全域狀態維持現況，只解除 markup 與函式名稱的耦合。
@@ -78,6 +86,8 @@ v4.7.0 上線後再審查發現：
   - 開機重試按鈕在 inline boot script 綁定。唯一保留的 inline 事件是非阻塞樣式表的 `onload`，它必須在任何 app script 之前執行。
 
 - **v4.7.1**：`retention.prune_account_history()` 對本機（`imported=0`）與備份帶入（`imported=1`）的稽核紀錄分開保留各 5,000 筆。`account_restore.discard_expired_previews()` 由 `create_app` 的 lifespan 在啟動時呼叫，只刪已過期的暫存預覽。`goals.yearly_goal_km()` 統一推算、寫入與匯出的年目標。`settings.RATE_LIMIT_BUCKET_RETENTION_SECONDS` 同時限制冷卻設定與限流紀錄保留時間。
+
+- **v4.7.2**：帳號備份檔名使用 `APP_TIMEZONE`。`llm.user_facing_error()` 依例外類別名稱與 HTTP 狀態回傳整理過的訊息，原始內容以 warning 寫進 `running_shoes.llm` log，模組仍不在啟動時載入 OpenAI SDK。清單查詢移到 `read_models/shoes.shoes_by_status`、`read_models/mileage.list_monthly_mileages` 與新的 `read_models/saved_reports.py`，readiness 探測移到 `migrations.ready_schema_version()`。
 
 ## Security and data isolation
 
@@ -124,6 +134,10 @@ v4.7.0 上線後再審查發現：
 - [x] AC-15：Given `MODEL_REFRESH_COOLDOWN_SECONDS` 大於 3600，When 讀取設定，Then 冷卻限制為 3600，且所有限流視窗都不超過紀錄保留時間。
 - [x] AC-16：Given 歷史復原遇到較新的資料或資料庫未就緒，When 復原或讀取 `/health/ready`，Then 分別回衝突且不覆寫較新資料、回 503。
 
+- [x] AC-17：Given Fly 主機在 UTC，When 台灣時間 00:30 下載帳號備份，Then 檔名是台灣當天日期；前端備用檔名也用本地日期。
+- [x] AC-18：Given 模型供應商回傳限流、額度、驗證、找不到模型、5xx、逾時或連線錯誤，When AI 對話或月報失敗，Then 使用者只看到對應的整理訊息，不含原始內容與識別碼，詳細內容寫進伺服器 log。
+- [x] AC-19：Given 任何 router，When 檢查原始碼，Then 沒有 `.query(`／`.execute(`；搬出的清單查詢只回傳本人資料且排序不變。
+
 ## Test traceability
 
 | Acceptance criterion | Named test / command |
@@ -144,3 +158,6 @@ v4.7.0 上線後再審查發現：
 | AC-14 | `unit_tests/test_goals.py::test_derived_yearly_goal_is_stored_returned_and_exported_at_two_decimals` |
 | AC-15 | `unit_tests/test_security_config.py::test_rate_limit_windows_never_outlive_bucket_retention` |
 | AC-16 | `unit_tests/test_history.py::test_restore_refuses_to_overwrite_later_changes`、`unit_tests/test_health.py::test_readiness_reports_503_for_missing_stale_or_unavailable_databases` |
+| AC-17 | `unit_tests/test_clock.py::test_account_backup_filename_uses_the_application_timezone`、`unit_tests/test_clock.py::test_frontend_export_fallback_names_use_the_local_calendar_day` |
+| AC-18 | `unit_tests/test_llm.py::test_provider_error_bodies_stay_in_the_server_log`、`unit_tests/test_llm.py::test_call_llm_stream_wraps_sdk_errors` |
+| AC-19 | `unit_tests/test_architecture_boundaries.py::test_routers_delegate_every_database_query`、`unit_tests/test_runs_api.py::test_shoe_month_and_report_read_models_return_only_this_account` |

@@ -11,6 +11,7 @@ from backend.auth import get_current_user
 from backend.clock import local_today
 from backend.dependencies import get_db
 from backend.rate_limits import enforce_agent_request_limits
+from backend.read_models.saved_reports import list_saved_reports, saved_report
 from backend.report_llm import stream_report_text
 from backend.report_protocol import report_sse
 from backend.services.reports import generate_report
@@ -50,19 +51,7 @@ def list_monthly_reports(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    rows = db.query(models.MonthlyReport).filter(
-        models.MonthlyReport.user_id == current_user.id
-    ).order_by(models.MonthlyReport.year.desc(), models.MonthlyReport.month.desc()).all()
-    return [
-        {
-            "id": row.id,
-            "year": row.year,
-            "month": row.month,
-            "model": row.model,
-            "updated_at": schemas.serialize_utc_timestamp(row.updated_at) if row.updated_at else None,
-        }
-        for row in rows
-    ]
+    return list_saved_reports(db, current_user.id)
 
 
 @router.get("/{year}/{month}")
@@ -72,20 +61,7 @@ def get_monthly_report(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    row = db.query(models.MonthlyReport).filter(
-        models.MonthlyReport.user_id == current_user.id,
-        models.MonthlyReport.year == year,
-        models.MonthlyReport.month == month,
-    ).first()
-    if row is None:
+    report = saved_report(db, current_user.id, year, month)
+    if report is None:
         raise HTTPException(status_code=404, detail="查無此月份的報告")
-    return {
-        "id": row.id,
-        "year": row.year,
-        "month": row.month,
-        "model": row.model,
-        "content_md": row.content_md,
-        "stats_json": row.stats_json,
-        "created_at": schemas.serialize_utc_timestamp(row.created_at) if row.created_at else None,
-        "updated_at": schemas.serialize_utc_timestamp(row.updated_at) if row.updated_at else None,
-    }
+    return report

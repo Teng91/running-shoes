@@ -50,3 +50,13 @@ def monthly_mileage_stats(db: Session, user_id: int) -> dict:
             {"year": row.year, "month": row.month, "mileage_km": round_metric(row.km)} for row in recent
         ],
     )
+
+
+def list_monthly_mileages(db: Session, user_id: int) -> list[models.MonthlyMileage]:
+    """This account's monthly totals in calendar order."""
+    return (
+        db.query(models.MonthlyMileage)
+        .filter(models.MonthlyMileage.user_id == user_id)
+        .order_by(models.MonthlyMileage.year, models.MonthlyMileage.month)
+        .all()
+    )

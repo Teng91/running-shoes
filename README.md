@@ -102,7 +102,7 @@ running-shoes/
 │   ├── goals.py          # 個人月／年跑量目標與達成率計算
 │   ├── forecasting.py    # 共用退役預估與 user-scoped 批次查詢
 │   ├── shoe_metrics.py   # 共用折數、成本與壽命算術
-│   ├── read_models/      # API／月報／AI 共用的 user-scoped native statistics
+│   ├── read_models/      # API／月報／AI 共用的 user-scoped native statistics 與清單查詢
 │   │   └── shoe_statistics.py # SQL 聚合與每雙鞋 12 筆 recent window
 │   ├── analytics.py      # 首頁洞察與單鞋使用分析
 │   ├── strava_import.py  # 純 Strava CSV 解析、篩選與領域錯誤
@@ -708,6 +708,14 @@ v3.10.3 使用 Asset 3.10.3／shell v38、schema 6、51 個 release assets。
 `registry.fly.io/running-shoes@sha256:bac44457f12adfde6473e9d9a973b330e1bf69eac7e44feb3fb6ed1f5a55429a`，
 不還原業務資料快照。發布驗證涵蓋 verify、40 組版面、雙引擎 CRUD／PWA、main/tag CI 及正式站匿名 release-check。
 
+### 備份檔名、AI 錯誤訊息與 router 解耦（SPEC-047 修訂，v4.7.2）
+
+- 帳號備份 JSON 的檔名改用台灣時間，不再在凌晨標成前一天。
+- AI 對話與月報出錯時顯示整理過的訊息（例如「這個免費模型目前請求過多或今日額度已滿」），不再顯示模型供應商的原始錯誤內容；詳細內容只寫進伺服器 log。
+- 所有 router 都不再自行查詢資料庫，改由 read model 或 service 負責。
+
+Asset 4.7.2／shell v56、51 個 release assets、schema 7 不變，可直接回滾至 v4.7.1 image。
+
 ### 保留上限與小修正（SPEC-047 修訂，v4.7.1）
 
 - 匯入含異動歷史的備份不再擠掉本機可復原的紀錄：本機與備份帶入的歷史各保留最新 5,000 筆。
@@ -849,7 +857,7 @@ Playwright／Chromium／WebKit 齊全時，也會執行版面測試。
 避免每次停止都重跑。Hook 不會呼叫其他模型、外部 API，或傳送提示、diff、原始碼與測試輸出。
 GitHub Actions 仍會在 push／pull request 執行 `verify`，並以三個可獨立重跑的 browser jobs 執行完整版面矩陣、真實 CRUD E2E 與 PWA 升級／離線測試；Dependabot 每月以單一 PR 合併 GitHub Actions 更新；Python 只接收安全性更新 PR，例行升級依下方 `uv pip compile --universal` 步驟手動重編鎖定檔（Dependabot 產生的鎖定檔會遺失 Windows 條件）。
 
-本次驗證基線為 Python **605 passed**、前端回歸測試 **166 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
+本次驗證基線為 Python **616 passed**、前端回歸測試 **166 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
 版面檢查涵蓋 WebKit／Chromium、亮／暗模式與 10 組直橫向尺寸，共 40 組設定，檢查四個功能分頁與月報、三個認證表單、圖表、全部彈窗、行內編輯、停用／錯誤及空資料狀態。
 
 主要表單、工具列與彈窗操作統一為 44px 控制項；桌面表格內的緊湊操作為 36px，手機至少 44px。

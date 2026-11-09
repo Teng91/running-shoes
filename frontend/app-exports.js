@@ -39,7 +39,7 @@ async function doExport() {
 
     // Get filename from Content-Disposition header
     const disposition = res.headers.get('Content-Disposition');
-    let filename = `running_shoes_${backendMode}_${new Date().toISOString().slice(0,10)}.${format}`;
+    let filename = `running_shoes_${backendMode}_${localDateISO()}.${format}`;
     if (disposition) {
       const match = disposition.match(/filename="([^"]+)"/);
       if (match) filename = match[1];

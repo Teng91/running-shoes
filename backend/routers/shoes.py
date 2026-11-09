@@ -9,6 +9,7 @@ from backend import models, schemas
 from backend.auth import get_current_user
 from backend.dependencies import OperationKey, get_db, get_settings
 from backend.forecasting import forecasts_for_shoes
+from backend.read_models import shoes as shoe_reads
 from backend.routers.errors import service_errors
 from backend.services import shoes as shoes_service
 from backend.services.operations import legacy_operation
@@ -40,15 +41,7 @@ def list_active(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    rows = (
-        db.query(models.Shoe)
-        .filter(
-            models.Shoe.is_retired.is_(False),
-            models.Shoe.is_deleted.is_(False),
-            models.Shoe.user_id == current_user.id,
-        )
-        .all()
-    )
+    rows = shoe_reads.shoes_by_status(db, current_user.id, retired=False)
     return _shoe_outputs(db, current_user.id, rows)
 
 
@@ -57,15 +50,7 @@ def list_retired(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    rows = (
-        db.query(models.Shoe)
-        .filter(
-            models.Shoe.is_retired.is_(True),
-            models.Shoe.is_deleted.is_(False),
-            models.Shoe.user_id == current_user.id,
-        )
-        .all()
-    )
+    rows = shoe_reads.shoes_by_status(db, current_user.id, retired=True)
     return _shoe_outputs(db, current_user.id, rows)
 
 
