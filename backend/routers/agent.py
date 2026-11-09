@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from backend import agent as agent_service
 from backend import llm, models, schemas
 from backend.auth import get_current_user
-from backend.database import get_db
+from backend.dependencies import get_db
 from backend.rate_limits import enforce_agent_request_limits, enforce_model_refresh_limits
 
 router = APIRouter(prefix="/api/agent", tags=["agent"])
@@ -20,10 +20,10 @@ def list_agent_providers(current_user: models.User = Depends(get_current_user)):
 
 @router.post("/models/refresh")
 def refresh_agent_models(
+    request: Request,
     current_user: models.User = Depends(get_current_user),
-    db: Session = Depends(get_db),
 ):
-    enforce_model_refresh_limits(current_user.id, db)
+    enforce_model_refresh_limits(request, current_user.id)
     return llm.list_providers(force=True)
 
 
@@ -34,7 +34,7 @@ def agent_chat_stream(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    enforce_agent_request_limits(request, current_user.id, db)
+    enforce_agent_request_limits(request, current_user.id)
     try:
         provider = llm.LLMProvider.from_str(payload.provider)
         model = llm.resolve_allowed_model(provider, payload.model)

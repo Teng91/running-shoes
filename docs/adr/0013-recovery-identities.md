@@ -1,6 +1,6 @@
 # ADR-0013：復原來源身分與提交後讀取
 
-- 狀態：Accepted
+- 狀態：Accepted（本機刪除證據改由 `run_tombstones` 提供，見 [ADR-0015](0015-bounded-history-and-injected-runtime.md)）
 - 日期：2026-10-25
 - 規格：[SPEC-033](../specs/033-recovery-and-sync-identity.md)
 

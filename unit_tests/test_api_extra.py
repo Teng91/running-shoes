@@ -17,10 +17,9 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from backend import llm, models, rate_limits, schemas
 from backend.auth import create_access_token, get_password_hash
-from backend.database import get_db
+from backend.dependencies import get_db
 from backend.main import app
 from backend.models import MonthlyMileage, Shoe
-from backend.rate_limits import _enforce_agent_rate_limit
 from backend.routers.exports import export_shoes
 from backend.routers.monthly import (
     create_monthly_mileage,
@@ -44,6 +43,16 @@ def client(db):
 
 def _auth(token):
     return {"Authorization": f"Bearer {token}"}
+
+
+def _limits(monkeypatch, **values):
+    """Rate limits are injected settings, read per request (SPEC-047)."""
+    monkeypatch.setattr(app.state, "settings", replace(app.state.settings, **values))
+
+
+def _bucket(db, scope, key):
+    db.expire_all()
+    return db.query(models.RateLimitBucket).filter_by(scope=scope, bucket_key=key).one_or_none()
 
 
 def _add_export_shoes(db, user_id):
@@ -252,8 +261,7 @@ def test_agent_provider_routes_delegate_to_llm(client, user_with_token, monkeypa
 def test_model_refresh_has_per_user_cooldown(
     client, db, user_with_token, monkeypatch
 ):
-    user, token = user_with_token
-    rate_limits._model_refresh_times.pop(user.id, None)
+    _user, token = user_with_token
     monkeypatch.setattr("backend.routers.agent.llm.list_providers", MagicMock(return_value=[]))
     first = client.post("/api/agent/models/refresh", headers=_auth(token))
     second = client.post("/api/agent/models/refresh", headers=_auth(token))
@@ -263,13 +271,12 @@ def test_model_refresh_has_per_user_cooldown(
         scope="model-refresh-global", bucket_key="global"
     ).one()
     assert bucket.event_count == 1
-    rate_limits._model_refresh_times.pop(user.id, None)
 
 
 def test_model_refresh_has_global_limit_across_users(
     client, db, user_with_token, monkeypatch
 ):
-    first_user, first_token = user_with_token
+    _first_user, first_token = user_with_token
     second_user = models.User(
         username="second-refresh-user",
         hashed_password=get_password_hash("pass1234"),
@@ -277,10 +284,7 @@ def test_model_refresh_has_global_limit_across_users(
     db.add(second_user)
     db.commit()
     second_token = create_access_token(data={"sub": second_user.username})
-    rate_limits._model_refresh_global_events.clear()
-    rate_limits._model_refresh_times.pop(first_user.id, None)
-    rate_limits._model_refresh_times.pop(second_user.id, None)
-    monkeypatch.setattr(rate_limits, "MODEL_REFRESH_GLOBAL_PER_MINUTE", 1)
+    _limits(monkeypatch, model_refresh_global_per_minute=1)
     monkeypatch.setattr("backend.routers.agent.llm.list_providers", MagicMock(return_value=[]))
 
     first = client.post("/api/agent/models/refresh", headers=_auth(first_token))
@@ -289,10 +293,7 @@ def test_model_refresh_has_global_limit_across_users(
     assert first.status_code == 200
     assert second.status_code == 429
     assert "模型列表更新" in second.json()["detail"]
-    assert second_user.id not in rate_limits._model_refresh_times
-    rate_limits._model_refresh_global_events.clear()
-    rate_limits._model_refresh_times.pop(first_user.id, None)
-    rate_limits._model_refresh_times.pop(second_user.id, None)
+    assert _bucket(db, "model-refresh-user", str(second_user.id)) is None
 
 
 def test_registration_capacity_is_enforced(client, db, monkeypatch):
@@ -311,9 +312,7 @@ def test_registration_capacity_is_enforced(client, db, monkeypatch):
 
 
 def test_auth_endpoint_rate_limit_uses_client_ip(client, monkeypatch):
-    rate_limits._auth_rate_events.clear()
-    rate_limits._auth_global_rate_events.clear()
-    monkeypatch.setattr(rate_limits, "AUTH_RATE_LIMIT_PER_MINUTE", 1)
+    _limits(monkeypatch, auth_rate_limit_per_minute=1)
     headers = {"Fly-Client-IP": "198.51.100.9"}
     first = client.post(
         "/api/auth/login", headers=headers,
@@ -325,18 +324,14 @@ def test_auth_endpoint_rate_limit_uses_client_ip(client, monkeypatch):
     )
     assert first.status_code == 401
     assert second.status_code == 429
-    rate_limits._auth_rate_events.clear()
-    rate_limits._auth_global_rate_events.clear()
 
 
 def test_auth_global_limit_rejects_before_creating_new_ip_bucket(
-    client, monkeypatch
+    client, db, monkeypatch
 ):
-    rate_limits._auth_rate_events.clear()
-    rate_limits._auth_global_rate_events.clear()
-    monkeypatch.setattr(rate_limits, "AUTH_RATE_LIMIT_PER_MINUTE", 100)
-    monkeypatch.setattr(rate_limits, "AUTH_GLOBAL_RATE_LIMIT_PER_MINUTE", 1)
-    monkeypatch.setattr(rate_limits, "IS_FLY_RUNTIME", True)
+    _limits(monkeypatch, auth_rate_limit_per_minute=100)
+    _limits(monkeypatch, auth_global_rate_limit_per_minute=1)
+    _limits(monkeypatch, fly_app_name="running-shoes")
 
     payload = {"username": "nobody", "password": "pass1234"}
     first = client.post(
@@ -352,20 +347,16 @@ def test_auth_global_limit_rejects_before_creating_new_ip_bucket(
 
     assert first.status_code == 401
     assert second.status_code == 429
-    assert "198.51.100.21" in rate_limits._auth_rate_events
-    assert "198.51.100.22" not in rate_limits._auth_rate_events
-    rate_limits._auth_rate_events.clear()
-    rate_limits._auth_global_rate_events.clear()
+    assert _bucket(db, "auth-ip", "198.51.100.21") is not None
+    assert _bucket(db, "auth-ip", "198.51.100.22") is None
 
 
 def test_throttled_client_does_not_consume_global_auth_budget(client, db, monkeypatch):
     # Regression: an address over its own limit used to spend the global budget
     # on every rejected request, letting one client lock everyone out of login.
-    rate_limits._auth_rate_events.clear()
-    rate_limits._auth_global_rate_events.clear()
-    monkeypatch.setattr(rate_limits, "AUTH_RATE_LIMIT_PER_MINUTE", 1)
-    monkeypatch.setattr(rate_limits, "AUTH_GLOBAL_RATE_LIMIT_PER_MINUTE", 3)
-    monkeypatch.setattr(rate_limits, "IS_FLY_RUNTIME", True)
+    _limits(monkeypatch, auth_rate_limit_per_minute=1)
+    _limits(monkeypatch, auth_global_rate_limit_per_minute=3)
+    _limits(monkeypatch, fly_app_name="running-shoes")
     payload = {"username": "nobody", "password": "pass1234"}
     attacker = {"Fly-Client-IP": "198.51.100.31"}
     responses = [client.post("/api/auth/login", headers=attacker, json=payload) for _ in range(5)]
@@ -376,34 +367,28 @@ def test_throttled_client_does_not_consume_global_auth_budget(client, db, monkey
     assert global_bucket.event_count == 1
     other = client.post("/api/auth/login", headers={"Fly-Client-IP": "198.51.100.32"}, json=payload)
     assert other.status_code == 401
-    rate_limits._auth_rate_events.clear()
-    rate_limits._auth_global_rate_events.clear()
 
 
 def test_throttled_account_does_not_consume_global_agent_budget(db, monkeypatch):
-    rate_limits._agent_rate_events.clear()
-    rate_limits._agent_ip_rate_events.clear()
-    rate_limits._agent_global_rate_events.clear()
-    monkeypatch.setattr(rate_limits, "AGENT_RATE_LIMIT_PER_MINUTE", 1)
-    request = SimpleNamespace(headers={}, client=SimpleNamespace(host="198.51.100.41"))
-    rate_limits.enforce_agent_request_limits(request, 4242, db)
+    _limits(monkeypatch, agent_rate_limit_per_minute=1)
+    request = SimpleNamespace(
+        headers={}, client=SimpleNamespace(host="198.51.100.41"),
+        app=SimpleNamespace(state=SimpleNamespace(
+            settings=replace(app.state.settings, agent_rate_limit_per_minute=1), db_engine=db.get_bind(),
+        )),
+    )
+    rate_limits.enforce_agent_request_limits(request, 4242)
     for _ in range(3):
         with pytest.raises(HTTPException) as exc_info:
-            rate_limits.enforce_agent_request_limits(request, 4242, db)
+            rate_limits.enforce_agent_request_limits(request, 4242)
         assert exc_info.value.status_code == 429
     global_bucket = db.query(models.RateLimitBucket).filter_by(
         scope="agent-global", bucket_key="global"
     ).one()
     assert global_bucket.event_count == 1
-    assert len(rate_limits._agent_global_rate_events["global"]) == 1
-    rate_limits._agent_rate_events.clear()
-    rate_limits._agent_ip_rate_events.clear()
-    rate_limits._agent_global_rate_events.clear()
 
 
 def test_repeated_password_failures_lock_only_that_account(client, db, monkeypatch):
-    rate_limits._auth_rate_events.clear()
-    rate_limits._auth_global_rate_events.clear()
     monkeypatch.setattr(rate_limits, "LOGIN_FAILURE_LIMIT", 2)
     db.add(models.User(username="victim", hashed_password=get_password_hash("correct-horse")))
     db.add(models.User(username="bystander", hashed_password=get_password_hash("correct-horse")))
@@ -420,8 +405,24 @@ def test_repeated_password_failures_lock_only_that_account(client, db, monkeypat
     assert change.status_code == 429
     other = client.post("/api/auth/login", json={"username": "bystander", "password": "correct-horse"})
     assert other.status_code == 200
-    rate_limits._auth_rate_events.clear()
-    rate_limits._auth_global_rate_events.clear()
+
+
+def test_failed_logins_lock_one_address_before_the_whole_account(client, db, monkeypatch):
+    """SPEC-047: one address cannot lock the owner out; only many addresses lock the account."""
+    monkeypatch.setattr(rate_limits, "LOGIN_FAILURE_LIMIT", 2)
+    monkeypatch.setattr(rate_limits, "ACCOUNT_FAILURE_LIMIT", 3)
+    _limits(monkeypatch, fly_app_name="running-shoes")
+    db.add(models.User(username="owner", hashed_password=get_password_hash("correct-horse")))
+    db.commit()
+    wrong = {"username": "owner", "password": "wrong-pass"}
+    right = {"username": "owner", "password": "correct-horse"}
+    attacker, owner, second = ({"Fly-Client-IP": ip} for ip in ("198.51.100.61", "198.51.100.62", "198.51.100.63"))
+    assert [client.post("/api/auth/login", headers=attacker, json=wrong).status_code for _ in range(3)] == [401, 401, 429]
+    assert client.post("/api/auth/login", headers=owner, json=right).status_code == 200
+    assert client.post("/api/auth/login", headers=second, json=wrong).status_code == 401
+    locked = client.post("/api/auth/login", headers=owner, json=right)
+    assert locked.status_code == 429
+    assert int(locked.headers["Retry-After"]) > 60
 
 
 def test_unknown_username_still_runs_a_password_hash_check(client, monkeypatch):
@@ -446,13 +447,10 @@ def test_shoe_record_quota_is_enforced(client, db, user_with_token, monkeypatch)
 
 
 def test_agent_ip_and_global_limits_run_before_llm(client, user_with_token, monkeypatch):
-    user, token = user_with_token
-    rate_limits._agent_rate_events.clear()
-    rate_limits._agent_ip_rate_events.clear()
-    rate_limits._agent_global_rate_events.clear()
-    monkeypatch.setattr(rate_limits, "AGENT_IP_RATE_LIMIT_PER_MINUTE", 1)
-    monkeypatch.setattr(rate_limits, "AGENT_RATE_LIMIT_PER_MINUTE", 10)
-    monkeypatch.setattr(rate_limits, "AGENT_GLOBAL_RATE_LIMIT_PER_MINUTE", 10)
+    _user, token = user_with_token
+    _limits(monkeypatch, agent_ip_rate_limit_per_minute=1)
+    _limits(monkeypatch, agent_rate_limit_per_minute=10)
+    _limits(monkeypatch, agent_global_rate_limit_per_minute=10)
     monkeypatch.setattr("backend.routers.agent.llm.resolve_allowed_model", MagicMock(return_value="free"))
     run_agent = MagicMock(return_value=iter(['data: {"type":"done"}\n\n']))
     monkeypatch.setattr("backend.routers.agent.agent_service.run_agent_stream", run_agent)
@@ -466,22 +464,16 @@ def test_agent_ip_and_global_limits_run_before_llm(client, user_with_token, monk
     assert first.status_code == 200
     assert second.status_code == 429
     assert run_agent.call_count == 1
-    rate_limits._agent_rate_events.pop(user.id, None)
-    rate_limits._agent_ip_rate_events.clear()
-    rate_limits._agent_global_rate_events.clear()
 
 
 def test_agent_global_limit_rejects_before_creating_ip_or_account_buckets(
-    client, user_with_token, monkeypatch
+    client, db, user_with_token, monkeypatch
 ):
     user, token = user_with_token
-    rate_limits._agent_rate_events.clear()
-    rate_limits._agent_ip_rate_events.clear()
-    rate_limits._agent_global_rate_events.clear()
-    monkeypatch.setattr(rate_limits, "AGENT_GLOBAL_RATE_LIMIT_PER_MINUTE", 1)
-    monkeypatch.setattr(rate_limits, "AGENT_IP_RATE_LIMIT_PER_MINUTE", 100)
-    monkeypatch.setattr(rate_limits, "AGENT_RATE_LIMIT_PER_MINUTE", 100)
-    monkeypatch.setattr(rate_limits, "IS_FLY_RUNTIME", True)
+    _limits(monkeypatch, agent_global_rate_limit_per_minute=1)
+    _limits(monkeypatch, agent_ip_rate_limit_per_minute=100)
+    _limits(monkeypatch, agent_rate_limit_per_minute=100)
+    _limits(monkeypatch, fly_app_name="running-shoes")
     monkeypatch.setattr("backend.routers.agent.llm.resolve_allowed_model", MagicMock(return_value="free"))
     monkeypatch.setattr(
         "backend.routers.agent.agent_service.run_agent_stream",
@@ -501,12 +493,9 @@ def test_agent_global_limit_rejects_before_creating_ip_or_account_buckets(
 
     assert first.status_code == 200
     assert second.status_code == 429
-    assert "198.51.100.31" in rate_limits._agent_ip_rate_events
-    assert "198.51.100.32" not in rate_limits._agent_ip_rate_events
-    assert len(rate_limits._agent_rate_events[user.id]) == 1
-    rate_limits._agent_rate_events.clear()
-    rate_limits._agent_ip_rate_events.clear()
-    rate_limits._agent_global_rate_events.clear()
+    assert _bucket(db, "agent-ip", "198.51.100.31") is not None
+    assert _bucket(db, "agent-ip", "198.51.100.32") is None
+    assert _bucket(db, "agent-user", str(user.id)).event_count == 1
 
 
 def test_agent_stream_route_forwards_payload_and_user(client, user_with_token, monkeypatch):
@@ -573,19 +562,31 @@ def test_agent_stream_rejects_malformed_or_oversized_payload(client, user_with_t
     assert oversized.status_code == 422
 
 
-def test_agent_rate_limit_uses_per_user_sliding_window(monkeypatch):
-    user_id = 987654
-    rate_limits._agent_rate_events.pop(user_id, None)
-    monkeypatch.setattr(rate_limits, "AGENT_RATE_LIMIT_PER_MINUTE", 2)
-
-    _enforce_agent_rate_limit(user_id, now=100)
-    _enforce_agent_rate_limit(user_id, now=101)
+def test_rate_limit_windows_reset_after_their_fixed_window(db):
+    window = rate_limits.Window("agent-user", "987654", 2, "AI 請求過於頻繁，請稍後再試。")
+    engine = db.get_bind()
+    rate_limits.consume(engine, [window], now=100)
+    rate_limits.consume(engine, [window], now=101)
     with pytest.raises(HTTPException) as exc_info:
-        _enforce_agent_rate_limit(user_id, now=102)
+        rate_limits.consume(engine, [window], now=102)
     assert exc_info.value.status_code == 429
     assert exc_info.value.headers == {"Retry-After": "58"}
 
-    _enforce_agent_rate_limit(user_id, now=161)
+    rate_limits.consume(engine, [window], now=161)
+
+
+def test_rate_limit_checks_never_commit_the_request_session(db, user_with_token):
+    """SPEC-047: throttling uses its own transaction; pending request work is untouched."""
+    user, _ = user_with_token
+    request = SimpleNamespace(
+        headers={}, client=SimpleNamespace(host="198.51.100.51"),
+        app=SimpleNamespace(state=SimpleNamespace(settings=app.state.settings, db_engine=db.get_bind())),
+    )
+    db.add(Shoe(user_id=user.id, brand="Pending", model="Uncommitted", date="2026-01-01"))
+    rate_limits.enforce_auth_rate_limit(request)
+    db.rollback()
+    assert db.query(Shoe).filter_by(brand="Pending").count() == 0
+    assert _bucket(db, "auth-global", "global").event_count == 1
 
 
 def test_update_shoe_not_found(client, user_with_token):
@@ -765,7 +766,7 @@ def test_static_asset_and_non404_http_errors(client):
 
     service_worker = client.get("/service-worker.js")
     assert service_worker.status_code == 200
-    assert "running-shoes-shell-v53" in service_worker.text
+    assert "running-shoes-shell-v54" in service_worker.text
 
     agent_script = client.get("/app-agent.js")
     assert agent_script.status_code == 200

@@ -12,7 +12,7 @@ from backend.backup_contract import AccountBackup, backup_fingerprint, parse_bac
 from backend.services.account_import import execute_import
 from backend.services.account_import_plan import RestoreMode, build_import_plan, summarize_import
 from backend.services.errors import Conflict, Invalid
-from backend.services.run_requests import payload_hash
+from backend.services.fingerprints import payload_hash
 from backend.services.transactions import write_transaction
 from backend.settings import Settings
 

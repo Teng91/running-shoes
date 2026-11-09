@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from backend import models
 from backend.auth import get_current_user
-from backend.database import get_db
+from backend.dependencies import get_db
 from backend.read_models.spending import spending_summary
 
 router = APIRouter(tags=["spending"])

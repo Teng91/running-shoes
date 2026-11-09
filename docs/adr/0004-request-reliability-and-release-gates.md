@@ -1,6 +1,6 @@
 # ADR-0004：持久化新增操作回執與唯讀發布檢查
 
-- 狀態：Accepted
+- 狀態：Accepted（`run_creation_requests` 決策由 [ADR-0015](0015-bounded-history-and-injected-runtime.md) 取代）
 - 日期：2026-10-22
 - 規格：SPEC-019
 

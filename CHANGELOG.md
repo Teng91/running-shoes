@@ -2,6 +2,28 @@
 
 ## [Unreleased]
 
+## [4.7.0] - 2026-11-09
+
+### Fixed
+- Strava 日期（SPEC-047）：匯出的 UTC 時間改換算為台灣日期，清晨跑步不再記到前一天或上個月；重新匯入時會修正仍停在舊 UTC 日期的紀錄並移動月跑量，手動改過的日期保留。
+- `PUT /api/runs/{id}` 送 `expected_version: null` 改回 422，不再誤報 409「已被更新」；匯出檔名改用台灣時間；同月份新增跑步不再浪費月跑量 ID。
+- 稽核 trigger 每次啟動依目前欄位重建，避免日後增刪欄位造成復原缺欄或寫入失敗。
+- 測試的 SyntaxWarning（無效跳脫字元）與 330 個未關閉 SQLite 連線警告。
+
+### Security
+- 登入鎖定改為兩層：同一來源對同一帳號輸錯 10 次只暫停該來源，跨來源累計 100 次才暫停整個帳號，避免他人把已知帳號鎖在外面。
+- 正式環境要求 `SECRET_KEY` 至少 32 bytes，缺少或太短時拒絕啟動；開發用預設密鑰也達 32 bytes。
+
+### Changed
+- Schema 6 → 7：新增 `run_tombstones`（刪除身分不再由稽核紀錄推導），替 `mutation_receipts` 加上 `recorded_at`，移除被取代的 `run_creation_requests`；提供 `scripts/rollback_schema_seven.sql`。
+- 每個帳號保留最新 5,000 筆異動紀錄、1,000 筆操作回執與 50,000 筆刪除身分，資料庫不再無上限成長。
+- 解耦：
+  - 匯入 backend 模組不做 I/O，`create_app()` 唯一驗證密鑰並建立 engine。
+  - 限流只用 SQLite、在獨立交易中 all-or-nothing 計數，限額來自注入設定。
+  - 跑步清單與 Strava 歷史查詢移到 read model；上傳上限文字依實際限制產生。
+  - 鞋款驗證規則各只定義一次；操作分派改為固定註冊表；`change_password` 改經 `write_transaction`。
+- 前端以 `app-actions.js` 委派 `data-*` 動作，移除約 80 個 inline 事件。Asset 4.7.0／shell v54、51 個 release assets。
+
 ## [4.6.0] - 2026-11-09
 
 ### Added

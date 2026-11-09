@@ -50,18 +50,20 @@ def test_fly_deployment_enables_production_secret_checks():
     assert config["env"].get("SEED_DATA") != "true"
 
 
-def test_client_ip_header_is_only_trusted_on_fly(monkeypatch):
+def test_client_ip_header_is_only_trusted_on_fly():
+    from dataclasses import replace
+
+    from backend.settings import settings
+
     request = SimpleNamespace(
         headers={"fly-client-ip": "198.51.100.9"},
         client=SimpleNamespace(host="203.0.113.7"),
     )
-    monkeypatch.setattr(rate_limits, "IS_FLY_RUNTIME", False)
-    assert rate_limits._client_key(request) == "203.0.113.7"
-
-    monkeypatch.setattr(rate_limits, "IS_FLY_RUNTIME", True)
-    assert rate_limits._client_key(request) == "198.51.100.9"
+    local, fly = replace(settings, fly_app_name=None), replace(settings, fly_app_name="running-shoes")
+    assert rate_limits.client_key(request, local) == "203.0.113.7"
+    assert rate_limits.client_key(request, fly) == "198.51.100.9"
     request.headers["fly-client-ip"] = "not-an-ip"
-    assert rate_limits._client_key(request) == "203.0.113.7"
+    assert rate_limits.client_key(request, fly) == "203.0.113.7"
 
 
 def test_docker_enables_production_secret_checks():
@@ -151,8 +153,8 @@ def test_run_log_frontend_keeps_calendar_actions_and_select_state_safe():
 
     assert 'id="run-calendar"' in source
     assert "Array.from({length:daysInMonth}" in source
-    assert "selectRunCalendarDate('${date}',event)" in source
-    assert "event.stopPropagation();openRunModal(${run.id})" in source
+    assert 'data-click="select-calendar-date" data-date="${date}"' in source
+    assert 'data-click="open-run" data-run-id="${run.id}"' in source
     assert 'id="run-shoe-legend"' in source
     assert "percentage.toFixed(1)" in source
     assert "km.toFixed(2)} km" in source

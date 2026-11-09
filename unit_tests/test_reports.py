@@ -12,15 +12,15 @@ from sqlalchemy.pool import StaticPool
 
 from backend import llm, reports, schemas
 from backend.auth import create_access_token, get_password_hash
-from backend.database import Base, get_db
+from backend.database import Base
+from backend.dependencies import get_db
 from backend.main import app
 from backend.models import MonthlyReport, Run, Shoe, User
-from backend.rate_limits import _agent_global_rate_events, _agent_ip_rate_events, _agent_rate_events
 from backend.routers import reports as report_routes
 
 
 @pytest.fixture
-def db():
+def db(dispose_test_engines):
     engine = create_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},
@@ -43,17 +43,6 @@ def client(db):
     with TestClient(app) as c:
         yield c
     app.dependency_overrides.clear()
-
-
-@pytest.fixture(autouse=True)
-def clear_agent_rate_buckets():
-    _agent_rate_events.clear()
-    _agent_ip_rate_events.clear()
-    _agent_global_rate_events.clear()
-    yield
-    _agent_rate_events.clear()
-    _agent_ip_rate_events.clear()
-    _agent_global_rate_events.clear()
 
 
 @pytest.fixture

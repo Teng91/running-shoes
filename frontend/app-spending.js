@@ -23,7 +23,7 @@ async function loadSpendingData() {
     if (document.querySelector('.tab-panel.active')?.dataset.panel === 'shoes') renderSpendingCharts();
   } catch (error) {
     if (error.name === 'AbortError' || !isCurrentAuthSession(session) || requestId !== spendingLoadRequestId) return;
-    document.getElementById('spending-cards').innerHTML = `<div class="card"><div class="card-sub">支出載入失敗：${esc(error.message)}</div><button class="btn btn-edit" onclick="loadSpendingData()">重試</button></div>`;
+    document.getElementById('spending-cards').innerHTML = `<div class="card"><div class="card-sub">支出載入失敗：${esc(error.message)}</div><button class="btn btn-edit" data-click="load-spending">重試</button></div>`;
   } finally {
     if (requestId === spendingLoadRequestId) spendingLoadPending = false;
   }

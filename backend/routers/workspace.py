@@ -9,8 +9,7 @@ from starlette.concurrency import run_in_threadpool
 
 from backend import models, schemas
 from backend.auth import get_current_user
-from backend.database import get_db
-from backend.dependencies import get_settings
+from backend.dependencies import get_db, get_settings
 from backend.routers.errors import service_errors
 from backend.services import account_restore, history, operations
 from backend.settings import Settings

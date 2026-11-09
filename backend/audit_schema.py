@@ -9,6 +9,12 @@ AUDITED = {"shoes": models.Shoe, "runs": models.Run,
 
 
 def install_audit_triggers(engine: Engine) -> None:
+    """(Re)build every trigger from current model metadata in one transaction.
+
+    Triggers embed the audited column list. Rebuilding on every startup keeps
+    snapshots complete after a column is added and avoids a trigger that still
+    references a dropped or renamed column and would fail every write.
+    """
     with engine.begin() as connection:
         for table, model in AUDITED.items():
             for action in ("INSERT", "UPDATE", "DELETE"):
@@ -29,8 +35,9 @@ def install_audit_triggers(engine: Engine) -> None:
                     "ON CONFLICT(name) DO UPDATE SET next_id=max(next_id,excluded.next_id);"
                     if action == "DELETE" and table in {"runs", "monthly_mileages"} else ""
                 )
+                connection.exec_driver_sql(f"DROP TRIGGER IF EXISTS audit_{table}_{action.lower()}")
                 connection.exec_driver_sql(f"""
-                    CREATE TRIGGER IF NOT EXISTS audit_{table}_{action.lower()}
+                    CREATE TRIGGER audit_{table}_{action.lower()}
                     AFTER {action} ON {table} BEGIN
                       {sequence}
                       UPDATE users SET data_revision = data_revision + 1 WHERE id = {alias}.user_id;
@@ -46,8 +53,9 @@ def install_audit_triggers(engine: Engine) -> None:
         for table in ("monthly_reports", "strava_imports"):
             for action in ("INSERT", "UPDATE", "DELETE"):
                 alias = "OLD" if action == "DELETE" else "NEW"
+                connection.exec_driver_sql(f"DROP TRIGGER IF EXISTS revision_{table}_{action.lower()}")
                 connection.exec_driver_sql(f"""
-                    CREATE TRIGGER IF NOT EXISTS revision_{table}_{action.lower()}
+                    CREATE TRIGGER revision_{table}_{action.lower()}
                     AFTER {action} ON {table} BEGIN
                       UPDATE users SET data_revision = data_revision + 1 WHERE id = {alias}.user_id;
                     END

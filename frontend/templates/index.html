@@ -46,10 +46,12 @@ body { margin: 0; opacity: 1 !important; }
     <div class="app-boot-spinner" aria-hidden="true"></div>
     <h1>跑鞋追蹤</h1>
     <p id="app-boot-message">正在準備應用程式…</p>
-    <button class="app-boot-retry" id="app-boot-retry" type="button" onclick="window.location.reload()" hidden>重新載入</button>
+    <button class="app-boot-retry" id="app-boot-retry" type="button" hidden>重新載入</button>
   </div>
 </div>
 <script>
+// Wired here, not by the app bundle, so retry still works when the bundle fails to load.
+document.getElementById('app-boot-retry').addEventListener('click', function () { window.location.reload(); });
 // Compatibility bridge: a previously cached app bundle does not know about
 // #app-boot, so dismiss it once that bundle reveals either top-level view.
 window.__appBootWatchdog = window.setTimeout(function () {
@@ -78,7 +80,7 @@ window.__appBootLegacyPoll = window.setInterval(function () {
 <div class="container" id="auth-view" style="display:none;">
 
   <!-- Login Form -->
-  <form class="auth-box" id="login-form" autocomplete="off" onsubmit="handleLogin(); return false;">
+  <form class="auth-box" id="login-form" autocomplete="off" data-submit="login">
     <h1>跑鞋追蹤</h1>
     <div class="form-group">
       <label for="login-username">帳號</label>
@@ -91,14 +93,14 @@ window.__appBootLegacyPoll = window.setInterval(function () {
     <div class="auth-error" id="auth-error"></div>
     <button type="submit" class="btn btn-primary" style="width:100%;margin-top:8px;">登入</button>
     <div style="text-align:center;margin-top:12px;">
-      <a href="#" onclick="showChangeForm();return false;" style="color:var(--text-dim);font-size:13px;">更改密碼</a>
+      <a href="#" data-click="show-change-form" style="color:var(--text-dim);font-size:13px;">更改密碼</a>
       <span style="color:var(--border);margin:0 8px;">|</span>
-      <a href="#" onclick="showRegisterForm();return false;" style="color:var(--accent-light);font-size:13px;">註冊</a>
+      <a href="#" data-click="show-register-form" style="color:var(--accent-light);font-size:13px;">註冊</a>
     </div>
   </form>
 
   <!-- Register Form -->
-  <form class="auth-box" id="register-form" style="display:none;" onsubmit="handleRegister(); return false;">
+  <form class="auth-box" id="register-form" style="display:none;" data-submit="register">
     <h1>註冊帳號</h1>
     <div class="form-group">
       <label for="reg-username">帳號</label>
@@ -115,12 +117,12 @@ window.__appBootLegacyPoll = window.setInterval(function () {
     <div class="auth-error" id="reg-error"></div>
     <button type="submit" class="btn btn-primary" style="width:100%;margin-top:8px;">註冊</button>
     <div style="text-align:center;margin-top:12px;">
-      <a href="#" onclick="showLoginForm();return false;" style="color:var(--accent-light);font-size:13px;">已有帳號？登入</a>
+      <a href="#" data-click="show-login-form" style="color:var(--accent-light);font-size:13px;">已有帳號？登入</a>
     </div>
   </form>
 
   <!-- Change Password Form -->
-  <form class="auth-box" id="change-form" style="display:none;" onsubmit="handleChangePassword(); return false;">
+  <form class="auth-box" id="change-form" style="display:none;" data-submit="change-password">
     <h1>更改密碼</h1>
     <div class="form-group">
       <label for="change-username">帳號</label>
@@ -141,7 +143,7 @@ window.__appBootLegacyPoll = window.setInterval(function () {
     <div class="auth-error" id="change-error"></div>
     <button type="submit" class="btn btn-primary" style="width:100%;margin-top:8px;">更改密碼</button>
     <div style="text-align:center;margin-top:12px;">
-      <a href="#" onclick="showLoginForm();return false;" style="color:var(--accent-light);font-size:13px;">回登入頁</a>
+      <a href="#" data-click="show-login-form" style="color:var(--accent-light);font-size:13px;">回登入頁</a>
     </div>
   </form>
 
@@ -160,21 +162,21 @@ window.__appBootLegacyPoll = window.setInterval(function () {
     </div>
 
     <div class="sidebar-menu" id="sidebar-menu">
-      <button class="mobile-menu-toggle" type="button" aria-expanded="false" aria-controls="sidebar-navigation" onclick="setMobileMenu(this.getAttribute('aria-expanded') !== 'true')"><span aria-hidden="true">☰</span> 帳號</button>
+      <button class="mobile-menu-toggle" type="button" aria-expanded="false" aria-controls="sidebar-navigation" data-click="toggle-mobile-menu"><span aria-hidden="true">☰</span> 帳號</button>
     <div class="app-nav-label">功能選單</div>
     <div class="tabs" role="tablist" aria-label="主要功能">
-      <button class="tab active" role="tab" aria-selected="true" aria-controls="panel-runs" data-tab="runs" onclick="switchTab('runs')"><span class="tab-icon" aria-hidden="true">🏃</span><span>跑步日誌</span></button>
-      <button class="tab" role="tab" aria-selected="false" aria-controls="panel-shoes" data-tab="shoes" onclick="switchTab('shoes')"><span class="tab-icon" aria-hidden="true">👟</span><span>跑鞋</span></button>
-      <button class="tab" role="tab" aria-selected="false" aria-controls="panel-monthly" data-tab="monthly" onclick="switchTab('monthly')"><span class="tab-icon" aria-hidden="true">📊</span><span>月跑量</span></button>
-      <button class="tab" role="tab" aria-selected="false" aria-controls="panel-agent" data-tab="agent" onclick="switchTab('agent')"><span class="tab-icon" aria-hidden="true">✨</span><span>AI</span></button>
+      <button class="tab active" role="tab" aria-selected="true" aria-controls="panel-runs" data-tab="runs" data-click="switch-tab"><span class="tab-icon" aria-hidden="true">🏃</span><span>跑步日誌</span></button>
+      <button class="tab" role="tab" aria-selected="false" aria-controls="panel-shoes" data-tab="shoes" data-click="switch-tab"><span class="tab-icon" aria-hidden="true">👟</span><span>跑鞋</span></button>
+      <button class="tab" role="tab" aria-selected="false" aria-controls="panel-monthly" data-tab="monthly" data-click="switch-tab"><span class="tab-icon" aria-hidden="true">📊</span><span>月跑量</span></button>
+      <button class="tab" role="tab" aria-selected="false" aria-controls="panel-agent" data-tab="agent" data-click="switch-tab"><span class="tab-icon" aria-hidden="true">✨</span><span>AI</span></button>
     </div>
       <div class="sidebar-navigation" id="sidebar-navigation">
     <div class="user-info">
       <span class="user-name" id="user-label"></span>
-      <button class="btn btn-sm btn-edit" onclick="openWorkspaceModal()">資料與同步</button>
+      <button class="btn btn-sm btn-edit" data-click="open-workspace">資料與同步</button>
       <div class="sidebar-actions">
-        <button class="btn btn-sm btn-edit" id="theme-toggle-btn" onclick="toggleTheme()">☀️ 亮色模式</button>
-        <button class="btn btn-sm btn-edit" onclick="handleLogout()">登出</button>
+        <button class="btn btn-sm btn-edit" id="theme-toggle-btn" data-click="toggle-theme">☀️ 亮色模式</button>
+        <button class="btn btn-sm btn-edit" data-click="logout">登出</button>
       </div>
     </div>
       </div>
@@ -184,8 +186,8 @@ window.__appBootLegacyPoll = window.setInterval(function () {
   <main class="app-workspace" id="app-workspace">
     <div class="app-version" id="app-version" aria-label="目前應用程式版本"></div>
     <p id="workspace-status" class="workspace-help" role="status" aria-live="polite"></p>
-    <div id="data-load-error" role="alert" hidden>載入資料失敗，目前顯示上次載入的資料。<button class="btn" onclick="loadData()">重新載入</button></div>
-    <div id="run-load-error" role="alert" hidden>跑步紀錄載入失敗，目前保留上次資料。<button class="btn" onclick="loadRunsForSelectedMonth(runController.state.retryOptions)">重試跑步紀錄</button></div>
+    <div id="data-load-error" role="alert" hidden>載入資料失敗，目前顯示上次載入的資料。<button class="btn" data-click="reload-data">重新載入</button></div>
+    <div id="run-load-error" role="alert" hidden>跑步紀錄載入失敗，目前保留上次資料。<button class="btn" data-click="retry-runs">重試跑步紀錄</button></div>
 
   <div class="tab-panel" id="panel-shoes" role="tabpanel" data-panel="shoes">
 
@@ -213,8 +215,8 @@ window.__appBootLegacyPoll = window.setInterval(function () {
       <div class="table-header">
         <h2>現役跑鞋</h2>
         <div class="table-header-actions">
-          <button class="btn btn-primary" onclick="openAddModal()">+ 新增跑鞋</button>
-          <button class="btn btn-edit" onclick="openExportModal()">匯出</button>
+          <button class="btn btn-primary" data-click="add-shoe">+ 新增跑鞋</button>
+          <button class="btn btn-edit" data-click="open-export">匯出</button>
         </div>
       </div>
       <p class="table-scroll-hint">欄位較多時，可左右滑動表格查看。</p>
@@ -265,7 +267,7 @@ window.__appBootLegacyPoll = window.setInterval(function () {
         <div class="chart-box">
           <div class="chart-title-row">
             <h3>年度月支出</h3>
-            <select id="spending-year-select" class="year-select" onchange="onSpendingYearChange()"></select>
+            <select id="spending-year-select" class="year-select" data-change="spending-year"></select>
           </div>
           <div class="chart-canvas"><canvas id="chart-spending"></canvas></div>
         </div>
@@ -298,15 +300,15 @@ window.__appBootLegacyPoll = window.setInterval(function () {
         <p>把每次跑步和鞋款記下來，就能看見訓練節奏，也更清楚每雙鞋子真正承擔了<span class="run-intro-tail">多少里程。</span></p>
         <div class="run-filter">
           <label for="run-month">查看月份</label>
-          <input id="run-month" class="year-select" type="month" onchange="loadRunsForSelectedMonth()">
+          <input id="run-month" class="year-select" type="month" data-change="load-runs">
         </div>
       </div>
-      <form class="run-entry" onsubmit="addRun(); return false;">
+      <form class="run-entry" data-submit="add-run">
         <h3>記下一次跑步</h3>
         <div class="run-entry-grid">
-          <div class="form-group"><label for="run-date">日期</label><input id="run-date" type="date" required onchange="updateRunDateWarning('run')"></div>
+          <div class="form-group"><label for="run-date">日期</label><input id="run-date" type="date" required data-change="run-date-warning" data-form="run"></div>
           <div class="form-group"><label for="run-km">距離 (km)</label><input id="run-km" type="number" min="0.01" max="1000" step="0.01" placeholder="5.00" required></div>
-          <div class="form-group shoe-field"><label for="run-shoe">穿哪雙鞋</label><select id="run-shoe" required onchange="updateRunDateWarning('run')"></select></div>
+          <div class="form-group shoe-field"><label for="run-shoe">穿哪雙鞋</label><select id="run-shoe" required data-change="run-date-warning" data-form="run"></select></div>
         </div>
         <p class="run-date-warning" id="run-date-warning" role="status" hidden></p>
         <div class="shoe-suggestion" id="shoe-suggestion" hidden></div>
@@ -324,7 +326,7 @@ window.__appBootLegacyPoll = window.setInterval(function () {
       <div class="chart-box run-shoe-chart-box"><h3>鞋款里程分布</h3><div class="run-shoe-canvas"><canvas id="chart-run-shoes"></canvas></div><div id="run-shoe-legend" class="run-shoe-legend"></div></div>
     </div>
     <div class="table-section">
-      <div class="table-header"><h2 id="run-table-title">跑步紀錄</h2><div class="table-header-actions"><span id="strava-last" class="strava-last"></span><button class="btn btn-edit" onclick="openStravaModal()">↗ 匯入 Strava</button></div></div>
+      <div class="table-header"><h2 id="run-table-title">跑步紀錄</h2><div class="table-header-actions"><span id="strava-last" class="strava-last"></span><button class="btn btn-edit" data-click="open-strava">↗ 匯入 Strava</button></div></div>
       <p class="table-scroll-hint">欄位較多時，可左右滑動表格查看。</p>
       <div class="table-wrap" tabindex="0" role="region" aria-label="可左右滑動的資料表">
         <table>
@@ -333,10 +335,10 @@ window.__appBootLegacyPoll = window.setInterval(function () {
         </table>
       </div>
       <div id="run-paging" class="table-header-actions" hidden>
-        <button id="run-prev" class="btn btn-edit" onclick="changeRunPage(-1)">上一頁</button>
+        <button id="run-prev" class="btn btn-edit" data-click="run-page" data-step="-1">上一頁</button>
         <span id="run-page-label" role="status"></span>
-        <button id="run-next" class="btn btn-edit" onclick="changeRunPage(1)">下一頁</button>
-        <button id="run-clear-day" class="btn btn-edit" onclick="loadRunsForSelectedMonth()" hidden>整月明細</button>
+        <button id="run-next" class="btn btn-edit" data-click="run-page" data-step="1">下一頁</button>
+        <button id="run-clear-day" class="btn btn-edit" data-click="load-runs" hidden>整月明細</button>
       </div>
     </div>
   </div><!-- /tab-panel runs -->
@@ -345,7 +347,7 @@ window.__appBootLegacyPoll = window.setInterval(function () {
 
     <div class="monthly-year-bar">
       <label for="year-select">年份</label>
-      <select id="year-select" class="year-select" onchange="onYearChange()"></select>
+      <select id="year-select" class="year-select" data-change="year"></select>
       <span class="monthly-year-hint">下方的目標、回顧、趨勢與圖表都會切換到這一年</span>
     </div>
 
@@ -354,13 +356,13 @@ window.__appBootLegacyPoll = window.setInterval(function () {
         <h2 class="trends-heading" id="goal-title">年度目標</h2>
         <div class="goal-heading-actions">
           <span class="goal-target-summary" id="goal-target-summary"></span>
-          <button type="button" class="btn btn-edit" id="goal-edit-toggle" aria-expanded="false" aria-controls="goal-settings" onclick="toggleGoalSettings(true)">調整目標</button>
+          <button type="button" class="btn btn-edit" id="goal-edit-toggle" aria-expanded="false" aria-controls="goal-settings" data-click="goal-settings" data-open="true">調整目標</button>
         </div>
       </div>
-      <form class="goal-settings" id="goal-settings" hidden novalidate onsubmit="event.preventDefault(); saveRunningGoal();">
+      <form class="goal-settings" id="goal-settings" hidden novalidate data-submit="save-goal">
         <div class="form-group">
           <label for="goal-monthly-km">每月目標 (km)</label>
-          <input id="goal-monthly-km" type="number" min="0.01" step="0.01" inputmode="decimal" aria-describedby="goal-yearly-hint" oninput="updateGoalYearlyHint()">
+          <input id="goal-monthly-km" type="number" min="0.01" step="0.01" inputmode="decimal" aria-describedby="goal-yearly-hint" data-input="goal-yearly-hint">
           <span class="goal-field-hint" id="goal-yearly-hint"></span>
         </div>
         <div class="form-group">
@@ -369,7 +371,7 @@ window.__appBootLegacyPoll = window.setInterval(function () {
           <span class="goal-field-hint" id="goal-start-hint">更早的年份只看跑量，不計算達成率</span>
         </div>
         <div class="goal-settings-actions">
-          <button type="button" class="btn btn-edit" id="cancel-goal-btn" onclick="toggleGoalSettings(false)">取消</button>
+          <button type="button" class="btn btn-edit" id="cancel-goal-btn" data-click="goal-settings" data-open="false">取消</button>
           <button type="submit" class="btn btn-primary" id="save-goal-btn">儲存目標</button>
         </div>
       </form>
@@ -441,11 +443,11 @@ window.__appBootLegacyPoll = window.setInterval(function () {
 
   <!-- Agent Chat Panel -->
   <div class="tab-panel agent-panel" id="panel-agent" role="tabpanel" data-panel="agent">
-    <div class="ai-switch" role="group" aria-label="AI 功能"><button type="button" class="ai-switch-btn active" aria-pressed="true" onclick="switchTab('agent')">對話</button><button type="button" class="ai-switch-btn" aria-pressed="false" onclick="switchTab('report')">月報</button></div>
+    <div class="ai-switch" role="group" aria-label="AI 功能"><button type="button" class="ai-switch-btn active" aria-pressed="true" data-click="open-ai-panel" data-ai-panel="agent">對話</button><button type="button" class="ai-switch-btn" aria-pressed="false" data-click="open-ai-panel" data-ai-panel="report">月報</button></div>
     <div class="agent-config">
       <label for="agent-model">今日免費模型</label>
       <select id="agent-model"></select>
-      <button class="btn btn-edit" id="agent-refresh-btn" onclick="refreshAgentModels()">🔄 刷新模型列表</button>
+      <button class="btn btn-edit" id="agent-refresh-btn" data-click="refresh-models">🔄 刷新模型列表</button>
     </div>
     <div class="agent-messages" id="agent-messages">
       <div class="agent-message bot">
@@ -453,21 +455,21 @@ window.__appBootLegacyPoll = window.setInterval(function () {
       </div>
     </div>
     <div class="agent-input-area">
-      <textarea id="agent-input" rows="2" placeholder="問問你的跑鞋資料..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendAgentMessage()}"></textarea>
-      <button id="agent-send-btn" onclick="sendAgentMessage()">送出</button>
+      <textarea id="agent-input" rows="2" placeholder="問問你的跑鞋資料..." data-keydown="agent-compose"></textarea>
+      <button id="agent-send-btn" data-click="send-agent-message">送出</button>
     </div>
   </div><!-- /tab-panel agent -->
 
   <!-- Monthly Report Panel -->
   <div class="tab-panel" id="panel-report" role="tabpanel" data-panel="report">
-    <div class="ai-switch" role="group" aria-label="AI 功能"><button type="button" class="ai-switch-btn" aria-pressed="false" onclick="switchTab('agent')">對話</button><button type="button" class="ai-switch-btn active" aria-pressed="true" onclick="switchTab('report')">月報</button></div>
+    <div class="ai-switch" role="group" aria-label="AI 功能"><button type="button" class="ai-switch-btn" aria-pressed="false" data-click="open-ai-panel" data-ai-panel="agent">對話</button><button type="button" class="ai-switch-btn active" aria-pressed="true" data-click="open-ai-panel" data-ai-panel="report">月報</button></div>
     <div class="run-hero">
       <div class="run-intro">
         <h2>AI 月度跑步報告</h2>
         <p>選擇月份後由 AI 整理當月跑量趨勢、鞋款狀態與退役提醒，報告會自動保存，之後可隨時回看。</p>
         <div class="run-filter">
           <label for="report-month">報告月份</label>
-          <input id="report-month" class="year-select" type="month" onchange="loadSavedReport()">
+          <input id="report-month" class="year-select" type="month" data-change="load-saved-report">
         </div>
       </div>
       <div class="run-entry">
@@ -475,14 +477,14 @@ window.__appBootLegacyPoll = window.setInterval(function () {
         <div class="run-entry-grid">
           <div class="form-group">
             <label for="report-history">歷史報告</label>
-            <select id="report-history" onchange="onReportHistoryChange()"><option value="">選擇已儲存的月份…</option></select>
+            <select id="report-history" data-change="report-history"><option value="">選擇已儲存的月份…</option></select>
           </div>
           <div class="form-group">
             <label for="report-model">本日免費模型</label>
             <select id="report-model"></select>
           </div>
         </div>
-        <button class="btn btn-primary" id="generate-report-btn" onclick="generateReport()">產生報告</button>
+        <button class="btn btn-primary" id="generate-report-btn" data-click="generate-report">產生報告</button>
         <div class="report-status" id="report-status" role="status" aria-live="polite"></div>
       </div>
     </div>

@@ -1,20 +1,27 @@
 """User-scoped source aliases across run deletion and explicit recovery.
 
-The caller owns the transaction. Imported audit rows are display-only and cannot
-establish a local deletion identity.
+The caller owns the transaction. Deletion tombstones live in their own table, so
+audit history can be pruned without letting a restored backup resurrect a run.
 """
 
 from sqlalchemy import String, cast
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
 from backend import models
 from backend.services.errors import Invalid
 
 
+def record_tombstone(db: Session, user_id: int, run_id: int) -> None:
+    db.execute(
+        sqlite_insert(models.RunTombstone)
+        .values(user_id=user_id, run_id=run_id)
+        .on_conflict_do_nothing(index_elements=["user_id", "run_id"])
+    )
+
+
 def add_local_tombstones(db: Session, user_id: int, mappings: dict[tuple[str, str], int]) -> None:
-    deleted_ids = db.query(models.AuditEvent.entity_id).filter_by(
-        user_id=user_id, entity="runs", action="delete", imported=False,
-    ).distinct()
+    deleted_ids = db.query(models.RunTombstone.run_id).filter_by(user_id=user_id)
     for (identifier,) in deleted_ids:
         mappings.setdefault(("run", str(identifier)), identifier)
 

@@ -3,7 +3,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend.auth import get_password_hash
-from backend.database import get_db
+from backend.dependencies import get_db
 from backend.main import app
 from backend.models import MonthlyMileage, Shoe, User
 

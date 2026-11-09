@@ -1,6 +1,5 @@
 """Run log CRUD HTTP routes."""
 
-from calendar import monthrange
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
@@ -8,9 +7,9 @@ from sqlalchemy.orm import Session
 
 from backend import models, schemas
 from backend.auth import get_current_user
-from backend.database import get_db
-from backend.dependencies import OperationKey, get_settings
-from backend.read_models.runs import month_run_summary, year_run_summary
+from backend.dependencies import OperationKey, get_db, get_settings
+from backend.read_models import runs as run_reads
+from backend.read_models.runs import is_calendar_day, month_run_summary, year_run_summary
 from backend.routers.errors import service_errors
 from backend.services import runs as runs_service
 from backend.services.operations import legacy_operation
@@ -33,27 +32,11 @@ def list_runs(
         raise HTTPException(status_code=422, detail="month requires year")
     if day is not None and (month is None or year is None):
         raise HTTPException(status_code=422, detail="day requires year and month")
-    query = db.query(models.Run).filter(models.Run.user_id == current_user.id)
-    if year is not None:
-        if month is None:
-            start_date = f"{year:04d}-01-01"
-            end_date = f"{year:04d}-12-31"
-        else:
-            last_day = monthrange(year, month)[1]
-            start_date = f"{year:04d}-{month:02d}-01"
-            end_date = f"{year:04d}-{month:02d}-{last_day:02d}"
-        query = query.filter(
-            models.Run.date >= start_date,
-            models.Run.date <= end_date,
-        )
-        if day is not None:
-            if month is None or day > monthrange(year, month)[1]:
-                raise HTTPException(status_code=422, detail="invalid calendar day")
-            query = query.filter(models.Run.date == f"{year:04d}-{month:02d}-{day:02d}")
-    query = query.order_by(models.Run.date.desc(), models.Run.id.desc()).offset(offset)
-    if limit is not None:
-        query = query.limit(limit)
-    return query.all()
+    if day is not None and year is not None and month is not None and not is_calendar_day(year, month, day):
+        raise HTTPException(status_code=422, detail="invalid calendar day")
+    return run_reads.list_runs(
+        db, current_user.id, year=year, month=month, day=day, limit=limit, offset=offset
+    )
 
 
 @router.get("/api/runs/summary")
@@ -83,11 +66,7 @@ def create_run(
         if idempotency_key:
             return legacy_operation(db, current_user.id, "run.create", config, idempotency_key, payload.model_dump(exclude_unset=True))
         return runs_service.create_run(
-            db,
-            current_user.id,
-            payload,
-            max_runs=config.max_runs_per_user,
-            idempotency_key=idempotency_key,
+            db, current_user.id, payload, max_runs=config.max_runs_per_user
         )
 
 

@@ -102,7 +102,7 @@ async function loadGoalProgress(year) {
     renderGoalOverview(result.value);
   } catch (error) {
     if (error.name === 'AbortError' || !isCurrentAuthSession(session) || requestId !== goalProgressRequestId) return;
-    target.innerHTML = `<div class="goal-card"><div class="card-sub">目標載入失敗：${esc(error.message)}</div><button class="btn btn-sm btn-edit" onclick="renderGoalProgress()">重試</button></div>`;
+    target.innerHTML = `<div class="goal-card"><div class="card-sub">目標載入失敗：${esc(error.message)}</div><button class="btn btn-sm btn-edit" data-click="render-goal-progress">重試</button></div>`;
   }
 }
 

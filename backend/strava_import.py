@@ -5,9 +5,10 @@ import io
 import math
 import re
 from collections.abc import Sequence
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 from backend import schemas
+from backend.clock import APP_TIMEZONE
 
 
 class InvalidCSVError(ValueError):
@@ -33,29 +34,60 @@ def _field(headers: Sequence[str], key: str) -> str | None:
     return next((candidate for candidate in STRAVA_HEADERS[key] if candidate in headers), None)
 
 
-def _parse_date(value: str) -> str:
-    text_value = value.strip()
-    match = re.search(r"(\d{4})年\s*(\d{1,2})月\s*(\d{1,2})日", text_value)
-    if match:
-        return datetime.strptime(
-            f"{match.group(1)}-{match.group(2)}-{match.group(3)}", "%Y-%m-%d"
-        ).replace(tzinfo=UTC).date().isoformat()
-    for fmt in (
-        "%b %d, %Y, %I:%M:%S %p",
-        "%B %d, %Y, %I:%M:%S %p",
-        "%b %d, %Y",
-        "%B %d, %Y",
-    ):
+_CHINESE_DATE = re.compile(r"(\d{4})年\s*(\d{1,2})月\s*(\d{1,2})日")
+_CHINESE_TIME = re.compile(r"(上午|下午)\s*(\d{1,2}):(\d{2}):(\d{2})")
+_TIMESTAMP_FORMATS = ("%b %d, %Y, %I:%M:%S %p", "%B %d, %Y, %I:%M:%S %p")
+_DATE_FORMATS = ("%b %d, %Y", "%B %d, %Y")
+_SHORT_DATE_FORMATS = ("%Y-%m-%d", "%Y/%m/%d", "%m/%d/%Y")
+
+
+def _utc_timestamp(text_value: str) -> datetime | None:
+    """A Strava export timestamp, which is written in UTC, or None without a time."""
+    day = _CHINESE_DATE.search(text_value)
+    clock = _CHINESE_TIME.search(text_value)
+    if day and clock:
+        hour = int(clock.group(2)) % 12 + (12 if clock.group(1) == "下午" else 0)
+        return datetime(int(day.group(1)), int(day.group(2)), int(day.group(3)), hour,
+                        int(clock.group(3)), int(clock.group(4)), tzinfo=UTC)
+    for fmt in _TIMESTAMP_FORMATS:
         try:
-            return datetime.strptime(text_value, fmt).replace(tzinfo=UTC).date().isoformat()
+            return datetime.strptime(text_value, fmt).replace(tzinfo=UTC)
         except ValueError:
             continue
-    for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%m/%d/%Y"):
+    return None
+
+
+def _calendar_date(text_value: str) -> date:
+    day = _CHINESE_DATE.search(text_value)
+    if day:
+        return date(int(day.group(1)), int(day.group(2)), int(day.group(3)))
+    for fmt in _DATE_FORMATS:
         try:
-            return datetime.strptime(text_value[:10], fmt).replace(tzinfo=UTC).date().isoformat()
+            return datetime.strptime(text_value, fmt).replace(tzinfo=UTC).date()
+        except ValueError:
+            continue
+    for fmt in _SHORT_DATE_FORMATS:
+        try:
+            return datetime.strptime(text_value[:10], fmt).replace(tzinfo=UTC).date()
         except ValueError:
             continue
     raise ValueError("invalid date")
+
+
+def parse_activity_dates(value: str) -> tuple[str, str]:
+    """Return (application calendar date, UTC calendar date) for one activity.
+
+    Strava's bulk export writes Activity Date in UTC: a 06:00 run in Taipei is
+    22:00 UTC on the previous day. The run belongs to the local calendar day.
+    The UTC date is what versions before SPEC-047 stored, and identifies runs
+    that a re-import may correct. A value without a time is used as-is.
+    """
+    text_value = value.strip()
+    stamp = _utc_timestamp(text_value)
+    if stamp is not None:
+        return stamp.astimezone(APP_TIMEZONE).date().isoformat(), stamp.date().isoformat()
+    day = _calendar_date(text_value).isoformat()
+    return day, day
 
 
 def _normalize_gear(value: str) -> str:
@@ -88,7 +120,7 @@ def parse_csv(
                 continue
             try:
                 activity_id = (row.get(fields["id"] or "") or "").strip()
-                date_value = _parse_date(row.get(fields["date"] or "") or "")
+                date_value, utc_date = parse_activity_dates(row.get(fields["date"] or "") or "")
                 schemas._validate_completed_run_date(date_value)
                 distance_m = float((row.get(fields["distance"] or "") or "").replace(",", "").strip())
                 km = round(distance_m / 1000, 2)
@@ -106,6 +138,7 @@ def parse_csv(
             rows.append({
                 "strava_id": activity_id[:100],
                 "date": date_value,
+                "utc_date": utc_date,
                 "km": km,
                 "gear": (row.get(fields["gear"] or "") or "").strip(),
                 "activity_type": (row.get(fields["type"] or "") or "").strip(),
@@ -140,3 +173,24 @@ def filter_rows(
         and (not normalized_end or str(row["date"]) <= normalized_end)
     ]
     return filtered, len(rows) - len(filtered)
+
+
+def date_corrections(
+    rows: list[dict[str, object]], existing_dates: dict[str, str]
+) -> list[dict[str, object]]:
+    """Existing runs still stored on the UTC date that pre-SPEC-047 imports used.
+
+    Only a run whose stored date equals the activity's UTC date (and differs from
+    its local date) is corrected, so a date the user edited by hand is kept.
+    """
+    corrections: list[dict[str, object]] = []
+    seen: set[str] = set()
+    for row in rows:
+        strava_id = str(row["strava_id"])
+        if strava_id in seen or strava_id not in existing_dates:
+            continue
+        seen.add(strava_id)
+        local, utc = str(row["date"]), str(row.get("utc_date", row["date"]))
+        if local != utc and existing_dates[strava_id] == utc:
+            corrections.append({"strava_id": strava_id, "from_date": utc, "to_date": local, "km": row["km"]})
+    return corrections

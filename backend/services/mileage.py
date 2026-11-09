@@ -3,7 +3,6 @@
 from collections.abc import Sequence
 
 from sqlalchemy import func
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
 from backend import models
@@ -48,39 +47,26 @@ def apply_run_mileage_deltas(
         if abs(delta) < 0.005:
             continue
         rounded_delta = round(delta, 2)
-        if rounded_delta > 0:
-            statement = sqlite_insert(models.MonthlyMileage).values(
-                id=allocate_id(db, "monthly_mileages"), user_id=user_id,
-                year=year,
-                month=month,
-                km=rounded_delta,
-                adjustment_km=0,
-                version=0,
-            )
-            statement = statement.on_conflict_do_update(
-                index_elements=["user_id", "year", "month"],
-                set_={
-                    "km": func.max(
-                        0,
-                        func.round(func.coalesce(models.MonthlyMileage.km, 0) + rounded_delta, 2),
-                    ),
-                    "version": models.MonthlyMileage.version + 1,
-                },
-            )
-            db.execute(statement)
-        else:
-            db.query(models.MonthlyMileage).filter(
-                models.MonthlyMileage.user_id == user_id,
-                models.MonthlyMileage.year == year,
-                models.MonthlyMileage.month == month,
-            ).update(
-                {
-                    models.MonthlyMileage.version: models.MonthlyMileage.version + 1,
-                    models.MonthlyMileage.km: func.max(
-                        0,
-                        func.round(func.coalesce(models.MonthlyMileage.km, 0) + rounded_delta, 2),
-                    ),
-                },
-                synchronize_session=False,
-            )
+        # Callers hold the SQLite writer reservation, so update-then-insert is
+        # race free and a new identifier is only allocated for a new month.
+        changed = db.query(models.MonthlyMileage).filter(
+            models.MonthlyMileage.user_id == user_id,
+            models.MonthlyMileage.year == year,
+            models.MonthlyMileage.month == month,
+        ).update(
+            {
+                models.MonthlyMileage.version: models.MonthlyMileage.version + 1,
+                models.MonthlyMileage.km: func.max(
+                    0,
+                    func.round(func.coalesce(models.MonthlyMileage.km, 0) + rounded_delta, 2),
+                ),
+            },
+            synchronize_session=False,
+        )
+        if not changed and rounded_delta > 0:
+            db.add(models.MonthlyMileage(
+                id=allocate_id(db, "monthly_mileages"), user_id=user_id, year=year, month=month,
+                km=rounded_delta, adjustment_km=0, version=0,
+            ))
+            db.flush()
     return round(total_delta, 2)

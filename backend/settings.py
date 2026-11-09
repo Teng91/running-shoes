@@ -1,13 +1,19 @@
 """Typed runtime configuration loaded once from environment variables."""
 
 import os
+import warnings
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from dotenv import load_dotenv
 
 load_dotenv()
+
+# HS256 keys shorter than the hash output are brute-forceable (RFC 7518 §3.2).
+MIN_SECRET_KEY_BYTES = 32
+# Development-only signing key; production refuses to start without SECRET_KEY.
+DEV_FALLBACK_SECRET_KEY = "development-only-insecure-secret-key-change-me"
 
 
 def _positive_int(values: Mapping[str, str], name: str, default: int) -> int:
@@ -80,6 +86,34 @@ class Settings:
             llm_max_output_tokens=max(256, int(env.get("LLM_MAX_OUTPUT_TOKENS", "4096"))),
             openrouter_default_model=env.get("OR_MODEL") or None,
         )
+
+
+def megabytes_label(size: int) -> str:
+    """Human-readable limit for error messages, derived from the configured bytes."""
+    return f"{size / (1024 * 1024):g} MB"
+
+
+def runtime_settings(config: Settings) -> Settings:
+    """Validate the signing secret for this environment before serving requests.
+
+    Production refuses a missing or short SECRET_KEY; development gets a loud,
+    deterministic fallback so local runs and tests can sign tokens.
+    """
+    if config.is_production:
+        if not config.secret_key:
+            raise RuntimeError("SECRET_KEY environment variable is required in production")
+        if len(config.secret_key.encode("utf-8")) < MIN_SECRET_KEY_BYTES:
+            raise RuntimeError(f"SECRET_KEY must be at least {MIN_SECRET_KEY_BYTES} bytes in production")
+        return config
+    if config.secret_key:
+        return config
+    warnings.warn("Using fallback SECRET_KEY — set the SECRET_KEY env var in production!", stacklevel=2)
+    return replace(config, secret_key=DEV_FALLBACK_SECRET_KEY)
+
+
+def default_secret_key() -> str:
+    """Signing key of the default (environment) settings, for scripts and tests."""
+    return settings.secret_key or DEV_FALLBACK_SECRET_KEY
 
 
 settings = Settings.from_env()

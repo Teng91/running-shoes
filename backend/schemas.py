@@ -5,6 +5,7 @@ from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Annotated, Literal
 
 from pydantic import (
+    AfterValidator,
     BaseModel,
     ConfigDict,
     Field,
@@ -168,156 +169,90 @@ class UserChangePassword(BaseModel):
 
 # ── Shoe Schemas ──────────────────────────────────────────────
 
+def _finite_non_negative(value: float) -> float:
+    # Reject NaN/Inf — SQLite treats them as NULL and the NOT NULL
+    # constraint turns a legit client into a 500.
+    if not math.isfinite(value):
+        raise ValueError("must be a finite number")
+    if value < 0:
+        raise ValueError("must be non-negative")
+    return _round_two_decimals(value)
+
+
+def _at_most(limit: float) -> AfterValidator:
+    def check(value: float) -> float:
+        if value > limit:
+            raise ValueError(f"must be at most {limit:g}")
+        return value
+    return AfterValidator(check)
+
+
+def _shoe_categories(values: list[str]) -> list[str]:
+    if len(values) != len(set(values)):
+        raise ValueError("categories must not contain duplicates")
+    invalid = [category for category in values if category not in SHOE_CATEGORIES]
+    if invalid:
+        raise ValueError(f"Invalid categories: {invalid}. Must be subset of {SHOE_CATEGORIES}")
+    return values
+
+
+# One definition per field rule, shared by create, update and output schemas.
+NonBlankShoeName = Annotated[ShoeName, AfterValidator(_validate_non_blank)]
+ShoeAmount = Annotated[float, AfterValidator(_finite_non_negative)]
+ShoePrice = Annotated[ShoeAmount, _at_most(MAX_SHOE_PRICE)]
+ShoeMileage = Annotated[ShoeAmount, _at_most(MAX_SHOE_MILEAGE_KM)]
+ShoeMonthlyKm = Annotated[ShoeAmount, _at_most(MAX_SHOE_MONTHLY_KM)]
+ShoeCategories = Annotated[
+    list[str], Field(max_length=len(SHOE_CATEGORIES)), AfterValidator(_shoe_categories)
+]
+ShoePurchaseDate = Annotated[str, AfterValidator(_validate_iso_date)]
+
+
 class ShoeBase(BaseModel):
     nickname: str = Field(default="", max_length=80)
-    brand: ShoeName
-    model: ShoeName
+    brand: NonBlankShoeName
+    model: NonBlankShoeName
     date: str
     size: ShoeSize = ""
-    price: float = 0
-    orig_price: float = 0
-    mileage: float = 0
-    expected_mileage: float = 800
-    monthly_km: float = 60
+    price: ShoeAmount = 0
+    orig_price: ShoeAmount = 0
+    mileage: ShoeAmount = 0
+    expected_mileage: ShoeAmount = 800
+    monthly_km: ShoeAmount = 60
     is_retired: bool = False
-    categories: list[str] = Field(default_factory=lambda: ["Daily"], max_length=len(SHOE_CATEGORIES))
-
-    @field_validator("brand", "model")
-    @classmethod
-    def validate_names(cls, value: str) -> str:
-        return _validate_non_blank(value)
-
-    @field_validator("categories")
-    @classmethod
-    def validate_categories(cls, v):
-        if len(v) != len(set(v)):
-            raise ValueError("categories must not contain duplicates")
-        invalid = [c for c in v if c not in SHOE_CATEGORIES]
-        if invalid:
-            raise ValueError(
-                f"Invalid categories: {invalid}. Must be subset of {SHOE_CATEGORIES}"
-            )
-        return v
-
-    @field_validator("price", "orig_price", "mileage", "expected_mileage", "monthly_km")
-    @classmethod
-    def validate_non_negative(cls, v):
-        if v is None:
-            return v
-        # Reject NaN/Inf — SQLite treats them as NULL and the NOT NULL
-        # constraint turns a legit client into a 500.
-        if isinstance(v, float) and not math.isfinite(v):
-            raise ValueError("must be a finite number")
-        if v < 0:
-            raise ValueError("must be non-negative")
-        return _round_two_decimals(v)
+    categories: ShoeCategories = Field(default_factory=lambda: ["Daily"])
 
 
 class ShoeCreate(ShoeBase):
     # user_id is set by the backend, never by the client.
-    @field_validator("date")
-    @classmethod
-    def validate_date(cls, value: str) -> str:
-        return _validate_iso_date(value)
-
-    @field_validator("price", "orig_price")
-    @classmethod
-    def validate_price_limit(cls, value: float) -> float:
-        if value > MAX_SHOE_PRICE:
-            raise ValueError(f"must be at most {MAX_SHOE_PRICE:g}")
-        return value
-
-    @field_validator("mileage", "expected_mileage")
-    @classmethod
-    def validate_mileage_limit(cls, value: float) -> float:
-        if value > MAX_SHOE_MILEAGE_KM:
-            raise ValueError(f"must be at most {MAX_SHOE_MILEAGE_KM:g}")
-        return value
-
-    @field_validator("monthly_km")
-    @classmethod
-    def validate_monthly_limit(cls, value: float) -> float:
-        if value > MAX_SHOE_MONTHLY_KM:
-            raise ValueError(f"must be at most {MAX_SHOE_MONTHLY_KM:g}")
-        return value
+    date: ShoePurchaseDate
+    price: ShoePrice = 0
+    orig_price: ShoePrice = 0
+    mileage: ShoeMileage = 0
+    expected_mileage: ShoeMileage = 800
+    monthly_km: ShoeMonthlyKm = 60
 
 
 class ShoeUpdate(BaseModel):
     expected_version: int | None = Field(default=None, ge=0)
     nickname: str | None = Field(default=None, max_length=80)
-    brand: ShoeName | None = None
-    model: ShoeName | None = None
-    date: str | None = None
+    brand: NonBlankShoeName | None = None
+    model: NonBlankShoeName | None = None
+    date: ShoePurchaseDate | None = None
     size: ShoeSize | None = None
-    price: float | None = None
-    orig_price: float | None = None
-    mileage: float | None = None
-    expected_mileage: float | None = None
-    monthly_km: float | None = None
+    price: ShoePrice | None = None
+    orig_price: ShoePrice | None = None
+    mileage: ShoeMileage | None = None
+    expected_mileage: ShoeMileage | None = None
+    monthly_km: ShoeMonthlyKm | None = None
     is_retired: bool | None = None
-    categories: Annotated[list[str], Field(max_length=len(SHOE_CATEGORIES))] | None = None
+    categories: ShoeCategories | None = None
 
     @model_validator(mode="before")
     @classmethod
     def reject_explicit_nulls(cls, value):
         if isinstance(value, dict) and any(item is None for item in value.values()):
             raise ValueError("shoe fields may be omitted but must not be null")
-        return value
-
-    @field_validator("brand", "model")
-    @classmethod
-    def validate_names(cls, value: str | None) -> str | None:
-        return _validate_non_blank(value) if value is not None else None
-
-    @field_validator("date")
-    @classmethod
-    def validate_date(cls, value: str | None) -> str | None:
-        return _validate_iso_date(value) if value is not None else None
-
-    @field_validator("categories")
-    @classmethod
-    def validate_categories(cls, v):
-        if v is not None:
-            if len(v) != len(set(v)):
-                raise ValueError("categories must not contain duplicates")
-            invalid = [c for c in v if c not in SHOE_CATEGORIES]
-            if invalid:
-                raise ValueError(
-                    f"Invalid categories: {invalid}. Must be subset of {SHOE_CATEGORIES}"
-                )
-        return v
-
-    @field_validator("price", "orig_price", "mileage", "expected_mileage", "monthly_km")
-    @classmethod
-    def validate_non_negative(cls, v):
-        if v is None:
-            return v
-        if isinstance(v, float) and not math.isfinite(v):
-            raise ValueError("must be a finite number")
-        if v < 0:
-            raise ValueError("must be non-negative")
-        rounded = _round_two_decimals(v)
-        return rounded
-
-    @field_validator("price", "orig_price")
-    @classmethod
-    def validate_price_limit(cls, value: float | None) -> float | None:
-        if value is not None and value > MAX_SHOE_PRICE:
-            raise ValueError(f"must be at most {MAX_SHOE_PRICE:g}")
-        return value
-
-    @field_validator("mileage", "expected_mileage")
-    @classmethod
-    def validate_mileage_limit(cls, value: float | None) -> float | None:
-        if value is not None and value > MAX_SHOE_MILEAGE_KM:
-            raise ValueError(f"must be at most {MAX_SHOE_MILEAGE_KM:g}")
-        return value
-
-    @field_validator("monthly_km")
-    @classmethod
-    def validate_monthly_limit(cls, value: float | None) -> float | None:
-        if value is not None and value > MAX_SHOE_MONTHLY_KM:
-            raise ValueError(f"must be at most {MAX_SHOE_MONTHLY_KM:g}")
         return value
 
 
@@ -471,11 +406,10 @@ class RunUpdate(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def reject_explicit_nulls_except_optional_metrics(cls, value):
-        if not isinstance(value, dict):
-            return value
-        required_when_present = {"date", "km", "shoe_id"}
-        if any(key in value and value[key] is None for key in required_when_present):
+    def reject_explicit_nulls(cls, value):
+        # A null version used to reach SQL as `version IS NULL` and always
+        # failed as a misleading 409; reject it like shoe and month updates.
+        if isinstance(value, dict) and any(item is None for item in value.values()):
             raise ValueError("run fields may be omitted but must not be null")
         return value
 

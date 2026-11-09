@@ -5,6 +5,8 @@ from typing import ClassVar
 from fastapi.responses import JSONResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from backend.settings import megabytes_label
+
 
 class StravaUploadLimitMiddleware:
     """Reject oversized Strava multipart bodies before form parsing/spooling."""
@@ -15,9 +17,10 @@ class StravaUploadLimitMiddleware:
         "/api/account-restore/preview",
     })
 
-    def __init__(self, app: ASGIApp, max_bytes: int):
+    def __init__(self, app: ASGIApp, max_bytes: int, max_backup_bytes: int):
         self.app = app
         self.max_bytes = max_bytes
+        self.max_backup_bytes = max_backup_bytes
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if (
@@ -29,8 +32,11 @@ class StravaUploadLimitMiddleware:
             return
         headers = dict(scope.get("headers", []))
         is_backup = scope.get("path") == "/api/account-restore/preview"
-        max_bytes = 20 * 1024 * 1024 if is_backup else self.max_bytes
-        detail = "備份不可超過 20 MB" if is_backup else "Strava 上傳請求不可超過 11 MB"
+        max_bytes = self.max_backup_bytes if is_backup else self.max_bytes
+        detail = (
+            f"備份不可超過 {megabytes_label(max_bytes)}" if is_backup
+            else f"Strava 上傳請求不可超過 {megabytes_label(max_bytes)}"
+        )
         content_length = headers.get(b"content-length", b"")
         try:
             declared_size = int(content_length) if content_length else None

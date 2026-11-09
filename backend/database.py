@@ -1,16 +1,13 @@
+"""ORM base, SQLite connection policy and engine construction.
+
+Importing this module has no side effects: the composition root (``create_app``)
+builds the engine from injected settings, and request sessions come from
+``backend.dependencies.get_db``.
+"""
+
 from sqlalchemy import create_engine, event
-from sqlalchemy.orm import DeclarativeBase, sessionmaker
-
-from backend.settings import settings
-
-DATABASE_DIR = str(settings.database_dir)
-settings.database_dir.mkdir(parents=True, exist_ok=True)
-DATABASE_URL = settings.database_url
-
-engine = create_engine(
-    DATABASE_URL,
-    connect_args={"check_same_thread": False, "timeout": 30},
-)
+from sqlalchemy.engine import Engine
+from sqlalchemy.orm import DeclarativeBase
 
 
 def configure_sqlite_connection(dbapi_connection) -> None:
@@ -29,23 +26,13 @@ def configure_sqlite_connection(dbapi_connection) -> None:
         cursor.close()
 
 
-@event.listens_for(engine, "connect")
-def _enable_sqlite_foreign_keys(dbapi_connection, _connection_record):
-    """Enforce declared relationships instead of relying only on API checks."""
-    if DATABASE_URL.startswith("sqlite"):
-        configure_sqlite_connection(dbapi_connection)
-
-
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+def create_database_engine(database_url: str) -> Engine:
+    """Create an engine; SQLite connections enforce declared relationships."""
+    engine = create_engine(database_url, connect_args={"check_same_thread": False, "timeout": 30})
+    if database_url.startswith("sqlite"):
+        event.listen(engine, "connect", lambda connection, _record: configure_sqlite_connection(connection))
+    return engine
 
 
 class Base(DeclarativeBase):
     pass
-
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()

@@ -11,7 +11,8 @@ from sqlalchemy.orm import sessionmaker
 from backend import models
 from backend.app_factory import create_app
 from backend.auth import create_access_token
-from backend.database import Base, configure_sqlite_connection, get_db
+from backend.database import Base, configure_sqlite_connection
+from backend.dependencies import get_db
 from backend.main import app
 from backend.migrations import run_startup_migrations, schema_version
 from backend.read_models.runs import year_run_summary
@@ -43,7 +44,7 @@ def test_replayed_run_returns_original_snapshot_and_updates_mileage_once(db, req
     assert first.status_code == 200
     assert client.post("/api/runs", json=payload, headers=headers).json() == first.json()
     assert db.query(models.Run).count() == 1
-    assert db.query(models.RunCreationRequest).count() == 1
+    assert db.query(models.MutationReceipt).count() == 1
     assert db.get(models.Shoe, payload["shoe_id"]).mileage == 5
     assert db.query(models.MonthlyMileage).one().km == 5
     changed = client.post("/api/runs", json={**payload, "km": 10}, headers=headers)
@@ -71,7 +72,7 @@ def test_request_keys_are_user_scoped_and_legacy_clients_remain_supported(db, re
     db.commit()
     other_headers = {**headers, "Authorization": f"Bearer {create_access_token({'sub': other.username})}"}
     assert client.post("/api/runs", json=payload, headers=other_headers).status_code == 404
-    assert db.query(models.RunCreationRequest).count() == 1
+    assert db.query(models.MutationReceipt).count() == 1
     assert client.post("/api/runs", json={**payload, "shoe_id": shoe.id}, headers=other_headers).status_code == 200
     legacy = {"Authorization": headers["Authorization"]}
     assert client.post("/api/runs", json=payload, headers=legacy).status_code == 200
@@ -83,7 +84,7 @@ def test_invalid_operation_keys_never_create_receipts_or_runs(db, request_client
     client, headers, payload = request_client
     response = client.post("/api/runs", json=payload, headers={**headers, "Idempotency-Key": key})
     assert response.status_code == 422
-    assert db.query(models.Run).count() == db.query(models.RunCreationRequest).count() == 0
+    assert db.query(models.Run).count() == db.query(models.MutationReceipt).count() == 0
 
 
 def test_failed_run_transaction_does_not_poison_its_request_key(db, request_client, monkeypatch):
@@ -98,7 +99,7 @@ def test_failed_run_transaction_does_not_poison_its_request_key(db, request_clie
     monkeypatch.setattr(runs.runs_service, "apply_run_mileage_deltas", fail)
     with pytest.raises(RuntimeError, match="synthetic"):
         client.post("/api/runs", json=payload, headers=headers)
-    assert db.query(models.RunCreationRequest).count() == 0
+    assert db.query(models.MutationReceipt).count() == 0
     assert db.query(models.Run).count() == 0
     monkeypatch.setattr(runs.runs_service, "apply_run_mileage_deltas", original)
     assert client.post("/api/runs", json=payload, headers=headers).status_code == 200
@@ -133,7 +134,7 @@ def test_concurrent_requests_share_one_committed_receipt(tmp_path, conflicting):
         assert all(response.json() == successes[0].json() for response in successes)
         with sessions() as db:
             assert db.query(models.Run).count() == 1
-            assert db.query(models.RunCreationRequest).count() == 1
+            assert db.query(models.MutationReceipt).count() == 1
             assert db.get(models.Shoe, shoe_id).mileage == successes[0].json()["km"]
     engine.dispose()
 
@@ -145,7 +146,7 @@ def test_receipt_replay_succeeds_even_after_quota_reached(db, request_client, mo
     monkeypatch.setattr(app.state, "settings", replace(app.state.settings, max_runs_per_user=1))
     assert client.post("/api/runs", json=payload, headers=headers).json() == original
     assert client.post("/api/runs", json=payload, headers={**headers, "Idempotency-Key": "a-new-operation-0001"}).status_code == 409
-    assert db.query(models.RunCreationRequest).count() == 1
+    assert db.query(models.MutationReceipt).count() == 1
 
 
 def test_year_summary_preserves_deleted_shoe_history_and_scopes_users(db, request_client):
@@ -193,21 +194,58 @@ def test_year_summary_uses_one_grouped_query(db, user_with_token):
     assert "GROUP BY" in statements[0]
 
 
-def test_schema_two_adds_receipts_without_changing_business_rows(tmp_path):
+def test_schema_seven_drops_superseded_run_receipts_without_changing_business_rows(tmp_path):
+    """SPEC-047: MutationReceipt is the only run-creation receipt; the schema-2 table is dropped."""
     engine = create_engine(f"sqlite:///{tmp_path / 'migration.sqlite'}")
-    Base.metadata.create_all(engine, tables=[table for table in Base.metadata.sorted_tables if table.name != "run_creation_requests"])
+    Base.metadata.create_all(engine)
     sessions = sessionmaker(bind=engine)
     with sessions() as db:
         db.add(models.User(username="preserved", hashed_password="synthetic"))
         db.commit()
     with engine.begin() as connection:
+        connection.execute(text(
+            "CREATE TABLE run_creation_requests (id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL, "
+            "request_key VARCHAR(128) NOT NULL, payload_hash VARCHAR(64) NOT NULL, response_json JSON NOT NULL)"
+        ))
+        connection.execute(text("INSERT INTO run_creation_requests VALUES (1, 1, 'legacy-key-000001', 'x', '{}')"))
         connection.execute(text("CREATE TABLE schema_metadata (key VARCHAR PRIMARY KEY, value VARCHAR NOT NULL)"))
-        connection.execute(text("INSERT INTO schema_metadata VALUES ('schema_version', '1')"))
+        connection.execute(text("INSERT INTO schema_metadata VALUES ('schema_version', '6')"))
     for _ in range(2):
         run_startup_migrations(engine, sessions)
-        assert schema_version(engine) == 6
-    assert "run_creation_requests" in inspect(engine).get_table_names()
+        assert schema_version(engine) == 7
+    assert "run_creation_requests" not in inspect(engine).get_table_names()
     with sessions() as db:
         assert db.query(models.User).one().username == "preserved"
-        assert db.query(models.RunCreationRequest).count() == 0
+    engine.dispose()
+
+
+def test_schema_seven_rollback_restores_the_schema_six_contract_and_reupgrades(tmp_path):
+    """SPEC-047: the documented 7 -> 6 rollback keeps business rows and is reversible."""
+    from pathlib import Path
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'rollback.sqlite'}", connect_args={"check_same_thread": False})
+    event.listen(engine, "connect", lambda connection, _: configure_sqlite_connection(connection))
+    sessions = sessionmaker(bind=engine, autoflush=False)
+    run_startup_migrations(engine, sessions)
+    with sessions() as db:
+        user = models.User(username="rollback", hashed_password="synthetic")
+        db.add(user)
+        db.flush()
+        db.add(models.Shoe(user_id=user.id, brand="A", model="B", date="2026-01-01", mileage=42))
+        db.commit()
+    connection = engine.raw_connection()
+    try:
+        connection.executescript(Path("scripts/rollback_schema_seven.sql").read_text())
+        with pytest.raises(Exception, match="CHECK constraint failed"):
+            connection.executescript(Path("scripts/rollback_schema_seven.sql").read_text())
+        connection.rollback()
+    finally:
+        connection.close()
+    assert schema_version(engine) == 6
+    assert "run_creation_requests" in inspect(engine).get_table_names()
+    run_startup_migrations(engine, sessions)
+    assert schema_version(engine) == 7
+    assert "run_creation_requests" not in inspect(engine).get_table_names()
+    with sessions() as db:
+        assert db.query(models.Shoe).one().mileage == 42
     engine.dispose()

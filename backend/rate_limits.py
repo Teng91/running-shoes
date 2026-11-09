@@ -1,61 +1,61 @@
-"""Shared request throttling for authentication and LLM-backed endpoints."""
+"""Shared request throttling for authentication and LLM-backed endpoints.
+
+Every limit is a fixed window stored in SQLite (``rate_limit_buckets``), so all
+workers share one budget. Limits come from the application's injected settings.
+Each check runs on its own short transaction from the application engine: the
+request's session is never committed as a side effect, and all windows touched by
+one request are consumed atomically. A rejected request records nothing, so a
+client that is over its own limit never spends a shared (global) budget.
+"""
 
 import time
-from collections import deque
+from collections.abc import Sequence
+from dataclasses import dataclass
 from ipaddress import ip_address
-from threading import Lock
 
 from fastapi import HTTPException, Request
 from sqlalchemy import text
-from sqlalchemy.orm import Session
+from sqlalchemy.engine import Connection, Engine
 
-from backend import models
-from backend.settings import settings
+from backend.settings import Settings
 
-AGENT_RATE_LIMIT_PER_MINUTE = settings.agent_rate_limit_per_minute
-AGENT_IP_RATE_LIMIT_PER_MINUTE = settings.agent_ip_rate_limit_per_minute
-AGENT_GLOBAL_RATE_LIMIT_PER_MINUTE = settings.agent_global_rate_limit_per_minute
-AUTH_RATE_LIMIT_PER_MINUTE = settings.auth_rate_limit_per_minute
-AUTH_GLOBAL_RATE_LIMIT_PER_MINUTE = settings.auth_global_rate_limit_per_minute
-MODEL_REFRESH_COOLDOWN_SECONDS = settings.model_refresh_cooldown_seconds
-MODEL_REFRESH_GLOBAL_PER_MINUTE = settings.model_refresh_global_per_minute
-IS_FLY_RUNTIME = settings.is_fly_runtime
+# Failed password checks. A per-address lock alone still allows distributed
+# guessing, and a per-account lock alone lets anyone lock a known username out.
+# Lock one address after LOGIN_FAILURE_LIMIT failures for an account, and the
+# account everywhere only after ACCOUNT_FAILURE_LIMIT failures from many addresses.
+LOGIN_FAILURE_WINDOW_SECONDS = 15 * 60
+LOGIN_FAILURE_LIMIT = 10
+ACCOUNT_FAILURE_LIMIT = 100
+STALE_BUCKET_SECONDS = 3600
 
-_agent_rate_events: dict[int, deque[float]] = {}
-_agent_ip_rate_events: dict[str, deque[float]] = {}
-_agent_global_rate_events: dict[str, deque[float]] = {}
-_auth_rate_events: dict[str, deque[float]] = {}
-_auth_global_rate_events: dict[str, deque[float]] = {}
-_model_refresh_times: dict[int, float] = {}
-_model_refresh_global_events: dict[str, deque[float]] = {}
-_agent_rate_lock = Lock()
-
-
-def _enforce_agent_rate_limit(user_id: int, now: float | None = None) -> None:
-    """Apply a per-account sliding-window limit to server-key LLM calls."""
-    current = time.monotonic() if now is None else now
-    cutoff = current - 60
-    with _agent_rate_lock:
-        for stale_user_id, stale_events in list(_agent_rate_events.items()):
-            while stale_events and stale_events[0] <= cutoff:
-                stale_events.popleft()
-            if not stale_events:
-                _agent_rate_events.pop(stale_user_id, None)
-        events = _agent_rate_events.setdefault(user_id, deque())
-        if len(events) >= AGENT_RATE_LIMIT_PER_MINUTE:
-            retry_after = max(1, int(60 - (current - events[0])))
-            raise HTTPException(
-                status_code=429,
-                detail="AI 請求過於頻繁，請稍後再試。",
-                headers={"Retry-After": str(retry_after)},
-            )
-        events.append(current)
+_AUTH_IP_DETAIL = "驗證請求過於頻繁，請稍後再試。"
+_AUTH_GLOBAL_DETAIL = "驗證服務目前忙碌，請稍後再試。"
+_AGENT_IP_DETAIL = "此網路的 AI 請求過於頻繁，請稍後再試。"
+_AGENT_USER_DETAIL = "AI 請求過於頻繁，請稍後再試。"
+_AGENT_GLOBAL_DETAIL = "AI 服務目前忙碌，請稍後再試。"
+_REFRESH_USER_DETAIL = "模型列表剛更新過，請稍後再試。"
+_REFRESH_GLOBAL_DETAIL = "模型列表更新目前忙碌，請稍後再試。"
+_LOGIN_FAILURE_DETAIL = "此帳號登入失敗次數過多，請 15 分鐘後再試。"
 
 
-def _client_key(request: Request) -> str:
+@dataclass(frozen=True)
+class Window:
+    scope: str
+    key: str
+    limit: int
+    detail: str
+    seconds: int = 60
+
+
+def _runtime(request: Request) -> tuple[Settings, Engine]:
+    state = request.app.state
+    return state.settings, state.db_engine
+
+
+def client_key(request: Request, settings: Settings) -> str:
     """Trust Fly's client-IP header only when running behind Fly's proxy."""
     fly_ip = request.headers.get("fly-client-ip", "").strip()
-    if IS_FLY_RUNTIME and fly_ip:
+    if settings.is_fly_runtime and fly_ip:
         try:
             return str(ip_address(fly_ip))
         except ValueError:
@@ -63,256 +63,118 @@ def _client_key(request: Request) -> str:
     return (request.client.host if request.client else "unknown")[:64]
 
 
-def _enforce_window_limit(
-    buckets: dict[str, deque[float]],
-    key: str,
-    limit: int,
-    detail: str,
-    now: float | None = None,
-) -> None:
-    current = time.monotonic() if now is None else now
-    cutoff = current - 60
-    with _agent_rate_lock:
-        for stale_key, stale_events in list(buckets.items()):
-            while stale_events and stale_events[0] <= cutoff:
-                stale_events.popleft()
-            if not stale_events:
-                buckets.pop(stale_key, None)
-        events = buckets.setdefault(key, deque())
-        if len(events) >= limit:
-            retry_after = max(1, int(60 - (current - events[0])))
-            raise HTTPException(
-                status_code=429,
-                detail=detail,
-                headers={"Retry-After": str(retry_after)},
-            )
-        events.append(current)
+def _rejection(window: Window, started: float | None, now: float) -> HTTPException:
+    elapsed = now - started if started is not None else 0
+    return HTTPException(
+        status_code=429,
+        detail=window.detail,
+        headers={"Retry-After": str(max(1, int(window.seconds - elapsed)))},
+    )
 
 
-def _enforce_shared_window_limit(
-    db: Session,
-    scope: str,
-    key: str,
-    limit: int,
-    detail: str,
-    window_seconds: int = 60,
-    now: float | None = None,
-) -> None:
-    """Atomically enforce a fixed window in SQLite so workers share limits."""
-    current = time.time() if now is None else now
-    cutoff = current - window_seconds
-    db.query(models.RateLimitBucket).filter(
-        models.RateLimitBucket.window_started <= current - 3600
-    ).delete(synchronize_session=False)
-    result = db.execute(
+def _bucket_start(connection: Connection, window: Window) -> float | None:
+    return connection.execute(
+        text("SELECT window_started FROM rate_limit_buckets WHERE scope = :scope AND bucket_key = :key"),
+        {"scope": window.scope, "key": window.key[:128]},
+    ).scalar_one_or_none()
+
+
+def _take(connection: Connection, window: Window, now: float) -> bool:
+    """Record one event in a fixed window; False (and no change) when it is full."""
+    recorded = connection.execute(
         text("""
-            INSERT INTO rate_limit_buckets
-                (scope, bucket_key, window_started, event_count)
-            VALUES (:scope, :key, :current, 1)
+            INSERT INTO rate_limit_buckets (scope, bucket_key, window_started, event_count)
+            VALUES (:scope, :key, :now, 1)
             ON CONFLICT(scope, bucket_key) DO UPDATE SET
-                window_started = CASE
-                    WHEN rate_limit_buckets.window_started <= :cutoff THEN :current
-                    ELSE rate_limit_buckets.window_started
-                END,
-                event_count = CASE
-                    WHEN rate_limit_buckets.window_started <= :cutoff THEN 1
-                    ELSE rate_limit_buckets.event_count + 1
-                END
+                window_started = CASE WHEN rate_limit_buckets.window_started <= :cutoff
+                    THEN :now ELSE rate_limit_buckets.window_started END,
+                event_count = CASE WHEN rate_limit_buckets.window_started <= :cutoff
+                    THEN 1 ELSE rate_limit_buckets.event_count + 1 END
             WHERE rate_limit_buckets.window_started <= :cutoff
                OR rate_limit_buckets.event_count < :limit
             RETURNING window_started
         """),
-        {"scope": scope, "key": key[:128], "current": current, "cutoff": cutoff, "limit": limit},
+        {"scope": window.scope, "key": window.key[:128], "now": now,
+         "cutoff": now - window.seconds, "limit": window.limit},
     ).scalar_one_or_none()
-    db.commit()
-    if result is None:
-        bucket = db.query(models.RateLimitBucket).filter(
-            models.RateLimitBucket.scope == scope,
-            models.RateLimitBucket.bucket_key == key[:128],
-        ).first()
-        retry_after = max(
-            1,
-            int(window_seconds - (current - bucket.window_started)) if bucket else window_seconds,
-        )
-        raise HTTPException(
-            status_code=429,
-            detail=detail,
-            headers={"Retry-After": str(retry_after)},
-        )
+    return recorded is not None
 
 
-def _reject_if_window_full(
-    buckets: dict, key, limit: int, detail: str, now: float | None = None
-) -> None:
-    """Read-only check of an in-memory window; never records an event."""
-    current = time.monotonic() if now is None else now
-    with _agent_rate_lock:
-        events = buckets.get(key)
-        while events and events[0] <= current - 60:
-            events.popleft()
-        if events and len(events) >= limit:
-            raise HTTPException(
-                status_code=429,
-                detail=detail,
-                headers={"Retry-After": str(max(1, int(60 - (current - events[0]))))},
-            )
-
-
-def _reject_if_shared_window_full(
-    db: Session, scope: str, key: str, limit: int, detail: str,
-    window_seconds: int = 60, now: float | None = None,
-) -> None:
-    """Read-only check of a shared window; never creates or increments a bucket."""
+def consume(engine: Engine, windows: Sequence[Window], now: float | None = None) -> None:
+    """Record one event in every window, or none of them if any window is full."""
     current = time.time() if now is None else now
-    bucket = db.query(models.RateLimitBucket).filter(
-        models.RateLimitBucket.scope == scope,
-        models.RateLimitBucket.bucket_key == key[:128],
-    ).first()
-    if (
-        bucket is not None
-        and bucket.window_started > current - window_seconds
-        and bucket.event_count >= limit
-    ):
-        raise HTTPException(
-            status_code=429,
-            detail=detail,
-            headers={"Retry-After": str(
-                max(1, int(window_seconds - (current - bucket.window_started)))
-            )},
+    with engine.begin() as connection:
+        connection.execute(
+            text("DELETE FROM rate_limit_buckets WHERE window_started <= :stale"),
+            {"stale": current - STALE_BUCKET_SECONDS},
         )
+        for window in windows:
+            if not _take(connection, window, current):
+                # Raising rolls back every window already taken in this transaction.
+                raise _rejection(window, _bucket_start(connection, window), current)
 
 
-def enforce_auth_rate_limit(request: Request, db: Session) -> None:
-    # A client already over its own limit must not consume the shared global
-    # budget; otherwise one address can lock every account out of login.
-    client_key = _client_key(request)
-    ip_detail = "驗證請求過於頻繁，請稍後再試。"
-    _reject_if_window_full(_auth_rate_events, client_key, AUTH_RATE_LIMIT_PER_MINUTE, ip_detail)
-    _reject_if_shared_window_full(db, "auth-ip", client_key, AUTH_RATE_LIMIT_PER_MINUTE, ip_detail)
-    _enforce_shared_window_limit(
-        db, "auth-global", "global", AUTH_GLOBAL_RATE_LIMIT_PER_MINUTE,
-        "驗證服務目前忙碌，請稍後再試。",
-    )
-    _enforce_window_limit(
-        _auth_global_rate_events, "global", AUTH_GLOBAL_RATE_LIMIT_PER_MINUTE,
-        "驗證服務目前忙碌，請稍後再試。",
-    )
-    _enforce_window_limit(
-        _auth_rate_events, client_key, AUTH_RATE_LIMIT_PER_MINUTE,
-        "驗證請求過於頻繁，請稍後再試。",
-    )
-    _enforce_shared_window_limit(
-        db, "auth-ip", client_key, AUTH_RATE_LIMIT_PER_MINUTE,
-        "驗證請求過於頻繁，請稍後再試。",
-    )
+def reject_if_full(engine: Engine, windows: Sequence[Window], now: float | None = None) -> None:
+    """Read-only check; never creates or increments a bucket."""
+    current = time.time() if now is None else now
+    with engine.connect() as connection:
+        for window in windows:
+            row = connection.execute(
+                text("SELECT window_started, event_count FROM rate_limit_buckets "
+                     "WHERE scope = :scope AND bucket_key = :key"),
+                {"scope": window.scope, "key": window.key[:128]},
+            ).first()
+            if row is not None and row[0] > current - window.seconds and row[1] >= window.limit:
+                raise _rejection(window, row[0], current)
 
 
-def enforce_agent_request_limits(request: Request, user_id: int, db: Session) -> None:
-    # Reject a throttled network or account before it spends shared AI budget.
-    client_key = _client_key(request)
-    ip_detail = "此網路的 AI 請求過於頻繁，請稍後再試。"
-    user_detail = "AI 請求過於頻繁，請稍後再試。"
-    _reject_if_window_full(_agent_ip_rate_events, client_key, AGENT_IP_RATE_LIMIT_PER_MINUTE, ip_detail)
-    _reject_if_window_full(_agent_rate_events, user_id, AGENT_RATE_LIMIT_PER_MINUTE, user_detail)
-    _reject_if_shared_window_full(db, "agent-ip", client_key, AGENT_IP_RATE_LIMIT_PER_MINUTE, ip_detail)
-    _reject_if_shared_window_full(db, "agent-user", str(user_id), AGENT_RATE_LIMIT_PER_MINUTE, user_detail)
-    _enforce_shared_window_limit(
-        db, "agent-global", "global", AGENT_GLOBAL_RATE_LIMIT_PER_MINUTE,
-        "AI 服務目前忙碌，請稍後再試。",
-    )
-    _enforce_window_limit(
-        _agent_global_rate_events, "global", AGENT_GLOBAL_RATE_LIMIT_PER_MINUTE,
-        "AI 服務目前忙碌，請稍後再試。",
-    )
-    _enforce_window_limit(
-        _agent_ip_rate_events, client_key, AGENT_IP_RATE_LIMIT_PER_MINUTE,
-        "此網路的 AI 請求過於頻繁，請稍後再試。",
-    )
-    _enforce_agent_rate_limit(user_id)
-    _enforce_shared_window_limit(
-        db, "agent-ip", client_key, AGENT_IP_RATE_LIMIT_PER_MINUTE,
-        "此網路的 AI 請求過於頻繁，請稍後再試。",
-    )
-    _enforce_shared_window_limit(
-        db, "agent-user", str(user_id), AGENT_RATE_LIMIT_PER_MINUTE,
-        "AI 請求過於頻繁，請稍後再試。",
-    )
+def enforce_auth_rate_limit(request: Request) -> None:
+    settings, engine = _runtime(request)
+    consume(engine, (
+        Window("auth-ip", client_key(request, settings), settings.auth_rate_limit_per_minute, _AUTH_IP_DETAIL),
+        Window("auth-global", "global", settings.auth_global_rate_limit_per_minute, _AUTH_GLOBAL_DETAIL),
+    ))
 
 
-def enforce_model_refresh_limits(user_id: int, db: Session, now: float | None = None) -> None:
-    """Apply account cooldown and shared/global refresh limits as one operation."""
-    current = time.monotonic() if now is None else now
-    with _agent_rate_lock:
-        for stale_user_id, refreshed_at in list(_model_refresh_times.items()):
-            if current - refreshed_at >= MODEL_REFRESH_COOLDOWN_SECONDS:
-                _model_refresh_times.pop(stale_user_id, None)
-        last_refresh = _model_refresh_times.get(user_id)
-        if last_refresh is not None and current - last_refresh < MODEL_REFRESH_COOLDOWN_SECONDS:
-            retry_after = max(1, int(MODEL_REFRESH_COOLDOWN_SECONDS - (current - last_refresh)))
-            raise HTTPException(
-                status_code=429,
-                detail="模型列表剛更新過，請稍後再試。",
-                headers={"Retry-After": str(retry_after)},
-            )
-        _model_refresh_times[user_id] = current
-    try:
-        _enforce_shared_window_limit(
-            db, "model-refresh-global", "global", MODEL_REFRESH_GLOBAL_PER_MINUTE,
-            "模型列表更新目前忙碌，請稍後再試。",
-        )
-        _enforce_window_limit(
-            _model_refresh_global_events, "global", MODEL_REFRESH_GLOBAL_PER_MINUTE,
-            "模型列表更新目前忙碌，請稍後再試。",
-        )
-    except Exception:
-        with _agent_rate_lock:
-            _model_refresh_times.pop(user_id, None)
-        raise
+def enforce_agent_request_limits(request: Request, user_id: int) -> None:
+    settings, engine = _runtime(request)
+    consume(engine, (
+        Window("agent-ip", client_key(request, settings), settings.agent_ip_rate_limit_per_minute,
+               _AGENT_IP_DETAIL),
+        Window("agent-user", str(user_id), settings.agent_rate_limit_per_minute, _AGENT_USER_DETAIL),
+        Window("agent-global", "global", settings.agent_global_rate_limit_per_minute, _AGENT_GLOBAL_DETAIL),
+    ))
 
 
-# Private aliases retained for focused unit tests and gradual caller migration.
-_enforce_auth_rate_limit = enforce_auth_rate_limit
-_enforce_agent_request_limits = enforce_agent_request_limits
+def enforce_model_refresh_limits(request: Request, user_id: int) -> None:
+    """Account cooldown and global refresh budget, consumed together or not at all."""
+    settings, engine = _runtime(request)
+    consume(engine, (
+        Window("model-refresh-user", str(user_id), 1, _REFRESH_USER_DETAIL,
+               seconds=settings.model_refresh_cooldown_seconds),
+        Window("model-refresh-global", "global", settings.model_refresh_global_per_minute,
+               _REFRESH_GLOBAL_DETAIL),
+    ))
 
 
-def _enforce_model_refresh_cooldown(user_id: int, now: float | None = None) -> None:
-    """Compatibility helper that applies only the account cooldown."""
-    current = time.monotonic() if now is None else now
-    with _agent_rate_lock:
-        for stale_user_id, refreshed_at in list(_model_refresh_times.items()):
-            if current - refreshed_at >= MODEL_REFRESH_COOLDOWN_SECONDS:
-                _model_refresh_times.pop(stale_user_id, None)
-        last_refresh = _model_refresh_times.get(user_id)
-        if last_refresh is not None and current - last_refresh < MODEL_REFRESH_COOLDOWN_SECONDS:
-            retry_after = max(1, int(MODEL_REFRESH_COOLDOWN_SECONDS - (current - last_refresh)))
-            raise HTTPException(
-                status_code=429,
-                detail="模型列表剛更新過，請稍後再試。",
-                headers={"Retry-After": str(retry_after)},
-            )
-        _model_refresh_times[user_id] = current
-
-
-# Failed password checks per username. The per-IP window alone still allows
-# distributed guessing against one account; this bounds guesses per account.
-LOGIN_FAILURE_LIMIT = 10
-LOGIN_FAILURE_WINDOW_SECONDS = 15 * 60
-_LOGIN_FAILURE_DETAIL = "此帳號登入失敗次數過多，請 15 分鐘後再試。"
-
-
-def reject_locked_account(db: Session, username: str) -> None:
-    _reject_if_shared_window_full(
-        db, "auth-user-failure", username, LOGIN_FAILURE_LIMIT, _LOGIN_FAILURE_DETAIL,
-        window_seconds=LOGIN_FAILURE_WINDOW_SECONDS,
+def _login_failure_windows(request: Request, settings: Settings, username: str) -> tuple[Window, Window]:
+    return (
+        Window("auth-failure-client", f"{client_key(request, settings)}|{username}", LOGIN_FAILURE_LIMIT,
+               _LOGIN_FAILURE_DETAIL, seconds=LOGIN_FAILURE_WINDOW_SECONDS),
+        Window("auth-failure-account", username, ACCOUNT_FAILURE_LIMIT,
+               _LOGIN_FAILURE_DETAIL, seconds=LOGIN_FAILURE_WINDOW_SECONDS),
     )
 
 
-def record_login_failure(db: Session, username: str) -> None:
-    try:
-        _enforce_shared_window_limit(
-            db, "auth-user-failure", username, LOGIN_FAILURE_LIMIT, _LOGIN_FAILURE_DETAIL,
-            window_seconds=LOGIN_FAILURE_WINDOW_SECONDS,
-        )
-    except HTTPException:
-        # Already at the limit; the next attempt is rejected by reject_locked_account.
-        pass
+def reject_locked_account(request: Request, username: str) -> None:
+    settings, engine = _runtime(request)
+    reject_if_full(engine, _login_failure_windows(request, settings, username))
+
+
+def record_login_failure(request: Request, username: str) -> None:
+    """Count a failed password check; a full window simply stops counting."""
+    settings, engine = _runtime(request)
+    current = time.time()
+    with engine.begin() as connection:
+        for window in _login_failure_windows(request, settings, username):
+            _take(connection, window, current)

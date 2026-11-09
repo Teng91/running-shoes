@@ -4,9 +4,11 @@ import importlib
 import os
 import runpy
 import sys
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
-from backend import auth, llm
+import pytest
+
+from backend import llm
 
 settings_module = importlib.import_module("backend.settings")
 
@@ -37,58 +39,47 @@ def test_llm_does_not_inject_stale_or_model_env_defaults():
         importlib.reload(llm)
 
 
-def test_auth_requires_secret_key_in_production_at_import(monkeypatch):
-    original_environment = os.environ.get("ENVIRONMENT")
-    original_secret = os.environ.get("SECRET_KEY")
-    exit_mock = MagicMock()
-    try:
-        os.environ["ENVIRONMENT"] = "production"
-        os.environ.pop("SECRET_KEY", None)
-        monkeypatch.setattr(sys, "exit", exit_mock)
-        # A developer's local .env must not refill the secret this test removes.
-        monkeypatch.setattr("dotenv.load_dotenv", lambda *args, **kwargs: False)
-        with patch("warnings.warn"):
-            importlib.reload(settings_module)
-            importlib.reload(auth)
-        exit_mock.assert_called_once_with(1)
-    finally:
-        if original_environment is None:
-            os.environ.pop("ENVIRONMENT", None)
-        else:
-            os.environ["ENVIRONMENT"] = original_environment
-        if original_secret is None:
-            os.environ.pop("SECRET_KEY", None)
-        else:
-            os.environ["SECRET_KEY"] = original_secret
-        with patch("warnings.warn"):
-            importlib.reload(settings_module)
-            importlib.reload(auth)
+def test_production_refuses_a_missing_or_short_secret_key(tmp_path):
+    """SPEC-047: validation happens in the composition root, not as an import side effect."""
+    from backend.app_factory import create_app
+    from backend.settings import Settings, runtime_settings
+
+    def production(secret):
+        return Settings.from_env({"ENVIRONMENT": "production", "SECRET_KEY": secret, "DB_DIR": str(tmp_path)})
+
+    with pytest.raises(RuntimeError, match="required in production"):
+        create_app(production(""), frontend_dir=tmp_path)
+    with pytest.raises(RuntimeError, match="at least 32 bytes"):
+        runtime_settings(production("x" * 31))
+    accepted = production("p" * 32)
+    assert runtime_settings(accepted) is accepted
 
 
-def test_auth_import_with_secret_key_skips_fallback(monkeypatch):
-    original_environment = os.environ.get("ENVIRONMENT")
-    original_secret = os.environ.get("SECRET_KEY")
-    try:
-        os.environ["ENVIRONMENT"] = "production"
-        os.environ["SECRET_KEY"] = "production-test-secret"
-        exit_mock = MagicMock()
-        monkeypatch.setattr(sys, "exit", exit_mock)
-        importlib.reload(settings_module)
-        importlib.reload(auth)
-        assert auth.SECRET_KEY == "production-test-secret"
-        exit_mock.assert_not_called()
-    finally:
-        if original_environment is None:
-            os.environ.pop("ENVIRONMENT", None)
-        else:
-            os.environ["ENVIRONMENT"] = original_environment
-        if original_secret is None:
-            os.environ.pop("SECRET_KEY", None)
-        else:
-            os.environ["SECRET_KEY"] = original_secret
-        with patch("warnings.warn"):
-            importlib.reload(settings_module)
-            importlib.reload(auth)
+def test_development_without_secret_uses_a_long_fallback_and_warns(tmp_path):
+    from backend.settings import (
+        DEV_FALLBACK_SECRET_KEY,
+        MIN_SECRET_KEY_BYTES,
+        Settings,
+        runtime_settings,
+    )
+
+    config = Settings.from_env({"ENVIRONMENT": "development", "DB_DIR": str(tmp_path)})
+    with pytest.warns(UserWarning, match="fallback SECRET_KEY"):
+        resolved = runtime_settings(config)
+    assert resolved.secret_key == DEV_FALLBACK_SECRET_KEY
+    assert len(DEV_FALLBACK_SECRET_KEY.encode()) >= MIN_SECRET_KEY_BYTES
+
+
+def test_importing_backend_modules_performs_no_database_io(tmp_path):
+    """SPEC-047: no engine, directory or secret check is created at import time."""
+    import subprocess
+
+    missing = tmp_path / "not-created"
+    environment = {**os.environ, "DB_DIR": str(missing), "ENVIRONMENT": "production", "SECRET_KEY": ""}
+    code = "import backend.database, backend.auth, backend.rate_limits, backend.routers.runs; print('ok')"
+    result = subprocess.run((sys.executable, "-c", code), capture_output=True, text=True, env=environment, check=True)
+    assert result.stdout.strip().splitlines()[-1] == "ok"
+    assert not missing.exists()
 
 
 def test_run_module_starts_uvicorn(monkeypatch):

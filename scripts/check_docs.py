@@ -104,7 +104,7 @@ def main() -> None:
         "scripts/browser_artifacts.cjs",
         "package.json",
         "package-lock.json",
-        "backend/services/run_requests.py",
+        "backend/services/fingerprints.py",
         "unit_tests/frontend_reliability.cjs",
         "docs/specs/017-consistent-statistics-and-feature-lifecycles.md",
         "docs/adr/0003-shared-read-models-and-feature-lifecycles.md",

@@ -304,7 +304,7 @@ test('SPEC-028 stale sync cannot change the next account feedback', async () => 
 
 test('SPEC-028 workspace guidance distinguishes server backup and local data', () => {
   const modal = fs.readFileSync('frontend/templates/workspace-modal.html', 'utf8');
-  assert.match(modal, /syncWorkspace\(\{ manual: true \}\)/);
+  assert.match(modal, /data-click="sync-workspace"/);
   assert.match(modal, /id="workspace-sync-status" role="status" aria-live="polite"/);
   assert.match(modal, /不會覆寫整個資料庫/);
   assert.match(modal, /不含密碼、本機草稿或待同步跑步/);

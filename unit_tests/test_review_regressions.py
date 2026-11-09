@@ -1,7 +1,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from backend.database import get_db
+from backend.dependencies import get_db
 from backend.main import app
 from backend.routers.strava import _parse_strava_csv
 
@@ -65,6 +65,6 @@ def test_run_dates_cannot_poison_monthly_response(api, date):
     assert api.get("/api/monthly-mileage").json() == []
     csv = ("Activity ID,Activity Date,Activity Type,Activity Gear,Distance\n"
            f"1,{date},Run,Test,1000\n")
-    rows, invalid, _ = _parse_strava_csv(csv.encode())
+    rows, invalid, _ = _parse_strava_csv(csv.encode(), 50_000)
     assert rows == []
     assert invalid == 1

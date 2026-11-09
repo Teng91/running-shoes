@@ -169,3 +169,15 @@ test('SPEC-046 Strava mapping flags gear whose first activity predates the chose
   elements['strava-map-0'].value = ''; context.updateStravaDateWarning(0);
   assert.equal(elements['strava-warn-0'].hidden, true, 'skipped gear has no reminder');
 });
+
+test('SPEC-047 Strava preview explains UTC date corrections and allows a correction-only import', () => {
+  const context = vm.createContext({});
+  vm.runInContext(extract('stravaDateCorrectionText') + extract('stravaHasChanges'), context);
+  const preview = { importable_count: 0, date_correction_count: 2,
+    date_correction_samples: [{ from_date: '2026-10-31', to_date: '2026-11-01', km: 10 }] };
+  assert.equal(context.stravaDateCorrectionText(preview), '另有 2 筆既有紀錄的日期會依台灣時間修正（例如 2026/10/31 → 2026/11/01）。');
+  assert.equal(context.stravaHasChanges(preview), true, 'corrections alone enable the import button');
+  assert.equal(context.stravaDateCorrectionText({ date_correction_count: 0 }), '');
+  assert.equal(context.stravaHasChanges({ importable_count: 0, date_correction_count: 0 }), false);
+  assert.equal(context.stravaHasChanges({ importable_count: 3 }), true, 'older servers omit the correction count');
+});

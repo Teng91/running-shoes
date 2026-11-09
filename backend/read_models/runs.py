@@ -1,5 +1,6 @@
-"""Complete calendar/summary read model independent of detail pagination."""
+"""User-scoped run lists, calendar summaries and import history, independent of transport."""
 
+from calendar import monthrange
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -69,3 +70,43 @@ def year_run_summary(db: Session, user_id: int, year: int) -> dict:
         "monthly_km": [round(km, 2) for km in totals],
         "shoes": [{"shoe_id": shoe_id, "monthly_km": kms} for shoe_id, kms in matrix.items()],
     }
+
+
+def list_runs(
+    db: Session,
+    user_id: int,
+    *,
+    year: int | None = None,
+    month: int | None = None,
+    day: int | None = None,
+    limit: int | None = None,
+    offset: int = 0,
+) -> list[models.Run]:
+    """Newest-first runs for an optional year, month or day (callers validate the combination)."""
+    query = db.query(models.Run).filter(models.Run.user_id == user_id)
+    if year is not None:
+        if month is None:
+            start, end = f"{year:04d}-01-01", f"{year:04d}-12-31"
+        else:
+            start, end = month_bounds(year, month)
+        query = query.filter(models.Run.date >= start, models.Run.date <= end)
+        if month is not None and day is not None:
+            query = query.filter(models.Run.date == f"{year:04d}-{month:02d}-{day:02d}")
+    query = query.order_by(models.Run.date.desc(), models.Run.id.desc()).offset(offset)
+    if limit is not None:
+        query = query.limit(limit)
+    return query.all()
+
+
+def is_calendar_day(year: int, month: int, day: int) -> bool:
+    return day <= monthrange(year, month)[1]
+
+
+def recent_strava_imports(db: Session, user_id: int, limit: int = 10) -> list[models.StravaImport]:
+    return (
+        db.query(models.StravaImport)
+        .filter(models.StravaImport.user_id == user_id)
+        .order_by(models.StravaImport.imported_at.desc(), models.StravaImport.id.desc())
+        .limit(limit)
+        .all()
+    )

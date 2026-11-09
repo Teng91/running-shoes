@@ -7,8 +7,7 @@ from sqlalchemy.orm import Session
 
 from backend import models, schemas
 from backend.auth import get_current_user
-from backend.database import get_db
-from backend.dependencies import OperationKey, get_settings
+from backend.dependencies import OperationKey, get_db, get_settings
 from backend.forecasting import forecasts_for_shoes
 from backend.routers.errors import service_errors
 from backend.services import shoes as shoes_service

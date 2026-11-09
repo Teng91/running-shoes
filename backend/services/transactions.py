@@ -9,6 +9,7 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
 from backend.models import User, WriteContext
+from backend.services.retention import prune_account_history
 
 
 def reserve_user_write(db: Session, user_id: int | None) -> None:
@@ -48,6 +49,7 @@ def write_transaction(
         yield
         db.flush()
         if user_id is not None:
+            prune_account_history(db, user_id)
             db.execute(delete(WriteContext).where(WriteContext.user_id == user_id))
         db.commit()
     except Exception:

@@ -7,5 +7,9 @@ from datetime import date, datetime, timedelta, timezone
 APP_TIMEZONE = timezone(timedelta(hours=8))
 
 
+def local_now() -> datetime:
+    return datetime.now(APP_TIMEZONE)
+
+
 def local_today() -> date:
-    return datetime.now(APP_TIMEZONE).date()
+    return local_now().date()
