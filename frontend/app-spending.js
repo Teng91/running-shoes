@@ -20,7 +20,7 @@ async function loadSpendingData() {
     if (!summary || !Array.isArray(summary.monthly)) throw new Error('支出資料格式不正確');
     spendingSummary = summary;
     monthlySpending = summary.monthly;
-    if (document.querySelector('.tab-panel.active')?.dataset.panel === 'spending') renderSpendingCharts();
+    if (document.querySelector('.tab-panel.active')?.dataset.panel === 'shoes') renderSpendingCharts();
   } catch (error) {
     if (error.name === 'AbortError' || !isCurrentAuthSession(session) || requestId !== spendingLoadRequestId) return;
     document.getElementById('spending-cards').innerHTML = `<div class="card"><div class="card-sub">支出載入失敗：${esc(error.message)}</div><button class="btn btn-edit" onclick="loadSpendingData()">重試</button></div>`;

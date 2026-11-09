@@ -13,7 +13,7 @@ async function selectTab(page, name) {
   const destination = name === 'report' ? 'agent' : name;
   if (await toggle.isVisible()) {
     // SPEC-040: phones keep every destination in a fixed bottom tab bar; the menu holds account actions.
-    assert.equal(await page.locator('.tab:visible').count(), 5, 'bottom tab bar exposes all destinations');
+    assert.equal(await page.locator('.tab:visible').count(), 4, 'bottom tab bar exposes all destinations');
     if (await toggle.getAttribute('aria-expanded') !== 'true') await toggle.click();
     assert.equal(await page.locator('#user-label').isVisible(), true, 'expanded menu shows account actions');
     await assertLayout(page, 'expanded mobile menu');
@@ -23,7 +23,7 @@ async function selectTab(page, name) {
   assert.equal(await page.locator('.tab-panel.active').getAttribute('data-panel'), name);
   if (await toggle.isVisible()) {
     assert.equal(await toggle.getAttribute('aria-expanded'), 'false', 'selection closes mobile menu');
-    assert.equal(await page.locator('.tab:visible').count(), 5, 'the tab bar stays visible');
+    assert.equal(await page.locator('.tab:visible').count(), 4, 'the tab bar stays visible');
     const bar = await page.locator('.tabs').boundingBox();
     const viewport = page.viewportSize();
     assert.ok(Math.abs(bar.y + bar.height - viewport.height) <= 1, 'tab bar is pinned to the bottom');
@@ -372,11 +372,11 @@ async function run(engine, name) {
         await page.evaluate(theme => applyTheme(theme), theme);
         for (const [width, height] of [[320, 740], [375, 812], [390, 844], [430, 932], [844, 390], [768, 1024], [800, 1024], [1024, 768], [1280, 800], [1440, 900]]) {
           await page.setViewportSize({ width, height });
-          for (const tab of ['runs', 'shoes', 'monthly', 'spending', 'agent', 'report']) {
+          for (const tab of ['runs', 'shoes', 'monthly', 'agent', 'report']) {
             await selectTab(page, tab);
             await page.waitForTimeout(100);
             await assertLayout(page, `${name} ${theme} ${width} ${tab}`);
-            const expected = { runs: 1, shoes: 6, monthly: 6, spending: 2, agent: 0, report: 0 }[tab];
+            const expected = { runs: 1, shoes: 8, monthly: 6, agent: 0, report: 0 }[tab];
             if (tab === 'monthly') {
               assert.equal(await page.locator('#run-heatmap .heatmap-grid .heat-cell:not(.blank)').count(), 365, 'heatmap renders every day');
             }
@@ -484,7 +484,7 @@ async function run(engine, name) {
       await page.evaluate(() => renderDashboardInsights(window.layoutAnalytics));
       await assertLayout(page, `${name} analytics recovery`);
       await page.evaluate(() => { shoes = []; retiredShoes = []; runController.state.rows = []; monthlyMileages = []; monthlySpending = []; render(); });
-      for (const tab of ['runs', 'shoes', 'monthly', 'spending', 'report']) {
+      for (const tab of ['runs', 'shoes', 'monthly', 'report']) {
         await selectTab(page, tab);
         await page.waitForTimeout(100);
         await assertLayout(page, `${name} empty ${tab}`);

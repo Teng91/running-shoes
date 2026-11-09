@@ -153,6 +153,13 @@ test('SPEC-040 phones use a fixed bottom tab bar while the header menu keeps acc
   assert.ok(sidebar.indexOf('class="tabs"') < sidebar.indexOf('id="sidebar-navigation"'));
   assert.ok(sidebar.indexOf('id="user-label"') > sidebar.indexOf('id="sidebar-navigation"'));
   assert.match(sidebar, /<span aria-hidden="true">☰<\/span> 帳號<\/button>/);
-  assert.match(styleSource, /\.tabs \{\s*position: fixed;\s*right: 0;\s*bottom: 0;[\s\S]*?grid-template-columns: repeat\(5, minmax\(0, 1fr\)\);/);
+  assert.match(styleSource, /\.tabs \{\s*position: fixed;\s*right: 0;\s*bottom: 0;[\s\S]*?grid-template-columns: repeat\(4, minmax\(0, 1fr\)\);/);
+  // SPEC-043: spending sits at the bottom of the shoes tab instead of its own tab.
+  assert.doesNotMatch(htmlSource, /data-tab="spending"|id="panel-spending"/);
+  const shoesTab = htmlSource.slice(htmlSource.indexOf('id="panel-shoes"'), htmlSource.indexOf('<!-- /tab-panel shoes -->'));
+  for (const id of ['spending-cards', 'chart-spending-yearly', 'chart-spending', 'spending-year-select', 'spending-table']) {
+    assert.match(shoesTab, new RegExp(`id="${id}"`));
+  }
+  assert.match(extract('loadSpendingData'), /dataset\.panel === 'shoes'\) renderSpendingCharts\(\)/);
   assert.match(styleSource, /calc\(84px \+ env\(safe-area-inset-bottom\)\)/, 'content clears the tab bar');
 });

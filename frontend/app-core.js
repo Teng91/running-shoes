@@ -8,7 +8,7 @@ function invalidatePanels(resource = null) {
     runController.state.annualRequest += 1;
     return;
   }
-  const dependencies = { shoes: ['shoes', 'runs', 'monthly', 'spending'],
+  const dependencies = { shoes: ['shoes', 'runs', 'monthly'],
     monthly: ['monthly'], runs: ['runs', 'monthly'], goal: ['runs', 'monthly'] };
   for (const name of dependencies[resource] || []) renderedPanels.delete(name);
 }
@@ -28,12 +28,12 @@ function renderActivePanel() {
   if (name === 'shoes') {
     renderCards(); renderAlerts(); renderCategorySummary(); renderTable(); renderRetiredTable();
     if (typeof Chart !== 'undefined') renderCharts();
+    // Spending lives at the bottom of the shoes tab.
+    renderSpendingCharts();
   } else if (name === 'runs') {
     populateRunShoeSelects(); renderRunLog(); renderHomeSummary();
   } else if (name === 'monthly') {
     if (typeof Chart !== 'undefined') renderMonthlyCharts();
-  } else if (name === 'spending') {
-    renderSpendingCharts();
   }
 }
 

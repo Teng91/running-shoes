@@ -223,6 +223,10 @@ SPEC-032：合成資料驗證 50,000／50,001 筆歷史邊界、UTF-8 位元組�
 
 [規格與具名案例](specs/034-portable-recovery-and-sync-refresh.md) 驗證來源及接收者連續復原、省略歷史仍攜帶來源鍵、tombstone、別名衝突／全域容量／格式拒絕、v1/v2 指紋相容，以及小數累積與 legacy Float 尾差的 no-op 版本／audit 不變。Node 覆蓋手動空佇列讀取、通知失敗不重排已確認操作、刷新中的新通知及外帳號忽略；雙引擎 workspace E2E 操作 v3 來源復原檔及真實 BroadcastChannel／IndexedDB 多分頁，確認雲端讀取與表單草稿保留。
 
+## SPEC-043 支出併入跑鞋分頁
+
+[規格與具名案例](specs/043-spending-in-shoes-tab.md) 以 Node 驗證沒有支出分頁、支出卡片／圖表／明細位於跑鞋分頁、支出資料晚到時只在跑鞋分頁繪製、跑鞋異動只讓相關面板失效；`frontend-layout` 檢查 4 欄底部分頁列與跑鞋分頁 8 張圖，`frontend-e2e` 在跑鞋分頁驗證支出重試與購買明細。
+
 ## SPEC-042 移除跑步摘要卡、距離分布配色與 AI 分頁合併
 
 [規格與具名案例](specs/042-run-log-tiles-distance-colors-and-ai-tab.md) 以暫存資料庫驗證首頁摘要只回傳選鞋建議、距離分段在 20 km 邊界的歸屬；Node 驗證跑步日誌沒有摘要卡與個人紀錄、選鞋建議仍可選入、距離分布五色、AI 分頁只有一個按鈕且月報經面板切換開啟；`frontend-layout` 透過切換開啟月報並檢查 5 欄底部分頁列。
