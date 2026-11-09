@@ -12,6 +12,8 @@ load_dotenv()
 
 # HS256 keys shorter than the hash output are brute-forceable (RFC 7518 §3.2).
 MIN_SECRET_KEY_BYTES = 32
+# Rate-limit buckets older than this are deleted, so no window may be longer.
+RATE_LIMIT_BUCKET_RETENTION_SECONDS = 3600
 # Development-only signing key; production refuses to start without SECRET_KEY.
 DEV_FALLBACK_SECRET_KEY = "development-only-insecure-secret-key-change-me"
 
@@ -81,7 +83,10 @@ class Settings:
             agent_global_rate_limit_per_minute=_positive_int(env, "AGENT_GLOBAL_RATE_LIMIT_PER_MINUTE", 120),
             auth_rate_limit_per_minute=_positive_int(env, "AUTH_RATE_LIMIT_PER_MINUTE", 120),
             auth_global_rate_limit_per_minute=_positive_int(env, "AUTH_GLOBAL_RATE_LIMIT_PER_MINUTE", 300),
-            model_refresh_cooldown_seconds=_positive_int(env, "MODEL_REFRESH_COOLDOWN_SECONDS", 60),
+            model_refresh_cooldown_seconds=min(
+                RATE_LIMIT_BUCKET_RETENTION_SECONDS,
+                _positive_int(env, "MODEL_REFRESH_COOLDOWN_SECONDS", 60),
+            ),
             model_refresh_global_per_minute=_positive_int(env, "MODEL_REFRESH_GLOBAL_PER_MINUTE", 10),
             llm_max_output_tokens=max(256, int(env.get("LLM_MAX_OUTPUT_TOKENS", "4096"))),
             openrouter_default_model=env.get("OR_MODEL") or None,

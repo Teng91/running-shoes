@@ -937,3 +937,47 @@ def test_legacy_archive_fingerprint_excludes_v3_defaults(workspace, version):
     for row in original['runs']:
         row.pop('aliases')
     assert backup_fingerprint(parsed) == payload_hash(original)
+
+
+def test_imported_history_never_evicts_local_recoverable_events(workspace, monkeypatch):
+    """v4.7.1: local and imported audit events have separate retention caps."""
+    from backend.services import history, retention, runs
+    monkeypatch.setattr(retention.prune_account_history, "__kwdefaults__", {
+        "audit_events": 50, "imported_audit_events": 3, "receipts": 1_000, "tombstones": 50_000,
+    })
+    with workspace.sessions() as db:
+        payload = archive(db)
+        assert len(payload["history"]) > 3
+        shoe = add_shoe(db, uid=2)
+        run = add_run(db, shoe.id, uid=2)
+        runs.delete_run(db, 2, run.id, run.version)
+        local_before = db.query(models.AuditEvent).filter_by(user_id=2, imported=False).count()
+        preview = account_restore.preview_restore(db, 2, json.dumps(payload).encode(), workspace.config)
+        account_restore.apply_restore(db, 2, preview['token'], 'retention-import-0001', workspace.config)
+        rows = history.list_history(db, 2, limit=100)['rows']
+        assert sum(row['imported'] for row in rows) == 3
+        assert db.query(models.AuditEvent).filter_by(user_id=2, imported=False).count() >= local_before
+        assert any(row['can_restore'] and row['entity'] == 'runs' for row in rows)
+
+
+def test_startup_discards_every_accounts_expired_previews_only(workspace, tmp_path):
+    """v4.7.1: abandoned previews (up to 64 MiB each account) no longer wait for that account."""
+    from datetime import UTC, datetime, timedelta
+
+    from fastapi.testclient import TestClient
+
+    from backend.app_factory import create_app
+    now = datetime.now(UTC)
+    with workspace.sessions() as db:
+        for user_id, token, expires_at in ((1, 'a' * 36, now - timedelta(minutes=1)),
+                                           (2, 'b' * 36, now - timedelta(days=3)),
+                                           (2, 'c' * 36, now + timedelta(minutes=10))):
+            db.add(models.RestorePreview(user_id=user_id, token=token, revision=0, payload_hash='x',
+                                         payload_json={}, expires_at=expires_at))
+        db.commit()
+    app = create_app(workspace.config, db_engine=workspace.engine, session_factory=workspace.sessions,
+                     frontend_dir=tmp_path)
+    with TestClient(app):
+        pass
+    with workspace.sessions() as db:
+        assert [(row.user_id, row.token) for row in db.query(models.RestorePreview)] == [(2, 'c' * 36)]

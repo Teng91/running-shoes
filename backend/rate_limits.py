@@ -17,7 +17,7 @@ from fastapi import HTTPException, Request
 from sqlalchemy import text
 from sqlalchemy.engine import Connection, Engine
 
-from backend.settings import Settings
+from backend.settings import RATE_LIMIT_BUCKET_RETENTION_SECONDS, Settings
 
 # Failed password checks. A per-address lock alone still allows distributed
 # guessing, and a per-account lock alone lets anyone lock a known username out.
@@ -26,7 +26,7 @@ from backend.settings import Settings
 LOGIN_FAILURE_WINDOW_SECONDS = 15 * 60
 LOGIN_FAILURE_LIMIT = 10
 ACCOUNT_FAILURE_LIMIT = 100
-STALE_BUCKET_SECONDS = 3600
+STALE_BUCKET_SECONDS = RATE_LIMIT_BUCKET_RETENTION_SECONDS
 
 _AUTH_IP_DETAIL = "驗證請求過於頻繁，請稍後再試。"
 _AUTH_GLOBAL_DETAIL = "驗證服務目前忙碌，請稍後再試。"

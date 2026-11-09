@@ -1,6 +1,6 @@
 # SPEC-047：程式審查修正、有界歷史與模組解耦
 
-- 狀態：Implemented
+- 狀態：Implemented（v4.7.1 修訂：AC-12～AC-16）
 - Owner：Running Shoes maintainers
 - 關聯 issue／ADR：[ADR-0004](../adr/0004-request-reliability-and-release-gates.md)、[SPEC-019](019-reliable-requests-and-release-gates.md)、[SPEC-033](033-recovery-and-sync-identity.md)、[SPEC-036](036-security-hardening-and-portable-locks.md)
 
@@ -40,6 +40,15 @@
   - 前端改以 `data-*` 動作委派事件。
   - 測試不留未關閉連線。
 
+### v4.7.1 修訂
+
+v4.7.0 上線後再審查發現：
+
+- 保留上限只依 id 排序，匯入含大量歷史的備份會擠掉本機可復原的紀錄（已重現）。
+- 過期的還原預覽只有同一帳號再預覽時才清除。
+- 年目標 `monthly_km * 12` 沒有四捨五入，會寫進資料庫並出現在備份。
+- 模型刷新冷卻若設定超過限流紀錄保留時間（1 小時）會被提早清除。
+
 ## Non-goals
 
 - 不把 30 個前端 classic script 全面改成 ES modules；全域狀態維持現況，只解除 markup 與函式名稱的耦合。
@@ -67,6 +76,8 @@
   - `frontend/app-actions.js` 以 `UI_ACTIONS` 對應 `data-click`／`data-change`／`data-input`／`data-submit`／`data-dblclick`／`data-keydown`。
   - 只處理最近的宣告元素；送出表單與 `<a>` 由動作接管預設行為。
   - 開機重試按鈕在 inline boot script 綁定。唯一保留的 inline 事件是非阻塞樣式表的 `onload`，它必須在任何 app script 之前執行。
+
+- **v4.7.1**：`retention.prune_account_history()` 對本機（`imported=0`）與備份帶入（`imported=1`）的稽核紀錄分開保留各 5,000 筆。`account_restore.discard_expired_previews()` 由 `create_app` 的 lifespan 在啟動時呼叫，只刪已過期的暫存預覽。`goals.yearly_goal_km()` 統一推算、寫入與匯出的年目標。`settings.RATE_LIMIT_BUCKET_RETENTION_SECONDS` 同時限制冷卻設定與限流紀錄保留時間。
 
 ## Security and data isolation
 
@@ -107,6 +118,12 @@
 - [x] AC-10：Given 前端 markup 與動態列，When 檢查來源與觸發事件，Then 除了樣式表 `onload` 沒有 inline 事件；每個 `data-*` 動作都有唯一註冊，巢狀元素只執行最近的動作；開機重試不依賴 app bundle。
 - [x] AC-11：Given 測試建立的 engine，When 測試結束，Then 連線全部關閉，不產生 ResourceWarning。
 
+- [x] AC-12：Given 本機有可復原的刪除，When 匯入含大量歷史的備份，Then 本機紀錄保留且仍可復原，帶入的歷史另受自己的上限限制。
+- [x] AC-13：Given 多個帳號已過期與未過期的還原預覽，When 服務啟動，Then 只刪除已過期的預覽。
+- [x] AC-14：Given 月目標 12.3 km，When 更新、讀取或匯出，Then 年目標為 147.6；修正前寫入的舊值也輸出 147.6。
+- [x] AC-15：Given `MODEL_REFRESH_COOLDOWN_SECONDS` 大於 3600，When 讀取設定，Then 冷卻限制為 3600，且所有限流視窗都不超過紀錄保留時間。
+- [x] AC-16：Given 歷史復原遇到較新的資料或資料庫未就緒，When 復原或讀取 `/health/ready`，Then 分別回衝突且不覆寫較新資料、回 503。
+
 ## Test traceability
 
 | Acceptance criterion | Named test / command |
@@ -122,3 +139,8 @@
 | AC-9 | `unit_tests/test_runs_api.py::test_run_list_read_model_scopes_users_and_calendar_filters`、`unit_tests/test_strava_import.py::test_upload_limit_messages_follow_the_configured_limits` |
 | AC-10 | `unit_tests/frontend/presentation-shell.test.cjs::SPEC-047 markup declares UI actions instead of inline JavaScript handlers`、`unit_tests/frontend/presentation-shell.test.cjs::SPEC-047 every declared data action has exactly one registered handler`、`unit_tests/frontend/presentation-shell.test.cjs::SPEC-047 delegated dispatch runs only the nearest action and owns navigation defaults` |
 | AC-11 | `unit_tests/test_database.py::test_engines_opened_inside_a_test_are_disposed_afterwards`、`python3 scripts/task.py test-fast` |
+| AC-12 | `unit_tests/test_account_restore.py::test_imported_history_never_evicts_local_recoverable_events` |
+| AC-13 | `unit_tests/test_account_restore.py::test_startup_discards_every_accounts_expired_previews_only` |
+| AC-14 | `unit_tests/test_goals.py::test_derived_yearly_goal_is_stored_returned_and_exported_at_two_decimals` |
+| AC-15 | `unit_tests/test_security_config.py::test_rate_limit_windows_never_outlive_bucket_retention` |
+| AC-16 | `unit_tests/test_history.py::test_restore_refuses_to_overwrite_later_changes`、`unit_tests/test_health.py::test_readiness_reports_503_for_missing_stale_or_unavailable_databases` |

@@ -22,22 +22,18 @@ def update_goal(db: Session, user_id: int, payload: schemas.RunningGoalUpdate):
             version=1,
             start_year=payload.start_year,
             monthly_km=payload.monthly_km,
-            yearly_km=payload.monthly_km * 12,
+            yearly_km=goal_service.yearly_goal_km(payload.monthly_km),
         )
         statement = insert_statement.on_conflict_do_update(
             index_elements=["user_id"],
             set_={
                 "start_year": payload.start_year,
                 "monthly_km": payload.monthly_km,
-                "yearly_km": payload.monthly_km * 12,
+                "yearly_km": goal_service.yearly_goal_km(payload.monthly_km),
                 "version": models.RunningGoal.version + 1,
             },
             where=models.RunningGoal.version == expected_version,
         ).returning(models.RunningGoal.id)
-        try:
-            changed_id = db.execute(statement).scalar_one_or_none()
-            if changed_id is None:
-                raise Conflict("跑量目標已被更新，請重新載入後再編輯")
-        except Exception:
-            raise
+        if db.execute(statement).scalar_one_or_none() is None:
+            raise Conflict("跑量目標已被更新，請重新載入後再編輯")
         return goal_service.goal_values(db, user_id)

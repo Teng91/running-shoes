@@ -221,3 +221,15 @@ def test_docker_context_excludes_sqlite_sidecars_and_database_backups():
     for artifact in ("shoes.db", "shoes.db-wal", "shoes.db-shm", "shoes.db.local-snapshot.bak"):
         assert any(fnmatchcase(artifact, pattern) for pattern in patterns), artifact
     assert "backups/" in patterns
+
+
+def test_rate_limit_windows_never_outlive_bucket_retention():
+    """v4.7.1: a cooldown longer than bucket retention would be silently cut short."""
+    from backend import rate_limits
+    from backend.settings import RATE_LIMIT_BUCKET_RETENTION_SECONDS, Settings
+
+    long = Settings.from_env({"MODEL_REFRESH_COOLDOWN_SECONDS": "7200"})
+    assert long.model_refresh_cooldown_seconds == RATE_LIMIT_BUCKET_RETENTION_SECONDS
+    assert Settings.from_env({"MODEL_REFRESH_COOLDOWN_SECONDS": "90"}).model_refresh_cooldown_seconds == 90
+    assert rate_limits.STALE_BUCKET_SECONDS == RATE_LIMIT_BUCKET_RETENTION_SECONDS
+    assert rate_limits.LOGIN_FAILURE_WINDOW_SECONDS <= RATE_LIMIT_BUCKET_RETENTION_SECONDS
