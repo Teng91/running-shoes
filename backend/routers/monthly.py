@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from backend import models, schemas
 from backend.auth import get_current_user
 from backend.dependencies import OperationKey, get_db, get_settings
+from backend.read_models.mileage import list_monthly_mileages
 from backend.routers.errors import service_errors
 from backend.services import monthly as monthly_service
 from backend.services.operations import legacy_operation
@@ -21,14 +22,7 @@ def list_monthly_mileage(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    return (
-        db.query(models.MonthlyMileage)
-        .filter(
-            models.MonthlyMileage.user_id == current_user.id,
-        )
-        .order_by(models.MonthlyMileage.year, models.MonthlyMileage.month)
-        .all()
-    )
+    return list_monthly_mileages(db, current_user.id)
 
 
 @router.post("", response_model=schemas.MonthlyMileageOut)

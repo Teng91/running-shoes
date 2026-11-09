@@ -6,6 +6,7 @@ OpenRouter 提供 OpenAI-compatible 端點，用同一個 `openai` SDK 設定
 """
 
 import json
+import logging
 import os
 import time
 from collections.abc import Generator
@@ -276,6 +277,36 @@ def _build_client(provider: LLMProvider) -> "OpenAI":
     )
 
 
+logger = logging.getLogger("running_shoes.llm")
+
+
+def user_facing_error(exc: Exception) -> str:
+    """Actionable text for the browser; never the provider's raw response.
+
+    The OpenAI SDK embeds the provider's whole error body in its message, which
+    can include upstream provider details and account identifiers. That detail
+    goes to the server log only. The SDK is matched by class name so this module
+    still does not import it at startup.
+    """
+    names = {cls.__name__ for cls in type(exc).__mro__}
+    status = getattr(exc, "status_code", None)
+    if "APITimeoutError" in names or isinstance(exc, TimeoutError):
+        return "模型回應逾時，請稍後再試或更換模型。"
+    if "APIConnectionError" in names:
+        return "無法連線到模型服務，請稍後再試。"
+    if status == 429:
+        return "這個免費模型目前請求過多或今日額度已滿，請稍後再試或更換模型。"
+    if status == 402:
+        return "模型服務額度不足，請更換模型或稍後再試。"
+    if status in (401, 403):
+        return "模型服務驗證失敗，請聯絡網站管理員。"
+    if status in (400, 404, 422):
+        return "這個模型目前無法處理請求，請更換模型。"
+    if isinstance(status, int) and status >= 500:
+        return "模型服務暫時無法使用，請稍後再試或更換模型。"
+    return "模型呼叫發生錯誤，請稍後再試或更換模型。"
+
+
 def call_llm_stream(
     provider: LLMProvider,
     model: str,
@@ -340,7 +371,8 @@ def call_llm_stream(
     except LLMError:
         raise
     except Exception as exc:
-        raise LLMError(f"LLM 串流呼叫失敗（{provider.value} / {model}）：{exc}") from exc
+        logger.warning("LLM stream failed (%s / %s): %r", provider.value, model, exc)
+        raise LLMError(user_facing_error(exc)) from exc
     finally:
         close_stream = getattr(stream, "close", None)
         if close_stream is not None:

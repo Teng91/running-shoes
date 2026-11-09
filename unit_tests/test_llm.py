@@ -678,8 +678,48 @@ def test_call_llm_stream_wraps_sdk_errors(monkeypatch):
     client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
     monkeypatch.setattr(llm, "_build_client", MagicMock(return_value=client))
 
-    with pytest.raises(llm.LLMError, match="LLM 串流呼叫失敗"):
+    with pytest.raises(llm.LLMError, match="模型呼叫發生錯誤") as error:
         list(llm.call_llm_stream(llm.LLMProvider.openrouter, "openrouter/free", []))
+    assert "provider unavailable" not in str(error.value)
+
+
+def _sdk_errors():
+    import httpx
+    import openai
+
+    request = httpx.Request("POST", "https://openrouter.ai/api/v1/chat/completions")
+    body = {"error": {"message": "Provider returned error", "code": 0,
+                      "metadata": {"raw": "upstream detail", "provider_name": "Example"}},
+            "user_id": "user_SYNTHETIC123"}
+
+    def status(cls, code):
+        return cls(f"Error code: {code} - {body}", response=httpx.Response(code, request=request), body=body)
+
+    return [
+        (status(openai.RateLimitError, 429), "額度已滿"),
+        (status(openai.APIStatusError, 402), "額度不足"),
+        (status(openai.AuthenticationError, 401), "聯絡網站管理員"),
+        (status(openai.NotFoundError, 404), "請更換模型"),
+        (status(openai.InternalServerError, 503), "暫時無法使用"),
+        (openai.APITimeoutError(request=request), "逾時"),
+        (openai.APIConnectionError(request=request), "無法連線"),
+    ]
+
+
+@pytest.mark.parametrize(("error", "expected"), _sdk_errors())
+def test_provider_error_bodies_stay_in_the_server_log(monkeypatch, caplog, error, expected):
+    """v4.7.2: users get an actionable message; raw provider bodies only reach the log."""
+    create = MagicMock(side_effect=error)
+    client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+    monkeypatch.setattr(llm, "_build_client", MagicMock(return_value=client))
+
+    with caplog.at_level("WARNING", logger="running_shoes.llm"), pytest.raises(llm.LLMError) as raised:
+        list(llm.call_llm_stream(llm.LLMProvider.openrouter, "vendor/model:free", []))
+    message = str(raised.value)
+    assert expected in message
+    for leaked in ("user_SYNTHETIC123", "upstream detail", "Error code", "openrouter.ai"):
+        assert leaked not in message
+    assert "vendor/model:free" in caplog.text
 
 
 def test_call_llm_stream_rejects_empty_stream(monkeypatch):

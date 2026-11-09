@@ -29,3 +29,16 @@ def test_generated_frontend_is_exactly_reproducible():
 def test_reports_depend_on_read_models_not_tool_serialization():
     path = check_architecture.ROOT / "backend" / "reports.py"
     assert check_architecture.forbidden_dependency_chain(path, ("backend.tools",)) is None
+
+
+def test_routers_delegate_every_database_query():
+    """v4.7.2: HTTP adapters call read models or services; none builds its own query."""
+    from pathlib import Path
+
+    offenders = [
+        f"{path.name}:{number}"
+        for path in sorted(Path("backend/routers").glob("*.py"))
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1)
+        if ".query(" in line or ".execute(" in line
+    ]
+    assert offenders == []

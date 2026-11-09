@@ -11,7 +11,7 @@
 - `backend/read_models/`: user-scoped native statistics shared by HTTP, reports and AI adapters; never import tools or HTTP frameworks.
 - `backend/seeding.py`: optional default data using an injected session factory.
 - `backend/middleware.py`: request-level transport guards.
-- `backend/routers/`: feature-oriented HTTP routes; routers must never import `backend.main`.
+- `backend/routers/`: feature-oriented HTTP routes; routers must never import `backend.main` and never build database queries (read models, services or `migrations.ready_schema_version` own them).
 - `backend/services/`: framework-independent application services; services must not import FastAPI or routers.
 - `backend/services/transactions.py`: SQLite writer reservation and commit/rollback ownership; validate quotas and versions only after acquiring the reservation.
 - `backend/services/runs.py`, `shoes.py`, `monthly.py`: user-scoped CRUD application use cases; HTTP routers must not own mutations or commits.
@@ -20,12 +20,14 @@
 - `backend/read_models/run_statistics.py`: shared calendar ranges and bounded distance aggregates for goals, dashboard and reports.
 - `backend/read_models/trends.py`: user-scoped daily heatmap, streaks, weekly load, goal pace line and shoe rotation timeline.
 - `backend/read_models/highlights.py`: user-scoped next-shoe suggestion, year review and distance mix.
+- `backend/read_models/saved_reports.py`: user-scoped saved monthly report summaries and bodies.
 - `backend/read_models/rounding.py`: shared aggregate rounding (`round_metric`); do not redefine local `_round` helpers.
 - `scripts/document_contracts.py`: Markdown links, feature-spec structure, AC completion and traceability path validation.
 - `backend/credentials.py`: HTTP-independent bcrypt/JWT primitives; runtime secrets are injected.
 - `backend/services/accounts.py`, `goals.py`: account and goal writes, domain errors, and transactions.
 - `backend/services/reports.py`: injected report generation and domain events; `report_storage.py` owns latest-generation conditional transactions.
 - `backend/report_llm.py`, `backend/report_protocol.py`: model and SSE adapters; neither owns persistence.
+- `backend/llm.py`: OpenRouter adapter; users only see `user_facing_error()` text, raw provider error bodies go to the server log.
 - `backend/services/fingerprints.py`: canonical payload fingerprints for receipts, backups and import plans; `mutation_receipts` is the only keyed receipt and operation keys never replace authentication.
 - `backend/services/retention.py`: per-account caps for audit events, receipts and run tombstones, applied inside `write_transaction`.
 - `backend/audit_schema.py`: same-transaction domain audit and revision triggers; never audit credentials.

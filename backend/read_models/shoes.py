@@ -56,6 +56,19 @@ def _shoe_data(shoe: models.Shoe) -> dict:
     }
 
 
+def shoes_by_status(db: Session, user_id: int, *, retired: bool) -> list[models.Shoe]:
+    """This account's undeleted shoes on one side of the active/retired split."""
+    return (
+        db.query(models.Shoe)
+        .filter(
+            models.Shoe.user_id == user_id,
+            models.Shoe.is_retired.is_(retired),
+            models.Shoe.is_deleted.is_(False),
+        )
+        .all()
+    )
+
+
 # ── 工具實作 ────────────────────────────────────────────────────
 def list_my_shoes(db: Session, user_id: int) -> dict:
     shoes = (

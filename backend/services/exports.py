@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from backend import models
 from backend.backup_contract import ARCHIVE_LIMITS, MAX_RUN_ALIASES, ArchiveBudget, validate_export
+from backend.clock import APP_TIMEZONE
 from backend.exporting import export_filename, generate_shoe_rows
 from backend.goals import yearly_goal_km
 from backend.services.errors import Invalid
@@ -86,7 +87,8 @@ def _account_export_snapshot(db: Session, user: models.User, *, now: datetime | 
     }
     validate_export(payload)
     suffix = "" if include_history else "_without_history"
-    filename = f"running_shoes_account_{exported_at.astimezone():%Y%m%d_%H%M%S}{suffix}.json"
+    # Fly machines run in UTC; name the file with the application calendar time.
+    filename = f"running_shoes_account_{exported_at.astimezone(APP_TIMEZONE):%Y%m%d_%H%M%S}{suffix}.json"
     return payload, filename
 
 

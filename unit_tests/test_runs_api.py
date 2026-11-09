@@ -399,3 +399,38 @@ def test_run_list_read_model_scopes_users_and_calendar_filters(db, user_with_tok
     assert [run.km for run in list_runs(db, user.id, year=2025)] == [7]
     assert [run.km for run in list_runs(db, user.id, limit=1, offset=1)] == [5]
     assert not is_calendar_day(2026, 2, 29) and is_calendar_day(2024, 2, 29)
+
+
+def test_shoe_month_and_report_read_models_return_only_this_account(db, user_with_token):
+    """v4.7.2: list queries moved out of routers stay user-scoped and ordered."""
+    from datetime import UTC, datetime
+
+    from backend.models import MonthlyReport
+    from backend.read_models.mileage import list_monthly_mileages
+    from backend.read_models.saved_reports import list_saved_reports, saved_report
+    from backend.read_models.shoes import shoes_by_status
+
+    user, _ = user_with_token
+    other = User(username="reads-other", hashed_password="synthetic")
+    db.add(other)
+    db.flush()
+    db.add_all([
+        Shoe(user_id=user.id, brand="A", model="Active", date="2026-01-01"),
+        Shoe(user_id=user.id, brand="B", model="Retired", date="2026-01-01", is_retired=True),
+        Shoe(user_id=user.id, brand="C", model="Deleted", date="2026-01-01", is_deleted=True),
+        Shoe(user_id=other.id, brand="D", model="Theirs", date="2026-01-01"),
+        MonthlyMileage(user_id=user.id, year=2026, month=3, km=30),
+        MonthlyMileage(user_id=user.id, year=2025, month=12, km=12),
+        MonthlyMileage(user_id=other.id, year=2026, month=1, km=99),
+        MonthlyReport(user_id=user.id, year=2026, month=2, content_md="feb", model="m", stats_json={},
+                      created_at=datetime(2026, 3, 1, tzinfo=UTC), updated_at=datetime(2026, 3, 1, tzinfo=UTC)),
+        MonthlyReport(user_id=user.id, year=2026, month=3, content_md="mar", model="m", stats_json={}),
+        MonthlyReport(user_id=other.id, year=2026, month=4, content_md="secret", model="m", stats_json={}),
+    ])
+    db.commit()
+    assert [shoe.model for shoe in shoes_by_status(db, user.id, retired=False)] == ["Active"]
+    assert [shoe.model for shoe in shoes_by_status(db, user.id, retired=True)] == ["Retired"]
+    assert [(row.year, row.month) for row in list_monthly_mileages(db, user.id)] == [(2025, 12), (2026, 3)]
+    assert [(row["year"], row["month"]) for row in list_saved_reports(db, user.id)] == [(2026, 3), (2026, 2)]
+    assert saved_report(db, user.id, 2026, 2)["updated_at"] == "2026-03-01T00:00:00+00:00"
+    assert saved_report(db, user.id, 2026, 4) is None

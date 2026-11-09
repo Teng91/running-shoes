@@ -5,6 +5,7 @@ from typing import cast
 
 from sqlalchemy import Table, inspect, text
 from sqlalchemy.engine import Engine
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from backend import models
@@ -70,6 +71,35 @@ def _migrate_schema_seven(engine: Engine, applied_version: int) -> None:
         # Schema-2 run receipts were superseded by mutation_receipts, which every
         # keyed run creation already writes in the same transaction.
         connection.exec_driver_sql("DROP TABLE IF EXISTS run_creation_requests")
+
+
+READY_TABLES = {"users", "shoes", "runs", "monthly_mileages"}
+
+
+class DatabaseNotReady(Exception):
+    """The database cannot serve requests; the message is safe to return."""
+
+
+def ready_schema_version(db: Session) -> int:
+    """Probe responsiveness, required tables and the current schema version."""
+    try:
+        db.execute(text("SELECT 1"))
+        tables = set(inspect(db.get_bind()).get_table_names())
+        if not READY_TABLES.issubset(tables):
+            raise DatabaseNotReady("database schema is incomplete")
+        if "schema_metadata" not in tables:
+            raise DatabaseNotReady("database schema is not initialized")
+        value = db.execute(
+            text("SELECT value FROM schema_metadata WHERE key = 'schema_version'")
+        ).scalar_one_or_none()
+        version = int(value or 0)
+    except DatabaseNotReady:
+        raise
+    except (SQLAlchemyError, TypeError, ValueError) as exc:
+        raise DatabaseNotReady("database is unavailable") from exc
+    if version != CURRENT_SCHEMA_VERSION:
+        raise DatabaseNotReady("database schema is not current")
+    return version
 
 
 def schema_version(engine: Engine) -> int:
