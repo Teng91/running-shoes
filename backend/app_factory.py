@@ -34,6 +34,7 @@ from backend.routers import (
     workspace,
 )
 from backend.seeding import seed_default_data
+from backend.services import account_restore
 from backend.settings import Settings, runtime_settings
 from backend.settings import settings as default_settings
 
@@ -85,6 +86,8 @@ async def lifespan(app: FastAPI):
         migration_password=config.migration_password,
     )
     seed_default_data(app.state.session_factory, config)
+    with app.state.session_factory() as db:
+        account_restore.discard_expired_previews(db)
     yield
 
 

@@ -209,3 +209,32 @@ def test_year_goal_api_is_user_scoped(db):
             assert client.get("/api/running-goal/year?year=2026").status_code == 401
     finally:
         app.dependency_overrides.clear()
+
+
+def test_derived_yearly_goal_is_stored_returned_and_exported_at_two_decimals(db, user_with_token):
+    """v4.7.1: 12.3 km/month is 147.6 km/year, never 147.60000000000002."""
+    from backend.services.exports import build_account_export
+
+    user, token = user_with_token
+
+    def override_get_db():
+        yield db
+
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        with TestClient(app) as client:
+            updated = client.put("/api/running-goal", headers={"Authorization": f"Bearer {token}"},
+                                 json={"start_year": 2026, "monthly_km": 12.3})
+            assert updated.status_code == 200
+            assert updated.json()["yearly_km"] == 147.6
+    finally:
+        app.dependency_overrides.clear()
+    db.expire_all()
+    row = db.query(RunningGoal).filter_by(user_id=user.id).one()
+    assert row.yearly_km == 147.6
+    # A row written before the fix still exports and reports the clean value.
+    row.yearly_km = 12.3 * 12
+    db.commit()
+    assert goals.goal_values(db, user.id)["yearly_km"] == 147.6
+    assert build_account_export(db, user)[0]["running_goal"]["yearly_km"] == 147.6
+    assert goals.yearly_goal_km(0.1) == 1.2

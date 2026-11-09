@@ -192,7 +192,7 @@ def test_each_write_keeps_only_the_newest_history_per_account(workspace, monkeyp
     from backend.services import retention
 
     monkeypatch.setattr(retention.prune_account_history, "__kwdefaults__", {
-        "audit_events": 4, "receipts": 2, "tombstones": 1,
+        "audit_events": 4, "imported_audit_events": 4, "receipts": 2, "tombstones": 1,
     })
     with workspace.sessions() as db:
         shoe = add_shoe(db)
@@ -231,3 +231,52 @@ def test_schema_seven_backfills_tombstones_from_audit_history(workspace):
     run_startup_migrations(workspace.engine, workspace.sessions)
     with workspace.sessions() as db:
         assert [(row.user_id, row.run_id) for row in db.query(models.RunTombstone)] == [(1, deleted_id)]
+
+
+def test_restore_refuses_to_overwrite_later_changes(workspace):
+    """v4.7.1: each recovery conflict branch keeps the newer data untouched."""
+    with workspace.sessions() as db:
+        shoe = add_shoe(db)
+        # A deleted Strava run cannot come back once the same activity exists again.
+        strava_run = add_run(db, shoe.id)
+        db.query(models.Run).filter_by(id=strava_run.id).update({"strava_id": "strava-1"})
+        db.commit()
+        runs.delete_run(db, 1, strava_run.id)
+        run_event = db.query(models.AuditEvent).filter_by(entity="runs", action="delete").one()
+        db.add(models.Run(user_id=1, shoe_id=shoe.id, date="2026-01-03", km=4, strava_id="strava-1"))
+        db.commit()
+        with pytest.raises(Conflict, match="Strava 活動已存在"):
+            history.restore_deleted(db, 1, run_event.id, workspace.config)
+
+        # A shoe edited after deletion is not silently resurrected.
+        gone = add_shoe(db)
+        shoes.delete_shoe(db, 1, gone.id)
+        shoe_event = db.query(models.AuditEvent).filter_by(entity="shoes", reason="shoe.delete").one()
+        db.query(models.Shoe).filter_by(id=gone.id).update({models.Shoe.version: models.Shoe.version + 1})
+        db.commit()
+        with pytest.raises(Conflict, match="後續異動"):
+            history.restore_deleted(db, 1, shoe_event.id, workspace.config)
+
+        # A deleted month cannot replace a newer record for the same month.
+        payload = schemas.MonthlyMileageCreate(year=2025, month=5, km=100)
+        month = monthly.create_monthly_mileage(db, 1, payload)
+        monthly.delete_monthly_mileage(db, 1, month.id)
+        month_event = db.query(models.AuditEvent).filter_by(
+            entity="monthly_mileages", action="delete", reason="monthly.delete").one()
+        monthly.create_monthly_mileage(db, 1, schemas.MonthlyMileageCreate(year=2025, month=5, km=60))
+        with pytest.raises(Conflict, match="已有新紀錄"):
+            history.restore_deleted(db, 1, month_event.id, workspace.config)
+
+        # A cleared adjustment cannot be restored after the month changed again.
+        logged = db.query(models.MonthlyMileage).filter_by(year=2026, month=1).one()
+        monthly.update_monthly_mileage(db, 1, logged.id, schemas.MonthlyMileageUpdate(km=100))
+        db.expire_all()
+        monthly.delete_monthly_mileage(db, 1, logged.id)
+        clear_event = db.query(models.AuditEvent).filter_by(
+            entity="monthly_mileages", action="update", reason="monthly.delete").one()
+        add_run(db, shoe.id)
+        with pytest.raises(Conflict, match="月份已有後續異動"):
+            history.restore_deleted(db, 1, clear_event.id, workspace.config)
+        db.expire_all()
+        assert db.query(models.MonthlyMileage).filter_by(year=2025, month=5).one().km == 60
+        assert db.query(models.AuditEvent).filter_by(restored=True).count() == 0

@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from backend import models
 from backend.backup_contract import ARCHIVE_LIMITS, MAX_RUN_ALIASES, ArchiveBudget, validate_export
 from backend.exporting import export_filename, generate_shoe_rows
+from backend.goals import yearly_goal_km
 from backend.services.errors import Invalid
 from backend.services.run_identity import export_run_aliases
 
@@ -200,7 +201,8 @@ def _serialize_goal(goal: models.RunningGoal | None) -> dict[str, Any] | None:
     return {
         "start_year": goal.start_year,
         "monthly_km": goal.monthly_km,
-        "yearly_km": goal.yearly_km,
+        # Derived like goal_values, so legacy rows with float artifacts export cleanly.
+        "yearly_km": yearly_goal_km(goal.monthly_km),
     }
 
 

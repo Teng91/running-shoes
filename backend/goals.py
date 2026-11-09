@@ -19,6 +19,11 @@ DEFAULT_MONTHLY_GOAL_KM = 125.0
 DEFAULT_YEARLY_GOAL_KM = 1500.0
 
 
+def yearly_goal_km(monthly_km: float) -> float:
+    """The derived annual target at the stored two-decimal precision (12.3 → 147.6)."""
+    return round(float(monthly_km) * 12, 2)
+
+
 def goal_values(db: Session, user_id: int) -> dict:
     row = (
         db.query(models.RunningGoal)
@@ -31,7 +36,7 @@ def goal_values(db: Session, user_id: int) -> dict:
         "monthly_km": float(row.monthly_km if row else DEFAULT_MONTHLY_GOAL_KM),
         # The annual target is intentionally derived so monthly and annual
         # targets can never drift apart.
-        "yearly_km": float(row.monthly_km if row else DEFAULT_MONTHLY_GOAL_KM) * 12,
+        "yearly_km": yearly_goal_km(row.monthly_km if row else DEFAULT_MONTHLY_GOAL_KM),
     }
 
 

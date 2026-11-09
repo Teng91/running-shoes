@@ -120,8 +120,6 @@ def import_runs(
             _trim_history(db, user_id, history_limit)
         except IntegrityError as exc:
             raise DuplicateImportError from exc
-        except Exception:
-            raise
         return ImportResult(
             imported=len(runs),
             skipped_duplicate=duplicate_count,

@@ -282,7 +282,7 @@ AGENT_GLOBAL_RATE_LIMIT_PER_MINUTE=120
 # 選填：同一 IP／全站每分鐘登入、註冊、改密碼請求上限（預設 120／300）
 AUTH_RATE_LIMIT_PER_MINUTE=120
 AUTH_GLOBAL_RATE_LIMIT_PER_MINUTE=300
-# 選填：帳號總數、每人跑鞋／跑步紀錄筆數及模型列表刷新冷卻秒數
+# 選填：帳號總數、每人跑鞋／跑步紀錄筆數及模型列表刷新冷卻秒數（冷卻最多 3600）
 MAX_REGISTERED_USERS=100
 MAX_SHOES_PER_USER=500
 MAX_RUNS_PER_USER=5000
@@ -640,7 +640,7 @@ Schema 4 上線前，執行異地備份、checksum 與隔離還原驗證。回�
 - 最近鞋款、月跑量、目標及目前月份跑步另存本機快照；它們可能過期，不作為伺服器權威。Service worker 只快取公開 shell，IndexedDB 不存 token／密碼。瀏覽器回收空間或使用者清除網站資料會移除本機草稿／佇列，請定期同步、下載備份；本機資料不是加密保險箱。
 - 完整備份以同一資料庫讀取快照匯出，並行新增不會產生跨集合不一致。備份 JSON v2 包含穩定來源身分、鞋款基礎里程、月份歷史調整與異動歷史。選檔後先驗證／預覽，確認才在一個交易合併，保留既有暱稱、月份調整、目標與月報；不按同品牌型號合併鞋款。相同來源 ID／Strava ID 不重建，mapping 保留已刪紀錄的身分，重複匯入不撤銷後續刪除。新跑步正常累加里程。Strava 匯入摘要保留既有項目，剩餘容量內按新到舊合併，超額略過並在預覽列出，不清除既有摘要。舊 v1 格式仍接受，只保證完全相同檔案重複匯入不重建。
 - 預覽僅限本人、有效 20 分鐘；預覽後資料異動須重新預覽。上限 20 MB、5,000 雙鞋、50,000 筆跑步／歷史、2,412 個月份／月報及 1,000 筆匯入歷史，並受目標帳號配額限制；拒絕非有限數值、無效參照、未知欄位與認證內容，失敗整筆回滾。超過還原限制的大型完整匯出不會截斷，需另行規劃資料搬移；不會靜默部分還原。
-- Schema 5 起，鞋款、跑步、月跑量、目標每次寫入都在同一交易記錄前後值、原因及操作身分；升級前的歷史無法回溯產生。v4.7.0 起每個帳號保留最新 5,000 筆異動紀錄，更早的無法再顯示或復原；刪除過的跑步身分另存，不受影響。歷史分頁僅限本人；可復原刪除的跑步／鞋款及清除的月份，仍檢查原鞋款、目前版本、配額與 Strava 重複。復原會重新計算里程，原事件只可復原一次；備份帶入的歷史明確標為唯讀。
+- Schema 5 起，鞋款、跑步、月跑量、目標每次寫入都在同一交易記錄前後值、原因及操作身分；升級前的歷史無法回溯產生。v4.7.0 起每個帳號保留最新 5,000 筆異動紀錄，更早的無法再顯示或復原；v4.7.1 起從備份帶入的唯讀歷史另計 5,000 筆，不會擠掉本機紀錄。刪除過的跑步身分另存，不受影響。歷史分頁僅限本人；可復原刪除的跑步／鞋款及清除的月份，仍檢查原鞋款、目前版本、配額與 Strava 重複。復原會重新計算里程，原事件只可復原一次；備份帶入的歷史明確標為唯讀。
 - `/api/operations` 統一 operation ID、更新／刪除 expected_version、成功回執與錯誤 `{detail, error: {code, message}}`。既有 CRUD 保留相容性，新增／帶版本的異動可附 `Idempotency-Key`；未提供版本的舊式刪除不取得新契約的重播保護。年度、目標與洞察已移除相容鏡像 Map，統一由 resource store 擁有請求與快取。
 
 Schema 5 增加 user metadata、回執、預覽、mapping、異動、context 與主鍵配置表；既有業務資料／里程不改寫。Run／month ID 不因刪除而重用，避免恢復草稿寫到新紀錄；allocator 僅讀全域最大主鍵與 sequence 這類配置 metadata，不讀取其他帳號的業務值。上線前必須建立、校驗正式備份並完成隔離還原演練。若回滾至 v3.8.0，先停止所有寫入、另備份 schema 5，保留新增表／欄位／triggers，將 `schema_metadata` marker 降至 4，再切回舊映像及通過 readiness／匿名 release-check；舊版不再保證離線操作回執與主鍵不重用，不能混跑新舊寫入。重新升級需保留本機 queue 並使用新 shell revision。
@@ -707,6 +707,14 @@ v3.10.3 使用 Asset 3.10.3／shell v38、schema 6、51 個 release assets。
 本版無 schema migration，回滾可使用 v3.10.2 immutable image
 `registry.fly.io/running-shoes@sha256:bac44457f12adfde6473e9d9a973b330e1bf69eac7e44feb3fb6ed1f5a55429a`，
 不還原業務資料快照。發布驗證涵蓋 verify、40 組版面、雙引擎 CRUD／PWA、main/tag CI 及正式站匿名 release-check。
+
+### 保留上限與小修正（SPEC-047 修訂，v4.7.1）
+
+- 匯入含異動歷史的備份不再擠掉本機可復原的紀錄：本機與備份帶入的歷史各保留最新 5,000 筆。
+- 過期的還原預覽改在每次啟動時清除，避免占用磁碟。
+- 年目標固定兩位小數；`MODEL_REFRESH_COOLDOWN_SECONDS` 上限 3600 秒。
+
+Asset 4.7.1／shell v55、51 個 release assets、schema 7 不變，無資料 migration，可直接回滾至 v4.7.0 image。
 
 ### 程式審查修正、有界歷史與模組解耦（SPEC-047，v4.7.0）
 
@@ -841,7 +849,7 @@ Playwright／Chromium／WebKit 齊全時，也會執行版面測試。
 避免每次停止都重跑。Hook 不會呼叫其他模型、外部 API，或傳送提示、diff、原始碼與測試輸出。
 GitHub Actions 仍會在 push／pull request 執行 `verify`，並以三個可獨立重跑的 browser jobs 執行完整版面矩陣、真實 CRUD E2E 與 PWA 升級／離線測試；Dependabot 每月以單一 PR 合併 GitHub Actions 更新；Python 只接收安全性更新 PR，例行升級依下方 `uv pip compile --universal` 步驟手動重編鎖定檔（Dependabot 產生的鎖定檔會遺失 Windows 條件）。
 
-本次驗證基線為 Python **599 passed**、前端回歸測試 **166 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
+本次驗證基線為 Python **605 passed**、前端回歸測試 **166 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
 版面檢查涵蓋 WebKit／Chromium、亮／暗模式與 10 組直橫向尺寸，共 40 組設定，檢查四個功能分頁與月報、三個認證表單、圖表、全部彈窗、行內編輯、停用／錯誤及空資料狀態。
 
 主要表單、工具列與彈窗操作統一為 44px 控制項；桌面表格內的緊湊操作為 36px，手機至少 44px。

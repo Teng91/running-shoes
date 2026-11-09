@@ -72,6 +72,21 @@ def apply_restore(db: Session, user_id: int, token: str, operation_id: str, conf
         return response
 
 
+def discard_expired_previews(db: Session, now: datetime | None = None) -> int:
+    """Startup maintenance: drop every account's expired temporary previews.
+
+    A preview holds a full backup (up to 64 MiB per account) and an abandoned one
+    was otherwise kept until that same account previewed again. Only expired
+    temporary rows are removed; no account data is read or returned.
+    """
+    with write_transaction(db, reason="account.preview.expire"):
+        return int(
+            db.query(models.RestorePreview)
+            .filter(models.RestorePreview.expires_at < (now or datetime.now(UTC)))
+            .delete(synchronize_session=False)
+        )
+
+
 def discard_preview(db: Session, user_id: int, token: str) -> dict:
     with write_transaction(db, user_id, reason="account.preview.discard"):
         db.query(models.RestorePreview).filter_by(user_id=user_id, token=token).delete(synchronize_session=False)

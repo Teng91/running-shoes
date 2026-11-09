@@ -99,8 +99,6 @@ def update_monthly_mileage(
                 raise Conflict("月跑量已被更新，請重新載入後再編輯")
         except IntegrityError as exc:
             raise Invalid("該月份已有紀錄") from exc
-        except Exception:
-            raise
         return entry
 
 
