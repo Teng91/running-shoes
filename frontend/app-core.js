@@ -46,8 +46,10 @@ function switchTab(name) {
   // Establish a baseline before the fields become interactive; the chart render
   // runs in a later frame and must already recognize edits made in between.
   if (name === 'monthly') prepareGoalForm();
+  // Chat and the monthly report share one AI destination.
+  const destination = name === 'report' ? 'agent' : name;
   document.querySelectorAll('.tab').forEach(tab => {
-    const active = tab.dataset.tab === name;
+    const active = tab.dataset.tab === destination;
     tab.classList.toggle('active', active);
     tab.setAttribute('aria-selected', String(active));
   });

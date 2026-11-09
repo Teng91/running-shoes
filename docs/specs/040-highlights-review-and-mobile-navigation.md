@@ -2,7 +2,7 @@
 
 - 狀態：Implemented
 - Owner：Running Shoes maintainers
-- 關聯 issue／ADR：[SPEC-015](015-run-log-home.md)、[SPEC-038](038-training-trends-and-shoe-rotation.md)、[SPEC-039](039-compact-monthly-records.md)
+- 關聯 issue／ADR：[SPEC-015](015-run-log-home.md)、[SPEC-038](038-training-trends-and-shoe-rotation.md)、[SPEC-039](039-compact-monthly-records.md)、[SPEC-042](042-run-log-tiles-distance-colors-and-ai-tab.md)（v4.3.0 修訂）
 
 ## Problem
 
@@ -14,11 +14,11 @@
 
 - 年度回顧：總跑量（與前一年比較、年度目標達成率）、跑步次數與天數、平均距離、最長連續天數、最長一次、最多的一週與月份、最常穿的鞋、買鞋數量、花費與每 km 成本。
 - 今天穿哪雙：依休息天數排序現役鞋，快到退役里程（≥90%）的鞋排在最後；一鍵選入新增跑步表單。
-- 里程碑與個人紀錄：累計跑量里程碑（100／250／500／1000 km，之後每 1000 km）、現役鞋突破 100／300／500／800 km、近 30 天的新最長距離與單週新高。
-- 每雙現役鞋的距離分布（<5、5–10、10–15、15–21、≥21 km）。
+- ~~里程碑與個人紀錄~~（v4.3.0 依 SPEC-042 移除）：累計跑量里程碑（100／250／500／1000 km，之後每 1000 km）、現役鞋突破 100／300／500／800 km、近 30 天的新最長距離與單週新高。
+- 每雙現役鞋的距離分布（v4.3.0 起為 <5、5–10、10–15、15–20、≥20 km，依序紅、黃、綠、藍、紫）。
 - 年度月跑量對比：每年一條線，選定年份加粗。
 - 月跑量分頁只保留一個年份選單，所有年度區塊一起切換。
-- 跑步日誌頂端摘要：本週跑量、連續天數、本月目標進度環、累計跑量與下一個里程碑。
+- ~~跑步日誌頂端摘要~~（v4.3.0 依 SPEC-042 移除）：本週跑量、連續天數、本月目標進度環、累計跑量與下一個里程碑。
 - 同一雙鞋在所有圖表與表格使用相同顏色。
 - 手機版改為固定底部分頁列，標題列選單只保留帳號操作。
 
@@ -50,7 +50,7 @@
 
 - [x] AC-1：Given 過去、進行中與未來的年份，When 讀取年度回顧，Then 過去年份涵蓋全年並與前一年比較，進行中年份統計到今天，未來年份回傳無資料；已刪除鞋款不計入買鞋花費。
 - [x] AC-2：Given 現役、退役、未穿過與快到退役里程的鞋，When 讀取首頁摘要，Then 建議依休息天數排序、未穿過的鞋優先、快到退役的鞋排最後，退役鞋不列入；按「選這雙」會選入表單並觸發草稿更新。
-- [x] AC-3：Given 跑步紀錄，When 讀取首頁摘要，Then 回傳本週跑量、連續天數、本月目標百分比、累計里程碑與個人紀錄，並列出近 30 天內達成的里程碑與新紀錄。
+- [x] AC-3：Given 跑步紀錄，When 讀取首頁摘要，Then 只回傳選鞋建議（本週、連續、目標、累計、紀錄與成就已依 SPEC-042 移除）。
 - [x] AC-4：Given 多雙鞋的跑步，When 讀取距離分布，Then 只列現役鞋並依距離分桶計數；兩個使用者只看到自己的資料，未登入回 401，年份超出範圍回 422。
 - [x] AC-5：Given 月跑量分頁，When 切換唯一的年份選單，Then 目標、年度回顧、訓練趨勢、年度月跑量、跑鞋堆疊圖與年度對比一起更新；格式錯誤的回應不被快取。
 - [x] AC-6：Given 任意順序的鞋款清單，When 繪製圖表與表格，Then 同一雙鞋顏色相同；手機版底部分頁列永遠可見，選單只顯示帳號操作。
@@ -60,8 +60,8 @@
 | Acceptance criterion | Named test / command |
 | --- | --- |
 | AC-1 | `unit_tests/test_highlights.py::test_year_review_summarizes_a_past_year_and_compares_the_previous_one`、`unit_tests/frontend/highlights.test.cjs::SPEC-040 year review lays out the backend summary for the shared year` |
-| AC-2 | `unit_tests/test_highlights.py::test_suggestion_prefers_the_longest_rested_pair_and_demotes_worn_out_shoes`、`unit_tests/frontend/highlights.test.cjs::SPEC-040 run log summary shows week, streak, goal ring, milestones and the next shoe` |
-| AC-3 | `unit_tests/test_highlights.py::test_home_summary_reports_week_streak_goal_records_and_recent_achievements`、`unit_tests/test_highlights.py::test_total_milestones_step_through_the_list_then_every_thousand_km` |
+| AC-2 | `unit_tests/test_highlights.py::test_suggestion_prefers_the_longest_rested_pair_and_demotes_worn_out_shoes`、`unit_tests/frontend/highlights.test.cjs::SPEC-040 run log suggests the next shoe without summary tiles` |
+| AC-3 | `unit_tests/test_highlights.py::test_home_summary_only_carries_the_next_shoe_suggestion` |
 | AC-4 | `unit_tests/test_highlights.py::test_distance_mix_buckets_runs_for_active_shoes_only`、`unit_tests/test_highlights.py::test_highlight_endpoints_are_user_scoped`、`unit_tests/frontend/highlights.test.cjs::SPEC-040 distance mix stacks bucket counts per active shoe and names the long-run pair` |
 | AC-5 | `unit_tests/frontend/highlights.test.cjs::SPEC-040 the shared year selector redraws every year view and the comparison chart`、`unit_tests/frontend/highlights.test.cjs::SPEC-040 year review explains ongoing, empty and future years and rejects malformed data` |
 | AC-6 | `unit_tests/frontend/highlights.test.cjs::SPEC-040 shoes keep one color in every chart regardless of list order`、`unit_tests/frontend/highlights.test.cjs::SPEC-040 phones use a fixed bottom tab bar while the header menu keeps account actions`、`python3 scripts/task.py frontend-layout` |

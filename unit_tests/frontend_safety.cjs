@@ -111,9 +111,7 @@ module.exports = async function checkFrontendSafety(browser, baseUrl) {
         if (String(url).includes('/analytics/shoe-timeline')) return json({ as_of: '2026-01-31', idle_days: 30, shoes: [] });
         if (String(url).includes('/analytics/shoe-distance-mix')) return json({ buckets: ['<5'], shoes: [] });
         if (String(url).includes('/analytics/year-review?')) return json({ year: 2026, end_date: '2026-01-31', complete: false, has_runs: false });
-        if (String(url).includes('/analytics/home')) return json({ as_of: '2026-01-31', week: { km: 0, runs: 0 }, streak_days: 0,
-          month_goal: { active: false, km: 0, goal_km: 100, percent: 0 }, total: { km: 0, reached_km: null, next_km: 100, remaining_km: 100 },
-          records: { longest_run: null, biggest_week: null, biggest_month: null }, achievements: [], suggestion: [] });
+        if (String(url).includes('/analytics/home')) return json({ as_of: '2026-01-31', suggestion: [] });
         return json({});
       };
       shoes = [{ id: 1, brand: 'Test', model: 'Safety', date: '2026-01-01', size: 'US 9',

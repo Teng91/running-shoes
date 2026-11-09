@@ -1,4 +1,4 @@
-"""User-scoped highlights: run-log summary, shoe suggestion, milestones, year review and distance mix."""
+"""User-scoped highlights: next-shoe suggestion, year review and distance mix."""
 
 from __future__ import annotations
 
@@ -12,14 +12,10 @@ from backend.read_models.rounding import round_metric
 from backend.read_models.trends import run_streaks, trends_end
 from backend.shoe_metrics import shoe_metrics
 
-# Cumulative distance milestones; after the list, every 1000 km is a milestone.
-TOTAL_MILESTONES_KM = (100, 250, 500, 1000)
-SHOE_MILESTONES_KM = (100, 300, 500, 800)
-RECENT_DAYS = 30
 NEAR_END_PERCENT = 90.0
-# Distance buckets (km): short, medium, long, half-marathon training and beyond.
+# Distance buckets (km) in 5 km steps; 20 km and longer share the last bucket.
 DISTANCE_BUCKETS = ((0.0, 5.0, "<5"), (5.0, 10.0, "5–10"), (10.0, 15.0, "10–15"),
-                    (15.0, 21.1, "15–21"), (21.1, None, "≥21"))
+                    (15.0, 20.0, "15–20"), (20.0, None, "≥20"))
 
 
 def _active_shoes(db: Session, user_id: int) -> list[models.Shoe]:
@@ -32,16 +28,6 @@ def _active_shoes(db: Session, user_id: int) -> list[models.Shoe]:
     )
 
 
-def _run_days(db: Session, user_id: int, end: date) -> list[date]:
-    rows = (
-        db.query(models.Run.date)
-        .filter(models.Run.user_id == user_id, models.Run.date <= end.isoformat(), models.Run.km > 0)
-        .distinct()
-        .all()
-    )
-    return sorted(date.fromisoformat(day) for (day,) in rows)
-
-
 def _km_between(db: Session, user_id: int, start: date, end: date) -> tuple[float, int]:
     km, count = (
         db.query(func.coalesce(func.sum(models.Run.km), 0.0), func.count(models.Run.id))
@@ -50,18 +36,6 @@ def _km_between(db: Session, user_id: int, start: date, end: date) -> tuple[floa
         .one()
     )
     return float(km or 0), int(count)
-
-
-def next_total_milestone(total_km: float) -> tuple[float | None, float]:
-    """Return (last reached milestone, next milestone) for a cumulative distance."""
-    reached = None
-    for mark in TOTAL_MILESTONES_KM:
-        if total_km >= mark:
-            reached = float(mark)
-        else:
-            return reached, float(mark)
-    thousands = int(total_km // 1000) * 1000
-    return float(thousands), float(thousands + 1000)
 
 
 def shoe_suggestion(db: Session, user_id: int, as_of: date) -> list[dict]:
@@ -94,95 +68,9 @@ def shoe_suggestion(db: Session, user_id: int, as_of: date) -> list[dict]:
     return [row for _, row in candidates[:3]]
 
 
-def _records(db: Session, user_id: int, end: date) -> dict:
-    longest = (
-        db.query(models.Run.date, models.Run.km, models.Run.shoe_id)
-        .filter(models.Run.user_id == user_id, models.Run.date <= end.isoformat())
-        .order_by(models.Run.km.desc(), models.Run.date)
-        .first()
-    )
-    daily = (
-        db.query(models.Run.date, func.sum(models.Run.km))
-        .filter(models.Run.user_id == user_id, models.Run.date <= end.isoformat())
-        .group_by(models.Run.date)
-        .all()
-    )
-    weeks: dict[date, float] = {}
-    months: dict[tuple[int, int], float] = {}
-    for day_text, km in daily:
-        day = date.fromisoformat(day_text)
-        monday = day - timedelta(days=day.weekday())
-        weeks[monday] = weeks.get(monday, 0.0) + float(km or 0)
-        months[(day.year, day.month)] = months.get((day.year, day.month), 0.0) + float(km or 0)
-    week = max(weeks.items(), key=lambda item: (item[1], -item[0].toordinal()), default=None)
-    month = max(months.items(), key=lambda item: (item[1], -item[0][0], -item[0][1]), default=None)
-    return {
-        "longest_run": {"date": longest[0], "km": round_metric(longest[1]), "shoe_id": longest[2]} if longest else None,
-        "biggest_week": {"week_start": week[0].isoformat(), "km": round_metric(week[1])} if week else None,
-        "biggest_month": {"year": month[0][0], "month": month[0][1], "km": round_metric(month[1])} if month else None,
-    }
-
-
-def _achievements(db: Session, user_id: int, as_of: date, total_km: float, records: dict) -> list[dict]:
-    """Milestones reached and records set within the last RECENT_DAYS days, newest first."""
-    since = as_of - timedelta(days=RECENT_DAYS - 1)
-    recent_km, _ = _km_between(db, user_id, since, as_of)
-    items: list[dict] = []
-    before = total_km - recent_km
-    reached, _ = next_total_milestone(total_km)
-    if reached is not None and before < reached:
-        items.append({"kind": "total", "km": reached})
-    recent_by_shoe = dict(
-        db.query(models.Run.shoe_id, func.sum(models.Run.km))
-        .filter(models.Run.user_id == user_id, models.Run.date >= since.isoformat(),
-                models.Run.date <= as_of.isoformat())
-        .group_by(models.Run.shoe_id)
-        .all()
-    )
-    for shoe in _active_shoes(db, user_id):
-        recent = float(recent_by_shoe.get(shoe.id) or 0)
-        crossed = [mark for mark in SHOE_MILESTONES_KM if shoe.mileage - recent < mark <= shoe.mileage]
-        if crossed:
-            items.append({"kind": "shoe", "shoe_id": shoe.id, "km": float(crossed[-1])})
-    longest = records["longest_run"]
-    if longest and date.fromisoformat(longest["date"]) >= since:
-        items.append({"kind": "longest_run", "km": longest["km"], "date": longest["date"]})
-    week = records["biggest_week"]
-    if week and date.fromisoformat(week["week_start"]) + timedelta(days=6) >= since:
-        items.append({"kind": "biggest_week", "km": week["km"], "week_start": week["week_start"]})
-    return items
-
-
 def home_summary(db: Session, user_id: int, as_of: date) -> dict:
-    """Run-log header: this week, current streak, monthly goal, next shoe and milestones."""
-    monday = as_of - timedelta(days=as_of.weekday())
-    week_km, week_runs = _km_between(db, user_id, monday, as_of)
-    month_km, _ = _km_between(db, user_id, as_of.replace(day=1), as_of)
-    total_km, _ = _km_between(db, user_id, date(1900, 1, 1), as_of)
-    goal = goals.goal_values(db, user_id)
-    monthly_goal = goal["monthly_km"]
-    reached, upcoming = next_total_milestone(total_km)
-    records = _records(db, user_id, as_of)
-    return {
-        "as_of": as_of.isoformat(),
-        "week": {"start": monday.isoformat(), "km": round_metric(week_km), "runs": week_runs},
-        "streak_days": run_streaks(_run_days(db, user_id, as_of), as_of)["current_days"],
-        "month_goal": {
-            "active": as_of.year >= goal["start_year"],
-            "km": round_metric(month_km),
-            "goal_km": monthly_goal,
-            "percent": round_metric(month_km / monthly_goal * 100, 1) if monthly_goal > 0 else 0.0,
-        },
-        "total": {
-            "km": round_metric(total_km),
-            "reached_km": reached,
-            "next_km": upcoming,
-            "remaining_km": round_metric(upcoming - total_km),
-        },
-        "records": records,
-        "achievements": _achievements(db, user_id, as_of, total_km, records),
-        "suggestion": shoe_suggestion(db, user_id, as_of),
-    }
+    """Run-log data: which active shoe to wear next."""
+    return {"as_of": as_of.isoformat(), "suggestion": shoe_suggestion(db, user_id, as_of)}
 
 
 def year_review(db: Session, user_id: int, year: int, as_of: date) -> dict:
