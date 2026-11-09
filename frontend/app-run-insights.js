@@ -1,8 +1,12 @@
 // Run dashboard cards, calendar, charts, and per-shoe analytics.
 registerFeatureReset('run-insights', () => {
-  resourceStore?.invalidate(['dashboard-analytics']);
+  resourceStore?.invalidate(['dashboard-analytics', 'home-summary']);
   dashboardAnalyticsRequest += 1;
+  homeSummaryRequestId += 1;
   document.getElementById('dashboard-insights').replaceChildren();
+  ['home-tiles', 'home-achievements', 'shoe-suggestion'].forEach(id => document.getElementById(id)?.replaceChildren());
+  const suggestion = document.getElementById('shoe-suggestion');
+  if (suggestion) suggestion.hidden = true;
   closeShoeAnalytics();
 });
 function renderRunLog() {
@@ -40,7 +44,7 @@ function renderRunLog() {
   }
   document.getElementById('run-table').innerHTML = filtered.length ? filtered.map(run => {
     const shoe = runShoe(run.shoe_id);
-    const color = shoe ? brandColor(shoe.brand, 0) : '#64748b';
+    const color = shoe ? shoeColor(shoe.id) : '#64748b';
     const shoeName = shoe ? `${esc(shoe.brand)} ${esc(shoe.model)}` : '鞋款已刪除';
     const source = run.strava_id ? '<span class="run-source strava">Strava</span>' : '<span class="run-source">手動</span>';
     return `<tr><td>${esc(run.date.replace(/-/g, '/'))}</td><td class="numeric"><strong>${run.km.toFixed(2)} km</strong></td><td><span class="run-shoe-label"><span class="brand-dot" style="background:${color}"></span>${shoeName}</span></td><td>${source}</td><td><button class="btn btn-sm btn-edit" onclick="openRunModal(${run.id})">編輯</button></td></tr>`;
@@ -168,7 +172,7 @@ function getThemeColor(varName, fallback) {
 function renderRunShoeChart(shoeStats) {
   const entries = [...shoeStats.entries()].sort((a, b) => b[1].km - a[1].km);
   const shoeList = entries.map(([id]) => runShoe(id));
-  const colors = shoeList.map((shoe, index) => shoe ? brandColor(shoe.brand, index) : '#64748b');
+  const colors = shoeList.map(shoe => shoe ? shoeColor(shoe.id) : '#64748b');
   const total = entries.reduce((sum, [, stats]) => sum + stats.km, 0);
   const legend = document.getElementById('run-shoe-legend');
   legend.innerHTML = entries.length ? entries.map(([, stats], index) => {
@@ -237,4 +241,88 @@ function renderShoeAnalytics(data) {
     data: { labels: data.monthly_history.map(item => `${item.year}/${item.month}`), datasets: [{ label: '里程', data: data.monthly_history.map(item => item.km), backgroundColor: '#22c55e', borderRadius: 4 }] },
     options: { maintainAspectRatio:false, plugins:{ legend:{display:false}, tooltip:{callbacks:{label:context => `${Number(context.raw).toFixed(2)} km · ${data.monthly_history[context.dataIndex].count} 次`}}}, scales:{x:{grid:{display:false},ticks:{color:textColor}},y:{beginAtZero:true,grid:{color:gridColor},ticks:{color:textColor,callback:value => value + ' km'}}} },
   });
+}
+
+// ====== Run-log summary: week, streak, monthly goal, milestones and next shoe ======
+// Every number comes from /analytics/home; this only lays them out.
+let homeSummaryRequestId = 0;
+
+function goalRing(percent) {
+  const value = Math.max(0, Math.min(100, percent));
+  const circumference = 2 * Math.PI * 22;
+  return `<svg class="goal-ring" viewBox="0 0 52 52" aria-hidden="true"><circle cx="26" cy="26" r="22" class="goal-ring-track"></circle>`
+    + `<circle cx="26" cy="26" r="22" class="goal-ring-value" stroke-dasharray="${(value / 100 * circumference).toFixed(1)} ${circumference.toFixed(1)}"></circle></svg>`;
+}
+
+function homeTile(label, value, sub, extra = '') {
+  return `<div class="home-tile">${extra}<div><div class="home-tile-label">${label}</div><div class="home-tile-value">${value}</div><div class="home-tile-sub">${sub}</div></div></div>`;
+}
+
+function achievementText(item) {
+  const md = iso => { const [, m, d] = iso.split('-').map(Number); return `${m}/${d}`; };
+  if (item.kind === 'total') return `🎉 累計跑量突破 ${item.km} km`;
+  if (item.kind === 'shoe') return `👟 ${esc(shoeName(item.shoe_id))} 突破 ${item.km} km`;
+  if (item.kind === 'longest_run') return `🏅 新的最長距離 ${item.km.toFixed(1)} km（${md(item.date)}）`;
+  if (item.kind === 'biggest_week') return `📈 單週跑量新高 ${item.km.toFixed(1)} km（${md(item.week_start)} 那週）`;
+  return '';
+}
+
+function renderShoeSuggestion(suggestion) {
+  const target = document.getElementById('shoe-suggestion');
+  const pick = suggestion.find(row => shoes.some(shoe => shoe.id === row.shoe_id));
+  if (!pick) { target.hidden = true; target.replaceChildren(); return; }
+  const reason = pick.days_since_last_run == null ? '還沒穿過' : pick.days_since_last_run === 0 ? '今天穿過' : `已經 ${pick.days_since_last_run} 天沒穿`;
+  const wear = pick.near_end ? `，已用 ${pick.usage_percent.toFixed(0)}%，快到退役里程` : '';
+  target.innerHTML = `<span>今天穿哪雙？建議 <strong>${esc(shoeName(pick.shoe_id))}</strong>（${reason}${wear}）</span>`
+    + `<button type="button" class="btn btn-sm btn-edit" id="use-suggested-shoe">選這雙</button>`;
+  document.getElementById('use-suggested-shoe').onclick = () => {
+    const select = document.getElementById('run-shoe');
+    select.value = String(pick.shoe_id);
+    delete select.dataset.requiresSelection;
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+  };
+  target.hidden = false;
+}
+
+async function renderHomeSummary() {
+  const requestId = ++homeSummaryRequestId;
+  let summary;
+  try {
+    // Keyed by the local date: week, streak and milestones change at midnight.
+    const result = await resourceStore.read('home-summary', {
+      key: localDateISO(), refresh: false,
+      loader: async () => {
+        const value = await apiGet('/analytics/home');
+        if (!value?.week || !value.month_goal || !Array.isArray(value.suggestion) || !Array.isArray(value.achievements)) {
+          throw new Error('首頁摘要資料格式錯誤');
+        }
+        return value;
+      },
+    });
+    if (!resourceStore.current(result) || requestId !== homeSummaryRequestId) return;
+    if (result.status === 'rejected') throw result.error;
+    summary = result.value;
+  } catch (error) {
+    console.error('載入首頁摘要失敗:', error);
+    if (requestId === homeSummaryRequestId) renderedPanels.delete('runs');
+    return;
+  }
+  const km = value => `${Number(value).toFixed(1)} km`;
+  const goal = summary.month_goal;
+  const total = summary.total;
+  document.getElementById('home-tiles').innerHTML = [
+    homeTile('本週', km(summary.week.km), `${summary.week.runs} 次跑步`),
+    homeTile('連續跑步', `${summary.streak_days} 天`, summary.streak_days ? '繼續保持！' : '今天跑一下就開始累積'),
+    goal.active
+      ? homeTile('本月目標', `${goal.percent.toFixed(0)}%`, `${km(goal.km)} / ${km(goal.goal_km)}`, goalRing(goal.percent))
+      : homeTile('本月跑量', km(goal.km), '目標尚未開始'),
+    homeTile('累計跑量', km(total.km), `再 ${km(total.remaining_km)} 就到 ${total.next_km} km`),
+  ].join('');
+  const records = summary.records;
+  const recordText = records.longest_run
+    ? `個人紀錄：最長 ${km(records.longest_run.km)} · 單週最高 ${km(records.biggest_week.km)} · 單月最高 ${km(records.biggest_month.km)}`
+    : '';
+  const chips = summary.achievements.map(item => `<span class="achievement">${achievementText(item)}</span>`).join('');
+  document.getElementById('home-achievements').innerHTML = chips + (recordText ? `<span class="home-records">${recordText}</span>` : '');
+  renderShoeSuggestion(summary.suggestion);
 }

@@ -29,7 +29,7 @@ function renderActivePanel() {
     renderCards(); renderAlerts(); renderCategorySummary(); renderTable(); renderRetiredTable();
     if (typeof Chart !== 'undefined') renderCharts();
   } else if (name === 'runs') {
-    populateRunShoeSelects(); renderRunLog();
+    populateRunShoeSelects(); renderRunLog(); renderHomeSummary();
   } else if (name === 'monthly') {
     if (typeof Chart !== 'undefined') renderMonthlyCharts();
   } else if (name === 'spending') {

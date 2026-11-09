@@ -13,7 +13,7 @@ function trendsContext(nodes, globals = {}) {
   return runContext({
     document: { getElementById: id => nodes[id], querySelector: () => ({ dataset: { panel: globals.panel || 'monthly' } }) },
     chartInstances: {}, renderedPanels: new Map(), runningGoal: { start_year: 2026 },
-    getThemeColor: () => '#000', brandColor: () => '#123456', fitChartLabel: label => label,
+    getThemeColor: () => '#000', brandColor: () => '#123456', shoeColor: () => '#123456', fitChartLabel: label => label,
     Chart: function(_, config) { this.config = config; this.destroy = () => {}; },
     console: { error: assert.fail }, ...globals,
   });
@@ -35,7 +35,7 @@ const sample = {
 };
 
 test('SPEC-038 trends render a Monday-first heatmap, weekly spikes and the goal pace note', async () => {
-  const nodes = elements(); nodes['trends-year-select'].value = '2026';
+  const nodes = elements(); nodes['year-select'].value = '2026';
   const urls = [];
   const context = trendsContext(nodes, { apiGet: async url => { urls.push(url); return sample; } });
   vm.runInContext(`let trendsRequestId = 0;\n${trendRenderers.map(extract).join('\n')}`, context);
@@ -61,7 +61,7 @@ test('SPEC-038 trends render a Monday-first heatmap, weekly spikes and the goal 
 });
 
 test('SPEC-038 future years render no charts and malformed trends are not cached', async () => {
-  const nodes = elements(); nodes['trends-year-select'].value = '2027';
+  const nodes = elements(); nodes['year-select'].value = '2027';
   let calls = 0;
   const context = trendsContext(nodes, { console: { error() {} },
     apiGet: async () => (++calls === 1 ? { daily: 'bad' } : { ...sample, year: 2027, end_date: null, daily: [], weekly: [] }) });
@@ -98,7 +98,9 @@ test('SPEC-038 rotation timeline names active shoes and calls out idle ones with
 });
 
 test('SPEC-038 trend sections are present with an accessible scroll region and legend', () => {
-  assert.match(htmlSource, /id="trends-year-select" class="year-select" aria-label="訓練趨勢年份" onchange="onTrendsYearChange\(\)"/);
+  // SPEC-040: one shared selector drives the trends together with every other year view.
+  assert.match(htmlSource, /<label for="year-select">年份<\/label>\s*<select id="year-select" class="year-select" onchange="onYearChange\(\)">/);
+  assert.doesNotMatch(htmlSource, /trends-year-select|stacked-year-select/);
   for (const id of ['run-heatmap', 'streak-stats', 'chart-weekly', 'chart-cumulative', 'chart-shoe-timeline', 'timeline-note']) {
     assert.match(htmlSource, new RegExp(`id="${id}"`));
   }

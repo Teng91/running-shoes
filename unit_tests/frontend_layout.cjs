@@ -10,14 +10,19 @@ const { startArtifacts, saveFailure, closeBrowser, withDeadline } = require('../
 async function selectTab(page, name) {
   const toggle = page.locator('.mobile-menu-toggle');
   if (await toggle.isVisible()) {
+    // SPEC-040: phones keep every destination in a fixed bottom tab bar; the menu holds account actions.
+    assert.equal(await page.locator('.tab:visible').count(), 6, 'bottom tab bar exposes all destinations');
     if (await toggle.getAttribute('aria-expanded') !== 'true') await toggle.click();
-    assert.equal(await page.locator('.tab:visible').count(), 6, 'expanded menu exposes all destinations');
+    assert.equal(await page.locator('#user-label').isVisible(), true, 'expanded menu shows account actions');
     await assertLayout(page, 'expanded mobile menu');
   }
   await page.locator(`.tab[data-tab="${name}"]`).click();
   if (await toggle.isVisible()) {
     assert.equal(await toggle.getAttribute('aria-expanded'), 'false', 'selection closes mobile menu');
-    assert.equal(await page.locator('.tab:visible').count(), 0, 'closed mobile menu hides destinations');
+    assert.equal(await page.locator('.tab:visible').count(), 6, 'the tab bar stays visible');
+    const bar = await page.locator('.tabs').boundingBox();
+    const viewport = page.viewportSize();
+    assert.ok(Math.abs(bar.y + bar.height - viewport.height) <= 1, 'tab bar is pinned to the bottom');
     const label = await page.locator(`.tab[data-tab="${name}"] > span:last-child`).textContent();
     assert.equal(await page.locator('#mobile-page-label').textContent(), label);
   }
@@ -268,6 +273,32 @@ async function run(engine, name) {
               ytd_km: 1285.7, expected_km: 1232.9, delta_km: 52.8, projected_km: 1564 },
           } });
         }
+        if (url.pathname === '/api/analytics/home') return route.fulfill({ json: {
+          as_of: '2026-10-27', week: { start: '2026-10-26', km: 18.4, runs: 2 }, streak_days: 12,
+          month_goal: { active: true, km: 96.5, goal_km: 125, percent: 77.2 },
+          total: { km: 2468.9, reached_km: 2000, next_km: 3000, remaining_km: 531.1 },
+          records: { longest_run: { date: '2026-03-01', km: 42.2, shoe_id: 1 }, biggest_week: { week_start: '2026-03-02', km: 88.8 },
+            biggest_month: { year: 2026, month: 3, km: 301.5 } },
+          achievements: [{ kind: 'total', km: 2000 }, { kind: 'shoe', shoe_id: 2, km: 500 },
+            { kind: 'longest_run', km: 42.2, date: '2026-10-20' }, { kind: 'biggest_week', km: 88.8, week_start: '2026-10-19' }],
+          suggestion: [{ shoe_id: 3, days_since_last_run: 87, remaining_km: 500, usage_percent: 37.5, near_end: false }],
+        } });
+        if (url.pathname === '/api/analytics/year-review') {
+          const year = Number(url.searchParams.get('year'));
+          return route.fulfill({ json: {
+            year, end_date: `${year}-10-27`, complete: false, has_runs: true, total_km: 1285.7, run_count: 187, run_days: 170,
+            active_day_percent: 56.9, average_km: 6.88, longest_streak_days: 12,
+            longest_run: { date: `${year}-03-01`, km: 42.2, shoe_id: 1 }, biggest_week: { week_start: `${year}-03-02`, km: 88.8 },
+            biggest_month: { month: 3, km: 301.5 }, top_shoe: { shoe_id: 2, km: 512.3, runs: 70 },
+            shoes_bought: 8, shoe_spend: 32000, cost_per_km: 24.89, previous_year_km: 980.4,
+            goal: { active: true, yearly_km: 1500, percent: 85.7 },
+          } });
+        }
+        if (url.pathname === '/api/analytics/shoe-distance-mix') return route.fulfill({ json: {
+          buckets: ['<5', '5–10', '10–15', '15–21', '≥21'],
+          shoes: Array.from({ length: 8 }, (_, index) => ({ shoe_id: index + 1, counts: [3 + index, 8, 4, index % 3, index % 2],
+            runs: 16 + index, km: 120 + index * 40, longest_km: 18 + index, average_km: 7.5 })),
+        } });
         if (url.pathname === '/api/analytics/shoe-timeline') return route.fulfill({ json: {
           as_of: '2026-10-27', idle_days: 30, shoes: Array.from({ length: 8 }, (_, index) => ({
             shoe_id: index + 1, first_run_date: `2025-${String(index + 2).padStart(2, '0')}-01`,
@@ -347,7 +378,7 @@ async function run(engine, name) {
             await selectTab(page, tab);
             await page.waitForTimeout(100);
             await assertLayout(page, `${name} ${theme} ${width} ${tab}`);
-            const expected = { runs: 1, shoes: 5, monthly: 5, spending: 2, agent: 0, report: 0 }[tab];
+            const expected = { runs: 1, shoes: 6, monthly: 6, spending: 2, agent: 0, report: 0 }[tab];
             if (tab === 'monthly') {
               assert.equal(await page.locator('#run-heatmap .heatmap-grid .heat-cell:not(.blank)').count(), 365, 'heatmap renders every day');
             }

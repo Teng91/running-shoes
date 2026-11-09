@@ -20,7 +20,8 @@ function registerResourceCaches() {
     resourceStore.invalidate(['annual-summary', 'training-trends', 'shoe-timeline']);
   });
   resourceStore.registerCache('dashboard', () => {
-    dashboardAnalyticsRequest++; resourceStore.invalidate(['dashboard-analytics', 'shoe-timeline']);
+    dashboardAnalyticsRequest++;
+    resourceStore.invalidate(['dashboard-analytics', 'shoe-timeline', 'home-summary', 'year-review', 'shoe-distance-mix']);
   });
 }
 

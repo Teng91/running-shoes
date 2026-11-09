@@ -1,9 +1,8 @@
 // Month/year selectors and monthly, annual, per-shoe mileage charts.
 // ====== Charts ======
+// One year selector drives every year-scoped view on the monthly tab.
 function populateYearSelect() {
   const sel = document.getElementById('year-select');
-  const stackedSel = document.getElementById('stacked-year-select');
-  const trendsSel = document.getElementById('trends-year-select');
   const years = [...new Set([
     ...monthlyMileages.map(m => m.year),
     runningGoal.start_year,
@@ -11,29 +10,11 @@ function populateYearSelect() {
   ])].sort((a, b) => b - a);
   if (years.length === 0) {
     sel.innerHTML = '<option value="">無資料</option>';
-    if (stackedSel) stackedSel.innerHTML = '<option value="">無資料</option>';
-    if (trendsSel) trendsSel.innerHTML = '<option value="">無資料</option>';
     selectedYear = null;
-    selectedStackedYear = null;
-    selectedTrendsYear = null;
     return;
   }
-  if (!selectedYear || !years.includes(selectedYear)) {
-    selectedYear = years[0];
-  }
-  if (!selectedStackedYear || !years.includes(selectedStackedYear)) {
-    selectedStackedYear = years[0];
-  }
-  if (!selectedTrendsYear || !years.includes(selectedTrendsYear)) {
-    selectedTrendsYear = years[0];
-  }
-  if (trendsSel) {
-    trendsSel.innerHTML = years.map(y => `<option value="${y}" ${y === selectedTrendsYear ? 'selected' : ''}>${y}</option>`).join('');
-  }
+  if (!selectedYear || !years.includes(selectedYear)) selectedYear = years[0];
   sel.innerHTML = years.map(y => `<option value="${y}" ${y === selectedYear ? 'selected' : ''}>${y}</option>`).join('');
-  if (stackedSel) {
-    stackedSel.innerHTML = years.map(y => `<option value="${y}" ${y === selectedStackedYear ? 'selected' : ''}>${y}</option>`).join('');
-  }
 }
 
 function onYearChange() {
@@ -42,35 +23,31 @@ function onYearChange() {
   selectedGoalMonth = null;
   renderGoalProgress();
   renderMonthlyYearChart();
+  renderShoeStackedChart();
+  renderYearOverYearChart();
+  renderYearReview();
+  renderTrends();
 }
 
 // ====== Monthly Mileage Charts ======
-let selectedStackedYear = null;
-
 function renderMonthlyCharts() {
-  if (chartInstances.monthlyYear) { chartInstances.monthlyYear.destroy(); delete chartInstances.monthlyYear; }
-  if (chartInstances.shoeStacked) { chartInstances.shoeStacked.destroy(); delete chartInstances.shoeStacked; }
-  if (chartInstances.yearlyTotal) { chartInstances.yearlyTotal.destroy(); delete chartInstances.yearlyTotal; }
-  ['weekly', 'cumulative'].forEach(key => { if (chartInstances[key]) { chartInstances[key].destroy(); delete chartInstances[key]; } });
+  ['monthlyYear', 'shoeStacked', 'yearlyTotal', 'yearOverYear', 'weekly', 'cumulative'].forEach(key => {
+    if (chartInstances[key]) { chartInstances[key].destroy(); delete chartInstances[key]; }
+  });
   populateYearSelect();
   renderGoalProgress();
   renderMonthlyYearChart();
   renderShoeStackedChart();
   renderYearlyTotalChart();
+  renderYearOverYearChart();
+  renderYearReview();
   renderTrends();
-}
-
-function onStackedYearChange() {
-  const sel = document.getElementById('stacked-year-select');
-  selectedStackedYear = parseInt(sel.value, 10) || null;
-  renderShoeStackedChart();
 }
 
 async function renderShoeStackedChart() {
   if (document.querySelector('.tab-panel.active')?.dataset.panel !== 'monthly') return;
   if (chartInstances.shoeStacked) { chartInstances.shoeStacked.destroy(); delete chartInstances.shoeStacked; }
-  const sel = document.getElementById('stacked-year-select');
-  const year = parseInt(sel ? sel.value : selectedStackedYear, 10);
+  const year = parseInt(document.getElementById('year-select')?.value, 10);
   if (!year) return;
   const requestId = ++runController.state.annualRequest;
   let yearRuns;
@@ -109,11 +86,8 @@ async function renderShoeStackedChart() {
     id, brand: '歷史鞋款', model: `已刪除 #${id}`, is_retired: false,
   });
 
-  let brandSeq = {};
   const datasets = displayShoes.map(s => {
-    brandSeq[s.brand] = (brandSeq[s.brand] || 0);
-    const color = brandColor(s.brand, brandSeq[s.brand]);
-    brandSeq[s.brand]++;
+    const color = shoeColor(s.id);
     const data = shoeMonthlyMap.get(s.id).map(v => parseFloat(v.toFixed(2)));
     return {
       label: s.brand + ' ' + s.model + (s.is_retired ? ' (退役)' : ''),
@@ -275,16 +249,10 @@ function renderMonthlyYearChart() {
 // The backend owns every aggregate (daily km, streaks, rolling averages, goal line);
 // these renderers only lay out the returned values.
 let trendsRequestId = 0;
-let selectedTrendsYear = null;
-
-function onTrendsYearChange() {
-  selectedTrendsYear = parseInt(document.getElementById('trends-year-select').value, 10) || null;
-  renderTrends();
-}
 
 async function renderTrends() {
   if (document.querySelector('.tab-panel.active')?.dataset.panel !== 'monthly') return;
-  const year = parseInt(document.getElementById('trends-year-select')?.value, 10);
+  const year = parseInt(document.getElementById('year-select')?.value, 10);
   if (!year) return;
   const requestId = ++trendsRequestId;
   let trends;
@@ -481,4 +449,111 @@ function renderCumulativeChart(trends) {
   } else {
     note.textContent = `全年累計 ${cumulative.ytd_km.toFixed(1)} km，目標 ${cumulative.yearly_goal_km.toFixed(0)} km。`;
   }
+}
+
+// ====== Year-over-year monthly mileage ======
+// Monthly totals come from the backend; the chart overlays one line per year and
+// emphasises the year chosen in the shared selector.
+const YEAR_LINE_COLORS = ['#6366f1', '#22c55e', '#f97316', '#38bdf8', '#e879f9', '#facc15'];
+
+function renderYearOverYearChart() {
+  if (chartInstances.yearOverYear) { chartInstances.yearOverYear.destroy(); delete chartInstances.yearOverYear; }
+  const note = document.getElementById('yoy-note');
+  const byYear = new Map();
+  monthlyMileages.forEach(m => {
+    if (!byYear.has(m.year)) byYear.set(m.year, Array(12).fill(null));
+    byYear.get(m.year)[m.month - 1] = m.km;
+  });
+  const years = [...byYear.keys()].sort((a, b) => a - b);
+  if (!years.length) { if (note) note.textContent = '還沒有月跑量資料。'; return; }
+  const chosen = parseInt(document.getElementById('year-select')?.value, 10);
+  const textColor = getThemeColor('--text-dim', '#8b8d9a');
+  const gridColor = getThemeColor('--chart-grid', '#f1f5f9');
+  const datasets = years.map((year, index) => {
+    const color = YEAR_LINE_COLORS[index % YEAR_LINE_COLORS.length];
+    const emphasis = year === chosen;
+    return {
+      label: String(year), data: byYear.get(year), borderColor: color, backgroundColor: color,
+      borderWidth: emphasis ? 3 : 1.5, pointRadius: emphasis ? 3 : 0, spanGaps: false, tension: .25,
+      order: emphasis ? 0 : 1,
+    };
+  });
+  chartInstances.yearOverYear = new Chart(document.getElementById('chart-year-over-year'), {
+    type: 'line',
+    data: { labels: Array.from({ length: 12 }, (_, i) => (i + 1) + '月'), datasets },
+    options: {
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: true, labels: { color: textColor, boxWidth: 12, font: { size: 11 } } },
+        tooltip: { callbacks: { label: ctx => ctx.raw == null ? `${ctx.dataset.label}：—` : `${ctx.dataset.label}：${ctx.raw.toFixed(1)} km` } },
+      },
+      scales: {
+        x: { grid: { display: false }, ticks: { color: textColor, font: { size: 11 } } },
+        y: { grid: { color: gridColor }, ticks: { color: textColor, callback: v => v + ' km' }, beginAtZero: true },
+      },
+    },
+  });
+  if (note) {
+    note.textContent = years.length > 1
+      ? `粗線為 ${chosen} 年；其他年份以細線對照。`
+      : `目前只有 ${years[0]} 年的資料，明年開始就能逐月比較。`;
+  }
+}
+
+// ====== Year in review ======
+let yearReviewRequestId = 0;
+
+function reviewCard(label, value, sub = '') {
+  return `<div class="review-card"><div class="review-label">${label}</div><div class="review-value">${value}</div>${sub ? `<div class="review-sub">${sub}</div>` : ''}</div>`;
+}
+
+async function renderYearReview() {
+  if (document.querySelector('.tab-panel.active')?.dataset.panel !== 'monthly') return;
+  const target = document.getElementById('year-review');
+  const title = document.getElementById('year-review-title');
+  const year = parseInt(document.getElementById('year-select')?.value, 10);
+  if (!target || !year) return;
+  const requestId = ++yearReviewRequestId;
+  let review;
+  try {
+    const result = await resourceStore.read('year-review', {
+      key: String(year), refresh: false,
+      loader: async () => {
+        const value = await apiGet(`/analytics/year-review?year=${year}`);
+        if (value?.year !== year || typeof value.has_runs !== 'boolean') throw new Error('年度回顧資料格式錯誤');
+        return value;
+      },
+    });
+    if (!resourceStore.current(result) || requestId !== yearReviewRequestId) return;
+    if (result.status === 'rejected') throw result.error;
+    review = result.value;
+  } catch (error) {
+    console.error('載入年度回顧失敗:', error);
+    if (requestId === yearReviewRequestId) renderedPanels.delete('monthly');
+    return;
+  }
+  const [, endMonth, endDay] = (review.end_date || '').split('-').map(Number);
+  title.textContent = review.complete || !review.end_date
+    ? `${year} 年度回顧` : `${year} 年度回顧（統計到 ${endMonth}/${endDay}）`;
+  if (!review.end_date) { target.innerHTML = `<p class="chart-note">${year} 年還沒開始。</p>`; return; }
+  if (!review.has_runs) { target.innerHTML = '<p class="chart-note">這一年還沒有跑步紀錄。</p>'; return; }
+  const km = value => `${Number(value).toFixed(1)} km`;
+  const md = iso => { const [, m, d] = iso.split('-').map(Number); return `${m}/${d}`; };
+  const change = review.previous_year_km
+    ? `比 ${year - 1} 年 ${review.total_km >= review.previous_year_km ? '+' : ''}${((review.total_km / review.previous_year_km - 1) * 100).toFixed(0)}%（${km(review.previous_year_km)}）`
+    : '';
+  const goal = review.goal.active && review.goal.percent != null ? `年度目標 ${km(review.goal.yearly_km)} 的 ${review.goal.percent}%` : '';
+  const longest = review.longest_run;
+  target.innerHTML = [
+    reviewCard('總跑量', km(review.total_km), [change, goal].filter(Boolean).join('<br>')),
+    reviewCard('跑步', `${review.run_count} 次`, `${review.run_days} 天有跑（${review.active_day_percent}% 的日子）`),
+    reviewCard('平均每次', km(review.average_km), `最長連續 ${review.longest_streak_days} 天`),
+    reviewCard('最長一次', km(longest.km), `${md(longest.date)} · ${esc(shoeName(longest.shoe_id))}`),
+    reviewCard('最多的一週', km(review.biggest_week.km), `${md(review.biggest_week.week_start)} 那週`),
+    reviewCard('最多的月份', `${review.biggest_month.month} 月`, km(review.biggest_month.km)),
+    reviewCard('最常穿', esc(shoeName(review.top_shoe.shoe_id)), `${km(review.top_shoe.km)} · ${review.top_shoe.runs} 次`),
+    reviewCard('買鞋', `${review.shoes_bought} 雙`, review.shoes_bought
+      ? `NT$ ${Math.round(review.shoe_spend).toLocaleString()}${review.cost_per_km != null ? ` · 每 km NT$ ${review.cost_per_km.toFixed(1)}` : ''}` : '這一年沒有買鞋'),
+  ].join('');
 }

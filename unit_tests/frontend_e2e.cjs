@@ -241,7 +241,8 @@ async function run() {
   } finally {
     try { if (browser) await closeBrowser(null, browser); } finally {
       await stopProcess(server);
-      fs.rmSync(tempRoot, { recursive: true, force: true });
+      // Windows may hold the stopped server's SQLite file briefly; rmSync retries EPERM/EBUSY.
+      fs.rmSync(tempRoot, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
     }
   }
 }
