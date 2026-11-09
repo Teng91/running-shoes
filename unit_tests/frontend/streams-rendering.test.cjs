@@ -3,7 +3,7 @@ const { runContext, test, assert, fs, path, vm, htmlSource, scriptPaths, scriptS
 test('panel rendering is lazy, reused, and invalidated by data or theme changes', () => {
   const counts = {};
   const hooks = ['renderCards', 'renderAlerts', 'renderCategorySummary', 'renderTable', 'renderRetiredTable',
-    'renderCharts', 'populateRunShoeSelects', 'renderRunLog', 'renderMonthlyCharts', 'renderSpendingCharts'];
+    'renderCharts', 'populateRunShoeSelects', 'renderRunLog', 'renderHomeSummary', 'renderMonthlyCharts', 'renderSpendingCharts'];
   let active = 'runs';
   const context = runContext({ document: { querySelector: () => ({ dataset: { panel: active } }) },
     Chart() {}, localDateISO: () => '2026-10-19', selectedRunMonth: () => '2026-10',
@@ -75,7 +75,7 @@ test('shoe purchase columns live only in spending details, with aligned table ro
   const context = vm.createContext({
     document: { getElementById: id => elements[id] },
     shoes: [shoe], retiredShoes: [{ ...shoe, id: 8, is_retired: true }],
-    brandColor: () => '#123456', progressColor: () => '#123456',
+    brandColor: () => '#123456', shoeColor: () => '#123456', progressColor: () => '#123456',
     shoeCategories: s => s.categories,
   });
   vm.runInContext(['esc', 'calc', 'fmtPct', 'fmtCostPerKm', 'fmtDate',

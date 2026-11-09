@@ -89,3 +89,44 @@ body.light-theme .heat-cell.level-4 { background: #14532d; }
 .chart-note { margin-top: 10px; font-size: 12px; line-height: 1.5; color: var(--text-dim); }
 .timeline-box { margin-bottom: 28px; }
 .timeline-canvas { height: auto; min-height: 140px; }
+/* Shared year selector for the monthly tab */
+.monthly-year-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 18px; }
+.monthly-year-bar label { font-weight: 600; }
+.monthly-year-hint { color: var(--text-dim); font-size: 12px; }
+/* Year in review */
+.review-section { margin-bottom: 28px; }
+.review-section .trends-heading { margin-bottom: 12px; }
+.review-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.review-card { min-width: 0; padding: 14px 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--card); }
+.review-label { color: var(--text-dim); font-size: 12px; }
+.review-value { margin-top: 4px; font-size: 20px; font-weight: 700; overflow-wrap: anywhere; }
+.review-sub { margin-top: 4px; color: var(--text-dim); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.review-grid > .chart-note { grid-column: 1 / -1; margin: 0; }
+.yoy-box { margin-bottom: 28px; }
+/* Run-log summary */
+.home-summary { margin-bottom: 18px; }
+.home-tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.home-tile { display: flex; align-items: center; gap: 12px; min-width: 0; padding: 14px 16px; border: 1px solid var(--border); border-radius: 12px; background: var(--card); }
+.home-tile > div { min-width: 0; }
+.home-tile-label { color: var(--text-dim); font-size: 12px; }
+.home-tile-value { font-size: 20px; font-weight: 700; }
+.home-tile-sub { color: var(--text-dim); font-size: 12px; overflow-wrap: anywhere; }
+.goal-ring { flex: 0 0 52px; width: 52px; height: 52px; transform: rotate(-90deg); }
+.goal-ring circle { fill: none; stroke-width: 6; }
+.goal-ring-track { stroke: var(--border); }
+.goal-ring-value { stroke: var(--green); stroke-linecap: round; }
+.home-achievements { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; }
+.home-achievements:empty { display: none; }
+.achievement { padding: 5px 10px; border-radius: 999px; background: rgba(99, 102, 241, .14); color: var(--text); font-size: 12px; overflow-wrap: anywhere; }
+.home-records { color: var(--text-dim); font-size: 12px; }
+.shoe-suggestion { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin: 4px 0 10px; padding: 10px 12px; border: 1px dashed var(--border); border-radius: 10px; font-size: 13px; line-height: 1.5; }
+.shoe-suggestion[hidden] { display: none; }
+.shoe-suggestion span { min-width: 0; overflow-wrap: anywhere; }
+@media (max-width: 1100px) {
+  .review-grid, .home-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 380px) {
+  .review-value, .home-tile-value { font-size: 17px; }
+  .home-tile { padding: 12px; gap: 8px; }
+  .goal-ring { flex-basis: 40px; width: 40px; height: 40px; }
+}

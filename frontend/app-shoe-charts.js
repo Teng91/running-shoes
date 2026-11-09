@@ -47,19 +47,14 @@ function renderCharts() {
     }
   });
   renderShoeTimeline();
+  renderDistanceMix();
 
   const textColor = getThemeColor('--text-dim', '#8b8d9a');
   const gridColor = getThemeColor('--chart-grid', '#2a2d3e');
   const mainTextColor = getThemeColor('--text', '#e4e4e7');
 
   const labels = shoes.map(s => s.brand + ' ' + s.model);
-  let brandSeq = {};
-  const colors = shoes.map(s => {
-    brandSeq[s.brand] = (brandSeq[s.brand] || 0);
-    const c = brandColor(s.brand, brandSeq[s.brand]);
-    brandSeq[s.brand]++;
-    return c;
-  });
+  const colors = shoes.map(s => shoeColor(s.id));
   const calcs = shoes.map(s => calc(s));
 
   chartInstances.progress = new Chart(document.getElementById('chart-progress'), {
@@ -278,13 +273,7 @@ async function renderShoeTimeline() {
     if (!shoe) return `鞋款 #${row.shoe_id}`;
     return `${shoe.brand} ${shoe.model}${shoe.nickname ? `（${shoe.nickname}）` : ''}`;
   });
-  const brandSeq = {};
-  const colors = rows.map(row => {
-    if (row.idle) return '#f97316';
-    const brand = known.get(row.shoe_id)?.brand || '';
-    brandSeq[brand] = brandSeq[brand] || 0;
-    return brandColor(brand, brandSeq[brand]++);
-  });
+  const colors = rows.map(row => (row.idle ? '#f97316' : shoeColor(row.shoe_id)));
   const toTime = iso => { const [y, m, d] = iso.split('-').map(Number); return new Date(y, m - 1, d).getTime(); };
   const today = toTime(timeline.as_of);
   // A single-day bar still needs visible width, so each bar ends after its last day.
@@ -356,4 +345,80 @@ async function renderShoeTimeline() {
   note.textContent = idle.length
     ? `橘色：超過 ${timeline.idle_days} 天沒穿的現役鞋（${idle.join('、')}）。已退役的鞋不列出。`
     : `所有現役鞋近 ${timeline.idle_days} 天內都有穿；已退役的鞋不列出。`;
+}
+
+// ====== Distance mix per active shoe ======
+// The backend buckets every run; the chart shows how each pair is actually used.
+let distanceMixRequestId = 0;
+const DISTANCE_COLORS = ['#c7d2fe', '#a5b4fc', '#818cf8', '#6366f1', '#4338ca'];
+
+async function renderDistanceMix() {
+  if (chartInstances.distanceMix) { chartInstances.distanceMix.destroy(); delete chartInstances.distanceMix; }
+  const requestId = ++distanceMixRequestId;
+  let mix;
+  try {
+    const result = await resourceStore.read('shoe-distance-mix', {
+      refresh: false,
+      loader: async () => {
+        const value = await apiGet('/analytics/shoe-distance-mix');
+        if (!Array.isArray(value.shoes) || !Array.isArray(value.buckets)) throw new Error('距離分布資料格式錯誤');
+        return value;
+      },
+    });
+    if (!resourceStore.current(result) || requestId !== distanceMixRequestId) return;
+    if (result.status === 'rejected') throw result.error;
+    mix = result.value;
+  } catch (error) {
+    console.error('載入距離分布失敗:', error);
+    if (requestId === distanceMixRequestId) renderedPanels.delete('shoes');
+    return;
+  }
+  if (document.querySelector('.tab-panel.active')?.dataset.panel !== 'shoes') return;
+  if (chartInstances.distanceMix) { chartInstances.distanceMix.destroy(); delete chartInstances.distanceMix; }
+  const note = document.getElementById('distance-mix-note');
+  const box = document.getElementById('distance-mix-canvas');
+  const rows = mix.shoes;
+  if (!rows.length) {
+    box.style.height = '60px';
+    note.textContent = '現役鞋還沒有跑步紀錄。';
+    return;
+  }
+  const names = rows.map(row => shoeName(row.shoe_id));
+  const textColor = getThemeColor('--text-dim', '#8b8d9a');
+  const gridColor = getThemeColor('--chart-grid', '#2a2d3e');
+  box.style.height = `${Math.max(140, rows.length * 34 + 72)}px`;
+  chartInstances.distanceMix = new Chart(document.getElementById('chart-distance-mix'), {
+    type: 'bar',
+    data: {
+      labels: names,
+      datasets: mix.buckets.map((bucket, index) => ({
+        label: `${bucket} km`, data: rows.map(row => row.counts[index]),
+        backgroundColor: DISTANCE_COLORS[index % DISTANCE_COLORS.length], barPercentage: .7,
+      })),
+    },
+    options: {
+      indexAxis: 'y',
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: true, position: 'top', labels: { color: textColor, boxWidth: 12, font: { size: 11 } } },
+        tooltip: {
+          callbacks: {
+            title: items => names[items[0].dataIndex],
+            label: ctx => `${ctx.dataset.label}：${ctx.raw} 次`,
+            footer: items => { const row = rows[items[0].dataIndex]; return `共 ${row.runs} 次 · 平均 ${row.average_km.toFixed(1)} km · 最長 ${row.longest_km.toFixed(1)} km`; },
+          },
+        },
+      },
+      scales: {
+        x: { stacked: true, grid: { color: gridColor }, ticks: { color: textColor, precision: 0, callback: v => v + ' 次' } },
+        y: { stacked: true, grid: { display: false }, ticks: { color: textColor, font: { size: 11 }, callback: function(value) { return fitChartLabel(names[value], this.chart, 0.32); } } },
+      },
+    },
+  });
+  // Runs of 15 km or more are the "long" buckets (the last two).
+  const longRuns = rows.map(row => ({ row, long: row.counts.slice(-2).reduce((a, b) => a + b, 0) }))
+    .filter(item => item.long > 0).sort((a, b) => b.long - a.long);
+  note.textContent = longRuns.length
+    ? `15 km 以上的長跑最常穿 ${shoeName(longRuns[0].row.shoe_id)}（${longRuns[0].long} 次）。`
+    : '現役鞋還沒有 15 km 以上的長跑紀錄。';
 }

@@ -7,7 +7,7 @@ from backend import analytics, models
 from backend.auth import get_current_user
 from backend.clock import local_today
 from backend.database import get_db
-from backend.read_models import trends
+from backend.read_models import highlights, trends
 
 router = APIRouter(tags=["analytics"])
 
@@ -37,6 +37,30 @@ def shoe_timeline(
     db: Session = Depends(get_db),
 ):
     return trends.shoe_timeline(db, current_user.id, local_today())
+
+@router.get("/api/analytics/home")
+def home_summary(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return highlights.home_summary(db, current_user.id, local_today())
+
+
+@router.get("/api/analytics/year-review")
+def year_review(
+    year: int = Query(..., ge=1900, le=2100),
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return highlights.year_review(db, current_user.id, year, local_today())
+
+
+@router.get("/api/analytics/shoe-distance-mix")
+def shoe_distance_mix(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return highlights.shoe_distance_mix(db, current_user.id)
 
 
 @router.get("/api/shoes/{shoe_id}/analytics")

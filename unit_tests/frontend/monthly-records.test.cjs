@@ -4,7 +4,7 @@ test('SPEC-039 the monthly tab has no records table, add form or edit dialog', (
   for (const id of ['monthly-table', 'add-km', 'add-monthly-btn', 'monthly-modal', 'monthly-records']) {
     assert.doesNotMatch(htmlSource, new RegExp(`id="${id}"`));
   }
-  for (const id of ['goal-cards', 'trends-year-select', 'chart-monthly-year', 'chart-shoe-stacked']) {
+  for (const id of ['goal-cards', 'year-select', 'chart-monthly-year', 'chart-shoe-stacked']) {
     assert.match(htmlSource, new RegExp(`id="${id}"`));
   }
   const assets = JSON.parse(fs.readFileSync('frontend/assets.json', 'utf8'));

@@ -74,7 +74,7 @@ test('run shoe distribution shows monthly percentage, mileage, and wear count', 
   const context = vm.createContext({
     document: { getElementById: () => legend },
     runShoe: id => ({ brand: 'Test', model: `Shoe ${id}` }),
-    brandColor: () => '#123456', esc: value => value,
+    brandColor: () => '#123456', shoeColor: () => '#123456', esc: value => value,
   });
   vm.runInContext(extract('renderRunShoeChart'), context);
   context.renderRunShoeChart(new Map([

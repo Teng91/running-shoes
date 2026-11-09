@@ -82,11 +82,11 @@ test('SPEC-019 creation retries retain a key, but changed input or success start
 });
 
 test('SPEC-019 annual charts use one summary request rather than downloading individual runs', async () => {
-  const nodes = { 'stacked-year-select': { value: '2026' }, 'chart-shoe-stacked': {} }; const calls = [];
+  const nodes = { 'year-select': { value: '2026' }, 'chart-shoe-stacked': {} }; const calls = [];
   const context = runContext({ document: { getElementById: id => nodes[id], querySelector: () => ({ dataset: { panel: 'monthly' } }) },
     apiGet: async url => { calls.push(url); return { shoes: [{ shoe_id: 99, monthly_km: [5, ...Array(11).fill(0)] }] }; },
     chartInstances: {}, shoes: [], retiredShoes: [], yearlyRunsCache: new Map(), renderedPanels: new Map(),
-    stackedRunsRequestId: 0, getThemeColor: () => '#000', brandColor: () => '#000',
+    stackedRunsRequestId: 0, getThemeColor: () => '#000', brandColor: () => '#000', shoeColor: () => '#000',
     Chart: function(_, config) { this.config = config; this.destroy = () => {}; },
   });
   vm.runInContext(extract('renderShoeStackedChart'), context);

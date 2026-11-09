@@ -86,7 +86,7 @@ input::-webkit-datetime-edit { padding: 0; }
   .app-sidebar { padding-right: max(12px, env(safe-area-inset-right)); padding-left: max(12px, env(safe-area-inset-left)); }
   .app-workspace { padding-right: max(12px, env(safe-area-inset-right)); padding-left: max(12px, env(safe-area-inset-left)); }
   .app-brand .subtitle { display: none; }
-  .tab { flex-direction: column; gap: 2px; min-height: 52px; font-size: 12px; }
+  .tab { font-size: 10px; }
   .user-info { align-items: flex-start; }
   .sidebar-actions { flex: 0 0 auto; }
   .sidebar-actions .btn { padding-right: 8px; padding-left: 8px; font-size: 11px; }

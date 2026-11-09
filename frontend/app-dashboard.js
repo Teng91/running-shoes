@@ -28,6 +28,23 @@ function brandColor(brand, seq) {
   return palette[seq % palette.length] || palette[0];
 }
 
+// Every chart and table uses the same color for a shoe: its brand palette,
+// indexed by the shoe's position among that brand's shoes in id order.
+function shoeColor(shoeId) {
+  const seq = {};
+  for (const shoe of [...shoes, ...retiredShoes].sort((a, b) => a.id - b.id)) {
+    seq[shoe.brand] = (seq[shoe.brand] ?? -1) + 1;
+    if (shoe.id === shoeId) return brandColor(shoe.brand, seq[shoe.brand]);
+  }
+  return '#64748b';
+}
+
+function shoeName(shoeId) {
+  const shoe = [...shoes, ...retiredShoes].find(item => item.id === shoeId);
+  if (!shoe) return '已刪除的鞋款';
+  return `${shoe.brand} ${shoe.model}${shoe.nickname ? `（${shoe.nickname}）` : ''}`;
+}
+
 // ====== Render ======
 function render(resource = null) {
   const now = new Date();
@@ -132,13 +149,10 @@ function renderTable() {
   if (preserveInlineTable('shoe-table')) return;
   const tbody = document.getElementById('shoe-table');
   inlineTableRows.set('shoe-table', shoes.map(shoe => ({ ...shoe })));
-  let brandSeq = {};
   tbody.innerHTML = shoes.map((s, i) => {
     const c = calc(s);
     const pc = progressColor(c.lifeProgress);
-    brandSeq[s.brand] = (brandSeq[s.brand] || 0);
-    const bc = brandColor(s.brand, brandSeq[s.brand]);
-    brandSeq[s.brand]++;
+    const bc = shoeColor(s.id);
     return `<tr>
       <td><span class="brand-dot" style="background:${bc}"></span><span class="brand">${esc(s.brand)}</span></td>
       <td><span>${esc(s.model)}</span>${s.nickname ? `<br><small>${esc(s.nickname)}</small>` : ''}</td>
@@ -163,13 +177,10 @@ function renderRetiredTable() {
   if (preserveInlineTable('retired-table')) return;
   const tbody = document.getElementById('retired-table');
   inlineTableRows.set('retired-table', retiredShoes.map(shoe => ({ ...shoe })));
-  let brandSeq = {};
   tbody.innerHTML = retiredShoes.map((s, i) => {
     const c = calc(s);
     const pc = progressColor(c.lifeProgress);
-    brandSeq[s.brand] = (brandSeq[s.brand] || 0);
-    const bc = brandColor(s.brand, brandSeq[s.brand]);
-    brandSeq[s.brand]++;
+    const bc = shoeColor(s.id);
     return `<tr>
       <td><span class="brand-dot" style="background:${bc}"></span><span class="brand">${esc(s.brand)}</span></td>
       <td><span>${esc(s.model)}</span>${s.nickname ? `<br><small>${esc(s.nickname)}</small>` : ''}</td>

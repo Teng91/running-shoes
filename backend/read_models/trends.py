@@ -41,7 +41,7 @@ def _daily_km(db: Session, user_id: int, start: date, end: date) -> dict[date, f
     return {date.fromisoformat(day): float(km or 0) for day, km in rows}
 
 
-def _streaks(days: list[date], end: date) -> dict:
+def run_streaks(days: list[date], end: date) -> dict:
     longest, longest_end, run, previous = 0, None, 0, None
     for day in days:
         run = run + 1 if previous is not None and day - previous == timedelta(days=1) else 1
@@ -95,7 +95,7 @@ def training_trends(db: Session, user_id: int, year: int, as_of: date) -> dict:
     }
     if end is None:
         return {
-            **base, "daily": [], "streaks": _streaks([], as_of), "weekly": [],
+            **base, "daily": [], "streaks": run_streaks([], as_of), "weekly": [],
             "cumulative": {
                 "goal_active": year >= goal["start_year"], "yearly_goal_km": yearly_goal,
                 "actual_km": [], "goal_km": goal_line, "ytd_km": 0.0, "expected_km": 0.0,
@@ -118,7 +118,7 @@ def training_trends(db: Session, user_id: int, year: int, as_of: date) -> dict:
     return {
         **base,
         "daily": [{"date": day.isoformat(), "km": round_metric(daily[day])} for day in year_days],
-        "streaks": _streaks(year_days, end),
+        "streaks": run_streaks(year_days, end),
         "weekly": _weekly(daily, end),
         "cumulative": {
             "goal_active": year >= goal["start_year"],
