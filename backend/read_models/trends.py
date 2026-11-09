@@ -134,7 +134,10 @@ def training_trends(db: Session, user_id: int, year: int, as_of: date) -> dict:
 
 
 def shoe_timeline(db: Session, user_id: int, as_of: date) -> dict:
-    """First/last logged run per owned, non-deleted shoe, oldest rotation first."""
+    """First/last logged run per owned active shoe, oldest rotation first.
+
+    Retired and deleted shoes are no longer in rotation, so they are omitted.
+    """
     rows = (
         db.query(
             models.Shoe,
@@ -142,7 +145,11 @@ def shoe_timeline(db: Session, user_id: int, as_of: date) -> dict:
             func.sum(models.Run.km), func.count(models.Run.id),
         )
         .join(models.Run, (models.Run.shoe_id == models.Shoe.id) & (models.Run.user_id == user_id))
-        .filter(models.Shoe.user_id == user_id, models.Shoe.is_deleted.is_(False))
+        .filter(
+            models.Shoe.user_id == user_id,
+            models.Shoe.is_deleted.is_(False),
+            models.Shoe.is_retired.is_(False),
+        )
         .group_by(models.Shoe.id)
         .order_by(func.min(models.Run.date), models.Shoe.id)
         .all()
@@ -152,12 +159,11 @@ def shoe_timeline(db: Session, user_id: int, as_of: date) -> dict:
         idle = (as_of - date.fromisoformat(last)).days
         shoes.append({
             "shoe_id": shoe.id,
-            "is_retired": shoe.is_retired,
             "first_run_date": first,
             "last_run_date": last,
             "km": round_metric(km),
             "run_count": int(count),
             "days_since_last_run": max(0, idle),
-            "idle": not shoe.is_retired and idle > IDLE_DAYS,
+            "idle": idle > IDLE_DAYS,
         })
     return {"as_of": as_of.isoformat(), "idle_days": IDLE_DAYS, "shoes": shoes}

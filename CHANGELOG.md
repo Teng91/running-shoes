@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [4.1.3] - 2026-11-09
+
+### Changed
+- 跑鞋輪替時間軸只列出現役鞋，已退役的鞋不再顯示；`GET /api/analytics/shoe-timeline` 不再回傳退役鞋與 `is_retired` 欄位（SPEC-038 修訂）。Asset 4.1.3／shell v47。
+
 ### Fixed
 - CI 瀏覽器工作固定在 `ubuntu-24.04`：`ubuntu-latest` 改為 26.04 後，掛進 Playwright noble 容器的 tool-cache Python 缺少 ssl 模組，pip 無法安裝依賴。
 

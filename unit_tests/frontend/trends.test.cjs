@@ -76,25 +76,25 @@ test('SPEC-038 future years render no charts and malformed trends are not cached
   assert.equal(nodes['run-heatmap'].innerHTML.match(/heat-cell future/g).length, 365);
 });
 
-test('SPEC-038 rotation timeline names shoes, greys retired pairs and calls out idle active shoes', async () => {
+test('SPEC-038 rotation timeline names active shoes and calls out idle ones without retired pairs', async () => {
   const nodes = elements();
   const context = trendsContext(nodes, { panel: 'shoes',
     shoes: [{ id: 2, brand: 'Mizuno', model: 'Rider', nickname: '日常' }, { id: 3, brand: 'PUMA', model: 'Nitro', nickname: '' }],
     retiredShoes: [{ id: 1, brand: 'Mizuno', model: 'Sky', nickname: '' }],
     apiGet: async () => ({ as_of: '2026-05-01', idle_days: 30, shoes: [
-      { shoe_id: 1, is_retired: true, first_run_date: '2025-01-01', last_run_date: '2025-08-01', km: 15, run_count: 2, days_since_last_run: 273, idle: false },
-      { shoe_id: 3, is_retired: false, first_run_date: '2025-06-01', last_run_date: '2026-03-01', km: 16, run_count: 2, days_since_last_run: 61, idle: true },
-      { shoe_id: 2, is_retired: false, first_run_date: '2026-02-01', last_run_date: '2026-04-30', km: 30, run_count: 3, days_since_last_run: 1, idle: false },
+      { shoe_id: 3, first_run_date: '2025-06-01', last_run_date: '2026-03-01', km: 16, run_count: 2, days_since_last_run: 61, idle: true },
+      { shoe_id: 2, first_run_date: '2026-02-01', last_run_date: '2026-04-30', km: 30, run_count: 3, days_since_last_run: 1, idle: false },
     ] }) });
   vm.runInContext(`const DAY_MS = 86400000; let shoeTimelineRequestId = 0;\n${extract('renderShoeTimeline')}`, context);
   await context.renderShoeTimeline();
   const { config } = context.chartInstances.timeline;
-  assert.deepEqual(config.data.labels, ['Mizuno Sky', 'PUMA Nitro', 'Mizuno Rider（日常）']);
-  assert.deepEqual(config.data.datasets[0].backgroundColor, ['#64748b', '#f97316', '#123456']);
-  const [start, end] = config.data.datasets[0].data[2];
+  assert.deepEqual(config.data.labels, ['PUMA Nitro', 'Mizuno Rider（日常）']);
+  assert.deepEqual(config.data.datasets[0].backgroundColor, ['#f97316', '#123456']);
+  const [start, end] = config.data.datasets[0].data[1];
   assert.equal(end - start, (88 + 1) * 86400000, 'bars include their last day');
-  assert.equal(nodes['shoe-timeline-canvas'].style.height, `${3 * 34 + 48}px`);
-  assert.match(nodes['timeline-note'].textContent, /超過 30 天沒穿的現役鞋（PUMA Nitro）/);
+  assert.equal(nodes['shoe-timeline-canvas'].style.height, '140px');
+  assert.match(nodes['timeline-note'].textContent, /超過 30 天沒穿的現役鞋（PUMA Nitro）。已退役的鞋不列出/);
+  assert.doesNotMatch(nodes['timeline-note'].textContent, /灰色/);
 });
 
 test('SPEC-038 trend sections are present with an accessible scroll region and legend', () => {

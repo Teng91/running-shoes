@@ -118,12 +118,12 @@ def test_shoe_timeline_orders_rotation_and_flags_idle_active_shoes(db, user_with
 
     result = shoe_timeline(db, user.id, date(2026, 5, 1))
 
-    assert [row["shoe_id"] for row in result["shoes"]] == [old.id, idle.id, daily.id]
+    # Retired, deleted and never-worn shoes are not in rotation.
+    assert [row["shoe_id"] for row in result["shoes"]] == [idle.id, daily.id]
     rows = {row["shoe_id"]: row for row in result["shoes"]}
-    assert rows[old.id]["idle"] is False and rows[old.id]["is_retired"] is True
     assert rows[idle.id]["idle"] is True and rows[idle.id]["days_since_last_run"] == 61
     assert rows[daily.id] == {
-        "shoe_id": daily.id, "is_retired": False, "first_run_date": "2026-02-01",
+        "shoe_id": daily.id, "first_run_date": "2026-02-01",
         "last_run_date": "2026-04-28", "km": 16, "run_count": 2, "days_since_last_run": 3, "idle": False,
     }
 
