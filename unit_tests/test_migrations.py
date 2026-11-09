@@ -258,3 +258,28 @@ def test_migration_refuses_a_newer_schema_version():
 
     with pytest.raises(RuntimeError, match="refusing to downgrade"):
         run_startup_migrations(engine, sessionmaker(bind=engine))
+
+
+def test_startup_drops_only_empty_legacy_tables():
+    """SPEC-045: discontinued, unused tables go away without losing any old rows."""
+    engine = _make_test_engine()
+    with engine.begin() as connection:
+        connection.execute(text(
+            "CREATE TABLE operation_history (id INTEGER PRIMARY KEY, user_id INTEGER, payload_json JSON)"
+        ))
+        connection.execute(text("CREATE INDEX idx_operation_history_user_time ON operation_history (user_id)"))
+        connection.execute(text("CREATE TABLE app_settings (id INTEGER PRIMARY KEY, key VARCHAR, value VARCHAR)"))
+        connection.execute(text("INSERT INTO app_settings (key, value) VALUES ('kept', 'row')"))
+
+    run_startup_migrations(engine, sessionmaker(bind=engine))
+    run_startup_migrations(engine, sessionmaker(bind=engine))
+
+    with engine.connect() as connection:
+        names = {row[0] for row in connection.execute(text("SELECT name FROM sqlite_master"))}
+        assert "operation_history" not in names
+        assert "idx_operation_history_user_time" not in names
+        assert "app_settings" in names, "a legacy table that still holds rows is kept"
+        assert connection.execute(text("SELECT value FROM app_settings")).scalar_one() == "row"
+        assert connection.execute(text(
+            "SELECT value FROM schema_metadata WHERE key = 'schema_version'"
+        )).scalar_one() == "6"

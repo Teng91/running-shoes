@@ -75,15 +75,19 @@ test('SPEC-017 deleted shoes remain in annual stacked mileage totals', async () 
   const nodes = elements(); nodes['year-select'].value = '2026';
   const context = runContext({ document: { getElementById: id => nodes[id], querySelector: () => ({ dataset: { panel: 'monthly' } }) },
     chartInstances: {}, shoes: [{ id: 2, brand: 'A', model: 'Visible' }], retiredShoes: [],
-    apiGet: async () => ({ shoes: [{ shoe_id: 1, monthly_km: [10] }, { shoe_id: 2, monthly_km: [20] }] }),
+    apiGet: async () => ({ shoes: [{ shoe_id: 1, monthly_km: [10, 1.5] }, { shoe_id: 2, monthly_km: [20, 0] },
+      { shoe_id: 15, monthly_km: [0, 6.67] }] }),
     brandColor: () => '#000', shoeColor: () => '#000', getThemeColor: () => '#000', stackedRunsRequestId: 0,
     Chart: function(_, config) { this.config = config; },
   });
   vm.runInContext(extract('renderShoeStackedChart'), context);
   await context.renderShoeStackedChart();
   const data = context.chartInstances.shoeStacked.config.data.datasets;
-  assert.equal(data.reduce((sum, row) => sum + row.data.reduce((a, b) => a + b, 0), 0), 30);
-  assert.ok(data.some(row => row.label.includes('已刪除 #1')));
+  assert.equal(Math.round(data.reduce((sum, row) => sum + row.data.reduce((a, b) => a + b, 0), 0) * 100) / 100, 38.17);
+  // SPEC-045: deleted shoes share one grey series and no internal ID is shown.
+  assert.deepEqual(Array.from(data, row => row.label), ['A Visible', '已刪除的鞋款']);
+  assert.deepEqual(Array.from(data[1].data.slice(0, 2)), [10, 8.17]);
+  assert.doesNotMatch(JSON.stringify(Array.from(data, row => row.label)), /#\d|歷史鞋款/);
 });
 
 test('SPEC-017 spending renders server calendar months without UTC Date parsing', () => {
@@ -168,7 +172,7 @@ test('SPEC-031 calendar shows shoe names and distance without run counts', () =>
   const html = nodes['run-calendar'].innerHTML;
   assert.match(html, /12\.00 km/);
   assert.match(html, /filterRunDay\('2026-08-05'\)\">Daily Runner<\/button>/);
-  assert.match(html, />歷史鞋款<\/button>/);
+  assert.match(html, />已刪除<\/button>/);
   assert.doesNotMatch(html, /\d+ 次/);
   context.renderRunCalendar([], '2026-08');
   assert.equal((nodes['run-calendar'].innerHTML.match(/class="calendar-number"/g) || []).length, 31);

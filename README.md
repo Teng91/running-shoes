@@ -458,7 +458,7 @@ python3 scripts/build_frontend.py --check
 
 - 月跑量 API 空白或無效不會寫入；清零必須明確輸入 `0`。歷史／手動調整與日誌里程分開保留（網頁編輯介面已於 SPEC-039 移除）。
 - 月跑量頁、首頁、月報目標皆只計逐筆日誌；鞋款成本／壽命指標由 `shoe_metrics.py` 統一計算。
-- 刪鞋不移除日誌或年度堆疊里程；圖表保留「歷史鞋款／已刪除」群組。
+- 刪鞋不移除日誌或年度堆疊里程；已刪除鞋款的里程合併為一個灰色「已刪除的鞋款」系列，不顯示內部編號。
 - AI 遇到同名鞋回傳含購買日期及狀態的候選，必須詢問後以 ID 選定；批次使用分析不逐鞋查詢。
 - 支出平均依後端日曆月份計算，不受瀏覽器時區影響；按需載入，失敗可在該區重試，不阻擋首頁。
 - PWA 回到前景或跨日時更新日期上限，不改目前分頁／月份／草稿。登入換帳號則清除前帳號狀態與草稿。
@@ -701,6 +701,12 @@ v3.10.3 使用 Asset 3.10.3／shell v38、schema 6、51 個 release assets。
 `registry.fly.io/running-shoes@sha256:bac44457f12adfde6473e9d9a973b330e1bf69eac7e44feb3fb6ed1f5a55429a`，
 不還原業務資料快照。發布驗證涵蓋 verify、40 組版面、雙引擎 CRUD／PWA、main/tag CI 及正式站匿名 release-check。
 
+### 清除舊空表與已刪除鞋款標籤（SPEC-045，v4.5.1）
+
+[SPEC-045](docs/specs/045-legacy-tables-and-deleted-shoe-labels.md) 啟動時刪除不再使用的空表 `operation_history`、`app_settings`（仍有資料則保留），資料庫由 19 張表變為 17 張；
+年度堆疊圖把已刪除鞋款合併為「已刪除的鞋款」，不再顯示 `#15` 這類內部編號。鞋款／跑步主鍵維持全域穩定編號，刪除不重排。
+schema 維持 6、Asset 4.5.1／shell v52，可直接回滾至 v4.5.0 image。
+
 ### 月跑量年度目標總覽（SPEC-044，v4.5.0）
 
 [SPEC-044](docs/specs/044-annual-goal-overview.md) 移除「查看月份」選單，月跑量分頁改以一張年度目標卡同時顯示 12 個月的達標狀態、年度進度與本月進度；
@@ -790,7 +796,7 @@ Playwright／Chromium／WebKit 齊全時，也會執行版面測試。
 避免每次停止都重跑。Hook 不會呼叫其他模型、外部 API，或傳送提示、diff、原始碼與測試輸出。
 GitHub Actions 仍會在 push／pull request 執行 `verify`，並以三個可獨立重跑的 browser jobs 執行完整版面矩陣、真實 CRUD E2E 與 PWA 升級／離線測試；Dependabot 每月以單一 PR 合併 GitHub Actions 更新；Python 只接收安全性更新 PR，例行升級依下方 `uv pip compile --universal` 步驟手動重編鎖定檔（Dependabot 產生的鎖定檔會遺失 Windows 條件）。
 
-本次驗證基線為 Python **571 passed**、前端回歸測試 **160 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
+本次驗證基線為 Python **572 passed**、前端回歸測試 **160 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
 版面檢查涵蓋 WebKit／Chromium、亮／暗模式與 10 組直橫向尺寸，共 40 組設定，檢查四個功能分頁與月報、三個認證表單、圖表、全部彈窗、行內編輯、停用／錯誤及空資料狀態。
 
 主要表單、工具列與彈窗操作統一為 44px 控制項；桌面表格內的緊湊操作為 36px，手機至少 44px。
