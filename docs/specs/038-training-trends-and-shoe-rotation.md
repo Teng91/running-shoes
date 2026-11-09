@@ -15,7 +15,7 @@
 - 年度跑步熱力圖：每天一格（週一起始），依當天合計公里分五級，並顯示有跑天數、最長連續與目前連續天數。
 - 近 16 週每週跑量與 4 週移動平均；當週比前 4 週平均多 30% 以上（且前 4 週平均至少 5 km）時標示為跑量暴增。
 - 年度累計跑量與目標進度線：顯示超前／落後公里數與全年推估。
-- 跑鞋輪替時間軸：每雙鞋從第一次到最後一次跑步的期間；現役鞋超過 30 天沒穿時標示提醒。
+- 跑鞋輪替時間軸：每雙現役鞋從第一次到最後一次跑步的期間；超過 30 天沒穿時標示提醒。已退役的鞋不在輪替中，不列出（v4.1.3 修訂）。
 
 ## Non-goals
 
@@ -33,7 +33,7 @@
 
 ## Security and data isolation
 
-- 兩個查詢都以 `Run.user_id`／`Shoe.user_id` 限制目前使用者；時間軸的 join 同時限制跑步與鞋款屬於同一使用者，已刪除鞋款不列出。
+- 兩個查詢都以 `Run.user_id`／`Shoe.user_id` 限制目前使用者；時間軸的 join 同時限制跑步與鞋款屬於同一使用者，已刪除與已退役鞋款不列出。
 - 不新增寫入、外部請求或秘密；回應只含使用者自己的日期、公里與鞋款 ID，鞋名由前端已載入的使用者鞋款清單對應。
 
 ## Migration, rollout, and rollback
@@ -47,7 +47,7 @@
 - [x] AC-1：Given 同一天有多筆跑步，When 讀取年度趨勢，Then 熱力圖顯示當天合計並以週一起始排列；連續天數在一整天沒跑後歸零；未來日期不著色。
 - [x] AC-2：Given 前 4 週平均 20 km，When 某週跑 30 km，Then 該週標示暴增；增加 11% 或前 4 週平均不足 5 km 時不標示；進行中的週次標示為未完成。
 - [x] AC-3：Given 年度目標，When 讀取年度趨勢，Then 回傳全年目標線、累計跑量、超前／落後公里與全年推估；未來年份回傳空資料，過去年份涵蓋全年。
-- [x] AC-4：Given 現役、退役、已刪除與未穿過的鞋，When 讀取輪替時間軸，Then 只列出有跑步且未刪除的鞋並依首次跑步排序，現役鞋超過 30 天未穿標示閒置。
+- [x] AC-4：Given 現役、退役、已刪除與未穿過的鞋，When 讀取輪替時間軸，Then 只列出有跑步、未刪除且未退役的鞋並依首次跑步排序，超過 30 天未穿標示閒置。
 - [x] AC-5：Given 兩個使用者，When 各自讀取趨勢與時間軸，Then 只看到自己的資料；未登入回 401，年份超出範圍回 422。
 - [x] AC-6：Given 前端取得趨勢與時間軸，When 繪製，Then 顯示熱力圖分級、暴增週次顏色、目標進度說明與閒置鞋提醒；格式錯誤的回應不被快取；跑步／跑鞋異動後重新讀取。
 
@@ -58,6 +58,6 @@
 | AC-1 | `unit_tests/test_trends.py::test_heatmap_merges_same_day_runs_and_counts_streaks`、`unit_tests/frontend/trends.test.cjs::SPEC-038 trends render a Monday-first heatmap, weekly spikes and the goal pace note` |
 | AC-2 | `unit_tests/test_trends.py::test_weekly_load_flags_jump_over_previous_four_week_average` |
 | AC-3 | `unit_tests/test_trends.py::test_cumulative_goal_line_and_projection`、`unit_tests/test_trends.py::test_future_year_is_empty_and_past_year_is_complete` |
-| AC-4 | `unit_tests/test_trends.py::test_shoe_timeline_orders_rotation_and_flags_idle_active_shoes`、`unit_tests/frontend/trends.test.cjs::SPEC-038 rotation timeline names shoes, greys retired pairs and calls out idle active shoes` |
+| AC-4 | `unit_tests/test_trends.py::test_shoe_timeline_orders_rotation_and_flags_idle_active_shoes`、`unit_tests/frontend/trends.test.cjs::SPEC-038 rotation timeline names active shoes and calls out idle ones without retired pairs` |
 | AC-5 | `unit_tests/test_trends.py::test_trend_endpoints_are_user_scoped` |
 | AC-6 | `unit_tests/frontend/trends.test.cjs::SPEC-038 future years render no charts and malformed trends are not cached`、`unit_tests/frontend/feature-operations.test.cjs::SPEC-038 run changes refresh training trends and the rotation timeline; shoe edits refresh the timeline`、`python3 scripts/task.py frontend-layout` |

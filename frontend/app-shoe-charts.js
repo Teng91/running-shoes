@@ -269,10 +269,10 @@ async function renderShoeTimeline() {
   const rows = timeline.shoes;
   if (!rows.length) {
     box.style.height = '60px';
-    note.textContent = '還沒有跑步紀錄，記錄跑步後會顯示每雙鞋的使用期間。';
+    note.textContent = '現役鞋還沒有跑步紀錄，記錄跑步後會顯示每雙鞋的使用期間。';
     return;
   }
-  const known = new Map([...shoes, ...retiredShoes].map(shoe => [shoe.id, shoe]));
+  const known = new Map(shoes.map(shoe => [shoe.id, shoe]));
   const names = rows.map(row => {
     const shoe = known.get(row.shoe_id);
     if (!shoe) return `鞋款 #${row.shoe_id}`;
@@ -280,7 +280,6 @@ async function renderShoeTimeline() {
   });
   const brandSeq = {};
   const colors = rows.map(row => {
-    if (row.is_retired) return '#64748b';
     if (row.idle) return '#f97316';
     const brand = known.get(row.shoe_id)?.brand || '';
     brandSeq[brand] = brandSeq[brand] || 0;
@@ -311,7 +310,7 @@ async function renderShoeTimeline() {
               return [
                 `${row.first_run_date.replaceAll('-', '/')} – ${row.last_run_date.replaceAll('-', '/')}`,
                 `${row.km.toFixed(1)} km · ${row.run_count} 次`,
-                row.is_retired ? '已退役' : `最後一次穿：${row.days_since_last_run} 天前`,
+                `最後一次穿：${row.days_since_last_run} 天前`,
               ];
             },
           },
@@ -355,6 +354,6 @@ async function renderShoeTimeline() {
   });
   const idle = rows.filter(row => row.idle).map(row => names[rows.indexOf(row)]);
   note.textContent = idle.length
-    ? `橘色：超過 ${timeline.idle_days} 天沒穿的現役鞋（${idle.join('、')}）。灰色為已退役。`
-    : `所有現役鞋近 ${timeline.idle_days} 天內都有穿；灰色為已退役。`;
+    ? `橘色：超過 ${timeline.idle_days} 天沒穿的現役鞋（${idle.join('、')}）。已退役的鞋不列出。`
+    : `所有現役鞋近 ${timeline.idle_days} 天內都有穿；已退役的鞋不列出。`;
 }
