@@ -12,7 +12,7 @@ from backend.audit_schema import install_audit_triggers
 from backend.credentials import get_password_hash
 from backend.database import Base
 
-CURRENT_SCHEMA_VERSION = 6
+CURRENT_SCHEMA_VERSION = 7
 
 
 def _migrate_preview_tokens(engine: Engine) -> None:
@@ -45,6 +45,31 @@ def _drop_empty_legacy_tables(engine: Engine) -> None:
                 f"SELECT 1 FROM {table} LIMIT 1"
             ).first() is None:
                 connection.exec_driver_sql(f"DROP TABLE {table}")
+
+
+def _migrate_schema_seven(engine: Engine, applied_version: int) -> None:
+    """Single receipt table, prunable receipts and audit-independent run tombstones."""
+    with engine.begin() as connection:
+        receipt_columns = {column["name"] for column in inspect(connection).get_columns("mutation_receipts")}
+        if "recorded_at" not in receipt_columns:
+            # Existing receipts sort as oldest (0) and are the first to be pruned.
+            connection.exec_driver_sql(
+                "ALTER TABLE mutation_receipts ADD COLUMN recorded_at FLOAT NOT NULL DEFAULT 0"
+            )
+        connection.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS idx_receipts_user_recorded ON mutation_receipts (user_id, recorded_at)"
+        )
+        if applied_version < 7:
+            # Deletions were previously inferred from audit events; keep every
+            # existing identity before audit history becomes prunable.
+            connection.exec_driver_sql(
+                "INSERT OR IGNORE INTO run_tombstones (user_id, run_id) "
+                "SELECT DISTINCT user_id, entity_id FROM audit_events "
+                "WHERE entity = 'runs' AND action = 'delete' AND imported = 0"
+            )
+        # Schema-2 run receipts were superseded by mutation_receipts, which every
+        # keyed run creation already writes in the same transaction.
+        connection.exec_driver_sql("DROP TABLE IF EXISTS run_creation_requests")
 
 
 def schema_version(engine: Engine) -> int:
@@ -127,7 +152,7 @@ def run_startup_migrations(
             db.close()
 
     Base.metadata.create_all(bind=engine, tables=[
-        table for table in Base.metadata.sorted_tables if table.name not in {"run_creation_requests", "report_generations", "mutation_receipts", "entity_sequences", "write_contexts", "audit_events", "restore_previews", "restore_mappings"}
+        table for table in Base.metadata.sorted_tables if table.name not in {"report_generations", "mutation_receipts", "entity_sequences", "write_contexts", "audit_events", "restore_previews", "restore_mappings", "run_tombstones"}
     ])
 
     with engine.begin() as connection:
@@ -233,11 +258,6 @@ def run_startup_migrations(
             )
         """))
 
-    # Schema 2 is additive: receipts share the run transaction, with no changes
-    # to existing run/shoe/monthly tables or mileage values.
-    if applied_version < 2:
-        cast(Table, models.RunCreationRequest.__table__).create(bind=engine, checkfirst=True)
-
     # Schema 3 adds display-only nicknames without rewriting mileage or versions.
     if applied_version < 3 and "nickname" not in {
         column["name"] for column in inspect(engine).get_columns("shoes")
@@ -253,10 +273,11 @@ def run_startup_migrations(
         cast(Table, models.ReportGeneration.__table__).create(bind=engine, checkfirst=True)
 
     for model in (models.MutationReceipt, models.EntitySequence, models.WriteContext, models.AuditEvent,
-                  models.RestorePreview, models.RestoreMapping):
+                  models.RestorePreview, models.RestoreMapping, models.RunTombstone):
         cast(Table, model.__table__).create(bind=engine, checkfirst=True)
     if applied_version < 6:
         _migrate_preview_tokens(engine)
+    _migrate_schema_seven(engine, applied_version)
     with engine.begin() as connection:
         for table in ("runs", "monthly_mileages"):
             connection.execute(text(

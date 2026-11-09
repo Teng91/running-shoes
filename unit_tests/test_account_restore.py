@@ -346,7 +346,7 @@ def test_update_http_mode_and_legacy_preview_compatibility(workspace):
 
     from backend.app_factory import create_app
     from backend.auth import create_access_token
-    from backend.services.run_requests import payload_hash
+    from backend.services.fingerprints import payload_hash
     with workspace.sessions() as db:
         raw = json.dumps(archive(db)).encode()
         preview = account_restore.preview_restore(db, 2, raw, workspace.config)
@@ -486,7 +486,7 @@ def test_schema_six_preserves_existing_preview_and_is_idempotent(workspace):
         connection.execute(text("UPDATE schema_metadata SET value='5' WHERE key='schema_version'"))
     run_startup_migrations(workspace.engine, workspace.sessions)
     run_startup_migrations(workspace.engine, workspace.sessions)
-    assert schema_version(workspace.engine) == 6
+    assert schema_version(workspace.engine) == 7
     assert inspect(workspace.engine).get_pk_constraint('restore_previews')['constrained_columns'] == ['user_id', 'token']
     with workspace.sessions() as db:
         after = exports.build_account_export(db, db.get(models.User, 1))[0]
@@ -529,6 +529,7 @@ def test_preview_schema_rollback_preserves_business_rows(workspace):
         before = db.query(models.AuditEvent).count()
     connection = workspace.engine.raw_connection()
     try:
+        connection.executescript(Path('scripts/rollback_schema_seven.sql').read_text())
         connection.executescript(Path('scripts/rollback_preview_schema.sql').read_text())
     finally:
         connection.close()
@@ -539,7 +540,7 @@ def test_preview_schema_rollback_preserves_business_rows(workspace):
         assert db.query(models.AuditEvent).count() == before
         assert db.query(models.RestorePreview).count() == 0
     run_startup_migrations(workspace.engine, workspace.sessions)
-    assert schema_version(workspace.engine) == 6
+    assert schema_version(workspace.engine) == 7
 
 
 def test_export_contract_limits_and_explicit_history_omission(workspace):
@@ -726,6 +727,7 @@ def test_recovered_run_retains_all_source_aliases(workspace):
 
 
 def test_imported_history_cannot_create_local_tombstones(workspace):
+    """SPEC-047: only a local deletion writes a tombstone; imported audit rows never do."""
     from backend.services import runs
     with workspace.sessions() as db:
         payload = archive(db)
@@ -733,10 +735,24 @@ def test_imported_history_cannot_create_local_tombstones(workspace):
         runs.delete_run(db, 1, run.id)
         event = db.query(models.AuditEvent).filter_by(user_id=1, entity='runs', action='delete').one()
         event.imported = True
+        db.query(models.RunTombstone).filter_by(user_id=1).delete()
         db.commit()
         preview = account_restore.preview_restore(db, 1, json.dumps(payload).encode(), workspace.config)
         assert preview['summary']['new_runs'] == 1
         assert preview['summary']['preserved_deleted_runs'] == 0
+
+
+def test_local_deletion_tombstone_is_preserved_after_audit_rows_are_pruned(workspace):
+    from backend.services import runs
+    with workspace.sessions() as db:
+        payload = archive(db)
+        run = db.query(models.Run).filter_by(user_id=1).one()
+        runs.delete_run(db, 1, run.id)
+        db.query(models.AuditEvent).filter_by(user_id=1).delete()
+        db.commit()
+        preview = account_restore.preview_restore(db, 1, json.dumps(payload).encode(), workspace.config)
+        assert preview['summary']['new_runs'] == 0
+        assert preview['summary']['preserved_deleted_runs'] == 1
 
 
 def test_recovery_source_aliases_roll_back_with_failed_commit(workspace, monkeypatch):
@@ -908,7 +924,7 @@ def test_fractional_import_ignores_legacy_noise_and_preserves_real_changes(works
 @pytest.mark.parametrize('version', [1, 2])
 def test_legacy_archive_fingerprint_excludes_v3_defaults(workspace, version):
     from backend.backup_contract import backup_fingerprint
-    from backend.services.run_requests import payload_hash
+    from backend.services.fingerprints import payload_hash
     with workspace.sessions() as db:
         payload = archive(db)
     payload['version'] = version

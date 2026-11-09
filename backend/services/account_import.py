@@ -8,9 +8,9 @@ from backend import models
 from backend.backup_contract import AccountBackup
 from backend.services.account_import_plan import ImportPlan
 from backend.services.errors import Conflict
+from backend.services.fingerprints import payload_hash
 from backend.services.identifiers import allocate_id
 from backend.services.mileage import apply_run_mileage_deltas
-from backend.services.run_requests import payload_hash
 from backend.settings import Settings
 
 

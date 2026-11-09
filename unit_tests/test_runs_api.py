@@ -5,7 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend.auth import get_password_hash
-from backend.database import get_db
+from backend.dependencies import get_db
 from backend.main import app
 from backend.models import MonthlyMileage, Shoe, User
 
@@ -298,6 +298,8 @@ def test_run_log_rejects_invalid_payload(client, user_with_token, payload):
     {"date": None},
     {"km": None},
     {"shoe_id": None},
+    # SPEC-047: a null version is a malformed request (422), not a stale edit (409).
+    {"km": 6, "expected_version": None},
 ])
 def test_run_log_update_rejects_explicit_nulls(client, db, user_with_token, payload):
     user, token = user_with_token
@@ -348,3 +350,52 @@ def test_run_log_rejects_another_users_shoe_and_record(client, db):
     assert client.get("/api/runs", headers=bob_headers).json() == []
     assert client.put(f"/api/runs/{run_id}", headers=bob_headers, json={"km": 7}).status_code == 404
     assert client.delete(f"/api/runs/{run_id}", headers=bob_headers).status_code == 404
+
+
+def test_runs_in_an_existing_month_do_not_consume_monthly_identifiers(client, db, user_with_token):
+    """SPEC-047: only a newly created month allocates a monthly-mileage identifier."""
+    from sqlalchemy import text
+
+    user, token = user_with_token
+    shoe = Shoe(user_id=user.id, brand="Mizuno", model="Rider", date="2026-01-01")
+    db.add(shoe)
+    db.commit()
+    headers = _auth_header(token)
+    for day in ("2026-08-01", "2026-08-02", "2026-08-03", "2026-09-01"):
+        assert client.post("/api/runs", headers=headers, json={
+            "date": day, "km": 5, "shoe_id": shoe.id,
+        }).status_code == 200
+
+    db.expire_all()
+    months = db.query(MonthlyMileage).order_by(MonthlyMileage.id).all()
+    assert [(row.id, row.month, row.km) for row in months] == [(1, 8, 15.0), (2, 9, 5.0)]
+    next_id = db.execute(text("SELECT next_id FROM entity_sequences WHERE name='monthly_mileages'")).scalar()
+    assert next_id == 3
+
+
+def test_run_list_read_model_scopes_users_and_calendar_filters(db, user_with_token):
+    """SPEC-047: the HTTP route delegates the run-list query to a read model."""
+    from backend.models import Run
+    from backend.read_models.runs import is_calendar_day, list_runs
+
+    user, _ = user_with_token
+    other = User(username="list-other", hashed_password="synthetic")
+    db.add(other)
+    db.flush()
+    mine = Shoe(user_id=user.id, brand="A", model="Mine", date="2026-01-01")
+    theirs = Shoe(user_id=other.id, brand="B", model="Theirs", date="2026-01-01")
+    db.add_all([mine, theirs])
+    db.flush()
+    db.add_all([
+        Run(user_id=user.id, shoe_id=mine.id, date="2026-02-03", km=5),
+        Run(user_id=user.id, shoe_id=mine.id, date="2026-02-28", km=6),
+        Run(user_id=user.id, shoe_id=mine.id, date="2025-12-31", km=7),
+        Run(user_id=other.id, shoe_id=theirs.id, date="2026-02-03", km=99),
+    ])
+    db.commit()
+    assert [run.km for run in list_runs(db, user.id)] == [6, 5, 7]
+    assert [run.km for run in list_runs(db, user.id, year=2026, month=2)] == [6, 5]
+    assert [run.km for run in list_runs(db, user.id, year=2026, month=2, day=3)] == [5]
+    assert [run.km for run in list_runs(db, user.id, year=2025)] == [7]
+    assert [run.km for run in list_runs(db, user.id, limit=1, offset=1)] == [5]
+    assert not is_calendar_day(2026, 2, 29) and is_calendar_day(2024, 2, 29)

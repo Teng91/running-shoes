@@ -358,12 +358,12 @@ ARIA 與 `agent-mode` 狀態，不以 inline style 決定 shell 幾何，因此�
 | 模組 | 責任 | 可以依賴 | 不應依賴 |
 | --- | --- | --- | --- |
 | `backend/main.py` | 最小 ASGI entry point | `app_factory` | routers、database、業務邏輯 |
-| `backend/app_factory.py` | app 組裝、lifecycle、router/middleware 與 SPA fallback | settings、routers、database | domain 計算 |
+| `backend/app_factory.py` | app 組裝、密鑰驗證、預設 engine、lifecycle、router/middleware 與 SPA fallback | settings、routers、database | domain 計算 |
 | `backend/settings.py` | typed environment configuration | Python stdlib | routers、database、FastAPI |
-| `backend/clock.py` | 唯一的應用時區與 `local_today()` | Python stdlib | routers、database、FastAPI |
-| `backend/dependencies.py`、`routers/errors.py` | app settings dependency 與 domain error 的 HTTP mapping | FastAPI、settings、service errors | 業務 transaction |
+| `backend/clock.py` | 唯一的應用時區、`local_now()` 與 `local_today()` | Python stdlib | routers、database、FastAPI |
+| `backend/dependencies.py`、`routers/errors.py` | app settings／request session（`get_db`）dependency 與 domain error 的 HTTP mapping | FastAPI、settings、service errors | 業務 transaction |
 | `backend/seeding.py`、`middleware.py` | 可選 seed 與 request body guard | settings、models／ASGI | `backend.main` |
-| `backend/rate_limits.py` | auth／AI 的 process 與 SQLite shared limits | models、database session | routers、`backend.main` |
+| `backend/rate_limits.py` | auth／AI 的 SQLite 固定視窗限額，於 app engine 的獨立交易消耗 | settings、SQLAlchemy engine | 請求 session、routers、`backend.main` |
 | `backend/routers/` | HTTP 參數、認證 dependency、response | auth、domain/service、models | `backend.main` |
 | `backend/services/` | 配額、版本、里程與 application transaction owner | models、schemas、read models、persistence | FastAPI、routers、`backend.main` |
 | `backend/read_models/` | user-scoped native statistics／身份消歧義 | models、純 domain、SQLAlchemy | HTTP frameworks、routers、tools |
@@ -376,7 +376,7 @@ ARIA 與 `agent-mode` 狀態，不以 inline style 決定 shell 幾何，因此�
 | `backend/agent_planner.py` | deterministic query plan | Python stdlib | database、FastAPI、LLM network |
 | `backend/agent_tools.py` | user-scoped tool dispatch | trusted tools、database session | routers、SSE serialization |
 | `backend/agent_protocol.py` | SSE event 與來源摘要 serialization | search result contract | database、FastAPI |
-| `backend/database.py`、`models.py` | persistence 與 schema | SQLAlchemy | router、frontend |
+| `backend/database.py`、`models.py` | ORM base、連線 pragma、engine 工廠與 schema；import 無 I/O | SQLAlchemy | router、FastAPI、frontend |
 
 依賴方向由入口往內：`main → app factory → router → domain/service → persistence/adapters`。CI 的
 `architecture-check` 會阻止 router 反向 import `backend.main`、service 穿透 HTTP layer，並檢查
@@ -615,3 +615,30 @@ restore controller 擁有 committed／refreshRequired／refreshing 與原操作�
 [ADR-0014](adr/0014-portable-run-aliases.md) 定義 archive v3 的原生來源別名與跨分頁讀取。`run_identity.py::export_run_aliases` 在一致匯出快照中只讀取本人原生 source_id、仍存在跑步的別名，集合有界；backup_contract 驗證 graph，import plan 共用多別名匹配並拒絕歧義，executor 在原交易記錄全部來源鍵。v1/v2 指紋不含新增欄位，DB schema 6 不變。
 
 `mileage.py` SQL 累加以 round 保持兩位，query-free patch 比較正規化同一精度，無需重寫既有資料。workspace controller 注入 best-effort committed callback；DOM bridge 管理 BroadcastChannel 的帳號 partition 通知，手動／前景／相同帳號通知要求讀取。同步中合併刷新需求，讀取期間的新通知形成 trailing read；session 更換撤銷舊 UI 所有權。
+
+## SPEC-047：有界歷史、單一回執與注入式執行環境
+
+[ADR-0015](adr/0015-bounded-history-and-injected-runtime.md) 取代 SPEC-033 以稽核紀錄推導刪除身分的做法，以及 ADR-0004 的 `run_creation_requests`。
+
+```mermaid
+flowchart LR
+    Main[main.py] --> Factory[create_app]
+    Factory -->|runtime_settings| Settings[settings.py]
+    Factory -->|create_database_engine| DB[database.py]
+    Factory --> State[app.state: settings / db_engine / session_factory]
+    State --> GetDb[dependencies.get_db]
+    State --> Limits[rate_limits.py 獨立交易]
+    GetDb --> Routers[routers]
+    Routers --> Services[services]
+    Services --> TX[transactions.write_transaction]
+    TX --> Retention[retention.prune_account_history]
+    Services --> Tombstones[run_identity.record_tombstone]
+```
+
+- **組合根**：`create_app()` 唯一驗證密鑰並建立預設 engine。匯入任何 backend 模組都不建立目錄、engine，也不結束程序。測試與 app 透過 `app.state.session_factory` 取得 session，清除 dependency override 後也不會落到預設資料庫。
+- **寫入交易**：`write_transaction` commit 前呼叫 `retention`，只清理該帳號超出上限的稽核、回執與墓碑。`run_tombstones` 由 `delete_run` 寫入、匯入計畫讀取；稽核紀錄只負責歷史與復原。
+- **限流**：`rate_limits.consume()` 把同一請求的所有視窗放在一個交易，滿了就整筆回滾；限額來自 `app.state.settings`，不再保留記憶體桶。
+- **稽核 trigger**：每次啟動依目前欄位重建，避免舊欄位清單使快照不完整或使寫入失敗。
+- **Strava**：`strava_import.parse_activity_dates()` 把 UTC 時間戳轉為 `clock.APP_TIMEZONE` 日期。`date_corrections()` 只修正仍停在舊 UTC 日期的既有活動，`services/strava_imports.py` 在匯入交易中移動日期與月跑量。
+- **前端事件**：markup 只宣告 `data-click`／`data-change`／`data-input`／`data-submit`／`data-dblclick`／`data-keydown`。`frontend/app-actions.js` 在 document 委派，只執行最近的宣告元素；表單送出與 `<a>` 由動作接管預設行為。
+

@@ -6,7 +6,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from backend import migrations
-from backend.database import get_db
+from backend.dependencies import get_db
 
 router = APIRouter(tags=["health"])
 REQUIRED_TABLES = {"users", "shoes", "runs", "monthly_mileages"}

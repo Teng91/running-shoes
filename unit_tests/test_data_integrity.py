@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import sessionmaker
 
 from backend.clock import local_today
-from backend.database import get_db
+from backend.dependencies import get_db
 from backend.main import app
 from backend.models import MonthlyMileage, Run
 

@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from backend import models
 from backend.auth import get_current_user
-from backend.database import get_db
+from backend.dependencies import get_db
 from backend.routers.errors import service_errors
 from backend.services import exports as export_service
 

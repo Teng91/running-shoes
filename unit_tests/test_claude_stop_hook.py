@@ -94,7 +94,7 @@ def test_main_retries_a_cached_failure_and_never_reblocks_an_active_stop(monkeyp
 
 
 def test_read_event_decodes_utf8_regardless_of_the_console_code_page(monkeypatch):
-    message = "已推上去 ✅ ⏸ 部署 \ \"引號\""
+    message = "已推上去 ✅ ⏸ 部署 \\ \"引號\""
     payload = json.dumps({"session_id": "utf8", "last_assistant_message": message}, ensure_ascii=False)
     # Windows wraps stdin with the locale code page; the hook must still read UTF-8 bytes.
     stdin = io.TextIOWrapper(io.BytesIO(payload.encode("utf-8")), encoding="cp950", errors="replace")

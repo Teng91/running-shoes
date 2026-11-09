@@ -6,8 +6,7 @@ from sqlalchemy.orm import Session
 from backend import goals as goal_service
 from backend import models, schemas
 from backend.auth import get_current_user
-from backend.database import get_db
-from backend.dependencies import OperationKey, get_settings
+from backend.dependencies import OperationKey, get_db, get_settings
 from backend.routers.errors import service_errors
 from backend.services import goals
 from backend.services.operations import legacy_operation

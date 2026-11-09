@@ -99,7 +99,7 @@ test('SPEC-038 rotation timeline names active shoes and calls out idle ones with
 
 test('SPEC-038 trend sections are present with an accessible scroll region and legend', () => {
   // SPEC-040: one shared selector drives the trends together with every other year view.
-  assert.match(htmlSource, /<label for="year-select">年份<\/label>\s*<select id="year-select" class="year-select" onchange="onYearChange\(\)">/);
+  assert.match(htmlSource, /<label for="year-select">年份<\/label>\s*<select id="year-select" class="year-select" data-change="year">/);
   assert.doesNotMatch(htmlSource, /trends-year-select|stacked-year-select/);
   for (const id of ['run-heatmap', 'streak-stats', 'chart-weekly', 'chart-cumulative', 'chart-shoe-timeline', 'timeline-note']) {
     assert.match(htmlSource, new RegExp(`id="${id}"`));

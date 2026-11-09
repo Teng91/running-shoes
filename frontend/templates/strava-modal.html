@@ -4,15 +4,15 @@
     <h2>匯入 Strava 跑步紀錄</h2>
     <p style="color:var(--text-dim);font-size:13px;line-height:1.6">請選擇 Strava 匯出資料夾中的 <code>activities.csv</code>。系統只會匯入跑步活動，並以活動 ID 避免重複。</p>
     <div id="strava-history" class="strava-summary"></div>
-    <div class="form-group"><label for="strava-file">activities.csv</label><input id="strava-file" type="file" accept=".csv,text/csv" onchange="previewStravaFile()"></div>
+    <div class="form-group"><label for="strava-file">activities.csv</label><input id="strava-file" type="file" accept=".csv,text/csv" data-change="preview-strava"></div>
     <div class="form-row">
-      <div class="form-group"><label for="strava-start-date">從這一天開始</label><input id="strava-start-date" type="date" onchange="previewStravaFile()"></div>
-      <div class="form-group"><label for="strava-end-date">到這一天結束</label><input id="strava-end-date" type="date" onchange="previewStravaFile()"></div>
+      <div class="form-group"><label for="strava-start-date">從這一天開始</label><input id="strava-start-date" type="date" data-change="preview-strava"></div>
+      <div class="form-group"><label for="strava-end-date">到這一天結束</label><input id="strava-end-date" type="date" data-change="preview-strava"></div>
     </div>
     <p class="strava-sync"><span>匯入後會自動同步<small>只有新活動會加入跑鞋里程與對應月份的月跑量；重複活動不會再次計算。</small></span></p>
     <div id="strava-summary"></div>
     <div id="strava-mapping" class="strava-groups"></div>
     <div class="auth-error" id="strava-error"></div>
-    <div class="modal-actions"><div class="modal-actions-primary"><button class="btn btn-cancel" onclick="closeStravaModal()">取消</button><button class="btn btn-primary" id="strava-import-btn" onclick="importStrava()" disabled>匯入</button></div></div>
+    <div class="modal-actions"><div class="modal-actions-primary"><button class="btn btn-cancel" data-click="close-strava">取消</button><button class="btn btn-primary" id="strava-import-btn" data-click="import-strava" disabled>匯入</button></div></div>
   </div>
 </div>

@@ -5,7 +5,7 @@ from typing import cast
 from sqlalchemy.orm import Session
 
 from backend import models
-from backend.strava_import import _normalize_gear
+from backend.strava_import import _normalize_gear, date_corrections
 
 
 def build_preview(
@@ -15,12 +15,14 @@ def build_preview(
     invalid: int,
     warnings: list[str],
 ) -> dict[str, object]:
-    existing_ids = {
-        value[0]
-        for value in db.query(models.Run.strava_id)
+    existing_dates = {
+        strava_id: run_date
+        for strava_id, run_date in db.query(models.Run.strava_id, models.Run.date)
         .filter(models.Run.user_id == user_id, models.Run.strava_id.isnot(None))
         .all()
+        if strava_id is not None
     }
+    existing_ids = set(existing_dates)
     shoes = (
         db.query(models.Shoe)
         .filter(
@@ -60,12 +62,15 @@ def build_preview(
             f"{suggested_shoe.brand} {suggested_shoe.model}" if suggested_shoe else None
         )
         group["ambiguous_match"] = len(candidates) > 1
+    corrections = date_corrections(rows, existing_dates)
     return {
         "total_rows": len(rows) + invalid,
         "run_count": len(rows),
         "importable_count": len(rows) - duplicate_count,
         "importable_km": round(importable_km, 2),
         "duplicate_count": duplicate_count,
+        "date_correction_count": len(corrections),
+        "date_correction_samples": corrections[:5],
         "invalid_count": invalid,
         "gear_groups": sorted(groups.values(), key=lambda group: str(group["gear"])),
         "warnings": warnings,

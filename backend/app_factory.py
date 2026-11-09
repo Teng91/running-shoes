@@ -10,11 +10,12 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
 from sqlalchemy.engine import Engine
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from backend import migrations
-from backend.database import SessionLocal, engine, get_db
+from backend.backup_contract import MAX_BACKUP_BYTES
+from backend.database import create_database_engine
 from backend.middleware import StravaUploadLimitMiddleware
 from backend.observability import RequestContextMiddleware
 from backend.routers import (
@@ -33,7 +34,7 @@ from backend.routers import (
     workspace,
 )
 from backend.seeding import seed_default_data
-from backend.settings import Settings
+from backend.settings import Settings, runtime_settings
 from backend.settings import settings as default_settings
 
 SessionFactory = Callable[[], Session]
@@ -94,28 +95,32 @@ def create_app(
     session_factory: SessionFactory | None = None,
     frontend_dir: Path | None = None,
 ) -> FastAPI:
-    """Build an isolated application from explicit runtime dependencies."""
-    selected_settings = config or default_settings
-    selected_engine = db_engine or engine
-    selected_session_factory = session_factory or SessionLocal
+    """Build an isolated application from explicit runtime dependencies.
+
+    This is the only place that validates secrets and creates the default
+    engine; importing backend modules performs no I/O.
+    """
+    selected_settings = runtime_settings(config or default_settings)
+    if db_engine is None:
+        selected_settings.database_dir.mkdir(parents=True, exist_ok=True)
+        db_engine = create_database_engine(selected_settings.database_url)
+    selected_session_factory = session_factory or sessionmaker(
+        autocommit=False, autoflush=False, bind=db_engine
+    )
     selected_frontend = (frontend_dir or selected_settings.frontend_dir).resolve()
     selected_frontend.mkdir(parents=True, exist_ok=True)
 
     app = FastAPI(title="Running Shoes API", lifespan=lifespan)
     app.state.settings = selected_settings
-    app.state.db_engine = selected_engine
+    app.state.db_engine = db_engine
     app.state.session_factory = selected_session_factory
     app.state.frontend_dir = selected_frontend
 
-    def app_database_session():
-        db = selected_session_factory()
-        try:
-            yield db
-        finally:
-            db.close()
-
-    app.dependency_overrides[get_db] = app_database_session
-    app.add_middleware(StravaUploadLimitMiddleware, max_bytes=selected_settings.max_strava_request_bytes)
+    app.add_middleware(
+        StravaUploadLimitMiddleware,
+        max_bytes=selected_settings.max_strava_request_bytes,
+        max_backup_bytes=MAX_BACKUP_BYTES,
+    )
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],

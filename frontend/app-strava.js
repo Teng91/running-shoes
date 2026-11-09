@@ -102,18 +102,19 @@ async function previewStravaFile() {
     summary.innerHTML = `找到 <strong>${stravaController.state.preview.run_count}</strong> 筆跑步活動；` +
       `其中 ${stravaController.state.preview.importable_count} 筆（${Number(stravaController.state.preview.importable_km).toFixed(2)} km）可匯入，` +
       `已有 ${stravaController.state.preview.duplicate_count} 筆重複。` +
+      stravaDateCorrectionText(stravaController.state.preview) +
       (unknown ? `有 ${unknown} 個鞋款需要手動配對或略過。` : '待匯入鞋款已全部自動配對。');
     const shoeOptions = allRunShoes().map(shoe => `<option value="${shoe.id}">${esc(shoeLabel(shoe))}</option>`).join('');
     mapping.innerHTML = stravaController.state.preview.gear_groups.map((group, index) => `
       <div class="strava-group"><div><strong>${esc(group.gear || '未指定鞋款')}</strong><small>${group.count} 次 · ${Number(group.km).toFixed(2)} km</small>
         <small class="strava-date-warning" id="strava-warn-${index}" role="status" hidden></small></div>
-        <select id="strava-map-${index}" onchange="updateStravaDateWarning(${index})"><option value="">不匯入此鞋款</option>${shoeOptions}</select></div>`).join('');
+        <select id="strava-map-${index}" data-change="strava-date-warning" data-index="${index}"><option value="">不匯入此鞋款</option>${shoeOptions}</select></div>`).join('');
     stravaController.state.preview.gear_groups.forEach((group, index) => {
       if (group.suggested_shoe_id) document.getElementById(`strava-map-${index}`).value = String(group.suggested_shoe_id);
       updateStravaDateWarning(index);
     });
     setStravaMappingDisabled(stravaController.importing());
-    document.getElementById('strava-import-btn').disabled = stravaController.importing() || stravaController.state.preview.importable_count === 0;
+    document.getElementById('strava-import-btn').disabled = stravaController.importing() || !stravaHasChanges(stravaController.state.preview);
   } catch (e) {
     if (e.name === 'AbortError' || !stravaController.current(operation)) return;
     summary.innerHTML = '';
@@ -122,6 +123,19 @@ async function previewStravaFile() {
   } finally {
     stravaController.finishPreview(operation);
   }
+}
+
+// SPEC-047: Strava exports UTC times; older imports stored the UTC date, which a re-import corrects.
+function stravaDateCorrectionText(preview) {
+  const count = Number(preview?.date_correction_count || 0);
+  if (!count) return '';
+  const sample = preview.date_correction_samples?.[0];
+  const example = sample ? `（例如 ${String(sample.from_date).replace(/-/g, '/')} → ${String(sample.to_date).replace(/-/g, '/')}）` : '';
+  return `另有 ${count} 筆既有紀錄的日期會依台灣時間修正${example}。`;
+}
+
+function stravaHasChanges(preview) {
+  return Number(preview?.importable_count || 0) > 0 || Number(preview?.date_correction_count || 0) > 0;
 }
 
 // SPEC-046: flag a mapping whose earliest activity predates the chosen shoe's purchase.
@@ -165,7 +179,7 @@ async function importStrava() {
     resourceStore.invalidate(['strava-history']);
     if (stravaController.ownsImport(operation)) {
       closeStravaModal();
-      alert(`已匯入 ${result.imported} 筆跑步紀錄${result.skipped_unmapped ? `，略過 ${result.skipped_unmapped} 筆未配對鞋款` : ''}${result.synced_mileage ? `，並同步 ${result.synced_mileage.toFixed(2)} km 至跑鞋與月跑量` : ''}。`);
+      alert(`已匯入 ${result.imported} 筆跑步紀錄${result.skipped_unmapped ? `，略過 ${result.skipped_unmapped} 筆未配對鞋款` : ''}${result.synced_mileage ? `，並同步 ${result.synced_mileage.toFixed(2)} km 至跑鞋與月跑量` : ''}${result.corrected_dates ? `，修正 ${result.corrected_dates} 筆跑步日期為台灣時間` : ''}。`);
     }
     await loadData({ mutation: 'strava' });
   } catch (e) {
@@ -177,7 +191,7 @@ async function importStrava() {
     stravaController.finishImport(operation);
     if (stravaController.windowCurrent(operation) && !stravaController.importing() && stravaController.state.preview) {
       setStravaMappingDisabled(false);
-      button.disabled = stravaController.state.preview.importable_count === 0;
+      button.disabled = !stravaHasChanges(stravaController.state.preview);
     }
   }
 }

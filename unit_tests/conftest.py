@@ -1,5 +1,9 @@
+from collections.abc import Iterator
+from contextlib import contextmanager
+
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -8,8 +12,34 @@ from backend.database import Base
 from backend.models import MonthlyMileage, Shoe, User
 
 
+@contextmanager
+def disposing_engines() -> Iterator[list[Engine]]:
+    """Dispose every engine that connects inside the block (SPEC-047)."""
+    engines: list[Engine] = []
+
+    def remember(connection):
+        if connection.engine not in engines:
+            engines.append(connection.engine)
+
+    event.listen(Engine, "engine_connect", remember)
+    try:
+        yield engines
+    finally:
+        event.remove(Engine, "engine_connect", remember)
+        for engine in engines:
+            engine.dispose()
+
+
+@pytest.fixture(autouse=True)
+def dispose_test_engines():
+    """Close every SQLite connection a test opened instead of leaving it to the GC."""
+    with disposing_engines():
+        yield
+
+
 @pytest.fixture
-def db():
+def db(dispose_test_engines):
+    # Depending on dispose_test_engines tears this session down before its engine.
     engine = create_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},

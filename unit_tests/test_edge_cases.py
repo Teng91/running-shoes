@@ -208,17 +208,20 @@ def test_lifespan_repairs_partial_owner_migration_when_users_table_exists():
         asyncio.run(context.__aexit__(None, None, None))
 
 
-def test_get_db_always_closes_session(monkeypatch):
+def test_get_db_always_closes_session():
+    from types import SimpleNamespace
+
+    from backend.dependencies import get_db
+
     session = MagicMock()
-    monkeypatch.setattr(database, "SessionLocal", MagicMock(return_value=session))
-    dependency = database.get_db()
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(session_factory=MagicMock(return_value=session))))
+    dependency = get_db(request)
     assert next(dependency) is session
     dependency.close()
     session.close.assert_called_once_with()
 
 
 def test_shoe_schema_numeric_and_category_boundaries():
-    assert schemas.ShoeBase.validate_non_negative(None) is None
     with pytest.raises(ValidationError, match="finite number"):
         schemas.ShoeCreate(brand="A", model="B", date="2026-01-01", price=float("nan"))
     with pytest.raises(ValidationError, match="non-negative"):

@@ -171,12 +171,12 @@ test('SPEC-031 calendar shows shoe names and distance without run counts', () =>
     shoes: [{ shoe_id: 1, count: 2 }, { shoe_id: 99, count: 1 }] }], '2026-08');
   const html = nodes['run-calendar'].innerHTML;
   assert.match(html, /12\.00 km/);
-  assert.match(html, /filterRunDay\('2026-08-05'\)\">Daily Runner<\/button>/);
+  assert.match(html, /data-click="filter-run-day" data-date="2026-08-05">Daily Runner<\/button>/);
   assert.match(html, />已刪除<\/button>/);
   assert.doesNotMatch(html, /\d+ 次/);
   context.renderRunCalendar([], '2026-08');
   assert.equal((nodes['run-calendar'].innerHTML.match(/class="calendar-number"/g) || []).length, 31);
-  assert.match(nodes['run-calendar'].innerHTML, /selectRunCalendarDate\('2026-08-31',event\)/);
+  assert.match(nodes['run-calendar'].innerHTML, /data-click="select-calendar-date" data-date="2026-08-31"/);
   assert.doesNotMatch(nodes['run-calendar'].innerHTML, /class="calendar-run"/);
 });
 

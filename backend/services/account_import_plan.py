@@ -9,8 +9,8 @@ from backend import models
 from backend.backup_contract import AccountBackup, BackupImport, backup_fingerprint
 from backend.services.account_import_changes import ImportChanges, build_changes
 from backend.services.errors import Conflict
+from backend.services.fingerprints import payload_hash
 from backend.services.run_identity import add_local_tombstones
-from backend.services.run_requests import payload_hash
 from backend.settings import Settings
 
 RestoreMode = Literal["merge", "update"]

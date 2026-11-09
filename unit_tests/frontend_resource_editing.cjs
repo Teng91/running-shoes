@@ -38,7 +38,7 @@ async function inspect(browser,baseUrl,scenario){
    await page.waitForFunction(()=>activeHttpRequests.size===1);
    await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
       // Match the mileage cell by its inline edit target, independent of numeric sibling cells.
-   const target=page.locator('#shoe-table td[ondblclick*="mileage"]').first();
+   const target=page.locator('#shoe-table td[data-dblclick="inline-edit"][data-field="mileage"]').first();
    await target.dblclick();await page.locator('.inline-input').fill('1');
    assert.equal(await page.locator('.inline-input').inputValue(),'1');
    assert.equal(await page.locator('.inline-input').evaluate(node=>document.activeElement===node),true);

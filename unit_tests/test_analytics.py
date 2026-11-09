@@ -4,7 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend import analytics
-from backend.database import get_db
+from backend.dependencies import get_db
 from backend.main import app
 from backend.models import MonthlyMileage, Run, Shoe
 

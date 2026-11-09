@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from backend import analytics, models
 from backend.auth import get_current_user
 from backend.clock import local_today
-from backend.database import get_db
+from backend.dependencies import get_db
 from backend.read_models import highlights, trends
 
 router = APIRouter(tags=["analytics"])

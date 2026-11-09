@@ -62,8 +62,10 @@ def change_password(db: Session, username: str, old_password: str, new_password:
     if not verify_password(old_password, user.hashed_password):
         raise Unauthorized("Incorrect username or old password")
     user_id, previous_hash, previous_version = user.id, user.hashed_password, user.token_version
+    # Hash before taking the SQLite writer; the conditional update detects a
+    # concurrent change made after the password was verified.
     hashed_password = get_password_hash(new_password)
-    try:
+    with write_transaction(db):
         changed = db.query(models.User).filter(
             models.User.id == user_id,
             models.User.hashed_password == previous_hash,
@@ -77,8 +79,4 @@ def change_password(db: Session, username: str, old_password: str, new_password:
         )
         if not changed:
             raise Conflict("密碼已被更新，請重新登入後再試")
-        db.commit()
-    except Exception:
-        db.rollback()
-        raise
     return {"ok": True}

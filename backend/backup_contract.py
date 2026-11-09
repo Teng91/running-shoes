@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 
 from backend import schemas
 from backend.services.errors import Invalid
-from backend.services.run_requests import payload_hash
+from backend.services.fingerprints import payload_hash
 
 MAX_RUN_ALIASES = 50_000
 MAX_BACKUP_BYTES = 20 * 1024 * 1024

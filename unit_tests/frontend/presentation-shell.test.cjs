@@ -108,3 +108,76 @@ test('unclassified shoes stay unclassified when the form is saved', () => {
   vm.runInContext(extract('getSelectedCategories'), context);
   assert.deepEqual(Array.from(context.getSelectedCategories()), []);
 });
+
+function loadUiActions(globals = {}) {
+  const plainVm = require('node:vm');
+  class Element {}
+  const listeners = {};
+  const context = plainVm.createContext({ Element, console, ...globals,
+    document: { addEventListener: (type, listener) => { listeners[type] = listener; } } });
+  plainVm.runInContext(fs.readFileSync('frontend/app-actions.js', 'utf8') + '\nthis.UI_ACTIONS = UI_ACTIONS;', context);
+  const element = (attributes, parent = null, tagName = 'BUTTON') => Object.assign(new Element(), {
+    tagName, parent, dataset: attributes.dataset || {},
+    getAttribute: name => attributes[name],
+    closest(selector) {
+      const name = selector.slice(1, -1);
+      for (let node = this; node; node = node.parent) if (node.getAttribute(name) !== undefined) return node;
+      return null;
+    },
+  });
+  return { context, listeners, element };
+}
+
+test('SPEC-047 markup declares UI actions instead of inline JavaScript handlers', () => {
+  const inline = /\son(?:click|dblclick|change|input|submit|keydown|keyup|focus|blur|error|load)=/g;
+  const htmlHandlers = htmlSource.match(inline) || [];
+  // The non-blocking stylesheet loader must run before any application script.
+  assert.deepEqual(htmlHandlers, [' onload=']);
+  assert.match(htmlSource, /<link id="app-styles" rel="preload"[^>]* onload=/);
+  assert.equal((scriptSource.match(inline) || []).length, 0, 'generated rows declare data actions');
+  assert.match(htmlSource, /getElementById\('app-boot-retry'\)\.addEventListener\('click'/, 'boot retry works without the app bundle');
+});
+
+test('SPEC-047 every declared data action has exactly one registered handler', () => {
+  const { context, listeners } = loadUiActions();
+  const declared = new Map();
+  for (const [, type, name] of `${htmlSource}\n${scriptSource}`.matchAll(/data-(click|dblclick|change|input|submit|keydown)="([a-z-]+)"/g)) {
+    declared.set(`${type}:${name}`, [type, name]);
+  }
+  for (const [type, name] of declared.values()) {
+    assert.equal(typeof context.UI_ACTIONS[type][name], 'function', `${type}:${name} is registered`);
+  }
+  const registered = Object.entries(context.UI_ACTIONS).flatMap(([type, actions]) => Object.keys(actions).map(name => `${type}:${name}`));
+  assert.deepEqual(registered.filter(key => !declared.has(key)), [], 'no registered action is unused');
+  assert.deepEqual(Object.keys(listeners).sort(), ['change', 'click', 'dblclick', 'input', 'keydown', 'submit']);
+});
+
+test('SPEC-047 delegated dispatch runs only the nearest action and owns navigation defaults', () => {
+  const calls = [];
+  const { listeners, element } = loadUiActions({
+    selectRunCalendarDate: (date, event) => calls.push(['day', date, event.type]),
+    openRunModal: id => calls.push(['run', id]),
+    handleLogin: () => calls.push(['login']),
+    showLoginForm: () => calls.push(['show-login']),
+    sendAgentMessage: () => calls.push(['send']),
+  });
+  const event = (type, target, extra = {}) => {
+    const value = { type, target, prevented: false, preventDefault() { this.prevented = true; }, ...extra };
+    listeners[type](value);
+    return value;
+  };
+  const day = element({ 'data-click': 'select-calendar-date', dataset: { date: '2026-11-01' } });
+  const runButton = element({ 'data-click': 'open-run', dataset: { runId: '42' } }, day);
+  const label = element({}, runButton, 'SPAN');
+  event('click', label);
+  event('click', day);
+  assert.deepEqual(calls.splice(0), [['run', 42], ['day', '2026-11-01', 'click']]);
+
+  assert.equal(event('submit', element({ 'data-submit': 'login' }, null, 'FORM')).prevented, true);
+  assert.equal(event('click', element({ 'data-click': 'show-login-form' }, null, 'A')).prevented, true);
+  assert.equal(event('click', element({ 'data-click': 'open-run', dataset: { runId: '7' } })).prevented, false);
+  const compose = element({ 'data-keydown': 'agent-compose' }, null, 'TEXTAREA');
+  assert.equal(event('keydown', compose, { key: 'Enter', shiftKey: true }).prevented, false);
+  assert.equal(event('keydown', compose, { key: 'Enter', shiftKey: false }).prevented, true);
+  assert.deepEqual(calls, [['login'], ['show-login'], ['run', 7], ['send']]);
+});

@@ -223,6 +223,17 @@ SPEC-032：合成資料驗證 50,000／50,001 筆歷史邊界、UTF-8 位元組�
 
 [規格與具名案例](specs/034-portable-recovery-and-sync-refresh.md) 驗證來源及接收者連續復原、省略歷史仍攜帶來源鍵、tombstone、別名衝突／全域容量／格式拒絕、v1/v2 指紋相容，以及小數累積與 legacy Float 尾差的 no-op 版本／audit 不變。Node 覆蓋手動空佇列讀取、通知失敗不重排已確認操作、刷新中的新通知及外帳號忽略；雙引擎 workspace E2E 操作 v3 來源復原檔及真實 BroadcastChannel／IndexedDB 多分頁，確認雲端讀取與表單草稿保留。
 
+## SPEC-047 程式審查修正、有界歷史與模組解耦
+
+[規格與具名案例](specs/047-review-hardening-and-decoupling.md)
+
+- **Strava 日期**：參數化驗證中英文 12 小時制 UTC 時間戳轉成台灣日期。API 案例確認重新匯入只修正仍停在舊 UTC 日期的跑步、保留手動日期、月跑量跨月移動且第二次為 no-op。
+- **Migration 與保留**：以檔案型 SQLite 驗證過期 trigger 會被重建、每帳號保留上限只刪自己最舊的資料、稽核清理後墓碑仍保護已刪跑步，以及 schema 7 回填墓碑、移除舊回執表與 7 → 6 回滾腳本可往返。
+- **限流**：以注入的 settings 調整限額，驗證超限請求整筆回滾不計數、不 commit 請求 session，以及「來源＋帳號」與「帳號」兩層登入鎖定。
+- **import 與密鑰**：子行程確認匯入 backend 模組不建立資料庫目錄；正式環境拒絕缺少或過短的密鑰。
+- **前端**：Node 確認 markup 與動態列除了樣式表 `onload` 沒有 inline 事件、每個 `data-*` 動作都有唯一註冊、巢狀元素只執行最近的動作。
+- **測試資源**：`conftest.py` 的 `disposing_engines()` 在每個測試結束時關閉它開啟的 engine，有專門測試確認原始連線已關閉；覆蓋率執行不再出現 ResourceWarning。
+
 ## SPEC-046 冷啟動加速、購買日前跑步提醒與瀏覽器偵測
 
 [規格與具名案例](specs/046-cold-start-purchase-date-warnings-and-browser-probe.md) 以子行程驗證匯入 `backend.main` 不載入 `openai`、Dockerfile 預先編譯 backend；Python 驗證 Strava 預覽回傳各群組最早日期；Node 驗證跑步表單與 Strava 配對在早於購買日時提醒、當天不提醒且不阻擋儲存；任務執行器與 Stop hook 以假的啟動探測驗證缺系統函式庫時只探測一次並跳過，release-check 仍拒絕。

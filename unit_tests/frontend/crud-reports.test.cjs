@@ -56,11 +56,11 @@ test('the report tab wires its panel and only loads data after login', () => {
   // SPEC-042: chat and report share one AI destination with an in-panel switch.
   assert.doesNotMatch(source, /data-tab="report"/);
   assert.match(source, /data-panel="report"/);
-  assert.match(source, /class="ai-switch-btn active" aria-pressed="true" onclick="switchTab\('report'\)">月報/);
-  assert.match(source, /class="ai-switch-btn active" aria-pressed="true" onclick="switchTab\('agent'\)">對話/);
+  assert.match(source, /class="ai-switch-btn active" aria-pressed="true" data-click="open-ai-panel" data-ai-panel="report">月報/);
+  assert.match(source, /class="ai-switch-btn active" aria-pressed="true" data-click="open-ai-panel" data-ai-panel="agent">對話/);
   assert.match(source, /<span>AI<\/span><\/button>/);
   assert.match(extract('switchTab'), /const destination = name === 'report' \? 'agent' : name;/);
-  assert.match(source, /onchange="loadSavedReport\(\)"/);
+  assert.match(source, /data-change="load-saved-report"/);
   const switchTab = extract('switchTab');
   assert.match(switchTab, /name === 'report' && authToken/);
 });

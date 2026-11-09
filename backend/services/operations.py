@@ -1,15 +1,17 @@
 """One transaction owns the business mutation, audit context and replay receipt."""
 
+from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any
 
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 from sqlalchemy.orm import Session
 
 from backend import models, schemas
 from backend.forecasting import forecasts_for_shoes
 from backend.services import goals, history, monthly, runs, shoes
 from backend.services.errors import Conflict, Invalid
-from backend.services.run_requests import payload_hash
+from backend.services.fingerprints import payload_hash
 from backend.services.transactions import write_transaction
 from backend.settings import Settings
 from backend.shoe_metrics import shoe_metrics
@@ -31,48 +33,70 @@ def execute_operation(db: Session, user_id: int, command: schemas.MutationComman
         return response
 
 
+@dataclass(frozen=True)
+class _EntityHandlers:
+    create_schema: type[BaseModel]
+    create: Callable[..., Any]
+    create_limits: Callable[[Settings], dict[str, int]]
+    update_schema: type[BaseModel]
+    update: Callable[..., Any]
+    delete: Callable[..., dict]
+    output: type[BaseModel]
+
+
+_HANDLERS: dict[str, _EntityHandlers] = {
+    "run": _EntityHandlers(
+        schemas.RunCreate, runs.create_run, lambda config: {"max_runs": config.max_runs_per_user},
+        schemas.RunUpdate, runs.update_run, runs.delete_run, schemas.RunOut,
+    ),
+    "shoe": _EntityHandlers(
+        schemas.ShoeCreate, shoes.create_shoe, lambda config: {"max_shoes": config.max_shoes_per_user},
+        schemas.ShoeUpdate, shoes.update_shoe, shoes.delete_shoe, schemas.ShoeOut,
+    ),
+    "monthly": _EntityHandlers(
+        schemas.MonthlyMileageCreate, monthly.create_monthly_mileage, lambda config: {},
+        schemas.MonthlyMileageUpdate, monthly.update_monthly_mileage,
+        monthly.delete_monthly_mileage, schemas.MonthlyMileageOut,
+    ),
+}
+
+
+def _reject_unknown_fields(payload: dict, schema: type[BaseModel]) -> None:
+    if set(payload) - set(schema.model_fields):
+        raise Invalid("操作包含不支援的欄位")
+
+
 def _dispatch(db: Session, user_id: int, command: schemas.MutationCommand, config: Settings) -> dict:
     kind, payload, entity_id = command.kind, command.payload, command.entity_id
     if kind == "history.restore":
         return history.restore_deleted(db, user_id, int(entity_id or 0), config)
     entity, action = kind.split(".")
-    create: dict[str, tuple[Any, Any, dict[str, Any]]] = {"run": (schemas.RunCreate, runs.create_run, {"max_runs": config.max_runs_per_user}),
-              "shoe": (schemas.ShoeCreate, shoes.create_shoe, {"max_shoes": config.max_shoes_per_user}),
-              "monthly": (schemas.MonthlyMileageCreate, monthly.create_monthly_mileage, {})}
-    update: dict[str, tuple[Any, Any]] = {"run": (schemas.RunUpdate, runs.update_run), "shoe": (schemas.ShoeUpdate, shoes.update_shoe),
-              "monthly": (schemas.MonthlyMileageUpdate, monthly.update_monthly_mileage)}
-    output: dict[str, Any] = {"run": schemas.RunOut, "shoe": schemas.ShoeOut, "monthly": schemas.MonthlyMileageOut}
-    allowed = {"run": schemas.RunCreate if action == "create" else schemas.RunUpdate,
-               "shoe": schemas.ShoeCreate if action == "create" else schemas.ShoeUpdate,
-               "monthly": schemas.MonthlyMileageCreate if action == "create" else schemas.MonthlyMileageUpdate,
-               "goal": schemas.RunningGoalUpdate}[entity]
-    if set(payload) - set(allowed.model_fields):
-        raise Invalid("操作包含不支援的欄位")
     if entity == "goal":
+        _reject_unknown_fields(payload, schemas.RunningGoalUpdate)
         return goals.update_goal(db, user_id, schemas.RunningGoalUpdate.model_validate(
             {**payload, "expected_version": command.expected_version}
         ))
+    handlers = _HANDLERS[entity]
     if action == "create":
-        schema, create_fn, kwargs = create[entity]
-        if entity == "run":
-            kwargs = {**kwargs, "idempotency_key": command.operation_id}
-        row = create_fn(db, user_id, schema.model_validate(payload), **kwargs)
+        _reject_unknown_fields(payload, handlers.create_schema)
+        row = handlers.create(
+            db, user_id, handlers.create_schema.model_validate(payload), **handlers.create_limits(config)
+        )
     elif action == "update":
-        schema, update_fn = update[entity]
-        row = update_fn(db, user_id, entity_id, schema.model_validate(
+        _reject_unknown_fields(payload, handlers.update_schema)
+        row = handlers.update(db, user_id, entity_id, handlers.update_schema.model_validate(
             {**payload, "expected_version": command.expected_version}
         ))
     elif action == "delete":
-        delete_fn = {"run": runs.delete_run, "shoe": shoes.delete_shoe,
-                     "monthly": monthly.delete_monthly_mileage}[entity]
-        return delete_fn(db, user_id, int(entity_id or 0), command.expected_version)
+        _reject_unknown_fields(payload, handlers.update_schema)
+        return handlers.delete(db, user_id, int(entity_id or 0), command.expected_version)
     else:
         raise Invalid("未知操作")
     if isinstance(row, dict):
         return row
     db.flush()
     db.refresh(row)
-    response = output[entity].model_validate(row).model_dump(mode="json")
+    response = handlers.output.model_validate(row).model_dump(mode="json")
     if entity == "shoe":
         response.update(shoe_metrics(row))
         response.update({key: value for key, value in forecasts_for_shoes(db, user_id, [row])[row.id].items()

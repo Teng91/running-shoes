@@ -1,6 +1,6 @@
 from fastapi.testclient import TestClient
 
-from backend.database import get_db
+from backend.dependencies import get_db
 from backend.main import app
 
 

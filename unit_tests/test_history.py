@@ -117,7 +117,7 @@ def test_schema_five_upgrade_preserves_existing_business_data(workspace):
         connection.execute(text("ALTER TABLE users DROP COLUMN data_revision"))
     for _ in range(2):
         run_startup_migrations(workspace.engine, workspace.sessions)
-    assert schema_version(workspace.engine) == 6
+    assert schema_version(workspace.engine) == 7
     assert "audit_events" in inspect(workspace.engine).get_table_names()
     with workspace.sessions() as db:
         assert db.get(models.Shoe, identifier).mileage == 123
@@ -139,3 +139,95 @@ def test_deleted_identifiers_are_never_reused_by_new_records(workspace, entity):
             old_id = old.id
             monthly.delete_monthly_mileage(db, 1, old_id)
             assert monthly.create_monthly_mileage(db, 1, payload).id > old_id
+
+
+def test_startup_rebuilds_stale_audit_triggers_from_current_columns(workspace):
+    """SPEC-047: a trigger created for an older column list is replaced, not kept."""
+    with workspace.engine.begin() as connection:
+        connection.exec_driver_sql("DROP TRIGGER audit_shoes_update")
+        # Simulate a trigger from an older schema: its snapshot lacks `nickname`.
+        connection.exec_driver_sql("""
+            CREATE TRIGGER audit_shoes_update AFTER UPDATE ON shoes BEGIN
+              INSERT INTO audit_events (user_id,operation_id,reason,entity,entity_id,action,
+                before_json,after_json,created_at,restored,imported)
+              VALUES (NEW.user_id,'stale','legacy.write','shoes',NEW.id,'update',
+                json_object('id', OLD.id),json_object('id', NEW.id),'now',0,0);
+            END
+        """)
+    run_startup_migrations(workspace.engine, workspace.sessions)
+    with workspace.sessions() as db:
+        shoe = add_shoe(db)
+        shoes.update_shoe(db, 1, shoe.id, schemas.ShoeUpdate(nickname="Daily"))
+        event = db.query(models.AuditEvent).filter_by(entity="shoes", action="update").one()
+        assert event.operation_id != "stale"
+        assert event.before_json["nickname"] == "" and event.after_json["nickname"] == "Daily"
+
+
+def test_run_deletion_tombstones_survive_audit_retention(workspace):
+    """SPEC-047: deletion identity no longer depends on audit rows that retention may prune."""
+    from backend.services.retention import prune_account_history
+    from backend.services.run_identity import add_local_tombstones
+
+    with workspace.sessions() as db:
+        shoe = add_shoe(db)
+        run = add_run(db, shoe.id)
+        deleted_id = run.id
+        runs.delete_run(db, 1, deleted_id, run.version)
+        other_shoe = add_shoe(db, uid=2)
+        add_run(db, other_shoe.id, uid=2)
+        prune_account_history(db, 1, audit_events=0)
+        db.commit()
+        assert db.query(models.AuditEvent).filter_by(user_id=1).count() == 0
+        assert db.query(models.AuditEvent).filter_by(user_id=2).count() > 0
+        mappings: dict[tuple[str, str], int] = {}
+        add_local_tombstones(db, 1, mappings)
+        assert mappings == {("run", str(deleted_id)): deleted_id}
+        other: dict[tuple[str, str], int] = {}
+        add_local_tombstones(db, 2, other)
+        assert other == {}
+
+
+def test_each_write_keeps_only_the_newest_history_per_account(workspace, monkeypatch):
+    """SPEC-047: audit events, receipts and tombstones are capped per account, oldest first."""
+    from backend.services import retention
+
+    monkeypatch.setattr(retention.prune_account_history, "__kwdefaults__", {
+        "audit_events": 4, "receipts": 2, "tombstones": 1,
+    })
+    with workspace.sessions() as db:
+        shoe = add_shoe(db)
+        other_shoe = add_shoe(db, uid=2)
+        created = [(run.id, run.version) for run in (add_run(db, shoe.id) for _ in range(3))]
+        for run_id, version in created[:2]:
+            runs.delete_run(db, 1, run_id, version)
+        for index in range(3):
+            db.add(models.MutationReceipt(user_id=1, operation_id=f"receipt-{index:012d}",
+                                          payload_hash="x", response_json={}, recorded_at=index))
+        db.commit()
+        add_run(db, other_shoe.id, uid=2)
+        add_run(db, shoe.id)
+        audit_ids = [row.id for row in db.query(models.AuditEvent).filter_by(user_id=1).order_by(models.AuditEvent.id)]
+        assert len(audit_ids) == 4 and audit_ids == sorted(audit_ids)
+        assert db.query(models.AuditEvent).filter_by(user_id=2).count() == 4
+        assert [row.operation_id for row in db.query(models.MutationReceipt).order_by(models.MutationReceipt.recorded_at)] == [
+            "receipt-000000000001", "receipt-000000000002",
+        ]
+        assert [row.run_id for row in db.query(models.RunTombstone).filter_by(user_id=1)] == [created[1][0]]
+
+
+def test_schema_seven_backfills_tombstones_from_audit_history(workspace):
+    with workspace.sessions() as db:
+        shoe = add_shoe(db)
+        run = add_run(db, shoe.id)
+        deleted_id = run.id
+        runs.delete_run(db, 1, deleted_id, run.version)
+        db.add(models.AuditEvent(user_id=1, operation_id="imported", reason="run.delete", entity="runs",
+                                 entity_id=999, action="delete", before_json={}, after_json=None,
+                                 created_at="2026-01-01T00:00:00Z", imported=True))
+        db.commit()
+    with workspace.engine.begin() as connection:
+        connection.exec_driver_sql("DELETE FROM run_tombstones")
+        connection.exec_driver_sql("UPDATE schema_metadata SET value='6' WHERE key='schema_version'")
+    run_startup_migrations(workspace.engine, workspace.sessions)
+    with workspace.sessions() as db:
+        assert [(row.user_id, row.run_id) for row in db.query(models.RunTombstone)] == [(1, deleted_id)]

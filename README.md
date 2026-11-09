@@ -73,7 +73,8 @@ running-shoes/
 │   │   ├── goals.py       # 個人目標 upsert、版本與 rollback
 │   │   ├── reports.py     # 月報生成身分、事件及成功保存流程
 │   │   ├── report_storage.py # 月報最新生成回執與條件寫入交易
-│   │   ├── run_requests.py # User-scoped 日誌建立回執
+│   │   ├── fingerprints.py # 回執、備份與匯入計畫共用的 payload 指紋
+│   │   ├── retention.py  # 每帳號稽核、回執與刪除墓碑的保留上限
 │   │   ├── transactions.py # SQLite writer reservation 與交易生命週期
 │   │   ├── runs.py       # 日誌寫入、重送、版本與里程交易
 │   │   ├── shoes.py      # 鞋款配額、編輯與刪除交易
@@ -85,10 +86,10 @@ running-shoes/
 │   ├── backup_contract.py # 有界 v1／v2／v3 備份格式與參照驗證
 │   ├── migrations.py     # 有版本的 SQLite schema upgrade
 │   ├── observability.py  # Request ID 與不含敏感內容的結構化 HTTP log
-│   ├── rate_limits.py    # Auth／AI process 與 SQLite shared rate limits
+│   ├── rate_limits.py    # Auth／AI SQLite 固定視窗限流（獨立交易、注入設定）
 │   ├── auth.py           # HTTP JWT 認證 adapter
 │   ├── credentials.py    # 不依賴 HTTP 的 bcrypt／JWT primitives
-│   ├── database.py       # SQLite 資料庫連線
+│   ├── database.py       # ORM base、SQLite pragma 與 engine 工廠（import 無 I/O）
 │   ├── models.py         # 資料表定義
 │   ├── schemas.py        # Pydantic schema
 │   ├── agent.py          # AI 助手 runner 與公開 orchestration entry point
@@ -130,6 +131,7 @@ running-shoes/
 │   ├── app-dates.js      # 日曆日期與跨日限制／恢復
 │   ├── app-dialogs.js    # 共用焦點、Tab、Escape 與彈窗語義
 │   ├── app-updates.js    # 版本資訊與不強制重載的 PWA 更新提示
+│   ├── app-actions.js    # data-* 介面動作的事件委派（不寫 inline handler）
 │   ├── app.js            # Dashboard 初始化與全域 dialog wiring
 │   ├── app-boot.js       # 啟動 loading、逾時與 stylesheet readiness
 │   ├── app-state.js      # 共用記憶體 state 與 presentation constants
@@ -371,6 +373,8 @@ LLM_MAX_OUTPUT_TOKENS=4096
 
 匯入前可逐組選擇現有鞋款；名稱只有一個相符候選時會自動配對，也可以把多個 Strava 裝備配到同一雙 Dashboard 跑鞋。如果同品牌型號有多雙，系統不會猜測，請依購買日期手動選擇。沒有鞋款或無法辨識的裝備可以選擇略過。
 
+Strava 匯出的活動時間是 UTC，系統會換算成台灣日期：清晨 6:30 的跑步（UTC 前一天 22:30）記在當天，不會跑到前一天或上個月。v4.7.0 以前匯入的紀錄只取了 UTC 日期；用涵蓋那段時間的匯出檔重新預覽時，會顯示「另有 N 筆既有紀錄的日期會依台灣時間修正」，匯入時一併修正並把里程移到正確月份。只修正仍停在舊 UTC 日期的紀錄，自己改過日期的不會被覆蓋。
+
 Strava 匯入後會自動同步跑鞋總里程與對應月份的月跑量，只有本次真正新增的活動會計入。每筆匯入資料會保留 Strava 活動 ID，因此重複選擇同一份 CSV 不會重複建立紀錄或再次增加里程。匯入仍受 `MAX_RUNS_PER_USER` 上限限制，CSV 最大為 10 MB、最多 50,000 筆資料列；後端會逐列解析，並在 multipart 解析前限制整體上傳請求為 11 MB。切換檔案或日期時，舊的預覽請求會被取消且結果不會覆蓋最新選擇。
 
 系統另保存成功匯入的摘要（不保存 CSV 內容），每個帳號保留最近 50 次並提供最近 10 次結果，包含時間、日期區間、新增里程與新增／重複／未配對／格式略過筆數。跑步日誌會顯示最近一次結果，下次開啟匯入視窗時則以最近匯入結束日的隔天作為起始日、今天作為結束日；若紀錄已到今天或未來，起始日會安全地停在今天。
@@ -548,7 +552,7 @@ CI 失敗／取消時嘗試上傳已有產物；引擎完全卡死時可能只�
 CI 的 `frontend-pwa` job 上傳獨立 `browser-diagnostics-roundtrip` artifact，另一個 job 下載並驗證 PNG、trace ZIP 與合成錯誤標記，缺檔／損毀會讓 pipeline 失敗。
 
 `frontend-e2e` 會對真實 FastAPI／CORS 與暫存 SQLite 執行同一個 `release-check`：檢查 readiness／schema、
-完整 API contract、manifest 對應的 50 個 shell／worker 資產雜湊與 MIME、四個統計 API 的匿名拒絕存取，
+完整 API contract、manifest 對應的 51 個 shell／worker 資產雜湊與 MIME、四個統計 API 的匿名拒絕存取，
 再驗證 Chromium／WebKit 匿名手機啟動與 native runtime cache，以及 Chromium 離線重開。
 WebKit 離線 shell 由 `frontend-pwa` 的 fixture transport 中斷驗證；API probe 在 HTTP headers 後截斷 response body，完整讀取 JSON 並檢查 server 請求計數，避免 headers 前 TCP 中斷讓裸 fetch 一直 pending。這些不取代引擎之外的實機驗證。
 這個 task 不登入、不送出資料、不發布或回滾；正式 origin 必須是 HTTPS，HTTP 只允許 loopback。
@@ -636,7 +640,7 @@ Schema 4 上線前，執行異地備份、checksum 與隔離還原驗證。回�
 - 最近鞋款、月跑量、目標及目前月份跑步另存本機快照；它們可能過期，不作為伺服器權威。Service worker 只快取公開 shell，IndexedDB 不存 token／密碼。瀏覽器回收空間或使用者清除網站資料會移除本機草稿／佇列，請定期同步、下載備份；本機資料不是加密保險箱。
 - 完整備份以同一資料庫讀取快照匯出，並行新增不會產生跨集合不一致。備份 JSON v2 包含穩定來源身分、鞋款基礎里程、月份歷史調整與異動歷史。選檔後先驗證／預覽，確認才在一個交易合併，保留既有暱稱、月份調整、目標與月報；不按同品牌型號合併鞋款。相同來源 ID／Strava ID 不重建，mapping 保留已刪紀錄的身分，重複匯入不撤銷後續刪除。新跑步正常累加里程。Strava 匯入摘要保留既有項目，剩餘容量內按新到舊合併，超額略過並在預覽列出，不清除既有摘要。舊 v1 格式仍接受，只保證完全相同檔案重複匯入不重建。
 - 預覽僅限本人、有效 20 分鐘；預覽後資料異動須重新預覽。上限 20 MB、5,000 雙鞋、50,000 筆跑步／歷史、2,412 個月份／月報及 1,000 筆匯入歷史，並受目標帳號配額限制；拒絕非有限數值、無效參照、未知欄位與認證內容，失敗整筆回滾。超過還原限制的大型完整匯出不會截斷，需另行規劃資料搬移；不會靜默部分還原。
-- Schema 5 起，鞋款、跑步、月跑量、目標每次寫入都在同一交易記錄前後值、原因及操作身分；升級前的歷史無法回溯產生。歷史分頁僅限本人；可復原刪除的跑步／鞋款及清除的月份，仍檢查原鞋款、目前版本、配額與 Strava 重複。復原會重新計算里程，原事件只可復原一次；備份帶入的歷史明確標為唯讀。
+- Schema 5 起，鞋款、跑步、月跑量、目標每次寫入都在同一交易記錄前後值、原因及操作身分；升級前的歷史無法回溯產生。v4.7.0 起每個帳號保留最新 5,000 筆異動紀錄，更早的無法再顯示或復原；刪除過的跑步身分另存，不受影響。歷史分頁僅限本人；可復原刪除的跑步／鞋款及清除的月份，仍檢查原鞋款、目前版本、配額與 Strava 重複。復原會重新計算里程，原事件只可復原一次；備份帶入的歷史明確標為唯讀。
 - `/api/operations` 統一 operation ID、更新／刪除 expected_version、成功回執與錯誤 `{detail, error: {code, message}}`。既有 CRUD 保留相容性，新增／帶版本的異動可附 `Idempotency-Key`；未提供版本的舊式刪除不取得新契約的重播保護。年度、目標與洞察已移除相容鏡像 Map，統一由 resource store 擁有請求與快取。
 
 Schema 5 增加 user metadata、回執、預覽、mapping、異動、context 與主鍵配置表；既有業務資料／里程不改寫。Run／month ID 不因刪除而重用，避免恢復草稿寫到新紀錄；allocator 僅讀全域最大主鍵與 sequence 這類配置 metadata，不讀取其他帳號的業務值。上線前必須建立、校驗正式備份並完成隔離還原演練。若回滾至 v3.8.0，先停止所有寫入、另備份 schema 5，保留新增表／欄位／triggers，將 `schema_metadata` marker 降至 4，再切回舊映像及通過 readiness／匿名 release-check；舊版不再保證離線操作回執與主鍵不重用，不能混跑新舊寫入。重新升級需保留本機 queue 並使用新 shell revision。
@@ -703,6 +707,38 @@ v3.10.3 使用 Asset 3.10.3／shell v38、schema 6、51 個 release assets。
 本版無 schema migration，回滾可使用 v3.10.2 immutable image
 `registry.fly.io/running-shoes@sha256:bac44457f12adfde6473e9d9a973b330e1bf69eac7e44feb3fb6ed1f5a55429a`，
 不還原業務資料快照。發布驗證涵蓋 verify、40 組版面、雙引擎 CRUD／PWA、main/tag CI 及正式站匿名 release-check。
+
+### 程式審查修正、有界歷史與模組解耦（SPEC-047，v4.7.0）
+
+[SPEC-047](docs/specs/047-review-hardening-and-decoupling.md) 修正一次全面程式審查找到的問題：
+
+- **Strava 日期**：改用台灣日期，重新匯入可修正舊紀錄。
+- **小修正**：跑步更新送 `expected_version: null` 改回 422；匯出檔名改用台灣時間；同月份新增跑步不再浪費月跑量 ID。
+- **登入鎖定**：同一網路對同一帳號輸錯 10 次只暫停該網路 15 分鐘，帳號擁有者換個網路仍可登入；跨網路累計 100 次才暫停整個帳號。
+- **保留上限**：每帳號保留最新 5,000 筆異動紀錄、1,000 筆操作回執與 50,000 筆刪除身分。
+- **SECRET_KEY**：正式環境要求至少 32 bytes。
+
+內部改動：
+
+- import 時不再做 I/O；限流只用 SQLite 一套計數，且不 commit 請求交易。
+- 稽核 trigger 每次啟動依目前欄位重建。
+- 前端改以 `data-*` 屬性委派事件。
+- 測試不再留下未關閉的 SQLite 連線。
+
+Asset 4.7.0／shell v54、51 個 release assets、schema 6 → 7。
+
+上線步驟：
+
+1. 部署前建立並驗證異地備份，在私有副本重複升級兩次，確認業務資料不變。
+2. 確認 Fly 的 `SECRET_KEY` 至少 32 bytes。
+3. 部署後執行匿名 `release-check`。
+4. 用自己的 Strava 匯出檔預覽一次，確認清晨跑步的修正方向正確（例如 10/31 → 11/01）再匯入。
+
+回滾步驟：
+
+1. 停止寫入並另做 schema 7 備份。
+2. 以 Python `sqlite3.Connection.executescript` 執行 [`scripts/rollback_schema_seven.sql`](scripts/rollback_schema_seven.sql)，重建空的舊回執表並把 marker 改回 6。
+3. 部署 v4.6.0 image。
 
 ### 冷啟動加速、購買日前跑步提醒與瀏覽器偵測（SPEC-046，v4.6.0）
 
@@ -805,7 +841,7 @@ Playwright／Chromium／WebKit 齊全時，也會執行版面測試。
 避免每次停止都重跑。Hook 不會呼叫其他模型、外部 API，或傳送提示、diff、原始碼與測試輸出。
 GitHub Actions 仍會在 push／pull request 執行 `verify`，並以三個可獨立重跑的 browser jobs 執行完整版面矩陣、真實 CRUD E2E 與 PWA 升級／離線測試；Dependabot 每月以單一 PR 合併 GitHub Actions 更新；Python 只接收安全性更新 PR，例行升級依下方 `uv pip compile --universal` 步驟手動重編鎖定檔（Dependabot 產生的鎖定檔會遺失 Windows 條件）。
 
-本次驗證基線為 Python **576 passed**、前端回歸測試 **162 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
+本次驗證基線為 Python **599 passed**、前端回歸測試 **166 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
 版面檢查涵蓋 WebKit／Chromium、亮／暗模式與 10 組直橫向尺寸，共 40 組設定，檢查四個功能分頁與月報、三個認證表單、圖表、全部彈窗、行內編輯、停用／錯誤及空資料狀態。
 
 主要表單、工具列與彈窗操作統一為 44px 控制項；桌面表格內的緊湊操作為 36px，手機至少 44px。
@@ -876,6 +912,8 @@ open http://你的IP:8000
 ## Fly.io 部署流程
 
 第一次部署至少需要設定 JWT 簽章密鑰；AI 功能另需 OpenRouter 金鑰：
+
+正式環境的 `SECRET_KEY` 至少要 32 bytes，缺少或太短時服務會拒絕啟動；下方指令產生 64 個字元。
 
 ```bash
 # 必要：自動產生 256-bit JWT 簽章密鑰

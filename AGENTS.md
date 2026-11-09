@@ -5,7 +5,7 @@
 - `backend/main.py`: minimal ASGI entry point; it must only import `backend.app_factory`.
 - `backend/app_factory.py`: FastAPI composition, injectable lifecycle dependencies, routers, and SPA fallback.
 - `backend/settings.py`: immutable typed runtime configuration.
-- `backend/clock.py`: the single application timezone and `local_today()`; never hard-code UTC offsets elsewhere.
+- `backend/clock.py`: the single application timezone, `local_now()` and `local_today()`; never hard-code UTC offsets or use the server zone elsewhere.
 - `backend/forecasting.py`: shared retirement policy and batched user-scoped forecasts.
 - `backend/shoe_metrics.py`: canonical shoe cost, discount and lifecycle arithmetic.
 - `backend/read_models/`: user-scoped native statistics shared by HTTP, reports and AI adapters; never import tools or HTTP frameworks.
@@ -15,7 +15,8 @@
 - `backend/services/`: framework-independent application services; services must not import FastAPI or routers.
 - `backend/services/transactions.py`: SQLite writer reservation and commit/rollback ownership; validate quotas and versions only after acquiring the reservation.
 - `backend/services/runs.py`, `shoes.py`, `monthly.py`: user-scoped CRUD application use cases; HTTP routers must not own mutations or commits.
-- `backend/dependencies.py`: request-scoped app settings; CRUD/import quotas must not use import-time globals.
+- `backend/dependencies.py`: request-scoped app settings and sessions (`get_db` uses `app.state.session_factory`); CRUD/import quotas must not use import-time globals.
+- `backend/database.py`: ORM base, SQLite pragmas and `create_database_engine()`; no import-time I/O, `create_app` builds the default engine.
 - `backend/read_models/run_statistics.py`: shared calendar ranges and bounded distance aggregates for goals, dashboard and reports.
 - `backend/read_models/trends.py`: user-scoped daily heatmap, streaks, weekly load, goal pace line and shoe rotation timeline.
 - `backend/read_models/highlights.py`: user-scoped next-shoe suggestion, year review and distance mix.
@@ -25,7 +26,8 @@
 - `backend/services/accounts.py`, `goals.py`: account and goal writes, domain errors, and transactions.
 - `backend/services/reports.py`: injected report generation and domain events; `report_storage.py` owns latest-generation conditional transactions.
 - `backend/report_llm.py`, `backend/report_protocol.py`: model and SSE adapters; neither owns persistence.
-- `backend/services/run_requests.py`: user-scoped transactional run-creation receipts; operation keys never replace authentication.
+- `backend/services/fingerprints.py`: canonical payload fingerprints for receipts, backups and import plans; `mutation_receipts` is the only keyed receipt and operation keys never replace authentication.
+- `backend/services/retention.py`: per-account caps for audit events, receipts and run tombstones, applied inside `write_transaction`.
 - `backend/audit_schema.py`: same-transaction domain audit and revision triggers; never audit credentials.
 - `backend/backup_contract.py`: bounded, credential-free v1/v2/v3 account archives.
 - `backend/services/operations.py`: operation identities, expected versions, transactional receipts.
@@ -34,10 +36,10 @@
 - `backend/services/account_import_changes.py`: query-free field patches and projected mileage shared by preview and execution.
 - `backend/services/account_import.py`: plan execution inside the caller-owned transaction; no independent commits.
 - `backend/services/history.py`: user-scoped audit and conflict-aware deletion recovery.
-- `backend/services/run_identity.py`: user-scoped deletion tombstones and recovered source aliases; caller-owned transactions.
+- `backend/services/run_identity.py`: user-scoped deletion tombstones (`run_tombstones`, never inferred from audit rows) and recovered source aliases; caller-owned transactions.
 - `backend/services/identifiers.py`: monotonic run/month primary-key allocation metadata.
-- `backend/migrations.py`: ordered SQLite schema upgrades and the current schema version.
-- `backend/rate_limits.py`: shared authentication and AI request throttling.
+- `backend/migrations.py`: ordered SQLite schema upgrades and the current schema version; `scripts/rollback_schema_seven.sql` is the documented 7 → 6 rollback.
+- `backend/rate_limits.py`: SQLite fixed-window throttling for authentication and AI, consumed all-or-nothing on its own transaction with limits from app settings; never commits the request session.
 - `docs/architecture.md`: current SDD, module boundaries, diagrams, and evolution sequence.
 - `docs/testing-strategy.md`: test design, traceability matrix, and definition of done.
 - `backend/agent.py`: LLM and tool-loop runner; planning, dispatch, and SSE serialization live in `backend/agent_*.py` modules.
@@ -78,6 +80,7 @@
 - `frontend/app-shoe-charts.js`: shoe lifecycle, cost, retirement, and allocation charts.
 - `frontend/app-monthly-charts.js`: month/year selectors and monthly/annual mileage charts.
 - `frontend/app-spending.js`: spending cards, charts, and table.
+- `frontend/app-actions.js`: delegated `data-click`/`data-change`/… UI actions; markup and generated rows never contain inline JavaScript handlers.
 - `frontend/app.js`: bootstrap and global dialog event wiring.
 - `frontend/app-agent.js`: AI conversation and streaming presentation.
 - `frontend/app-models.js`: shared provider/model menus.

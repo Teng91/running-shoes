@@ -157,17 +157,17 @@ function renderTable() {
       <td><span class="brand-dot" style="background:${bc}"></span><span class="brand">${esc(s.brand)}</span></td>
       <td><span>${esc(s.model)}</span>${s.nickname ? `<br><small>${esc(s.nickname)}</small>` : ''}</td>
       <td>${esc(s.date.replace(/-/g,'/'))}</td>
-      <td class="editable numeric" ondblclick="inlineEditRow(inlineTableRows.get('shoe-table'), ${i}, 'mileage', this)">${s.mileage}</td>
+      <td class="editable numeric" data-dblclick="inline-edit" data-table="shoe-table" data-index="${i}" data-field="mileage">${s.mileage}</td>
       <td class="numeric">${fmtCostPerKm(c.costPerKm)}</td>
-      <td class="editable numeric" ondblclick="inlineEditRow(inlineTableRows.get('shoe-table'), ${i}, 'expected_mileage', this)">${s.expected_mileage}</td>
+      <td class="editable numeric" data-dblclick="inline-edit" data-table="shoe-table" data-index="${i}" data-field="expected_mileage">${s.expected_mileage}</td>
       <td class="numeric">${fmtCostPerKm(c.expectedCost)}</td>
       <td class="numeric" style="color:${pc}">${fmtPct(c.lifeProgress)}</td>
-      <td class="editable numeric" ondblclick="inlineEditRow(inlineTableRows.get('shoe-table'), ${i}, 'monthly_km', this)">${s.monthly_km}</td>
+      <td class="editable numeric" data-dblclick="inline-edit" data-table="shoe-table" data-index="${i}" data-field="monthly_km">${s.monthly_km}</td>
       <td title="${s.forecast_source === 'recent_90_days' ? '依近 90 天實際使用' : '依計畫月跑量'}">${fmtDate(c.retireDate)}</td>
       <td>${esc(shoeCategories(s).join(', ') || '未分類')}</td>
       <td>
-        <button class="btn btn-sm" onclick="openShoeAnalytics(${s.id})">分析</button>
-        <button class="btn btn-sm btn-edit" onclick="openEditModal(${i})">編輯</button>
+        <button class="btn btn-sm" data-click="open-shoe-analytics" data-shoe-id="${s.id}">分析</button>
+        <button class="btn btn-sm btn-edit" data-click="edit-shoe" data-index="${i}">編輯</button>
       </td>
     </tr>`;
   }).join('');
@@ -185,13 +185,13 @@ function renderRetiredTable() {
       <td><span class="brand-dot" style="background:${bc}"></span><span class="brand">${esc(s.brand)}</span></td>
       <td><span>${esc(s.model)}</span>${s.nickname ? `<br><small>${esc(s.nickname)}</small>` : ''}</td>
       <td>${esc(s.date.replace(/-/g,'/'))}</td>
-      <td class="editable numeric" ondblclick="inlineEditRow(inlineTableRows.get('retired-table'), ${i}, 'mileage', this)">${s.mileage}</td>
+      <td class="editable numeric" data-dblclick="inline-edit" data-table="retired-table" data-index="${i}" data-field="mileage">${s.mileage}</td>
       <td class="numeric">${fmtCostPerKm(c.costPerKm)}</td>
-      <td class="editable numeric" ondblclick="inlineEditRow(inlineTableRows.get('retired-table'), ${i}, 'expected_mileage', this)">${s.expected_mileage}</td>
+      <td class="editable numeric" data-dblclick="inline-edit" data-table="retired-table" data-index="${i}" data-field="expected_mileage">${s.expected_mileage}</td>
       <td class="numeric">${fmtCostPerKm(c.expectedCost)}</td>
       <td class="numeric" style="color:${pc}">${fmtPct(c.lifeProgress)}</td>
       <td>${esc(shoeCategories(s).join(', ') || '未分類')}</td>
-      <td><button class="btn btn-sm" onclick="openShoeAnalytics(${s.id})">分析</button> <button class="btn btn-sm btn-edit" onclick="openRetiredEditModal(${i})">編輯</button></td>
+      <td><button class="btn btn-sm" data-click="open-shoe-analytics" data-shoe-id="${s.id}">分析</button> <button class="btn btn-sm btn-edit" data-click="edit-retired-shoe" data-index="${i}">編輯</button></td>
     </tr>`;
   }).join('');
 }

@@ -196,25 +196,27 @@ class StravaImport(Base):
     owner: Mapped["User"] = relationship(back_populates="strava_imports")
 
 
-class RunCreationRequest(Base):
-    """Committed, user-scoped receipts; never used as authentication credentials."""
-
-    __tablename__ = "run_creation_requests"
-    __table_args__ = (UniqueConstraint("user_id", "request_key", name="uq_run_request_user_key"),)
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
-    request_key: Mapped[str] = mapped_column(String(128), nullable=False)
-    payload_hash: Mapped[str] = mapped_column(String(64), nullable=False)
-    response_json: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
-
-
 class MutationReceipt(Base):
+    """The single replay receipt for keyed mutations, including run creation."""
+
     __tablename__ = "mutation_receipts"
+    __table_args__ = (Index("idx_receipts_user_recorded", "user_id", "recorded_at"),)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), primary_key=True)
     operation_id: Mapped[str] = mapped_column(String(128), primary_key=True)
     payload_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     response_json: Mapped[dict] = mapped_column(JSON, nullable=False)
+    # Epoch seconds; retention keeps each account's newest receipts.
+    recorded_at: Mapped[float] = mapped_column(
+        Float, default=lambda: datetime.now(UTC).timestamp(), server_default="0", nullable=False
+    )
+
+
+class RunTombstone(Base):
+    """A locally deleted run identifier, so restoring a backup never resurrects it."""
+
+    __tablename__ = "run_tombstones"
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    run_id: Mapped[int] = mapped_column(Integer, primary_key=True)
 
 
 class EntitySequence(Base):

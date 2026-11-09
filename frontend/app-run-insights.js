@@ -47,7 +47,7 @@ function renderRunLog() {
     const color = shoe ? shoeColor(shoe.id) : '#64748b';
     const shoeName = shoe ? `${esc(shoe.brand)} ${esc(shoe.model)}` : '鞋款已刪除';
     const source = run.strava_id ? '<span class="run-source strava">Strava</span>' : '<span class="run-source">手動</span>';
-    return `<tr><td>${esc(run.date.replace(/-/g, '/'))}</td><td class="numeric"><strong>${run.km.toFixed(2)} km</strong></td><td><span class="run-shoe-label"><span class="brand-dot" style="background:${color}"></span>${shoeName}</span></td><td>${source}</td><td><button class="btn btn-sm btn-edit" onclick="openRunModal(${run.id})">編輯</button></td></tr>`;
+    return `<tr><td>${esc(run.date.replace(/-/g, '/'))}</td><td class="numeric"><strong>${run.km.toFixed(2)} km</strong></td><td><span class="run-shoe-label"><span class="brand-dot" style="background:${color}"></span>${shoeName}</span></td><td>${source}</td><td><button class="btn btn-sm btn-edit" data-click="open-run" data-run-id="${run.id}">編輯</button></td></tr>`;
   }).join('') : '<tr><td colspan="5" class="empty-state">這個月還沒有跑步紀錄。點月曆日期或從右上角記下第一跑吧！</td></tr>';
   renderRunCalendar(summary ? summary.calendar : filtered, month);
   renderRunShoeChart(shoeStats);
@@ -155,12 +155,12 @@ function renderRunCalendar(filtered, month) {
     const items = dayRuns.map(run => {
       if (run.shoes) return run.shoes.map(group => {
         const shoe = runShoe(group.shoe_id);
-        return `<button class="calendar-run" onclick="event.stopPropagation();filterRunDay('${date}')">${esc(shoe?.model || '已刪除')}</button>`;
+        return `<button class="calendar-run" data-click="filter-run-day" data-date="${date}">${esc(shoe?.model || '已刪除')}</button>`;
       }).join('');
       const shoe = runShoe(run.shoe_id);
-      return `<button class="calendar-run" onclick="event.stopPropagation();openRunModal(${run.id})">${esc(shoe?.model || '跑鞋')}</button>`;
+      return `<button class="calendar-run" data-click="open-run" data-run-id="${run.id}">${esc(shoe?.model || '跑鞋')}</button>`;
     }).join('');
-    return `<div class="calendar-day${date === today ? ' today' : ''}" style="background:rgba(34,197,94,${intensity})" onclick="selectRunCalendarDate('${date}',event)"><div class="calendar-number">${day}</div>${total ? `<div class="calendar-total">${total.toFixed(2)} km</div>` : ''}${items}</div>`;
+    return `<div class="calendar-day${date === today ? ' today' : ''}" style="background:rgba(34,197,94,${intensity})" data-click="select-calendar-date" data-date="${date}"><div class="calendar-number">${day}</div>${total ? `<div class="calendar-total">${total.toFixed(2)} km</div>` : ''}${items}</div>`;
   });
   target.innerHTML = [...weekdays, ...blanks, ...cells].join('');
 }

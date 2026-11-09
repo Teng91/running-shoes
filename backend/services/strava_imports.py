@@ -11,6 +11,7 @@ from backend.read_models.strava_preview import build_preview
 from backend.services.identifiers import allocate_id
 from backend.services.mileage import apply_run_mileage_deltas
 from backend.services.transactions import write_transaction
+from backend.strava_import import date_corrections
 
 
 class InvalidShoeMappingError(Exception):
@@ -34,9 +35,11 @@ class ImportResult:
     filtered_out: int
     synced_mileage: float
     total_run_rows: int
+    corrected_dates: int = 0
 
     def as_dict(self) -> dict[str, int | float]:
         return {
+            "corrected_dates": self.corrected_dates,
             "imported": self.imported,
             "skipped_duplicate": self.skipped_duplicate,
             "skipped_unmapped": self.skipped_unmapped,
@@ -73,18 +76,19 @@ def import_runs(
     """Validate, persist, and mileage-sync a user-scoped Strava import."""
     with write_transaction(db, user_id, reason="strava.import"):
         normalized_mapping = _normalize_mapping(db, user_id, mapping)
-        existing_ids = {
-            value[0]
-            for value in db.query(models.Run.strava_id)
+        existing_dates = {
+            strava_id: run_date
+            for strava_id, run_date in db.query(models.Run.strava_id, models.Run.date)
             .filter(
                 models.Run.user_id == user_id,
                 models.Run.strava_id.isnot(None),
             )
             .all()
-            if value[0] is not None
+            if strava_id is not None
         }
+        corrected = _correct_utc_dates(db, user_id, date_corrections(rows, existing_dates))
         runs, duplicate_count, unmapped_count = _prepare_runs(
-            rows, user_id, normalized_mapping, existing_ids
+            rows, user_id, normalized_mapping, set(existing_dates)
         )
         for run in runs:
             run.id = allocate_id(db, "runs")
@@ -126,7 +130,29 @@ def import_runs(
             filtered_out=filtered_out,
             synced_mileage=synced_mileage,
             total_run_rows=len(rows),
+            corrected_dates=corrected,
         )
+
+
+def _correct_utc_dates(db: Session, user_id: int, corrections: list[dict[str, object]]) -> int:
+    """Move runs off the UTC date stored by older imports; mileage follows the month."""
+    deltas: list[tuple[int, str, float]] = []
+    for correction in corrections:
+        run = db.query(models.Run).filter(
+            models.Run.user_id == user_id,
+            models.Run.strava_id == str(correction["strava_id"]),
+            models.Run.date == str(correction["from_date"]),
+        ).first()
+        if run is None:
+            continue
+        shoe_id, km = run.shoe_id, float(run.km)
+        db.query(models.Run).filter(models.Run.id == run.id, models.Run.user_id == user_id).update(
+            {models.Run.date: str(correction["to_date"]), models.Run.version: models.Run.version + 1},
+            synchronize_session=False,
+        )
+        deltas += [(shoe_id, str(correction["from_date"]), -km), (shoe_id, str(correction["to_date"]), km)]
+    apply_run_mileage_deltas(db, user_id, deltas, 1)
+    return len(deltas) // 2
 
 
 def _normalize_mapping(db: Session, user_id: int, mapping: dict[str, Any]) -> dict[str, int | None]:

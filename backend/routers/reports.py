@@ -9,7 +9,7 @@ from backend import llm, models, schemas
 from backend import reports as report_statistics
 from backend.auth import get_current_user
 from backend.clock import local_today
-from backend.database import get_db
+from backend.dependencies import get_db
 from backend.rate_limits import enforce_agent_request_limits
 from backend.report_llm import stream_report_text
 from backend.report_protocol import report_sse
@@ -24,7 +24,7 @@ def generate_monthly_report(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    enforce_agent_request_limits(request, current_user.id, db)
+    enforce_agent_request_limits(request, current_user.id)
     today = local_today()
     if (payload.year, payload.month) > (today.year, today.month):
         raise HTTPException(status_code=422, detail="未來月份無法產生報告")

@@ -1,6 +1,7 @@
 
 import asyncio
 import io
+import json
 import threading
 from dataclasses import replace
 from datetime import timedelta
@@ -11,7 +12,7 @@ from fastapi import HTTPException, UploadFile
 from fastapi.testclient import TestClient
 
 from backend.clock import local_today
-from backend.database import get_db
+from backend.dependencies import get_db
 from backend.main import app
 from backend.middleware import StravaUploadLimitMiddleware
 from backend.models import MonthlyMileage, Run, Shoe, StravaImport
@@ -113,7 +114,7 @@ def test_strava_parser_rejects_future_activities():
         f"future-1,{future},跑步,Test Shoe,5000\n"
     ).encode()
 
-    rows, invalid, warnings = _parse_strava_csv(raw)
+    rows, invalid, warnings = _parse_strava_csv(raw, 50_000)
 
     assert rows == []
     assert invalid == 1
@@ -362,7 +363,7 @@ def test_strava_preview_accepts_official_english_headers_and_dates(
     assert result["gear_groups"][0]["gear"] == "Mizuno Wave Sky 7"
     assert result["gear_groups"][0]["suggested_shoe_id"] == shoe.id
     assert result["gear_groups"][0]["km"] == 11.35
-    parsed, invalid, _warnings = _parse_strava_csv(csv_content.encode("utf-8"))
+    parsed, invalid, _warnings = _parse_strava_csv(csv_content.encode("utf-8"), 50_000)
     assert invalid == 0
     assert [row["date"] for row in parsed] == ["2026-08-30", "2026-08-31"]
 
@@ -440,7 +441,7 @@ def test_strava_request_limit_counts_chunked_body_without_content_length(monkeyp
         "path": "/api/runs/import/strava/preview",
         "headers": [],
     }
-    middleware = StravaUploadLimitMiddleware(downstream, max_bytes=10)
+    middleware = StravaUploadLimitMiddleware(downstream, max_bytes=10, max_backup_bytes=10)
     asyncio.run(middleware(scope, receive, send))
     assert sent[0]["type"] == "http.response.start"
     assert sent[0]["status"] == 413
@@ -468,3 +469,89 @@ def test_strava_preview_reports_each_gear_groups_earliest_importable_date(db, us
     groups = {group["gear"]: group for group in preview["gear_groups"]}
     assert groups["Rider"]["first_date"] == "2026-01-04"
     assert groups["Sky"]["first_date"] == "2026-02-01"
+
+
+@pytest.mark.parametrize(("path", "message"), [
+    ("/api/runs/import/strava/preview", "Strava 上傳請求不可超過 3 MB"),
+    ("/api/account-restore/preview", "備份不可超過 5 MB"),
+])
+def test_upload_limit_messages_follow_the_configured_limits(path, message):
+    """SPEC-047: the rejection text is derived from the enforced byte limit."""
+    sent = []
+
+    async def receive():
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    async def send(event):
+        sent.append(event)
+
+    async def downstream(_scope, _receive, _send):
+        raise AssertionError("oversized request must not reach the route")
+
+    middleware = StravaUploadLimitMiddleware(downstream, max_bytes=3 * 1024 * 1024, max_backup_bytes=5 * 1024 * 1024)
+    scope = {"type": "http", "method": "POST", "path": path,
+             "headers": [(b"content-length", str(6 * 1024 * 1024).encode())]}
+    asyncio.run(middleware(scope, receive, send))
+    assert sent[0]["status"] == 413
+    assert json.loads(sent[1]["body"])["detail"] == message
+
+
+@pytest.mark.parametrize(("value", "local", "utc"), [
+    ("2026年10月31日 下午10:30:00", "2026-11-01", "2026-10-31"),
+    ("Oct 31, 2026, 10:30:00 PM", "2026-11-01", "2026-10-31"),
+    ("2026年10月31日 上午12:05:00", "2026-10-31", "2026-10-31"),
+    ("2026年8月30日 上午11:40:36", "2026-08-30", "2026-08-30"),
+    ("2026年8月30日", "2026-08-30", "2026-08-30"),
+    ("2026-08-30", "2026-08-30", "2026-08-30"),
+])
+def test_strava_utc_timestamps_become_taipei_calendar_dates(value, local, utc):
+    """SPEC-047: a 06:30 Taipei run exported as 22:30 UTC belongs to the next local day."""
+    from backend.strava_import import parse_activity_dates
+
+    assert parse_activity_dates(value) == (local, utc)
+
+
+UTC_SHIFT_CSV = (
+    "Activity ID,Activity Date,Activity Type,Activity Gear,Distance\n"
+    '"shift-1","Oct 31, 2026, 10:30:00 PM",Run,Mizuno Wave Sky 7,10000\n'
+    '"edited-1","Oct 31, 2026, 11:00:00 PM",Run,Mizuno Wave Sky 7,4000\n'
+    '"same-1","Oct 15, 2026, 9:00:00 AM",Run,Mizuno Wave Sky 7,3000\n'
+)
+
+
+def test_reimport_moves_runs_stored_on_the_old_utc_date(client, db, user_with_token):
+    """SPEC-047: a re-import corrects pre-fix UTC dates, keeps hand edits, and moves monthly totals."""
+    user, token = user_with_token
+    shoe = Shoe(user_id=user.id, brand="Mizuno", model="Wave Sky 7", date="2026-01-01")
+    db.add(shoe)
+    db.flush()
+    # As stored by the pre-SPEC-047 parser (UTC date), plus one run the user re-dated by hand.
+    db.add_all([
+        Run(user_id=user.id, shoe_id=shoe.id, date="2026-10-31", km=10, strava_id="shift-1"),
+        Run(user_id=user.id, shoe_id=shoe.id, date="2026-10-30", km=4, strava_id="edited-1"),
+        Run(user_id=user.id, shoe_id=shoe.id, date="2026-10-15", km=3, strava_id="same-1"),
+        MonthlyMileage(user_id=user.id, year=2026, month=10, km=17, adjustment_km=0),
+    ])
+    shoe.mileage = 17
+    db.commit()
+
+    preview = upload(client, "/api/runs/import/strava/preview", token, csv_content=UTC_SHIFT_CSV).json()
+    assert preview["importable_count"] == 0 and preview["duplicate_count"] == 3
+    assert preview["date_correction_count"] == 1
+    assert preview["date_correction_samples"] == [
+        {"strava_id": "shift-1", "from_date": "2026-10-31", "to_date": "2026-11-01", "km": 10.0},
+    ]
+
+    mapping = f'{{"Mizuno Wave Sky 7": {shoe.id}}}'
+    result = upload(client, "/api/runs/import/strava", token, mapping, csv_content=UTC_SHIFT_CSV).json()
+    assert result["corrected_dates"] == 1 and result["imported"] == 0
+
+    db.expire_all()
+    dates = {run.strava_id: run.date for run in db.query(Run).filter_by(user_id=user.id)}
+    assert dates == {"shift-1": "2026-11-01", "edited-1": "2026-10-30", "same-1": "2026-10-15"}
+    months = {(row.month): row.km for row in db.query(MonthlyMileage).filter_by(user_id=user.id)}
+    assert months == {10: 7.0, 11: 10.0}
+    assert db.get(Shoe, shoe.id).mileage == 17
+
+    again = upload(client, "/api/runs/import/strava", token, mapping, csv_content=UTC_SHIFT_CSV).json()
+    assert again["corrected_dates"] == 0
