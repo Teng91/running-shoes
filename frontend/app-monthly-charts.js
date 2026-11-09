@@ -79,22 +79,25 @@ async function renderShoeStackedChart() {
   // Backend owns the aggregation; the browser only builds chart datasets.
   const shoeMonthlyMap = new Map(yearRuns.shoes.map(row => [row.shoe_id, row.monthly_km]));
 
-  // Filter to shoes that actually have runs in this selected year
-  const activeShoeIds = [...shoeMonthlyMap.keys()];
-  const displayShoes = activeShoeIds.map(id => allShoes.find(shoe => shoe.id === id) || {
-    id, brand: '歷史鞋款', model: `已刪除 #${id}`, is_retired: false,
-  });
+  // Shoes in the cabinet keep their own series. Runs on deleted shoes stay in the
+  // totals as one grey series; internal shoe IDs are never shown.
+  const displayShoes = [], deletedKm = Array(12).fill(0);
+  for (const [id, monthly] of shoeMonthlyMap) {
+    const shoe = allShoes.find(item => item.id === id);
+    if (shoe) displayShoes.push(shoe);
+    else monthly.forEach((km, index) => { deletedKm[index] += km; });
+  }
 
-  const datasets = displayShoes.map(s => {
-    const color = shoeColor(s.id);
-    const data = shoeMonthlyMap.get(s.id).map(v => parseFloat(v.toFixed(2)));
-    return {
-      label: s.brand + ' ' + s.model + (s.is_retired ? ' (退役)' : ''),
-      data,
-      backgroundColor: color,
-      borderRadius: 2,
-    };
-  });
+  const datasets = displayShoes.map(s => ({
+    label: s.brand + ' ' + s.model + (s.is_retired ? ' (退役)' : ''),
+    data: shoeMonthlyMap.get(s.id).map(v => parseFloat(v.toFixed(2))),
+    backgroundColor: shoeColor(s.id),
+    borderRadius: 2,
+  }));
+  if (deletedKm.some(km => km > 0)) {
+    datasets.push({ label: '已刪除的鞋款', data: deletedKm.map(v => parseFloat(v.toFixed(2))),
+      backgroundColor: '#94a3b8', borderRadius: 2 });
+  }
 
   const textColor = getThemeColor('--text-dim', '#8b8d9a');
   const gridColor = getThemeColor('--chart-grid', '#f1f5f9');

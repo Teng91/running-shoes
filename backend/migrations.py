@@ -31,6 +31,22 @@ def _migrate_preview_tokens(engine: Engine) -> None:
         connection.exec_driver_sql("ALTER TABLE restore_previews_v6 RENAME TO restore_previews")
 
 
+# Tables left by discontinued features (operation undo, app settings). No model or
+# query uses them, so dropping them does not change the schema contract.
+LEGACY_TABLES = ("operation_history", "app_settings")
+
+
+def _drop_empty_legacy_tables(engine: Engine) -> None:
+    """Remove unused legacy tables, but never discard rows an old install still holds."""
+    with engine.begin() as connection:
+        existing = set(inspect(connection).get_table_names())
+        for table in LEGACY_TABLES:
+            if table in existing and connection.exec_driver_sql(
+                f"SELECT 1 FROM {table} LIMIT 1"
+            ).first() is None:
+                connection.exec_driver_sql(f"DROP TABLE {table}")
+
+
 def schema_version(engine: Engine) -> int:
     """Return the applied schema version, or zero for a legacy database."""
     with engine.connect() as connection:
@@ -248,6 +264,7 @@ def run_startup_migrations(
                 "ON CONFLICT(name) DO UPDATE SET next_id=max(entity_sequences.next_id,excluded.next_id)"
             ), {"name": table})
     install_audit_triggers(engine)
+    _drop_empty_legacy_tables(engine)
 
     with engine.begin() as connection:
         connection.execute(text(
