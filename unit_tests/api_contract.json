@@ -19,6 +19,7 @@
   "GET /api/reports/{year}/{month}",
   "GET /api/running-goal",
   "GET /api/running-goal/progress",
+  "GET /api/running-goal/year",
   "GET /api/runs",
   "GET /api/runs/import/strava/history",
   "GET /api/runs/summary",

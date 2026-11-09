@@ -74,8 +74,8 @@ function activateLocalWorkspace() {
           if (!workspaceForms[name]) continue;
           for (const id of workspaceForms[name]) {
             if (Object.hasOwn(values, id) && !localWorkspace.edited.has(id)) {
-              if (name === 'goal') prepareGoalForm();
-              document.getElementById(id).value = String(values[id]);
+              if (name === 'goal') { prepareGoalForm(); setGoalField(id, String(values[id])); }
+              else document.getElementById(id).value = String(values[id]);
             }
           }
         }

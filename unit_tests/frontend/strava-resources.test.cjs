@@ -2,7 +2,7 @@ const { test, assert, vm, extract, source, runContext } = require('./helpers.cjs
 const { observeWorkerUpdate } = require('../../scripts/worker_update.cjs');
 function deferred() { let resolve, reject; const promise = new Promise((a, b) => { resolve = a; reject = b; }); return { promise, resolve, reject }; }
 const flush = () => new Promise(resolve => setImmediate(resolve));
-function nodes() { return new Proxy({}, { get: (all, id) => all[id] ||= { value: '', style: {}, hidden: false,
+function nodes() { return new Proxy({}, { get: (all, id) => all[id] ||= { value: '', style: {}, hidden: false, setAttribute() {},
   parentElement: { style: {} }, querySelector: () => ({}), classList: { add() {}, remove() {}, contains: () => true } } }); }
 
 test('SPEC-025 deleted shoe selection remains explicit across redraws', () => {

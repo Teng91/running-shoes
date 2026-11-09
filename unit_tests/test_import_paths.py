@@ -45,6 +45,8 @@ def test_auth_requires_secret_key_in_production_at_import(monkeypatch):
         os.environ["ENVIRONMENT"] = "production"
         os.environ.pop("SECRET_KEY", None)
         monkeypatch.setattr(sys, "exit", exit_mock)
+        # A developer's local .env must not refill the secret this test removes.
+        monkeypatch.setattr("dotenv.load_dotenv", lambda *args, **kwargs: False)
         with patch("warnings.warn"):
             importlib.reload(settings_module)
             importlib.reload(auth)

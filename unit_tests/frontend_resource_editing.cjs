@@ -22,7 +22,7 @@ async function inspect(browser,baseUrl,scenario){
   else if(name==='/api/shoes/active')body=removeShoe?[other]:[shoe,other];
   else if(name==='/api/monthly-mileage')body=[{id:1,year:2026,month:10,km:100,adjustment_km:100,version:0}];
   else if(name==='/api/running-goal'){if(holdGoal){started.resolve();await gate.promise;}body={version:0,start_year:2026,monthly_km:125,yearly_km:1500};}
-  else if(name==='/api/running-goal/progress')body={active:false,start_year:2026};
+  else if(name==='/api/running-goal/year')body={year:Number(new URL(request.url()).searchParams.get('year')),active:false,start_year:2026,months:[]};
   else if(name==='/api/runs/summary')body={total_km:0,run_count:0,run_days:0,calendar:[],shoe_usage:[]};
   else if(name==='/api/runs/year-summary'){annualCalls++;if(holdAnnual){started.resolve();await gate.promise;}body={year:2026,total_km:0,monthly_km:Array(12).fill(0),shoes:[]};}
   else if(name==='/api/analytics/dashboard')body={};

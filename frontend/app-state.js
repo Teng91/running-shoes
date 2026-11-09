@@ -34,7 +34,6 @@ let spendingSummary = null;
 let stravaImports = [];
 let runningGoal = { version: 0, start_year: 2026, monthly_km: 125, yearly_km: 1500 };
 let selectedYear = null;
-let selectedGoalMonth = null;
 let selectedSpendingYear = null;
 let dashboardAnalyticsRequest = 0;
 let reportLoadRequestId = 0;
@@ -47,6 +46,6 @@ registerFeatureReset('dashboard-data', () => {
   shoes = []; retiredShoes = []; monthlyMileages = [];
   monthlySpending = []; spendingSummary = null;
   stravaImports = [];
-  selectedYear = null; selectedGoalMonth = null; selectedSpendingYear = null;
+  selectedYear = null; selectedSpendingYear = null;
   runningGoal = { version: 0, start_year: 2026, monthly_km: 125, yearly_km: 1500 };
 });

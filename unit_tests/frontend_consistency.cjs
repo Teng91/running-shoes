@@ -17,6 +17,14 @@ module.exports = async function checkConsistency(browser, baseUrl) {
   const progress = { ...goal, active: true, month_km: 50, ytd_km: 50,
     month_achievement_percent: 40, year_achievement_percent: 3.3, year_remaining_km: 1450,
     month_state: 'past', month_remaining_km: 75 };
+  // SPEC-044: the annual goal view shows logged August distance (50 km = 40%), not the adjusted 150 km.
+  const yearGoal = { ...goal, year: 2026, active: true, year_state: 'current', focus_month: 10,
+    month_km: 0, month_state: 'current', month_achievement_percent: 0, pace_delta_km: -72.58, remaining_days: 12,
+    required_daily_km: 10.42, ytd_km: 50, year_achievement_percent: 3.3, year_remaining_km: 1450,
+    year_expected_km_to_date: 1195.89, year_pace_delta_km: -1145.89, year_remaining_days: 73,
+    required_weekly_km: 139.04, months_closed: 9, months_met: 0,
+    months: Array.from({ length: 12 }, (_, index) => ({ month: index + 1, km: index === 7 ? 50 : 0,
+      percent: index === 7 ? 40 : 0, state: index < 9 ? 'past' : index === 9 ? 'current' : 'future', met: false })) };
   const errors = [], writes = []; let spendingCalls = 0;
   await context.route('**/api/**', route => {
     const request = route.request(), url = new URL(request.url()), name = url.pathname;
@@ -26,7 +34,7 @@ module.exports = async function checkConsistency(browser, baseUrl) {
     else if (name === '/api/shoes/active') body = [shoe];
     else if (name === '/api/monthly-mileage') body = [{ id: 1, year: 2026, month: 8, km: 150, adjustment_km: 100, version: 0 }];
     else if (name === '/api/running-goal') body = goal;
-    else if (name === '/api/running-goal/progress') body = progress;
+    else if (name === '/api/running-goal/year') body = yearGoal;
     else if (name === '/api/runs/year-summary') body = { shoes: [] };
     else if (name === '/api/analytics/dashboard') body = { goal: progress };
     else if (name === '/api/runs') {
@@ -73,8 +81,8 @@ module.exports = async function checkConsistency(browser, baseUrl) {
     assert.equal(await page.locator('#run-km').inputValue(), '7.50');
     assert.equal(await page.locator('#run-month').inputValue(), '2026-08');
     await page.evaluate(() => switchTab('monthly'));
-    await page.waitForFunction(() => document.getElementById('goal-cards').textContent.includes('40.0%'));
-    assert.doesNotMatch(await page.locator('#goal-cards').textContent(), /120\.0%/);
+    await page.waitForFunction(() => document.getElementById('goal-overview').textContent.includes('8 月 50.00 km，未達標，達成 40.0%'));
+    assert.doesNotMatch(await page.locator('#goal-overview').textContent(), /120\.0%|150\.00/);
     assert.deepEqual(writes, [], 'viewing goals never sends a mutation');
     // SPEC-043: spending loads lazily with the shoes tab.
     await page.evaluate(() => switchTab('shoes'));

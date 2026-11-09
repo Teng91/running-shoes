@@ -47,7 +47,7 @@ async function fixture(browser, url, scenario) {
     else if (name === '/api/monthly-mileage') body = [{ id: 1, year: 2026, month: 10, km, adjustment_km: 0, version: km ? 1 : 0 }];
     else if (name === '/api/running-goal' && scenario === 'slow') { started.resolve(); await gate.promise; body = { version: 0, start_year: 2026, monthly_km: 125, yearly_km: 1500 }; }
     else if (name === '/api/running-goal') body = { version: 0, start_year: 2026, monthly_km: 125, yearly_km: 1500 };
-    else if (name === '/api/running-goal/progress') body = { active: false, start_year: 2026 };
+    else if (name === '/api/running-goal/year') body = { year: Number(new URL(request.url()).searchParams.get('year')), active: false, start_year: 2026, months: [] };
     else if (name === '/api/runs') body = km ? [{ id: 1, version: 0, date: '2026-10-01', km, shoe_id: runShoeId }] : [];
     else if (name === '/api/runs/summary') body = { total_km: km, run_count: km ? 1 : 0, run_days: km ? 1 : 0, calendar: [], shoe_usage: [] };
     else if (name === '/api/analytics/dashboard') body = {};

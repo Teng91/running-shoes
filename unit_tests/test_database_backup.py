@@ -52,6 +52,32 @@ def test_backup_retention_removes_only_old_managed_snapshots(tmp_path):
     assert source.exists()
 
 
+def test_backup_retention_keeps_newest_when_snapshots_share_an_mtime(tmp_path, monkeypatch):
+    """Back-to-back snapshots in one filesystem clock tick must still keep the newest."""
+    import os
+
+    from scripts import database_backup
+
+    source = tmp_path / "source.db"
+    make_database(source)
+    stamps = iter(f"20261109T1000000000{index:02d}Z" for index in range(1, 4))
+    monkeypatch.setattr(database_backup, "_timestamp", lambda: next(stamps))
+    snapshot = database_backup._sqlite_snapshot
+
+    def snapshot_in_same_tick(source_path, destination):
+        snapshot(source_path, destination)
+        os.utime(destination, ns=(1_000_000_000, 1_000_000_000))
+
+    monkeypatch.setattr(database_backup, "_sqlite_snapshot", snapshot_in_same_tick)
+    backup_dir = tmp_path / "backups"
+    oldest = create_backup(source, backup_dir, keep=3)
+    middle = create_backup(source, backup_dir, keep=3)
+    newest = create_backup(source, backup_dir, keep=2)
+
+    assert sorted(backup_dir.glob("shoes-*.db")) == [middle, newest]
+    assert not oldest.with_suffix(".db.sha256").exists()
+
+
 def test_restore_requires_confirmation_and_preserves_previous_database(tmp_path):
     source = tmp_path / "source.db"
     destination = tmp_path / "destination.db"

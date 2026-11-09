@@ -144,7 +144,7 @@ running-shoes/
 │   ├── app-core.js       # Shell、主題、分頁與聚合資料載入
 │   ├── app-dashboard.js  # 首頁卡片、提醒與跑鞋表格
 │   ├── app-exports.js    # 跑鞋匯出與帳號備份下載
-│   ├── app-goals.js      # 跑步目標設定與期間進度
+│   ├── app-goals.js      # 年度目標總覽、每月達標與目標設定
 │   ├── app-charts.js     # 共用圖表 registry 與 label utilities
 │   ├── app-shoe-charts.js # 跑鞋生命週期、成本、時間軸與分配
 │   ├── app-monthly-charts.js # 月份／年度選擇與跑量圖表
@@ -318,7 +318,7 @@ LLM_MAX_OUTPUT_TOKENS=4096
 - **AI 月度跑步報告**：可自行選擇本日免費模型，一鍵產生指定月份的跑步報告（跑量趨勢、鞋款狀態、退役提醒與下月建議），報告自動保存、可隨時回看，不需重打 LLM；更新時間以帶 offset UTC 傳輸，生成與重新讀取皆顯示裝置本地時間
 - **安全的編輯與串流**：跑步／月跑量／跑鞋視窗保存開啟時的 ID、版本與 session；重新載入後仍由後端檢查衝突。跑鞋儲存、刪除與移動防止重送，晚到回應不關閉新草稿。AI／月報共用串流處理，AI 中斷會保留可見內容、提示重試，不把半截答案放進歷史
 - **按需圖表**：只建立或更新目前分頁的圖表；未變更的分頁可重用，資料或主題更新後在切入時重繪，年度跑步資料只在月跑量分頁需要時載入
-- **個人跑量目標**：預設自 2026 年起每月 125 km，年度目標自動以月目標 × 12 計算；目標、首頁與 AI 月報統一以逐筆跑步日誌計算，可切換月份查看達成率與「截至所選月份」年度進度
+- **個人跑量目標**：預設自 2026 年起每月 125 km，年度目標自動以月目標 × 12 計算；目標、首頁與 AI 月報統一以逐筆跑步日誌計算。月跑量分頁的年度目標卡依上方年份一次列出 12 個月是否達標、年度累計與今天應有的進度、年底前每週需求及本月進度；「調整目標」展開後才能修改每月目標與開始計算的年份
 - **多使用者隔離**：每人資料完全獨立，支援註冊/登入/改密碼；認證表單防重送，切換表單／session 使舊操作失效。切換帳號會清除洞察快取並取消 AI 串流，過期回應不覆蓋新登入或 UI 狀態
 
 ## 跑步日誌
@@ -348,6 +348,7 @@ LLM_MAX_OUTPUT_TOKENS=4096
 | `GET /api/runs/summary` | 指定 `year`、`month` 的完整月曆與鞋款／日誌彙總，不受明細分頁影響 |
 | `GET /api/runs/year-summary` | 指定 `year` 的完整年度每月／每鞋里程矩陣；一次聚合查詢，不下載逐筆日誌 |
 | `GET /api/running-goal/progress` | 指定 `year`、`month` 的日誌目標進度，與首頁／月報共用後端規則 |
+| `GET /api/running-goal/year?year=` | 年度目標總覽：12 個月日誌里程與達標狀態、年度進度、今天應達里程與每週需求 |
 | `GET /api/spending/summary` | 後端計算的總支出、折數、平均月支出與月份明細 |
 | `POST /api/runs` | 新增日期、公里數與鞋款 |
 | `PUT /api/runs/{run_id}` | 編輯指定跑步紀錄 |
@@ -700,6 +701,11 @@ v3.10.3 使用 Asset 3.10.3／shell v38、schema 6、51 個 release assets。
 `registry.fly.io/running-shoes@sha256:bac44457f12adfde6473e9d9a973b330e1bf69eac7e44feb3fb6ed1f5a55429a`，
 不還原業務資料快照。發布驗證涵蓋 verify、40 組版面、雙引擎 CRUD／PWA、main/tag CI 及正式站匿名 release-check。
 
+### 月跑量年度目標總覽（SPEC-044，v4.5.0）
+
+[SPEC-044](docs/specs/044-annual-goal-overview.md) 移除「查看月份」選單，月跑量分頁改以一張年度目標卡同時顯示 12 個月的達標狀態、年度進度與本月進度；
+目標設定收進「調整目標」，開始年份改為選單並說明用途。新增唯讀 `GET /api/running-goal/year`；Asset 4.5.0／shell v51、schema 6 不變，可回滾至 v4.4.0 image。
+
 ### 支出併入跑鞋分頁（SPEC-043，v4.4.0）
 
 [SPEC-043](docs/specs/043-spending-in-shoes-tab.md) 移除「支出」分頁，支出卡片、兩張支出圖與支出明細移到跑鞋分頁最下方，內容不變；導覽剩 4 個分頁。
@@ -784,7 +790,7 @@ Playwright／Chromium／WebKit 齊全時，也會執行版面測試。
 避免每次停止都重跑。Hook 不會呼叫其他模型、外部 API，或傳送提示、diff、原始碼與測試輸出。
 GitHub Actions 仍會在 push／pull request 執行 `verify`，並以三個可獨立重跑的 browser jobs 執行完整版面矩陣、真實 CRUD E2E 與 PWA 升級／離線測試；Dependabot 每月以單一 PR 合併 GitHub Actions 更新；Python 只接收安全性更新 PR，例行升級依下方 `uv pip compile --universal` 步驟手動重編鎖定檔（Dependabot 產生的鎖定檔會遺失 Windows 條件）。
 
-本次驗證基線為 Python **567 passed**、前端回歸測試 **156 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
+本次驗證基線為 Python **571 passed**、前端回歸測試 **160 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
 版面檢查涵蓋 WebKit／Chromium、亮／暗模式與 10 組直橫向尺寸，共 40 組設定，檢查四個功能分頁與月報、三個認證表單、圖表、全部彈窗、行內編輯、停用／錯誤及空資料狀態。
 
 主要表單、工具列與彈窗操作統一為 44px 控制項；桌面表格內的緊湊操作為 36px，手機至少 44px。

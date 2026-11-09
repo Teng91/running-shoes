@@ -47,3 +47,12 @@ def running_goal_progress(
     db: Session = Depends(get_db),
 ):
     return goal_service.goal_progress(db, current_user.id, year, month)
+
+
+@router.get("/year")
+def running_goal_year(
+    year: int = Query(ge=1900, le=2100),
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return goal_service.year_goal_overview(db, current_user.id, year)

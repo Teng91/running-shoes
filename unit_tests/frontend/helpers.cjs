@@ -15,7 +15,7 @@ function featureContext(globals = {}) {
   const context = vm.createContext({ structuredClone, formSnapshotMatches: matchesSnapshot,
     dashboardAnalyticsCache: new Map(), dashboardAnalyticsRequest: 0, inlineEditors: new Map(), inlineTableRows: new Map(),
     captureAuthSession: () => ({}), isCurrentAuthSession: () => true,
-    getSelectedCategories: () => [], ...globals });
+    getSelectedCategories: () => [], monthlyMileages: [], ...globals });
   const drafts = new Map();
   context.getFormDraft = name => {
     if (!drafts.has(name)) drafts.set(name, createFormDraft());
@@ -31,7 +31,7 @@ function featureContext(globals = {}) {
     }));
     return owners.get(name);
   };
-  vm.runInContext(['beginInlineEdit', 'finishInlineEdit', 'preserveInlineTable', 'readForm', 'matchesForm', 'shoeLabel', 'invalidateDataResources', 'refreshCoreData', 'registerResourceCaches', 'goalFormValues', 'prepareGoalForm'].map(extract).join('\n'), context);
+  vm.runInContext(['beginInlineEdit', 'finishInlineEdit', 'preserveInlineTable', 'readForm', 'matchesForm', 'shoeLabel', 'invalidateDataResources', 'refreshCoreData', 'registerResourceCaches', 'goalFormValues', 'goalStartYearOptions', 'setGoalField', 'setGoalSettingsOpen', 'updateGoalYearlyHint', 'prepareGoalForm'].map(extract).join('\n'), context);
   context.registerResourceCaches();
   return context;
 }
