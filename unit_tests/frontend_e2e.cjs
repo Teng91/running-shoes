@@ -56,7 +56,7 @@ async function stopProcess(processHandle) {
 }
 
 async function assertPurchaseDetails(page, status) {
-  await page.locator('.tab[data-tab="spending"]').click();
+  await page.locator('.tab[data-tab="shoes"]').click();
   const row = page.locator('#spending-table tr').filter({ hasText: 'Browser Runner v2' });
   await row.getByText('US 9.5/27.5cm', { exact: true }).waitFor();
   await row.getByText(status, { exact: true }).waitFor();
@@ -197,7 +197,7 @@ async function run() {
       await page.locator('#retired-table tr').filter({ hasText: 'Browser Runner v2' }).getByRole('button', { name: '編輯' }).click();
       await page.locator('#modal').getByRole('button', { name: '刪除' }).click();
       await page.locator('#retired-table').getByText('Browser Runner v2', { exact: true }).waitFor({ state: 'detached' });
-      await page.locator('.tab[data-tab="spending"]').click();
+      await page.locator('.tab[data-tab="shoes"]').click();
       await page.locator('#spending-table').getByText('Browser Runner v2', { exact: true }).waitFor({ state: 'detached' });
 
       assert.deepEqual(pageErrors, [], 'browser JavaScript errors');

@@ -51,10 +51,10 @@ test('SPEC-026 inline lifecycle cancels blur writes before removing account DOM'
 });
 
 test('SPEC-026 resource views invalidate only their dependent panels', () => {
-  const context = runContext({ renderedPanels: new Map(['shoes', 'monthly', 'runs', 'spending'].map(name => [name, 'rendered'])) });
+  const context = runContext({ renderedPanels: new Map(['shoes', 'monthly', 'runs'].map(name => [name, 'rendered'])) });
   vm.runInContext('let panelRevision = 0;\n' + extract('invalidatePanels'), context);
   context.invalidatePanels('goal');
-  assert.deepEqual([...context.renderedPanels.keys()], ['shoes', 'spending']);
+  assert.deepEqual([...context.renderedPanels.keys()], ['shoes']);
   assert.equal(vm.runInContext('panelRevision', context), 0);
   context.invalidatePanels('shoes'); assert.equal(context.renderedPanels.size, 0);
 });

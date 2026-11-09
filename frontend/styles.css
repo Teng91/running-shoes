@@ -293,6 +293,9 @@ body.light-theme .heat-cell.level-4 { background: #14532d; }
 .review-sub { margin-top: 4px; color: var(--text-dim); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
 .review-grid > .chart-note { grid-column: 1 / -1; margin: 0; }
 .yoy-box { margin-bottom: 28px; }
+/* Spending section at the bottom of the shoes tab */
+.shoe-spending { margin-top: 12px; }
+.shoe-spending > .trends-heading { margin-bottom: 12px; }
 /* One AI destination: chat / monthly report switch */
 .ai-switch { display: inline-flex; flex: 0 0 auto; align-self: flex-start; gap: 4px; margin-bottom: 14px; padding: 4px; border: 1px solid var(--border); border-radius: 10px; background: var(--card); }
 .ai-switch-btn { min-height: var(--control-compact-height); padding: 6px 16px; border: 0; border-radius: 7px; background: transparent; color: var(--text-dim); font-size: 13px; font-weight: 600; cursor: pointer; }
@@ -436,7 +439,7 @@ body.light-theme .heat-cell.level-4 { background: #14532d; }
     left: 0;
     z-index: 30;
     display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 2px;
     margin: 0;
     padding: 4px max(4px, env(safe-area-inset-right)) calc(4px + env(safe-area-inset-bottom)) max(4px, env(safe-area-inset-left));

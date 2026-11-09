@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
 <meta charset="UTF-8">
-<meta name="app-asset-version" content="4.3.0">
+<meta name="app-asset-version" content="4.4.0">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>跑鞋追蹤 Dashboard</title>
 <meta name="theme-color" content="#0f1117">
@@ -34,8 +34,8 @@ body { margin: 0; opacity: 1 !important; }
 @keyframes app-boot-critical-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .app-boot { transition: none; } .app-boot-spinner { animation: none; } }
 </style>
-<link id="app-styles" rel="preload" href="/styles.css?v=4.3.0" as="style" onload="this.onload=null;this.rel='stylesheet';this.dataset.ready='true';window.dispatchEvent(new Event('appstylesready'))">
-<noscript><link rel="stylesheet" href="/styles.css?v=4.3.0"></noscript>
+<link id="app-styles" rel="preload" href="/styles.css?v=4.4.0" as="style" onload="this.onload=null;this.rel='stylesheet';this.dataset.ready='true';window.dispatchEvent(new Event('appstylesready'))">
+<noscript><link rel="stylesheet" href="/styles.css?v=4.4.0"></noscript>
 </head>
 <body>
 
@@ -166,7 +166,6 @@ window.__appBootLegacyPoll = window.setInterval(function () {
       <button class="tab active" role="tab" aria-selected="true" aria-controls="panel-runs" data-tab="runs" onclick="switchTab('runs')"><span class="tab-icon" aria-hidden="true">🏃</span><span>跑步日誌</span></button>
       <button class="tab" role="tab" aria-selected="false" aria-controls="panel-shoes" data-tab="shoes" onclick="switchTab('shoes')"><span class="tab-icon" aria-hidden="true">👟</span><span>跑鞋</span></button>
       <button class="tab" role="tab" aria-selected="false" aria-controls="panel-monthly" data-tab="monthly" onclick="switchTab('monthly')"><span class="tab-icon" aria-hidden="true">📊</span><span>月跑量</span></button>
-      <button class="tab" role="tab" aria-selected="false" aria-controls="panel-spending" data-tab="spending" onclick="switchTab('spending')"><span class="tab-icon" aria-hidden="true">💳</span><span>支出</span></button>
       <button class="tab" role="tab" aria-selected="false" aria-controls="panel-agent" data-tab="agent" onclick="switchTab('agent')"><span class="tab-icon" aria-hidden="true">✨</span><span>AI</span></button>
     </div>
       <div class="sidebar-navigation" id="sidebar-navigation">
@@ -250,6 +249,45 @@ window.__appBootLegacyPoll = window.setInterval(function () {
         </table>
       </div>
     </div>
+
+
+    <section class="shoe-spending" aria-labelledby="shoe-spending-title">
+      <h2 class="trends-heading" id="shoe-spending-title">支出</h2>
+      <div class="cards" id="spending-cards"></div>
+
+      <div class="charts">
+        <div class="chart-box">
+          <div class="chart-title-row">
+            <h3>年度支出總覽</h3>
+          </div>
+          <div class="chart-canvas"><canvas id="chart-spending-yearly"></canvas></div>
+        </div>
+        <div class="chart-box">
+          <div class="chart-title-row">
+            <h3>年度月支出</h3>
+            <select id="spending-year-select" class="year-select" onchange="onSpendingYearChange()"></select>
+          </div>
+          <div class="chart-canvas"><canvas id="chart-spending"></canvas></div>
+        </div>
+      </div>
+
+      <div class="table-section">
+        <div class="table-header">
+          <h2>支出明細</h2>
+        </div>
+        <p class="table-scroll-hint">欄位較多時，可左右滑動表格查看。</p>
+        <div class="table-wrap" tabindex="0" role="region" aria-label="可左右滑動的資料表">
+          <table>
+            <thead>
+              <tr>
+                <th>日期</th><th>品牌</th><th>鞋款</th><th>尺寸</th><th class="numeric">買價</th><th class="numeric">原價</th><th class="numeric">折數</th><th>類別</th><th>狀態</th>
+              </tr>
+            </thead>
+            <tbody id="spending-table"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
 
   </div><!-- /tab-panel shoes -->
 
@@ -380,46 +418,6 @@ window.__appBootLegacyPoll = window.setInterval(function () {
     </div>
 
   </div><!-- /tab-panel monthly -->
-
-  <!-- Spending Tab -->
-  <div class="tab-panel" id="panel-spending" role="tabpanel" data-panel="spending">
-
-    <div class="cards" id="spending-cards"></div>
-
-    <div class="charts">
-      <div class="chart-box">
-        <div class="chart-title-row">
-          <h3>年度支出總覽</h3>
-        </div>
-        <div class="chart-canvas"><canvas id="chart-spending-yearly"></canvas></div>
-      </div>
-      <div class="chart-box">
-        <div class="chart-title-row">
-          <h3>年度月支出</h3>
-          <select id="spending-year-select" class="year-select" onchange="onSpendingYearChange()"></select>
-        </div>
-        <div class="chart-canvas"><canvas id="chart-spending"></canvas></div>
-      </div>
-    </div>
-
-    <div class="table-section">
-      <div class="table-header">
-        <h2>支出明細</h2>
-      </div>
-      <p class="table-scroll-hint">欄位較多時，可左右滑動表格查看。</p>
-      <div class="table-wrap" tabindex="0" role="region" aria-label="可左右滑動的資料表">
-        <table>
-          <thead>
-            <tr>
-              <th>日期</th><th>品牌</th><th>鞋款</th><th>尺寸</th><th class="numeric">買價</th><th class="numeric">原價</th><th class="numeric">折數</th><th>類別</th><th>狀態</th>
-            </tr>
-          </thead>
-          <tbody id="spending-table"></tbody>
-        </table>
-      </div>
-    </div>
-
-  </div><!-- /tab-panel spending -->
 
   <!-- Agent Chat Panel -->
   <div class="tab-panel agent-panel" id="panel-agent" role="tabpanel" data-panel="agent">
@@ -655,37 +653,37 @@ window.__appBootLegacyPoll = window.setInterval(function () {
 
 <script src="/vendor/chart.umd.min.js"></script>
 <script src="/vendor/marked.min.js"></script>
-<script src="/app-boot.js?v=4.3.0"></script>
-<script src="/app-lifecycle.js?v=4.3.0"></script>
-<script src="/app-state.js?v=4.3.0"></script>
-<script src="/app-api.js?v=4.3.0"></script>
-<script src="/app-auth.js?v=4.3.0"></script>
-<script src="/app-streams.js?v=4.3.0"></script>
-<script src="/app-resources.js?v=4.3.0"></script>
-<script src="/app-inline-editors.js?v=4.3.0"></script>
-<script src="/app-local-store.js?v=4.3.0"></script>
-<script src="/app-workspace.js?v=4.3.0"></script>
-<script src="/app-account-restore.js?v=4.3.0"></script>
-<script src="/app-history.js?v=4.3.0"></script>
-<script src="/app-core.js?v=4.3.0"></script>
-<script src="/app-models.js?v=4.3.0"></script>
-<script src="/app-markdown.js?v=4.3.0"></script>
-<script src="/app-agent.js?v=4.3.0"></script>
-<script src="/app-reports.js?v=4.3.0"></script>
-<script src="/app-runs.js?v=4.3.0"></script>
-<script src="/app-dates.js?v=4.3.0"></script>
-<script src="/app-strava.js?v=4.3.0"></script>
-<script src="/app-run-insights.js?v=4.3.0"></script>
-<script src="/app-shoes.js?v=4.3.0"></script>
-<script src="/app-dashboard.js?v=4.3.0"></script>
-<script src="/app-exports.js?v=4.3.0"></script>
-<script src="/app-goals.js?v=4.3.0"></script>
-<script src="/app-charts.js?v=4.3.0"></script>
-<script src="/app-shoe-charts.js?v=4.3.0"></script>
-<script src="/app-monthly-charts.js?v=4.3.0"></script>
-<script src="/app-spending.js?v=4.3.0"></script>
-<script src="/app-dialogs.js?v=4.3.0"></script>
-<script src="/app-updates.js?v=4.3.0"></script>
-<script src="/app.js?v=4.3.0"></script>
+<script src="/app-boot.js?v=4.4.0"></script>
+<script src="/app-lifecycle.js?v=4.4.0"></script>
+<script src="/app-state.js?v=4.4.0"></script>
+<script src="/app-api.js?v=4.4.0"></script>
+<script src="/app-auth.js?v=4.4.0"></script>
+<script src="/app-streams.js?v=4.4.0"></script>
+<script src="/app-resources.js?v=4.4.0"></script>
+<script src="/app-inline-editors.js?v=4.4.0"></script>
+<script src="/app-local-store.js?v=4.4.0"></script>
+<script src="/app-workspace.js?v=4.4.0"></script>
+<script src="/app-account-restore.js?v=4.4.0"></script>
+<script src="/app-history.js?v=4.4.0"></script>
+<script src="/app-core.js?v=4.4.0"></script>
+<script src="/app-models.js?v=4.4.0"></script>
+<script src="/app-markdown.js?v=4.4.0"></script>
+<script src="/app-agent.js?v=4.4.0"></script>
+<script src="/app-reports.js?v=4.4.0"></script>
+<script src="/app-runs.js?v=4.4.0"></script>
+<script src="/app-dates.js?v=4.4.0"></script>
+<script src="/app-strava.js?v=4.4.0"></script>
+<script src="/app-run-insights.js?v=4.4.0"></script>
+<script src="/app-shoes.js?v=4.4.0"></script>
+<script src="/app-dashboard.js?v=4.4.0"></script>
+<script src="/app-exports.js?v=4.4.0"></script>
+<script src="/app-goals.js?v=4.4.0"></script>
+<script src="/app-charts.js?v=4.4.0"></script>
+<script src="/app-shoe-charts.js?v=4.4.0"></script>
+<script src="/app-monthly-charts.js?v=4.4.0"></script>
+<script src="/app-spending.js?v=4.4.0"></script>
+<script src="/app-dialogs.js?v=4.4.0"></script>
+<script src="/app-updates.js?v=4.4.0"></script>
+<script src="/app.js?v=4.4.0"></script>
 </body>
 </html>

@@ -76,7 +76,8 @@ module.exports = async function checkConsistency(browser, baseUrl) {
     await page.waitForFunction(() => document.getElementById('goal-cards').textContent.includes('40.0%'));
     assert.doesNotMatch(await page.locator('#goal-cards').textContent(), /120\.0%/);
     assert.deepEqual(writes, [], 'viewing goals never sends a mutation');
-    await page.evaluate(() => switchTab('spending'));
+    // SPEC-043: spending loads lazily with the shoes tab.
+    await page.evaluate(() => switchTab('shoes'));
     await page.locator('#spending-cards').getByText(/支出載入失敗/).waitFor();
     assert.equal(await page.locator('#data-load-error').isVisible(), false);
     await page.locator('#spending-cards').getByRole('button', { name: '重試' }).click();
