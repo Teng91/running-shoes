@@ -27,7 +27,7 @@ jobs:
         run: python scripts/task.py verify
 
   frontend-layout:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     container:
       image: mcr.microsoft.com/playwright:v1.63.0-noble
@@ -48,7 +48,7 @@ jobs:
           retention-days: 7
 
   frontend-e2e:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     container:
       image: mcr.microsoft.com/playwright:v1.63.0-noble
@@ -69,7 +69,7 @@ jobs:
           retention-days: 7
 
   frontend-pwa:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 8
     container:
       image: mcr.microsoft.com/playwright:v1.63.0-noble

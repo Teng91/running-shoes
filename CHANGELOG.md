@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- CI 瀏覽器工作固定在 `ubuntu-24.04`：`ubuntu-latest` 改為 26.04 後，掛進 Playwright noble 容器的 tool-cache Python 缺少 ssl 模組，pip 無法安裝依賴。
+
 ## [4.1.2] - 2026-11-07
 
 ### Removed
