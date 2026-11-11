@@ -987,6 +987,8 @@ unset MIGRATION_PASSWORD_VALUE
 2. GitHub repo → **Settings → Secrets and variables → Actions → New repository secret**，名稱 `FLY_API_TOKEN`，值貼上剛才那串。
 3. 記下到期日（上例 8760h 為一年）。到期後部署 job 會在快照步驟失敗；照同樣步驟重新產生並覆蓋這個 secret 即可。
 
+目前的 token（名稱 `github-actions`）建立於 2026-11-11，**2027-11-11 到期**。
+
 沒有設定這個 secret 時，部署 job 會在第一步明確失敗，測試照常執行。
 
 #### 手動部署（備援）
