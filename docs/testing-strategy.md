@@ -276,3 +276,7 @@ SPEC-032：合成資料驗證歷史筆數上限（v4.7.3 起 10,000／10,001）�
 ## SPEC-036 安全強化與跨平台鎖定檔
 
 [規格與具名案例](specs/036-security-hardening-and-portable-locks.md) 以無 `document` 的 Node context 驗證 Markdown 只經 `DOMParser` 解析並移除可執行標記與非 allowlist 屬性；API 測試確認被 IP／帳號上限拒絕的請求不增加全站 bucket、密碼錯誤只鎖定該帳號、未知帳號仍執行 bcrypt；鎖定檔測試確認 `uvloop` 與 `colorama` 的平台條件。
+
+## SPEC-048 push 到 main 自動部署與發版
+
+[規格與具名案例](specs/048-push-to-main-deploy-and-release.md) 以文字解析 workflow：部署只在 main 且全部測試通過後執行、release-check 與發版依序在後；只有部署 job 取得 `FLY_API_TOKEN` 且不執行專案套件，只有發版 job 可寫入；部署前快照的遠端指令、資料庫路徑與成功訊息和 Dockerfile／`database_backup.py` 一致；實際執行發版腳本內嵌的 CHANGELOG 擷取，比對目前版本段落與缺段落的 commit 備援；main 執行序列化不取消；browser 與部署後檢查重跑一次並警告。實際部署由 main 上的 GitHub Actions 驗證。

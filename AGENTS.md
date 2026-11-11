@@ -43,6 +43,7 @@
 - `backend/migrations.py`: ordered SQLite schema upgrades and the current schema version; `scripts/rollback_schema_seven.sql` is the documented 7 → 6 rollback.
 - `backend/rate_limits.py`: SQLite fixed-window throttling for authentication, AI and backup previews, consumed all-or-nothing on its own transaction with limits from app settings; never commits the request session.
 - `docs/architecture.md`: current SDD, module boundaries, diagrams, and evolution sequence.
+- `.github/workflows/verify.yml`: CI for every push/PR; on `main` it also snapshots the production database, deploys with `FLY_API_TOKEN` (deploy job only), runs `release-check`, and tags/releases a new `package.json` version from `CHANGELOG.md` (SPEC-048).
 - `docs/testing-strategy.md`: test design, traceability matrix, and definition of done.
 - `backend/agent.py`: LLM and tool-loop runner; planning, dispatch, and SSE serialization live in `backend/agent_*.py` modules.
 - `backend/tools/`: trusted database and web-search tools used by the agent.
@@ -110,6 +111,7 @@
 - Update the SDD/ADR when module boundaries or dependency direction changes.
 - Start user-visible, data-model, deployment, or architecture work from `docs/specs/template.md`.
 - Before a production migration, create and verify a database backup and document rollback.
+- Pushing to `main` deploys to production once CI passes, and a new `package.json` version is tagged and released. Push to `main` only when the user asks for a release or deploy; otherwise use a branch or `[skip ci]`.
 
 ## Verification
 
