@@ -22,6 +22,15 @@ async function updateWorker(page) {
   return withDeadline(() => page.evaluate(observeWorkerUpdate, {}), 20000, 'service worker update');
 }
 
+// SPEC-049: an activated newer shell only prompts; the page reloads after the user confirms.
+async function confirmAppUpdate(page, release) {
+  await page.locator('#app-update-notice').waitFor({ state: 'visible', timeout: 15000 });
+  assert.equal(await page.locator('#app-update-title').textContent(), '有新版本 v' + release);
+  assert.notEqual(await page.evaluate(() => window.__pwaRelease), release, 'detecting an update never reloads by itself');
+  await page.locator('#app-update-apply').click();
+  await page.waitForFunction(value => window.__pwaRelease === value, release, { timeout: 15000 });
+}
+
 async function assertShell(page, release) {
   await page.locator('#login-form').waitFor({ state: 'visible' });
   await page.locator('#app-boot').waitFor({ state: 'hidden' });
@@ -241,7 +250,7 @@ async function run() {
           // Migrate the frozen real v3.2.2 worker online before testing failure-safe future upgrades.
           legacy = false; release = 'fixture-a-safe';
           assert.equal(await updateWorker(page), 'activated');
-          await page.waitForFunction(() => window.__pwaRelease === 'fixture-a-safe', null, { timeout: 15000 });
+          await confirmAppUpdate(page, 'fixture-a-safe');
           await assertShell(page, 'fixture-a-safe');
           assert.ok(moduleOriginRequests > 0, 'native module actually requests an Origin variant');
           assert.equal(await page.evaluate(async () => {
@@ -304,7 +313,7 @@ async function run() {
           await page.waitForFunction(() => window.__workerUpdateTimeline?.length > 0);
           releaseCandidate(); candidateGate = null;
           assert.equal(await withDeadline(() => observing, 20000, 'already installing candidate'), 'activated');
-          await page.waitForFunction(() => window.__pwaRelease === 'fixture-d', null, { timeout: 15000 });
+          await confirmAppUpdate(page, 'fixture-d');
           await assertShell(page, 'fixture-d');
           const state = await page.evaluate(async () => {
             const names = await caches.keys();

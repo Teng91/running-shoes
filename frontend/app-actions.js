@@ -19,6 +19,8 @@ const UI_ACTIONS = Object.freeze({
     'refresh-restore': () => refreshAccountRestoreView(),
     'apply-restore': () => applyAccountRestore(),
     'export-account': element => exportAccountData(element.dataset.fromWorkspace === 'true'),
+    'apply-app-update': () => applyAppUpdate(),
+    'dismiss-app-update': () => dismissAppUpdate(),
     'toggle-theme': () => toggleTheme(),
     logout: () => handleLogout(),
     'reload-data': () => loadData(),

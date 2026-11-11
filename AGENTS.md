@@ -62,7 +62,7 @@
 - `frontend/app-lifecycle.js`: compatibility bridge and reset registration.
 - `frontend/app-dates.js`: calendar parsing, cross-day limits and draft-safe foreground refresh.
 - `frontend/app-dialogs.js`: modal semantics and keyboard/focus lifecycle.
-- `frontend/app-updates.js`: shell version diagnostics and explicit update confirmation.
+- `frontend/app-updates.js`: shell version diagnostics, open-app deployment checks (focus, visibility, reconnect, 30 min) and an update prompt that reloads only on confirmation (SPEC-049).
 - `frontend/app-boot.js`: startup loading, stylesheet readiness, timeout, and retry state.
 - `frontend/app-state.js`: shared browser state and presentation constants.
 - `frontend/app-api.js`: authenticated JSON and upload transport helpers.
