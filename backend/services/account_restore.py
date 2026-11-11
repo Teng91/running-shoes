@@ -8,7 +8,12 @@ from sqlalchemy import Text, cast, func
 from sqlalchemy.orm import Session
 
 from backend import models
-from backend.backup_contract import AccountBackup, backup_fingerprint, parse_backup
+from backend.backup_contract import (
+    MAX_BACKUP_BYTES,
+    AccountBackup,
+    backup_fingerprint,
+    parse_backup,
+)
 from backend.services.account_import import execute_import
 from backend.services.account_import_plan import RestoreMode, build_import_plan, summarize_import
 from backend.services.errors import Conflict, Invalid
@@ -17,7 +22,9 @@ from backend.services.transactions import write_transaction
 from backend.settings import Settings
 
 MAX_ACTIVE_PREVIEWS = 8
-MAX_PREVIEW_BYTES = 64 * 1024 * 1024
+# Stored previews are ASCII-escaped JSON, which can double Chinese text; three files'
+# worth always leaves room for one full-size preview per account.
+MAX_PREVIEW_BYTES = 3 * MAX_BACKUP_BYTES
 
 
 def preview_restore(db: Session, user_id: int, raw: bytes, config: Settings, mode: RestoreMode = "merge") -> dict:
@@ -27,14 +34,20 @@ def preview_restore(db: Session, user_id: int, raw: bytes, config: Settings, mod
     with write_transaction(db, user_id, reason="account.preview"):
         plan = build_import_plan(db, user_id, backup, mode)
         summary = summarize_import(plan, backup, config, mode)
+        # Serialize the validated models straight to JSON text and release them before
+        # rebuilding the stored payload, so two full Python copies never coexist.
+        archive_json = backup.model_dump_json()
+        del plan, backup
+        payload = {"mode": mode, "backup": json.loads(archive_json)}
+        del archive_json
         revision = db.query(models.User.data_revision).filter_by(id=user_id).scalar()
         now = datetime.now(UTC)
         db.query(models.RestorePreview).filter(models.RestorePreview.user_id == user_id,
                                                models.RestorePreview.expires_at < now).delete(synchronize_session=False)
         token = str(uuid4())
-        payload = {"mode": mode, "backup": backup.model_dump(mode="json")}
         count, size = db.query(func.count(), func.coalesce(func.sum(func.length(cast(models.RestorePreview.payload_json, Text))), 0)).filter(models.RestorePreview.user_id == user_id).one()
-        if count >= MAX_ACTIVE_PREVIEWS or size + len(json.dumps(payload, ensure_ascii=True).encode()) > MAX_PREVIEW_BYTES:
+        # ASCII-escaped JSON: its character count is its byte count.
+        if count >= MAX_ACTIVE_PREVIEWS or size + len(json.dumps(payload, ensure_ascii=True)) > MAX_PREVIEW_BYTES:
             raise Conflict("有效預覽數量或容量已達上限，請關閉其他預覽或稍後再試")
         db.add(models.RestorePreview(user_id=user_id, token=token, revision=revision,
                                     payload_hash=payload_hash(payload), payload_json=payload,

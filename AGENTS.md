@@ -41,7 +41,7 @@
 - `backend/services/run_identity.py`: user-scoped deletion tombstones (`run_tombstones`, never inferred from audit rows) and recovered source aliases; caller-owned transactions.
 - `backend/services/identifiers.py`: monotonic run/month primary-key allocation metadata.
 - `backend/migrations.py`: ordered SQLite schema upgrades and the current schema version; `scripts/rollback_schema_seven.sql` is the documented 7 → 6 rollback.
-- `backend/rate_limits.py`: SQLite fixed-window throttling for authentication and AI, consumed all-or-nothing on its own transaction with limits from app settings; never commits the request session.
+- `backend/rate_limits.py`: SQLite fixed-window throttling for authentication, AI and backup previews, consumed all-or-nothing on its own transaction with limits from app settings; never commits the request session.
 - `docs/architecture.md`: current SDD, module boundaries, diagrams, and evolution sequence.
 - `docs/testing-strategy.md`: test design, traceability matrix, and definition of done.
 - `backend/agent.py`: LLM and tool-loop runner; planning, dispatch, and SSE serialization live in `backend/agent_*.py` modules.

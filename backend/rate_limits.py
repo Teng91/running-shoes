@@ -1,4 +1,4 @@
-"""Shared request throttling for authentication and LLM-backed endpoints.
+"""Shared request throttling for authentication, LLM-backed endpoints and backup previews.
 
 Every limit is a fixed window stored in SQLite (``rate_limit_buckets``), so all
 workers share one budget. Limits come from the application's injected settings.
@@ -36,6 +36,8 @@ _AGENT_GLOBAL_DETAIL = "AI 服務目前忙碌，請稍後再試。"
 _REFRESH_USER_DETAIL = "模型列表剛更新過，請稍後再試。"
 _REFRESH_GLOBAL_DETAIL = "模型列表更新目前忙碌，請稍後再試。"
 _LOGIN_FAILURE_DETAIL = "此帳號登入失敗次數過多，請 15 分鐘後再試。"
+_RESTORE_USER_DETAIL = "備份預覽過於頻繁，請稍後再試。"
+_RESTORE_GLOBAL_DETAIL = "備份還原服務目前忙碌，請稍後再試。"
 
 
 @dataclass(frozen=True)
@@ -154,6 +156,17 @@ def enforce_model_refresh_limits(request: Request, user_id: int) -> None:
                seconds=settings.model_refresh_cooldown_seconds),
         Window("model-refresh-global", "global", settings.model_refresh_global_per_minute,
                _REFRESH_GLOBAL_DETAIL),
+    ))
+
+
+def enforce_restore_preview_limits(request: Request, user_id: int) -> None:
+    """Parsing an uploaded backup is the most memory-hungry request; bound how often it runs."""
+    settings, engine = _runtime(request)
+    consume(engine, (
+        Window("restore-preview-user", str(user_id), settings.restore_preview_rate_limit_per_minute,
+               _RESTORE_USER_DETAIL),
+        Window("restore-preview-global", "global", settings.restore_preview_global_rate_limit_per_minute,
+               _RESTORE_GLOBAL_DETAIL),
     ))
 
 

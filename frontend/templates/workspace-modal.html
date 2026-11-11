@@ -28,7 +28,7 @@
       <p id="workspace-export-status" role="status" aria-live="polite"></p>
       <div class="form-group"><label for="restore-mode">匯入模式</label><select id="restore-mode" data-change="preview-restore"><option value="merge">只新增，保留既有內容</option><option value="update">新增並更新同來源資料（v2/v3）</option></select></div>
       <p class="workspace-help">「只新增」不更新既有紀錄。「新增並更新」會覆寫同來源鞋款／跑步、檔案內月份調整、目標及月報，適合再次匯入雲端新版資料；仍保留額外資料與已刪除跑步，檔案中缺少的資料不會自動刪除，也不按同品牌型號猜測鞋款。請先下載接收帳號的備份。</p>
-      <div class="form-group"><label for="restore-file">選擇備份 JSON（最多 20 MB）</label><input id="restore-file" type="file" accept=".json,application/json" data-change="preview-restore"></div>
+      <div class="form-group"><label for="restore-file">選擇備份 JSON（最多 10 MB）</label><input id="restore-file" type="file" accept=".json,application/json" data-change="preview-restore"></div>
       <p id="restore-preview" role="status" aria-live="polite"></p>
       <button class="btn btn-edit" data-click="preview-restore">重新預覽</button>
       <button id="restore-refresh" class="btn btn-edit" hidden data-click="refresh-restore">重新載入資料</button>

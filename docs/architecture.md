@@ -640,6 +640,7 @@ flowchart LR
 - **限流**：`rate_limits.consume()` 把同一請求的所有視窗放在一個交易，滿了就整筆回滾；限額來自 `app.state.settings`，不再保留記憶體桶。
 - **稽核 trigger**：每次啟動依目前欄位重建，避免舊欄位清單使快照不完整或使寫入失敗。
 - **Strava**：`strava_import.parse_activity_dates()` 把 UTC 時間戳轉為 `clock.APP_TIMEZONE` 日期。`date_corrections()` 只修正仍停在舊 UTC 日期的既有活動，`services/strava_imports.py` 在匯入交易中移動日期與月跑量。
+- **v4.7.3**：`backup_contract` 的歷史上限由 `services/retention` 的保留常數推導，容量降為 10 MiB。`rate_limits.enforce_restore_preview_limits()` 限制預覽頻率；`create_app` 在 `app.state.restore_slot` 注入每個程序一個的還原鎖，`routers/workspace.restore_slot()` 讓預覽與套用逐一執行，忙碌時立即 429。
 - **v4.7.2**：router 不再自行查詢資料庫（架構測試把關）：清單查詢在 read model，readiness 探測在 `migrations.ready_schema_version()`。`llm.user_facing_error()` 是模型錯誤進入 HTTP／SSE 前的唯一出口，原始內容只寫 log。
 - **前端事件**：markup 只宣告 `data-click`／`data-change`／`data-input`／`data-submit`／`data-dblclick`／`data-keydown`。`frontend/app-actions.js` 在 document 委派，只執行最近的宣告元素；表單送出與 `<a>` 由動作接管預設行為。
 

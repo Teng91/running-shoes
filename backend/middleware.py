@@ -62,13 +62,14 @@ class StravaUploadLimitMiddleware:
                 return
             if not message.get("more_body", False):
                 break
-        replayed = False
+        # Hand the body over once and drop this reference, so the request does not keep
+        # an extra copy of an upload of up to max_bytes while it is being processed.
+        pending = [bytes(body)]
+        del body
 
         async def replay_receive() -> Message:
-            nonlocal replayed
-            if not replayed:
-                replayed = True
-                return {"type": "http.request", "body": bytes(body), "more_body": False}
+            if pending:
+                return {"type": "http.request", "body": pending.pop(), "more_body": False}
             return {"type": "http.disconnect"}
 
         await self.app(scope, replay_receive, send)

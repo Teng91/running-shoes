@@ -4,7 +4,7 @@ from dataclasses import replace
 import pytest
 
 from backend import models
-from backend.backup_contract import parse_backup
+from backend.backup_contract import MAX_BACKUP_BYTES, parse_backup
 from backend.services import account_restore, exports
 from backend.services.errors import Conflict, Invalid
 from unit_tests.workspace_helpers import add_run, add_shoe
@@ -89,7 +89,7 @@ def test_backup_validation_rejects_untrusted_or_inconsistent_archives(workspace,
         for _ in range(30):
             value = {"nested": value}
         payload["monthly_reports"] = [{"stats_json": value}]
-    raw = b" " * (20 * 1024 * 1024 + 1) if mutation == "oversize" else json.dumps(payload).encode()
+    raw = b" " * (MAX_BACKUP_BYTES + 1) if mutation == "oversize" else json.dumps(payload).encode()
     with pytest.raises(Invalid) as error:
         parse_backup(raw)
     assert "do-not-echo" not in str(error.value)
@@ -556,10 +556,10 @@ def test_export_contract_limits_and_explicit_history_omission(workspace):
         db.bulk_insert_mappings(models.AuditEvent, [history] * ARCHIVE_LIMITS['history'])
         db.commit()
         payload, _ = exports.build_account_export(db, db.get(models.User, 1))
-        assert len(parse_backup(json.dumps(payload).encode()).history) == 50_000
+        assert len(parse_backup(json.dumps(payload).encode()).history) == ARCHIVE_LIMITS['history']
         db.bulk_insert_mappings(models.AuditEvent, [history, {**history, 'user_id': 2}])
         db.commit()
-        with pytest.raises(Invalid, match=r'異動歷史.*50,000.*取消包含異動歷史'):
+        with pytest.raises(Invalid, match=rf"異動歷史.*{ARCHIVE_LIMITS['history']:,}.*取消包含異動歷史"):
             exports.build_account_export(db, db.get(models.User, 1))
         payload, name = exports.build_account_export(db, db.get(models.User, 1), include_history=False)
         assert parse_backup(json.dumps(payload).encode()).history == []
@@ -577,7 +577,7 @@ def test_export_contract_limits_and_explicit_history_omission(workspace):
         assert '_without_history.json' in response.headers['Content-Disposition']
         assert client.get('/api/export/account?include_history=false').status_code in (401, 403)
     with workspace.sessions() as db:
-        assert db.query(models.AuditEvent).filter_by(user_id=1).count() == 50_001
+        assert db.query(models.AuditEvent).filter_by(user_id=1).count() == ARCHIVE_LIMITS['history'] + 1
 
 
 def test_export_uses_import_byte_budget_and_rejects_unsafe_content(workspace, monkeypatch):
@@ -594,7 +594,7 @@ def test_export_uses_import_byte_budget_and_rejects_unsafe_content(workspace, mo
         monkeypatch.setattr(backup_contract, 'MAX_BACKUP_BYTES', size - 1)
         with pytest.raises(Invalid, match='未產生下載檔'):
             exports.build_account_export(db, db.get(models.User, 1), include_history=False, now=exported_at)
-        monkeypatch.setattr(backup_contract, 'MAX_BACKUP_BYTES', 20 * 1024 * 1024)
+        monkeypatch.setattr(backup_contract, 'MAX_BACKUP_BYTES', MAX_BACKUP_BYTES)
         db.add(models.MonthlyReport(user_id=1, year=2026, month=1, content_md='synthetic', model='mock',
                                      stats_json={'api_key': 'synthetic-never-export'}))
         db.commit()
@@ -981,3 +981,131 @@ def test_startup_discards_every_accounts_expired_previews_only(workspace, tmp_pa
         pass
     with workspace.sessions() as db:
         assert [(row.user_id, row.token) for row in db.query(models.RestorePreview)] == [(2, 'c' * 36)]
+
+
+def _bearer(workspace, name):
+    from backend.auth import create_access_token
+    return {'Authorization': 'Bearer ' + create_access_token({'sub': name}, secret_key=workspace.config.secret_key or None)}
+
+
+def test_archive_limits_follow_account_quotas_and_fit_a_full_real_account(workspace):
+    """v4.7.3: lower limits still accept the largest account the app itself can hold."""
+    from backend.backup_contract import ARCHIVE_LIMITS
+    from backend.services.retention import AUDIT_EVENTS_PER_USER, IMPORTED_AUDIT_EVENTS_PER_USER
+    from backend.settings import Settings
+    assert ARCHIVE_LIMITS['history'] == AUDIT_EVENTS_PER_USER + IMPORTED_AUDIT_EVENTS_PER_USER
+    assert ARCHIVE_LIMITS['runs'] >= Settings.from_env({}).max_runs_per_user
+    with pytest.raises(Invalid, match='10 MB'):
+        parse_backup(b' ' * (MAX_BACKUP_BYTES + 1))
+    with workspace.sessions() as db:
+        shoe = add_shoe(db, nickname='日常訓練鞋', size='US 9.5', price=3990, orig_price=4980,
+                        categories=['Daily', 'Tempo'])
+        for _ in range(3):
+            add_run(db, shoe.id, km=10.37)
+        archive_payload = exports.build_account_export(db, db.get(models.User, 1))[0]
+    # Real exported row shapes scaled to the account quotas: MAX_RUNS_PER_USER runs, every
+    # retained audit event (each logged run writes run, shoe and month events) and ten
+    # years of monthly reports.
+    shoes, runs_per_shoe, km = 500, 10, 10.37
+    archive_payload['shoes'] = [{**archive_payload['shoes'][0], 'id': i, 'mileage': round(runs_per_shoe * km, 2),
+                                 'baseline_mileage': 0} for i in range(1, shoes + 1)]
+    archive_payload['runs'] = [{**archive_payload['runs'][0], 'id': i, 'shoe_id': 1 + i % shoes, 'km': km,
+                                'strava_id': str(10**10 + i)} for i in range(1, shoes * runs_per_shoe + 1)]
+    run_date = archive_payload['runs'][0]['date']
+    archive_payload['monthly_mileages'] = [{'year': int(run_date[:4]), 'month': int(run_date[5:7]),
+                                            'km': round(shoes * runs_per_shoe * km, 2), 'adjustment_km': 0}]
+    templates = archive_payload['history']
+    archive_payload['history'] = [{**templates[i % len(templates)], 'id': i}
+                                  for i in range(1, ARCHIVE_LIMITS['history'] + 1)]
+    archive_payload['monthly_reports'] = [
+        {'year': 2016 + i // 12, 'month': i % 12 + 1, 'content_md': '本月跑量穩定成長。' * 330,
+         'model': 'openrouter/synthetic', 'stats_json': {'month_km': 120.5, 'runs': 12},
+         'created_at': None, 'updated_at': None} for i in range(120)]
+    raw = json.dumps(archive_payload, ensure_ascii=False, separators=(',', ':')).encode()
+    assert len(raw) <= MAX_BACKUP_BYTES
+    parsed = parse_backup(raw)
+    assert len(parsed.runs) == shoes * runs_per_shoe and len(parsed.history) == ARCHIVE_LIMITS['history']
+
+
+def test_restore_preview_is_rate_limited_per_account_and_globally(workspace, tmp_path):
+    """v4.7.3: uploads are parsed a bounded number of times; rejections store nothing."""
+    from fastapi.testclient import TestClient
+
+    from backend.app_factory import create_app
+    with workspace.sessions() as db:
+        raw = json.dumps(archive(db)).encode()
+    config = replace(workspace.config, restore_preview_rate_limit_per_minute=2,
+                     restore_preview_global_rate_limit_per_minute=3)
+    app = create_app(config, db_engine=workspace.engine, session_factory=workspace.sessions, frontend_dir=tmp_path)
+    with TestClient(app) as client:
+        def preview(name):
+            return client.post('/api/account-restore/preview', content=raw, headers=_bearer(workspace, name))
+        assert [preview('two').status_code for _ in range(2)] == [200, 200]
+        account_limited = preview('two')
+        assert account_limited.status_code == 429 and 'Retry-After' in account_limited.headers
+        assert account_limited.json()['detail'] == '備份預覽過於頻繁，請稍後再試。'
+        assert preview('one').status_code == 200
+        site_limited = preview('one')
+        assert site_limited.status_code == 429
+        assert site_limited.json()['detail'] == '備份還原服務目前忙碌，請稍後再試。'
+    with workspace.sessions() as db:
+        assert db.query(models.RestorePreview).filter_by(user_id=2).count() == 2
+        assert db.query(models.RestorePreview).filter_by(user_id=1).count() == 1
+
+
+def test_backup_preview_and_restore_run_one_at_a_time_per_process(workspace, tmp_path):
+    """v4.7.3: a second heavy restore request is refused at once without parsing or counting."""
+    from fastapi.testclient import TestClient
+
+    from backend.app_factory import create_app
+    with workspace.sessions() as db:
+        raw = json.dumps(archive(db)).encode()
+        token = account_restore.preview_restore(db, 2, raw, workspace.config)['token']
+    config = replace(workspace.config, restore_preview_rate_limit_per_minute=1)
+    app = create_app(config, db_engine=workspace.engine, session_factory=workspace.sessions, frontend_dir=tmp_path)
+    headers = _bearer(workspace, 'two')
+    apply_headers = {**headers, 'Idempotency-Key': 'restore-slot-apply-0001'}
+    with TestClient(app) as client:
+        assert app.state.restore_slot.acquire(blocking=False)
+        try:
+            busy = client.post('/api/account-restore/preview', content=raw, headers=headers)
+            assert busy.status_code == 429 and busy.headers['Retry-After'] == '5'
+            assert busy.json()['detail'] == '另一個備份還原正在處理，請稍後再試。'
+            assert client.post('/api/account-restore/apply', json={'token': token},
+                               headers=apply_headers).status_code == 429
+        finally:
+            app.state.restore_slot.release()
+        with workspace.sessions() as db:
+            assert db.query(models.RestorePreview).filter_by(user_id=2).count() == 1
+            assert db.query(models.MutationReceipt).filter_by(user_id=2).count() == 0
+        # The refused preview did not spend this account's one-per-minute budget.
+        assert client.post('/api/account-restore/preview', content=raw, headers=headers).status_code == 200
+        assert client.post('/api/account-restore/apply', json={'token': token},
+                           headers=apply_headers).status_code == 200
+    assert app.state.restore_slot.acquire(blocking=False)
+    app.state.restore_slot.release()
+
+
+def test_preview_stores_the_validated_archive_without_a_second_python_copy(workspace, monkeypatch):
+    """v4.7.3: the stored payload is unchanged though models are serialized straight to JSON."""
+    from backend.backup_contract import AccountBackup
+    with workspace.sessions() as db:
+        add_shoe(db, nickname='中文鞋款', price=1234.5)
+        payload = archive(db)
+        payload['monthly_reports'] = [{
+            'year': 2026, 'month': 1, 'content_md': '月報 **重點**', 'model': 'mock',
+            'stats_json': {'month_km': 10.37, 'nested': {'ratio': 0.1, 'values': [1, 2.5]}},
+            'created_at': '2026-02-01T08:30:00+08:00', 'updated_at': None,
+        }]
+        raw = json.dumps(payload, ensure_ascii=False).encode()
+        expected = {'mode': 'merge', 'backup': parse_backup(raw).model_dump(mode='json')}
+
+        def second_copy(*_args, **_kwargs):
+            raise AssertionError('preview must not build a second Python copy of the archive')
+        monkeypatch.setattr(AccountBackup, 'model_dump', second_copy)
+        preview = account_restore.preview_restore(db, 2, raw, workspace.config)
+        stored = db.query(models.RestorePreview).filter_by(user_id=2, token=preview['token']).one()
+        assert stored.payload_json == expected
+        monkeypatch.undo()
+        result = account_restore.apply_restore(db, 2, preview['token'], 'restore-json-copy-0001', workspace.config)
+        assert result['summary']['new_shoes'] == 2 and result['summary']['new_reports'] == 1
