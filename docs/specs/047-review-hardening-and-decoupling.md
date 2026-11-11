@@ -151,7 +151,7 @@ v4.7.0 上線後再審查發現：
 - [x] AC-19：Given 任何 router，When 檢查原始碼，Then 沒有 `.query(`／`.execute(`；搬出的清單查詢只回傳本人資料且排序不變。
 
 - [x] AC-20：Given 帳號配額內最大的真實資料（5,000 筆跑步、10,000 筆保留歷史、120 份月報），When 匯出並解析，Then 檔案在 10 MiB 內且可匯入；超過上限的檔案被拒絕，訊息依實際上限產生，歷史上限等於保留上限。
-- [x] AC-21：Given 同一帳號或全站在一分鐘內超過預覽次數，When 再上傳備份，Then 回 429 與 Retry-After，不解析、不儲存預覽，且被拒的請求不消耗其他視窗額度。
+- [x] AC-21：Given 同一帳號或全站在一分鐘內超過預覽次數，When 再上傳備份，Then 回 429 與 Retry-After，不解析、不儲存預覽，且被拒的請求不消耗其他視窗額度；預設值下，正常反覆選檔與切換匯入模式（每次都會重新預覽）不會被擋。
 - [x] AC-22：Given 同一程序正在處理預覽或還原，When 另一個預覽或套用請求到達，Then 立即回 429，不解析、不寫入、不消耗頻率額度；處理結束後可正常預覽與套用。
 - [x] AC-23：Given 一份含中文、巢狀統計與時區時間的備份，When 預覽，Then 暫存內容與原本 `model_dump(mode="json")` 結果相同，過程中不建立第二份 Python 模型副本，且可正常套用。
 
@@ -179,6 +179,6 @@ v4.7.0 上線後再審查發現：
 | AC-18 | `unit_tests/test_llm.py::test_provider_error_bodies_stay_in_the_server_log`、`unit_tests/test_llm.py::test_call_llm_stream_wraps_sdk_errors` |
 | AC-19 | `unit_tests/test_architecture_boundaries.py::test_routers_delegate_every_database_query`、`unit_tests/test_runs_api.py::test_shoe_month_and_report_read_models_return_only_this_account` |
 | AC-20 | `unit_tests/test_account_restore.py::test_archive_limits_follow_account_quotas_and_fit_a_full_real_account`、`unit_tests/test_account_restore.py::test_export_contract_limits_and_explicit_history_omission` |
-| AC-21 | `unit_tests/test_account_restore.py::test_restore_preview_is_rate_limited_per_account_and_globally` |
+| AC-21 | `unit_tests/test_account_restore.py::test_restore_preview_is_rate_limited_per_account_and_globally`、`unit_tests/test_account_restore.py::test_default_preview_limit_allows_a_normal_restore_session` |
 | AC-22 | `unit_tests/test_account_restore.py::test_backup_preview_and_restore_run_one_at_a_time_per_process` |
 | AC-23 | `unit_tests/test_account_restore.py::test_preview_stores_the_validated_archive_without_a_second_python_copy` |

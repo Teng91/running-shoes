@@ -1109,3 +1109,25 @@ def test_preview_stores_the_validated_archive_without_a_second_python_copy(works
         monkeypatch.undo()
         result = account_restore.apply_restore(db, 2, preview['token'], 'restore-json-copy-0001', workspace.config)
         assert result['summary']['new_shoes'] == 2 and result['summary']['new_reports'] == 1
+
+
+def test_default_preview_limit_allows_a_normal_restore_session(workspace, tmp_path):
+    """v4.7.3: every file or mode change previews again; ordinary use stays under the default."""
+    from fastapi.testclient import TestClient
+
+    from backend.app_factory import create_app
+    with workspace.sessions() as db:
+        raw = json.dumps(archive(db)).encode()
+    app = create_app(workspace.config, db_engine=workspace.engine, session_factory=workspace.sessions,
+                     frontend_dir=tmp_path)
+    headers = _bearer(workspace, 'two')
+    with TestClient(app) as client:
+        previous = None
+        # Pick a file, switch modes back and forth and re-pick files, like the panel does;
+        # each superseded preview is discarded as the browser does.
+        for mode in ['merge', 'update', 'update', 'merge', 'update', 'update', 'merge', 'update', 'merge', 'update']:
+            response = client.post(f'/api/account-restore/preview?mode={mode}', content=raw, headers=headers)
+            assert response.status_code == 200, response.json()
+            if previous:
+                assert client.delete('/api/account-restore/preview/' + previous, headers=headers).status_code == 200
+            previous = response.json()['token']

@@ -47,8 +47,9 @@ class Settings:
     max_strava_csv_bytes: int = 10 * 1024 * 1024
     max_strava_csv_rows: int = 50_000
     max_strava_import_history_per_user: int = 50
-    restore_preview_rate_limit_per_minute: int = 6
-    restore_preview_global_rate_limit_per_minute: int = 20
+    # Each file or mode change in the restore panel previews again; allow normal use.
+    restore_preview_rate_limit_per_minute: int = 20
+    restore_preview_global_rate_limit_per_minute: int = 60
 
     @property
     def is_production(self) -> bool:
@@ -92,9 +93,9 @@ class Settings:
             model_refresh_global_per_minute=_positive_int(env, "MODEL_REFRESH_GLOBAL_PER_MINUTE", 10),
             llm_max_output_tokens=max(256, int(env.get("LLM_MAX_OUTPUT_TOKENS", "4096"))),
             openrouter_default_model=env.get("OR_MODEL") or None,
-            restore_preview_rate_limit_per_minute=_positive_int(env, "RESTORE_PREVIEW_RATE_LIMIT_PER_MINUTE", 6),
+            restore_preview_rate_limit_per_minute=_positive_int(env, "RESTORE_PREVIEW_RATE_LIMIT_PER_MINUTE", 20),
             restore_preview_global_rate_limit_per_minute=_positive_int(
-                env, "RESTORE_PREVIEW_GLOBAL_RATE_LIMIT_PER_MINUTE", 20
+                env, "RESTORE_PREVIEW_GLOBAL_RATE_LIMIT_PER_MINUTE", 60
             ),
         )
 
