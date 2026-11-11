@@ -3,6 +3,7 @@
 from collections.abc import Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
+from threading import Lock
 from typing import cast
 
 from fastapi import FastAPI, Request
@@ -118,6 +119,8 @@ def create_app(
     app.state.db_engine = db_engine
     app.state.session_factory = selected_session_factory
     app.state.frontend_dir = selected_frontend
+    # Memory is per process: one backup preview or restore at a time in this process.
+    app.state.restore_slot = Lock()
 
     app.add_middleware(
         StravaUploadLimitMiddleware,

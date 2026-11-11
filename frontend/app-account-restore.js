@@ -32,7 +32,7 @@ async function previewAccountRestore() {
   const text = document.getElementById('restore-preview');
   document.getElementById('restore-apply').disabled = true;
   if (!file) { text.textContent = ''; return; }
-  if (file.size > 20 * 1024 * 1024) { text.textContent = '備份不可超過 20 MB'; return; }
+  if (file.size > 10 * 1024 * 1024) { text.textContent = '備份不可超過 10 MB'; return; }
   text.textContent = '正在驗證備份…';
   try {
     const raw = await file.text();

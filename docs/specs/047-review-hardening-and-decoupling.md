@@ -1,6 +1,6 @@
 # SPEC-047：程式審查修正、有界歷史與模組解耦
 
-- 狀態：Implemented（v4.7.1 修訂：AC-12～AC-16；v4.7.2 修訂：AC-17～AC-19）
+- 狀態：Implemented（v4.7.1 修訂：AC-12～AC-16；v4.7.2 修訂：AC-17～AC-19；v4.7.3 修訂：AC-20～AC-23）
 - Owner：Running Shoes maintainers
 - 關聯 issue／ADR：[ADR-0004](../adr/0004-request-reliability-and-release-gates.md)、[SPEC-019](019-reliable-requests-and-release-gates.md)、[SPEC-033](033-recovery-and-sync-identity.md)、[SPEC-036](036-security-hardening-and-portable-locks.md)
 
@@ -57,6 +57,15 @@ v4.7.0 上線後再審查發現：
 - OpenAI SDK 把供應商的完整錯誤內容放進例外訊息，AI 對話與月報再原樣顯示給使用者。
 - 跑鞋、月跑量、月報清單與 readiness 探測仍由 router 直接查詢資料庫。
 
+### v4.7.3 修訂
+
+第四次審查實測：一份 18.4 MiB 的備份（5 萬筆跑步＋5 萬筆歷史）預覽時 Python heap 峰值約 262 MiB，不含請求本體，而正式機只有 256 MB。
+
+- 備份上限（20 MB、5 萬筆跑步／歷史）是帳號本身能持有資料的 10 倍：帳號最多 5,000 筆跑步、保留 5,000＋5,000 筆歷史，配額內的完整匯出約 7 MB。超出配額的檢查要等整份解析完才做。
+- 預覽沒有頻率限制，也可同時處理多份；開放註冊的使用者可以反覆上傳捏造的大檔讓機器重啟。
+- 預覽在 Pydantic 模型仍存在時再 `model_dump()` 一份完整 Python 副本；上傳緩衝也在整個請求期間多留一份。
+- 每帳號暫存預覽可達 64 MiB。
+
 ## Non-goals
 
 - 不把 30 個前端 classic script 全面改成 ES modules；全域狀態維持現況，只解除 markup 與函式名稱的耦合。
@@ -87,6 +96,8 @@ v4.7.0 上線後再審查發現：
 
 - **v4.7.1**：`retention.prune_account_history()` 對本機（`imported=0`）與備份帶入（`imported=1`）的稽核紀錄分開保留各 5,000 筆。`account_restore.discard_expired_previews()` 由 `create_app` 的 lifespan 在啟動時呼叫，只刪已過期的暫存預覽。`goals.yearly_goal_km()` 統一推算、寫入與匯出的年目標。`settings.RATE_LIMIT_BUCKET_RETENTION_SECONDS` 同時限制冷卻設定與限流紀錄保留時間。
 
+- **v4.7.3**：`backup_contract.MAX_BACKUP_BYTES` 為 10 MiB，跑步上限 10,000（預設配額兩倍），歷史上限等於 `retention` 的本機＋帶入保留量（10,000）；錯誤訊息依上限產生。`account_restore.preview_restore()` 先算完摘要，以 `model_dump_json()` 直接序列化並釋放模型後才重建暫存內容；`MAX_PREVIEW_BYTES` 為三份備份上限。`rate_limits.enforce_restore_preview_limits()` 以 settings 的每帳號／全站視窗限制預覽。`create_app` 注入 `app.state.restore_slot`，`routers/workspace.restore_slot()` 讓預覽與套用在每個程序逐一執行，忙碌時不排隊、立即 429，且不消耗頻率額度。上傳 middleware 交出 body 後即釋放自己的緩衝。
+
 - **v4.7.2**：帳號備份檔名使用 `APP_TIMEZONE`。`llm.user_facing_error()` 依例外類別名稱與 HTTP 狀態回傳整理過的訊息，原始內容以 warning 寫進 `running_shoes.llm` log，模組仍不在啟動時載入 OpenAI SDK。清單查詢移到 `read_models/shoes.shoes_by_status`、`read_models/mileage.list_monthly_mileages` 與新的 `read_models/saved_reports.py`，readiness 探測移到 `migrations.ready_schema_version()`。
 
 ## Security and data isolation
@@ -108,6 +119,7 @@ v4.7.0 上線後再審查發現：
   2. 確認 Fly 的 SECRET_KEY 至少 32 bytes；README 的 `openssl rand -hex 32` 會產生 64 字元。
   3. Asset 4.7.0／shell v54／51 個 release assets。部署後執行匿名 `release-check`。
   4. 用自己的 Strava 匯出檔預覽一次，確認某筆清晨跑步的修正方向正確（例如 10/31 → 11/01）再匯入。
+  5. v4.7.3：Asset 4.7.3／shell v57，schema 7 不變。部署後下載一次自己的帳號備份並預覽，確認仍可匯入。回滾直接部署 v4.7.2 image，只是恢復舊上限與無頻率限制，資料不受影響。
 - **回滾方式與資料相容性**：
   1. 停止寫入並另做 schema 7 備份。
   2. 執行 [`scripts/rollback_schema_seven.sql`](../../scripts/rollback_schema_seven.sql)：重建空的 `run_creation_requests`，marker 改回 6。
@@ -138,6 +150,11 @@ v4.7.0 上線後再審查發現：
 - [x] AC-18：Given 模型供應商回傳限流、額度、驗證、找不到模型、5xx、逾時或連線錯誤，When AI 對話或月報失敗，Then 使用者只看到對應的整理訊息，不含原始內容與識別碼，詳細內容寫進伺服器 log。
 - [x] AC-19：Given 任何 router，When 檢查原始碼，Then 沒有 `.query(`／`.execute(`；搬出的清單查詢只回傳本人資料且排序不變。
 
+- [x] AC-20：Given 帳號配額內最大的真實資料（5,000 筆跑步、10,000 筆保留歷史、120 份月報），When 匯出並解析，Then 檔案在 10 MiB 內且可匯入；超過上限的檔案被拒絕，訊息依實際上限產生，歷史上限等於保留上限。
+- [x] AC-21：Given 同一帳號或全站在一分鐘內超過預覽次數，When 再上傳備份，Then 回 429 與 Retry-After，不解析、不儲存預覽，且被拒的請求不消耗其他視窗額度。
+- [x] AC-22：Given 同一程序正在處理預覽或還原，When 另一個預覽或套用請求到達，Then 立即回 429，不解析、不寫入、不消耗頻率額度；處理結束後可正常預覽與套用。
+- [x] AC-23：Given 一份含中文、巢狀統計與時區時間的備份，When 預覽，Then 暫存內容與原本 `model_dump(mode="json")` 結果相同，過程中不建立第二份 Python 模型副本，且可正常套用。
+
 ## Test traceability
 
 | Acceptance criterion | Named test / command |
@@ -161,3 +178,7 @@ v4.7.0 上線後再審查發現：
 | AC-17 | `unit_tests/test_clock.py::test_account_backup_filename_uses_the_application_timezone`、`unit_tests/test_clock.py::test_frontend_export_fallback_names_use_the_local_calendar_day` |
 | AC-18 | `unit_tests/test_llm.py::test_provider_error_bodies_stay_in_the_server_log`、`unit_tests/test_llm.py::test_call_llm_stream_wraps_sdk_errors` |
 | AC-19 | `unit_tests/test_architecture_boundaries.py::test_routers_delegate_every_database_query`、`unit_tests/test_runs_api.py::test_shoe_month_and_report_read_models_return_only_this_account` |
+| AC-20 | `unit_tests/test_account_restore.py::test_archive_limits_follow_account_quotas_and_fit_a_full_real_account`、`unit_tests/test_account_restore.py::test_export_contract_limits_and_explicit_history_omission` |
+| AC-21 | `unit_tests/test_account_restore.py::test_restore_preview_is_rate_limited_per_account_and_globally` |
+| AC-22 | `unit_tests/test_account_restore.py::test_backup_preview_and_restore_run_one_at_a_time_per_process` |
+| AC-23 | `unit_tests/test_account_restore.py::test_preview_stores_the_validated_archive_without_a_second_python_copy` |

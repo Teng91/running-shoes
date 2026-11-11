@@ -10,11 +10,20 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 from backend import schemas
 from backend.services.errors import Invalid
 from backend.services.fingerprints import payload_hash
+from backend.services.retention import AUDIT_EVENTS_PER_USER, IMPORTED_AUDIT_EVENTS_PER_USER
+from backend.settings import megabytes_label
 
 MAX_RUN_ALIASES = 50_000
-MAX_BACKUP_BYTES = 20 * 1024 * 1024
-ARCHIVE_LIMITS = {"shoes": 5000, "runs": 50_000, "monthly_mileages": 2412,
-                  "monthly_reports": 2412, "strava_imports": 1000, "history": 50_000}
+# Parsing a preview holds roughly ten times the file size in memory, and production
+# runs on 256 MB machines. A full real account (quota runs, all retained history and
+# ten years of monthly reports) exports at about 7 MB, so 10 MiB still fits every account.
+MAX_BACKUP_BYTES = 10 * 1024 * 1024
+ARCHIVE_LIMITS = {"shoes": 5000,
+                  # Twice the default MAX_RUNS_PER_USER (5,000).
+                  "runs": 10_000,
+                  "monthly_mileages": 2412, "monthly_reports": 2412, "strava_imports": 1000,
+                  # Retention never keeps more local plus imported events per account.
+                  "history": AUDIT_EVENTS_PER_USER + IMPORTED_AUDIT_EVENTS_PER_USER}
 
 
 class BackupShoe(schemas.ShoeCreate):
@@ -144,7 +153,7 @@ class AccountBackup(BaseModel):
 
 def parse_backup(raw: bytes) -> AccountBackup:
     if len(raw) > MAX_BACKUP_BYTES:
-        raise Invalid("備份不可超過 20 MB")
+        raise Invalid(f"備份不可超過 {megabytes_label(MAX_BACKUP_BYTES)}")
     try:
         value = json.loads(raw)
         _check_json(value)
