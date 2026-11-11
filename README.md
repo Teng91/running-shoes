@@ -40,7 +40,7 @@ running-shoes/
 ├── .github/
 │   ├── actions/browser-setup/ # 三個 browser jobs 共用的鎖版環境
 │   └── workflows/
-│       └── verify.yml    # Push／PR 自動執行完整 harness 驗證
+│       └── verify.yml    # Push／PR 完整 harness 驗證；push 到 main 再自動快照、部署、檢查與發版
 ├── .claude/
 │   └── settings.json     # Claude Code 完成回覆前執行確定性驗證的 Stop hook
 ├── backend/              # FastAPI 後端
@@ -866,9 +866,9 @@ Playwright／Chromium／WebKit 齊全時，也會執行版面測試。
 
 驗證失敗會把指令輸出送回 Claude 繼續修正。同一個 session 的同一份 diff 會重用本機快取，
 避免每次停止都重跑。Hook 不會呼叫其他模型、外部 API，或傳送提示、diff、原始碼與測試輸出。
-GitHub Actions 仍會在 push／pull request 執行 `verify`，並以三個可獨立重跑的 browser jobs 執行完整版面矩陣、真實 CRUD E2E 與 PWA 升級／離線測試；Dependabot 每月以單一 PR 合併 GitHub Actions 更新；Python 只接收安全性更新 PR，例行升級依下方 `uv pip compile --universal` 步驟手動重編鎖定檔（Dependabot 產生的鎖定檔會遺失 Windows 條件）。
+GitHub Actions 仍會在 push／pull request 執行 `verify`，並以三個可獨立重跑的 browser jobs 執行完整版面矩陣、真實 CRUD E2E 與 PWA 升級／離線測試；push 到 main 時再依序快照、部署、檢查並發版（見「日常開發流程、自動部署與發版」）；Dependabot 每月以單一 PR 合併 GitHub Actions 更新；Python 只接收安全性更新 PR，例行升級依下方 `uv pip compile --universal` 步驟手動重編鎖定檔（Dependabot 產生的鎖定檔會遺失 Windows 條件）。
 
-本次驗證基線為 Python **621 passed**、前端回歸測試 **166 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
+本次驗證基線為 Python **627 passed**、前端回歸測試 **166 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
 版面檢查涵蓋 WebKit／Chromium、亮／暗模式與 10 組直橫向尺寸，共 40 組設定，檢查四個功能分頁與月報、三個認證表單、圖表、全部彈窗、行內編輯、停用／錯誤及空資料狀態。
 
 主要表單、工具列與彈窗操作統一為 44px 控制項；桌面表格內的緊湊操作為 36px，手機至少 44px。
@@ -961,7 +961,37 @@ fly secrets set MIGRATION_PASSWORD="$MIGRATION_PASSWORD_VALUE"
 unset MIGRATION_PASSWORD_VALUE
 ```
 
-之後每次部署只要：
+### 日常開發流程、自動部署與發版（SPEC-048）
+
+之後不必在本機執行 `fly deploy`：**push 到 `main` 就會自動部署**。`.github/workflows/verify.yml` 依序執行，前一步沒過，後面就不跑：
+
+1. **測試**：`verify`（後端、前端、文件與安全檢查）、版面矩陣、CRUD E2E、PWA 與 diagnostics。三個 browser job 與部署後檢查遇到失敗會自動重跑一次，因為 CI 的 WebKit 偶爾回報內部錯誤；重跑通過仍會留下黃色警告，真正的錯誤兩次都會失敗。
+2. **部署前快照**：在 Fly 主機上用 `scripts/database_backup.py create` 建立並驗證一份資料庫快照（`/data/backups/predeploy`，保留最新 10 份）。快照失敗就不部署。快照留在 Fly 的 volume 上，不會下載到 GitHub。
+3. **部署**：`flyctl deploy --remote-only --ha=false`（SQLite 只能跑一台機器）。
+4. **部署後檢查**：匿名、唯讀的 `release-check`，比對正式站與這個 commit 的資產、API 與離線 shell。
+5. **發版**：讀 `package.json` 的 version（必須與 `frontend/assets.json` 相同）。還沒有 `v<版號>` 這個 tag 時，才打 tag 並以 `CHANGELOG.md` 對應版本的段落發 GitHub Release；版號沒改的 push 只部署、不發版。
+
+其他行為：
+
+- Pull request、其他分支與 tag 只跑測試，不會部署。
+- commit 訊息含 `[skip ci]` 時整個 workflow 都不跑。
+- main 的執行一次跑一個，正在部署的不會被取消；排隊時 GitHub 只保留最新的一個，中間那次會被跳過，最後部署的一定是最新的 main。
+- 想手動重新部署：GitHub → Actions → Verify and deploy → Run workflow（選 `main`）。偶發失敗時用 **Re-run failed jobs**，後面被跳過的部署與發版會跟著重跑。
+- 權限分開：只有部署 job 拿得到 `FLY_API_TOKEN`，而且不安裝、不執行專案套件；只有發版 job 能寫入 repo；測試與部署後檢查都沒有任何 secret。
+
+發新版時：修 bug 加第三碼、加功能加第二碼，同時改 `package.json`、`package-lock.json`（根目錄兩處）與 `frontend/assets.json`（含 `cache_name`），然後執行 `python3 scripts/build_frontend.py --write`，並在 `CHANGELOG.md` 寫好 `## [版號] - 日期` 段落。
+
+#### 一次性設定：FLY_API_TOKEN
+
+1. 建立只能部署這個 app 的 deploy token：Fly 網頁 → `running-shoes` → **Tokens** → 建立 deploy token；或用 Fly CLI 執行 `fly tokens create deploy -a running-shoes -n github-actions -x 8760h`。完整複製輸出的整串文字（以 `FlyV1 ` 開頭）。
+2. GitHub repo → **Settings → Secrets and variables → Actions → New repository secret**，名稱 `FLY_API_TOKEN`，值貼上剛才那串。
+3. 記下到期日（上例 8760h 為一年）。到期後部署 job 會在快照步驟失敗；照同樣步驟重新產生並覆蓋這個 secret 即可。
+
+沒有設定這個 secret 時，部署 job 會在第一步明確失敗，測試照常執行。
+
+#### 手動部署（備援）
+
+GitHub Actions 無法使用時，仍可在裝好 Fly CLI 的電腦上手動部署：
 
 ```bash
 # 先建立異地快照，驗證 checksum 與隔離還原；備份目錄必須位於 Git 外
@@ -974,6 +1004,8 @@ fly deploy
 python3 scripts/task.py release-check --base-url https://running-shoes.fly.dev
 ```
 
+自動部署前的快照只存在 Fly 的 volume 上，不能防範 volume 本身遺失；異地備份仍請定期用上面的 `offsite_backup.py` 下載到 Git 以外的私人位置。
+
 Fly 與 Docker 會呼叫 `/health/ready`；只有 SQLite 可讀且 schema version 正確才會回 200。
 所有 HTTP response 也會附上 `X-Request-ID`，server log 只記錄 method、path、status、耗時與
 request ID，不會記錄 Authorization、request body 或使用者資料。
@@ -981,7 +1013,9 @@ request ID，不會記錄 Authorization、request body 或使用者資料。
 部署架構：
 
 ```
-git push (local) ──→ GitHub ──→ fly deploy ──→ Fly.io Builder
+git push main ──→ GitHub Actions：測試 → 資料庫快照 → flyctl deploy
+                                                    │
+                                              Fly.io Builder
                                                     │
                                               Dockerfile 建置
                                                     │
