@@ -280,3 +280,7 @@ SPEC-032：合成資料驗證歷史筆數上限（v4.7.3 起 10,000／10,001）�
 ## SPEC-048 push 到 main 自動部署與發版
 
 [規格與具名案例](specs/048-push-to-main-deploy-and-release.md) 以文字解析 workflow：部署只在 main 且全部測試通過後執行、release-check 與發版依序在後；只有部署 job 取得 `FLY_API_TOKEN` 且不執行專案套件，只有發版 job 可寫入；部署前快照的遠端指令、資料庫路徑與成功訊息和 Dockerfile／`database_backup.py` 一致；實際執行發版腳本內嵌的 CHANGELOG 擷取，比對目前版本段落與缺段落的 commit 備援；main 執行序列化不取消；browser 與部署後檢查重跑一次並警告。實際部署由 main 上的 GitHub Actions 驗證。
+
+## SPEC-049 新版部署提示與主動偵測
+
+[規格與具名案例](specs/049-pwa-update-prompt.md) 以 Node 驗證不同版本只顯示提示、不自動重新載入、稍後與再次提示、確認後只重新載入一次；以假時間與事件驗證前景、焦點、連線恢復與 30 分鐘檢查、60 秒合併、隱藏與離線不檢查及失敗不拋錯。`frontend-pwa` 在 Chromium／WebKit 的舊版 worker 遷移與完整升級中，確認提示出現時仍是舊版，按下更新後才載入新 shell。

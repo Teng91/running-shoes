@@ -130,7 +130,7 @@ running-shoes/
 │   ├── app-inline-editors.js # 表格輸入 DOM、列快照與 session 清理
 │   ├── app-dates.js      # 日曆日期與跨日限制／恢復
 │   ├── app-dialogs.js    # 共用焦點、Tab、Escape 與彈窗語義
-│   ├── app-updates.js    # 版本資訊與不強制重載的 PWA 更新提示
+│   ├── app-updates.js    # 版本資訊、新部署偵測與確認後才重載的更新提示
 │   ├── app-actions.js    # data-* 介面動作的事件委派（不寫 inline handler）
 │   ├── app.js            # Dashboard 初始化與全域 dialog wiring
 │   ├── app-boot.js       # 啟動 loading、逾時與 stylesheet readiness
@@ -711,6 +711,14 @@ v3.10.3 使用 Asset 3.10.3／shell v38、schema 6、51 個 release assets。
 `registry.fly.io/running-shoes@sha256:bac44457f12adfde6473e9d9a973b330e1bf69eac7e44feb3fb6ed1f5a55429a`，
 不還原業務資料快照。發布驗證涵蓋 verify、40 組版面、雙引擎 CRUD／PWA、main/tag CI 及正式站匿名 release-check。
 
+### 新版部署提示（SPEC-049，v4.8.0）
+
+- App 開著時也會檢查有沒有新部署：回到前景、視窗取得焦點、網路恢復，以及每 30 分鐘一次（同時觸發的只算一次，隱藏或離線時不檢查）。
+- 偵測到新版時右下角（手機在底部分頁列上方）跳出「有新版本 v<版號>」，按「立即更新」才重新載入；按「稍後」先隱藏，下次開啟 App 就是新版。重新載入時表單草稿會保留，AI 對話會清除。
+- v4.0.0～v4.7.3 偵測到新版會直接重新載入；已開著 v4.7.3 的頁面升級到本版時仍會自動載入一次，之後改為提示。
+
+Asset 4.8.0／shell v58、51 個 release assets、schema 7 不變，可直接回滾至 v4.7.3 image。
+
 ### 備份還原上限與頻率限制（SPEC-047 修訂，v4.7.3）
 
 - 帳號備份 JSON 上限從 20 MB 降為 10 MB，跑步與異動歷史各從 50,000 筆降為 10,000 筆。帳號本身最多只能有 5,000 筆跑步（`MAX_RUNS_PER_USER` 預設）及 5,000＋5,000 筆保留歷史，配額內的完整帳號匯出約 7 MB，仍可下載與還原。`MAX_RUNS_PER_USER` 設超過 10,000 時，跑步數超過的帳號需改用管理員完整資料庫備份。
@@ -868,7 +876,7 @@ Playwright／Chromium／WebKit 齊全時，也會執行版面測試。
 避免每次停止都重跑。Hook 不會呼叫其他模型、外部 API，或傳送提示、diff、原始碼與測試輸出。
 GitHub Actions 仍會在 push／pull request 執行 `verify`，並以三個可獨立重跑的 browser jobs 執行完整版面矩陣、真實 CRUD E2E 與 PWA 升級／離線測試；push 到 main 時再依序快照、部署、檢查並發版（見「日常開發流程、自動部署與發版」）；Dependabot 每月以單一 PR 合併 GitHub Actions 更新；Python 只接收安全性更新 PR，例行升級依下方 `uv pip compile --universal` 步驟手動重編鎖定檔（Dependabot 產生的鎖定檔會遺失 Windows 條件）。
 
-本次驗證基線為 Python **627 passed**、前端回歸測試 **166 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
+本次驗證基線為 Python **627 passed**、前端回歸測試 **167 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
 版面檢查涵蓋 WebKit／Chromium、亮／暗模式與 10 組直橫向尺寸，共 40 組設定，檢查四個功能分頁與月報、三個認證表單、圖表、全部彈窗、行內編輯、停用／錯誤及空資料狀態。
 
 主要表單、工具列與彈窗操作統一為 44px 控制項；桌面表格內的緊湊操作為 36px，手機至少 44px。
@@ -970,6 +978,8 @@ unset MIGRATION_PASSWORD_VALUE
 3. **部署**：`flyctl deploy --remote-only --ha=false`（SQLite 只能跑一台機器）。
 4. **部署後檢查**：匿名、唯讀的 `release-check`，比對正式站與這個 commit 的資產、API 與離線 shell。
 5. **發版**：讀 `package.json` 的 version（必須與 `frontend/assets.json` 相同）。還沒有 `v<版號>` 這個 tag 時，才打 tag 並以 `CHANGELOG.md` 對應版本的段落發 GitHub Release；版號沒改的 push 只部署、不發版。
+
+部署後，開著 App 的使用者會在回到前景、取得焦點或 30 分鐘內看到「有新版本」提示，按「立即更新」即可（SPEC-049）。
 
 其他行為：
 
@@ -1097,6 +1107,8 @@ Machine 若已停止，先用 `fly machine start <id> -a running-shoes` 啟動�
 本機副本可應付 Fly Volume 故障，但不能同時抵抗本機遺失；未另外設定排程／第二儲存位置前，不宣稱有自動或多地備援。
 
 ### PWA 升級與離線邊界
+
+新 shell 完整安裝並啟用後，頁面只顯示「有新版本」提示，使用者按「立即更新」才重新載入；App 開著時也會在回到前景、取得焦點、網路恢復與每 30 分鐘檢查一次新部署（SPEC-049）。
 
 每次發布須一併更新 HTML 的 `app-asset-version`、資產 query revision 與 SW cache 名稱。
 安裝先檢查所有資源及 HTML revision，成功後才啟用；導覽不將新 HTML 塞入舊 cache。

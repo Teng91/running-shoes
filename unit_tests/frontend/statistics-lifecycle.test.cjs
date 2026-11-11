@@ -1,4 +1,4 @@
-const { runContext, test, assert, fs, vm, extract } = require('./helpers.cjs');
+const { runContext, test, assert, fs, vm, extract, htmlSource } = require('./helpers.cjs');
 
 function elements() {
   return new Proxy({}, { get: (target, id) => target[id] ||= {
@@ -128,20 +128,64 @@ test('SPEC-017 native lifecycle keeps cleaning after errors and rejects duplicat
   assert.doesNotMatch(extract('clearAuth'), /shoeModal|report-content|stravaPreview|resetAgentChat/);
 });
 
-test('SPEC-017 PWA automatically reloads when a newer shell takes control', () => {
+test('SPEC-049 a newer shell shows an update prompt and reloads only after confirmation', () => {
   const nodes = elements(), handlers = {}; let reloads = 0;
-  const context = vm.createContext({ document: { querySelector: () => ({ content: 'test-old' }), getElementById: id => nodes[id], readyState: 'loading' },
+  nodes['app-update-notice'].hidden = true;
+  const context = vm.createContext({
+    document: { querySelector: () => ({ content: 'test-old' }), getElementById: id => nodes[id], readyState: 'loading', addEventListener() {} },
     navigator: { serviceWorker: { addEventListener: (name, fn) => handlers[name] = fn } },
-    window: { addEventListener() {}, location: { reload: () => reloads++ } },
+    window: { addEventListener() {}, location: { reload: () => reloads++ } }, setInterval() {},
   });
-  vm.runInContext(extract('initializeAppUpdates'), context);
+  vm.runInContext(['initializeAppUpdates', 'showAppUpdate', 'applyAppUpdate', 'dismissAppUpdate'].map(extract).join('\n'), context);
   context.initializeAppUpdates();
   handlers.message({ data: { type: 'SHELL_VERSION', version: 'test-old' } });
-  assert.equal(reloads, 0);
+  assert.equal(nodes['app-update-notice'].hidden, true, 'the same shell is not an update');
   handlers.message({ data: { type: 'SHELL_VERSION', version: 'test-new' } });
-  assert.equal(reloads, 1);
-  handlers.message({ data: { type: 'SHELL_VERSION', version: 'test-new' } });
-  assert.equal(reloads, 1, 'a detected update triggers at most one reload');
+  assert.equal(nodes['app-update-notice'].hidden, false);
+  assert.equal(nodes['app-update-title'].textContent, '有新版本 vtest-new');
+  assert.equal(reloads, 0, 'detecting an update never reloads by itself');
+  context.dismissAppUpdate();
+  assert.equal(nodes['app-update-notice'].hidden, true);
+  handlers.message({ data: { type: 'SHELL_VERSION', version: 'test-newer' } });
+  assert.equal(nodes['app-update-title'].textContent, '有新版本 vtest-newer', 'a later deployment asks again');
+  assert.equal(nodes['app-update-notice'].hidden, false);
+  context.applyAppUpdate(); context.applyAppUpdate();
+  assert.equal(reloads, 1, 'confirming reloads exactly once');
+  assert.match(htmlSource, /id="app-update-apply" data-click="apply-app-update"/);
+  assert.match(htmlSource, /data-click="dismiss-app-update"/);
+});
+
+test('SPEC-049 an open app looks for new deployments on focus, visibility, reconnect and every 30 minutes', async () => {
+  const nodes = elements(), documentListeners = {}, windowListeners = {}, intervals = [];
+  let now = 1_000_000, updates = 0;
+  const registration = { update: async () => { updates++; } };
+  const page = { querySelector: () => ({ content: 'v1' }), getElementById: id => nodes[id], readyState: 'complete',
+    visibilityState: 'visible', addEventListener: (name, fn) => { documentListeners[name] = fn; } };
+  const network = { onLine: true, serviceWorker: { addEventListener() {}, register: async () => registration } };
+  const context = vm.createContext({ document: page, navigator: network, console,
+    window: { addEventListener: (name, fn) => { windowListeners[name] = fn; } },
+    setInterval: (fn, ms) => intervals.push({ fn, ms }), Date: { now: () => now } });
+  vm.runInContext(extract('initializeAppUpdates'), context);
+  context.initializeAppUpdates();
+  await new Promise(setImmediate);
+  assert.deepEqual(intervals.map(item => item.ms), [30 * 60 * 1000]);
+  windowListeners.focus();
+  assert.equal(updates, 0, 'registering just checked; a focus right after does not repeat it');
+  now += 61_000; windowListeners.focus();
+  assert.equal(updates, 1);
+  documentListeners.visibilitychange(); windowListeners.online();
+  assert.equal(updates, 1, 'events that fire together share one check');
+  now += 61_000; page.visibilityState = 'hidden'; documentListeners.visibilitychange();
+  assert.equal(updates, 1, 'a hidden app does not check');
+  page.visibilityState = 'visible'; network.onLine = false; windowListeners.online();
+  assert.equal(updates, 1, 'an offline app does not check');
+  network.onLine = true; windowListeners.online();
+  assert.equal(updates, 2, 'reconnecting checks');
+  now += 30 * 60 * 1000; intervals[0].fn();
+  assert.equal(updates, 3, 'the 30-minute timer checks');
+  registration.update = async () => { throw new Error('offline'); };
+  now += 61_000; documentListeners.visibilitychange();
+  await new Promise(setImmediate);
 });
 
 test('SPEC-017 paged run cards and calendar use the complete backend summary', () => {
