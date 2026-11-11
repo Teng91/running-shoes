@@ -289,9 +289,9 @@ MAX_RUNS_PER_USER=5000
 MODEL_REFRESH_COOLDOWN_SECONDS=60
 # 選填：全站每分鐘最多強制刷新模型清單次數（預設 10）
 MODEL_REFRESH_GLOBAL_PER_MINUTE=10
-# 選填：每個帳號／全站每分鐘最多備份還原預覽次數（預設 6／20）
-RESTORE_PREVIEW_RATE_LIMIT_PER_MINUTE=6
-RESTORE_PREVIEW_GLOBAL_RATE_LIMIT_PER_MINUTE=20
+# 選填：每個帳號／全站每分鐘最多備份還原預覽次數（預設 20／60）
+RESTORE_PREVIEW_RATE_LIMIT_PER_MINUTE=20
+RESTORE_PREVIEW_GLOBAL_RATE_LIMIT_PER_MINUTE=60
 # 選填：每次 LLM 回覆最多輸出 token 數（預設 4096，最低 256）
 LLM_MAX_OUTPUT_TOKENS=4096
 ```
@@ -714,7 +714,7 @@ v3.10.3 使用 Asset 3.10.3／shell v38、schema 6、51 個 release assets。
 ### 備份還原上限與頻率限制（SPEC-047 修訂，v4.7.3）
 
 - 帳號備份 JSON 上限從 20 MB 降為 10 MB，跑步與異動歷史各從 50,000 筆降為 10,000 筆。帳號本身最多只能有 5,000 筆跑步（`MAX_RUNS_PER_USER` 預設）及 5,000＋5,000 筆保留歷史，配額內的完整帳號匯出約 7 MB，仍可下載與還原。`MAX_RUNS_PER_USER` 設超過 10,000 時，跑步數超過的帳號需改用管理員完整資料庫備份。
-- 備份預覽每個帳號每分鐘最多 6 次、全站 20 次（`RESTORE_PREVIEW_RATE_LIMIT_PER_MINUTE`／`RESTORE_PREVIEW_GLOBAL_RATE_LIMIT_PER_MINUTE`）；每個伺服器程序一次只處理一個預覽或還原，其他請求立即回 429「請稍後再試」，不排隊。
+- 備份預覽每個帳號每分鐘最多 20 次、全站 60 次（選檔或切換匯入模式都會重新預覽；`RESTORE_PREVIEW_RATE_LIMIT_PER_MINUTE`／`RESTORE_PREVIEW_GLOBAL_RATE_LIMIT_PER_MINUTE`）；每個伺服器程序一次只處理一個預覽或還原，其他請求立即回 429「請稍後再試」，不排隊。
 - 原因：解析一份上傳的備份會用到檔案大小數倍的記憶體，舊上限下一份刻意做大的檔案就可能讓 256 MB 的機器記憶體不足而重啟；預覽也不再同時保留兩份完整副本。
 
 Asset 4.7.3／shell v57、51 個 release assets、schema 7 不變，可直接回滾至 v4.7.2 image（回滾後恢復舊上限與無頻率限制）。
@@ -868,7 +868,7 @@ Playwright／Chromium／WebKit 齊全時，也會執行版面測試。
 避免每次停止都重跑。Hook 不會呼叫其他模型、外部 API，或傳送提示、diff、原始碼與測試輸出。
 GitHub Actions 仍會在 push／pull request 執行 `verify`，並以三個可獨立重跑的 browser jobs 執行完整版面矩陣、真實 CRUD E2E 與 PWA 升級／離線測試；Dependabot 每月以單一 PR 合併 GitHub Actions 更新；Python 只接收安全性更新 PR，例行升級依下方 `uv pip compile --universal` 步驟手動重編鎖定檔（Dependabot 產生的鎖定檔會遺失 Windows 條件）。
 
-本次驗證基線為 Python **620 passed**、前端回歸測試 **166 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
+本次驗證基線為 Python **621 passed**、前端回歸測試 **166 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
 版面檢查涵蓋 WebKit／Chromium、亮／暗模式與 10 組直橫向尺寸，共 40 組設定，檢查四個功能分頁與月報、三個認證表單、圖表、全部彈窗、行內編輯、停用／錯誤及空資料狀態。
 
 主要表單、工具列與彈窗操作統一為 44px 控制項；桌面表格內的緊湊操作為 36px，手機至少 44px。
