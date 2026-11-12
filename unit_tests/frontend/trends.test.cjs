@@ -97,6 +97,76 @@ test('SPEC-038 rotation timeline names active shoes and calls out idle ones with
   assert.doesNotMatch(nodes['timeline-note'].textContent, /灰色/);
 });
 
+// The shoes panel draws two run-derived charts from their own reads. Real resource store,
+// cache hooks and panel bookkeeping; only the HTTP responses are held back.
+function shoesPanelContext() {
+  const nodes = elements();
+  const state = { panel: 'shoes', pending: [], urls: [] };
+  const timeline = { as_of: '2026-05-01', idle_days: 30, shoes: [
+    { shoe_id: 2, first_run_date: '2026-02-01', last_run_date: '2026-04-30', km: 30, run_count: 3, days_since_last_run: 1, idle: false },
+  ] };
+  const mix = { buckets: ['<5', '5–10', '10–15', '15–20', '≥20'],
+    shoes: [{ shoe_id: 2, counts: [1, 0, 0, 1, 1], runs: 3, average_km: 12, longest_km: 21 }] };
+  const noop = () => {};
+  const context = trendsContext(nodes, {
+    document: { getElementById: id => nodes[id], querySelector: () => ({ dataset: { panel: state.panel } }) },
+    shoes: [{ id: 2, brand: 'Mizuno', model: 'Rider', nickname: '' }], retiredShoes: [],
+    shoeName: () => 'Mizuno Rider', panelRevision: 0, currentTheme: 'light', localDateISO: () => '2026-05-01',
+    renderCards: noop, renderAlerts: noop, renderCategorySummary: noop, renderTable: noop, renderRetiredTable: noop,
+    renderSpendingCharts: noop, populateRunShoeSelects: noop, renderRunLog: noop, renderHomeSummary: noop,
+    selectedRunMonth: () => '2026-05', spendingSummary: null, spendingLoadRequestId: 0, spendingLoadPending: false,
+    goalProgressRequestId: 0,
+    apiGet: url => new Promise(resolve => {
+      state.urls.push(url);
+      state.pending.push(() => resolve(url.endsWith('shoe-timeline') ? timeline : mix));
+    }),
+  });
+  vm.runInContext(`const DAY_MS = 86400000; let shoeTimelineRequestId = 0, distanceMixRequestId = 0;
+    const DISTANCE_COLORS = ['#ef4444'];
+    function renderCharts() { renderShoeTimeline(); renderDistanceMix(); }
+    ${['invalidatePanels', 'renderActivePanel', 'renderShoeTimeline', 'renderDistanceMix'].map(extract).join('\n')}`, context);
+  const settle = () => new Promise(resolve => setImmediate(resolve));
+  // Mirrors loadData's applyResource: accept (cache hooks run), then render(resource).
+  context.arrive = async (resource, value) => {
+    const result = await context.resourceStore.read(resource, { loader: async () => value });
+    context.resourceStore.accept([result]);
+    context.invalidatePanels(resource);
+    context.renderActivePanel();
+    await settle();
+  };
+  context.respond = async () => {
+    do { state.pending.shift()?.(); await settle(); } while (state.pending.length);
+  };
+  return { context, state, nodes };
+}
+
+test('the shoes panel redraws its rotation timeline and distance mix when runs arrive mid-read', async () => {
+  for (const later of ['runs', 'goal']) {
+    const { context, state } = shoesPanelContext();
+    await context.arrive('shoes', [context.shoes, []]);
+    assert.deepEqual(state.urls, ['/analytics/shoe-timeline', '/analytics/shoe-distance-mix']);
+    // Accepting runs or the goal drops both cached reads while they are still in flight.
+    await context.arrive(later, later === 'runs' ? { page: { rows: [] }, summary: {}, requestId: 0 } : {});
+    await context.respond();
+    assert.ok(context.chartInstances.timeline, `${later}: the rotation timeline is drawn`);
+    assert.ok(context.chartInstances.distanceMix, `${later}: the distance mix is drawn`);
+  }
+});
+
+test('the shoes panel redraws its run charts after leaving the tab during their reads', async () => {
+  const { context, state } = shoesPanelContext();
+  await context.arrive('shoes', [context.shoes, []]);
+  state.panel = 'runs';
+  await context.respond();
+  assert.equal(context.chartInstances.timeline, undefined);
+  state.panel = 'shoes';
+  context.renderActivePanel();
+  await context.respond();
+  assert.ok(context.chartInstances.timeline, 'the rotation timeline is drawn on return');
+  assert.ok(context.chartInstances.distanceMix, 'the distance mix is drawn on return');
+  assert.equal(state.urls.length, 2, 'the finished reads are reused instead of fetched again');
+});
+
 test('SPEC-038 trend sections are present with an accessible scroll region and legend', () => {
   // SPEC-040: one shared selector drives the trends together with every other year view.
   assert.match(htmlSource, /<label for="year-select">年份<\/label>\s*<select id="year-select" class="year-select" data-change="year">/);

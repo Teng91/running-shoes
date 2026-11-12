@@ -70,7 +70,11 @@ def test_batch_forecast_is_scoped_bounded_and_matches_analysis(db, user_with_tok
     for output in [*active, *retired]:
         result = analytics.shoe_analytics(db, user.id, output.id, today=as_of)
         assert result is not None
-        for field in ("forecast_retirement_date", "forecast_source", "forecast_monthly_km"):
-            assert getattr(output, field) == result["lifecycle"][field] == batch[output.id][field]
+        analysis = {**result["lifecycle"], **result["usage"]}
+        for field in forecasting.SHOE_RESPONSE_FIELDS:
+            assert getattr(output, field) == analysis[field] == batch[output.id][field]
     assert active[0].forecast_retirement_date == "2027-04-17"
+    # SPEC-050: the shoe list carries the same 90-day monthly average as the analysis window.
+    assert active[0].actual_monthly_km_90_days == round(300 / 90 * 30.4375, 2)
+    assert retired[0].actual_monthly_km_90_days == 0
     assert retired[0].forecast_source == "planned_monthly_km"

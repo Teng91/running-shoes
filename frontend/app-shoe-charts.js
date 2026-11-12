@@ -1,4 +1,7 @@
 // Shoe lifecycle, cost, retirement timeline, and allocation charts.
+// Whole kilometres stay whole; averages show one decimal.
+const shareKm = value => (Number.isInteger(value) ? String(value) : Number(value).toFixed(1));
+
 // Keep the monthly allocation readable without a tall legend below the chart.
 const shoeShareLabels = {
   id: 'shoeShareLabels',
@@ -25,7 +28,7 @@ const shoeShareLabels = {
       const radius = (arc.innerRadius + arc.outerRadius) / 2;
       const x = arc.x + Math.cos(angle) * radius;
       const y = arc.y + Math.sin(angle) * radius;
-      const km = Number.isInteger(value) ? String(value) : value.toFixed(1);
+      const km = shareKm(value);
       const percentage = value / total * 100;
 
       ctx.font = '700 10px "Segoe UI", system-ui, sans-serif';
@@ -188,13 +191,16 @@ function renderCharts() {
     }
   });
 
-  const totalMonthlyKm = shoes.reduce((sum, s) => sum + s.monthly_km, 0);
+  // SPEC-050: each active shoe's actual monthly average over the last 90 days, from the
+  // backend forecast (the analysis window's 實際月均), not the planned monthly km.
+  const recentMonthlyKm = shoes.map(s => Number(s.actual_monthly_km_90_days) || 0);
+  const totalRecentKm = recentMonthlyKm.reduce((sum, km) => sum + km, 0);
   chartInstances.value = new Chart(document.getElementById('chart-value'), {
     type: 'doughnut',
     data: {
       labels,
       datasets: [{
-        data: shoes.map(s => s.monthly_km),
+        data: recentMonthlyKm,
         backgroundColor: colors,
         borderWidth: 0,
       }]
@@ -204,7 +210,7 @@ function renderCharts() {
       cutout: '60%',
       plugins: {
         legend: { display: false },
-        tooltip: { callbacks: { label: ctx => ctx.raw + ' km/月' } }
+        tooltip: { callbacks: { label: ctx => `近 90 天月均 ${shareKm(ctx.raw)} km` } }
       }
     },
     plugins: [shoeShareLabels, {
@@ -220,10 +226,10 @@ function renderCharts() {
         const y0 = cy - (h1 + gap + h2) / 2;
         ctx.fillStyle = textColor;
         ctx.font = '13px "Segoe UI", system-ui, sans-serif';
-        ctx.fillText('總月跑量', cx, y0);
+        ctx.fillText('近 90 天月均', cx, y0);
         ctx.fillStyle = mainTextColor;
         ctx.font = 'bold 24px "Segoe UI", system-ui, sans-serif';
-        ctx.fillText(totalMonthlyKm + ' km', cx, y0 + h1 + gap);
+        ctx.fillText(shareKm(totalRecentKm) + ' km', cx, y0 + h1 + gap);
         ctx.restore();
       }
     }]
@@ -256,7 +262,8 @@ async function renderShoeTimeline() {
     if (requestId === shoeTimelineRequestId) renderedPanels.delete('shoes');
     return;
   }
-  if (document.querySelector('.tab-panel.active')?.dataset.panel !== 'shoes') return;
+  // The chart was already cleared; draw it again when the tab returns.
+  if (document.querySelector('.tab-panel.active')?.dataset.panel !== 'shoes') { renderedPanels.delete('shoes'); return; }
   if (chartInstances.timeline) { chartInstances.timeline.destroy(); delete chartInstances.timeline; }
 
   const note = document.getElementById('timeline-note');
@@ -374,7 +381,8 @@ async function renderDistanceMix() {
     if (requestId === distanceMixRequestId) renderedPanels.delete('shoes');
     return;
   }
-  if (document.querySelector('.tab-panel.active')?.dataset.panel !== 'shoes') return;
+  // The chart was already cleared; draw it again when the tab returns.
+  if (document.querySelector('.tab-panel.active')?.dataset.panel !== 'shoes') { renderedPanels.delete('shoes'); return; }
   if (chartInstances.distanceMix) { chartInstances.distanceMix.destroy(); delete chartInstances.distanceMix; }
   const note = document.getElementById('distance-mix-note');
   const box = document.getElementById('distance-mix-canvas');

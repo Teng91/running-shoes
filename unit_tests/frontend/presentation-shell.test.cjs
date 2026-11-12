@@ -69,6 +69,35 @@ test('monthly shoe share draws values in the doughnut without a separate legend'
   assert.match(source, /percentage\.toFixed\(1\)/);
 });
 
+test('SPEC-050 the share doughnut shows each active shoe’s 90-day monthly average and their total', () => {
+  const configs = {};
+  const context = vm.createContext({
+    document: { getElementById: id => ({ id }) },
+    shoes: [
+      { id: 1, brand: 'Mizuno', model: 'Rider', monthly_km: 40, actual_monthly_km_90_days: 30 },
+      { id: 2, brand: 'PUMA', model: 'Nitro', monthly_km: 10, actual_monthly_km_90_days: 12.44 },
+      // No runs in 90 days (or a record cached before the field existed): no slice, planned km ignored.
+      { id: 3, brand: 'Adidas', model: 'Boston', monthly_km: 30 },
+    ],
+    chartInstances: {}, getThemeColor: (_, fallback) => fallback, shoeColor: () => '#123456',
+    progressColor: () => '#123456', fitChartLabel: label => label,
+    Chart: function(canvas, config) { configs[canvas.id] = config; this.destroy = () => {}; },
+  });
+  vm.runInContext(`${['calc', 'fmtDate'].map(extract).join('\n')}\n${fs.readFileSync('frontend/app-shoe-charts.js', 'utf8')}`, context);
+  context.renderShoeTimeline = context.renderDistanceMix = () => {};
+  context.renderCharts();
+  const doughnut = configs['chart-value'];
+  assert.deepEqual(doughnut.data.datasets[0].data, [30, 12.44, 0]);
+  assert.equal(doughnut.options.plugins.tooltip.callbacks.label({ raw: 12.44 }), '近 90 天月均 12.4 km');
+  const written = [];
+  const ctx = { save() {}, restore() {}, fillText: text => written.push(text) };
+  doughnut.plugins.find(plugin => plugin.id === 'centerText')
+    .afterDraw({ ctx, chartArea: { top: 0, bottom: 200, left: 0, right: 200 } });
+  assert.deepEqual(written, ['近 90 天月均', '42.4 km']);
+  assert.match(htmlSource, /<h3>近 90 天月均里程佔比<\/h3><div class="chart-canvas"><canvas id="chart-value">/);
+  assert.doesNotMatch(htmlSource, /月跑量佔比/);
+});
+
 test('run shoe distribution shows monthly percentage, mileage, and wear count', () => {
   const legend = {};
   const context = vm.createContext({

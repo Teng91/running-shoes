@@ -162,7 +162,6 @@ function renderTable() {
       <td class="editable numeric" data-dblclick="inline-edit" data-table="shoe-table" data-index="${i}" data-field="expected_mileage">${s.expected_mileage}</td>
       <td class="numeric">${fmtCostPerKm(c.expectedCost)}</td>
       <td class="numeric" style="color:${pc}">${fmtPct(c.lifeProgress)}</td>
-      <td class="editable numeric" data-dblclick="inline-edit" data-table="shoe-table" data-index="${i}" data-field="monthly_km">${s.monthly_km}</td>
       <td title="${s.forecast_source === 'recent_90_days' ? '依近 90 天實際使用' : '依計畫月跑量'}">${fmtDate(c.retireDate)}</td>
       <td>${esc(shoeCategories(s).join(', ') || '未分類')}</td>
       <td>

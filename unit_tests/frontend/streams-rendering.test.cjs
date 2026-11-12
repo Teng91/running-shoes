@@ -37,7 +37,7 @@ test('shoe retirement presentation uses only the backend date, including no fore
 });
 
 test('table numeric headers and shared component geometry have explicit presentation contracts', () => {
-  for (const [id, expected] of Object.entries({ 'shoe-table': [3,4,5,6,7,8], 'retired-table': [3,4,5,6,7], 'run-table': [1], 'spending-table': [4,5,6] })) {
+  for (const [id, expected] of Object.entries({ 'shoe-table': [3,4,5,6,7], 'retired-table': [3,4,5,6,7], 'run-table': [1], 'spending-table': [4,5,6] })) {
     const before = htmlSource.slice(0, htmlSource.indexOf(`<tbody id="${id}"`));
     const heads = [...before.slice(before.lastIndexOf('<thead>')).matchAll(/<th\b([^>]*)>/g)];
     assert.deepEqual(heads.flatMap((head, index) => head[1].includes('numeric') ? [index] : []), expected);
@@ -82,10 +82,12 @@ test('shoe purchase columns live only in spending details, with aligned table ro
     'renderTable', 'renderRetiredTable'].map(extract).join('\n'), context);
   context.renderTable();
   context.renderRetiredTable();
-  for (const [id, count] of [['shoe-table', 12], ['retired-table', 10]]) {
+  // SPEC-050: the planned monthly km is edited in the shoe form, not shown as a column.
+  for (const [id, count] of [['shoe-table', 11], ['retired-table', 10]]) {
     const headers = tableHeaders(id);
     assert.equal(headers.length, count);
-    assert.ok(['尺寸', '買價', '原價', '折數'].every(label => !headers.includes(label)));
+    assert.ok(['尺寸', '買價', '原價', '折數', '月跑量'].every(label => !headers.includes(label)));
+    assert.doesNotMatch(elements[id].innerHTML, /data-field="monthly_km"/);
     assert.equal((elements[id].innerHTML.match(/<td\b/g) || []).length, count);
     assert.doesNotMatch(elements[id].innerHTML, /UNIQUE-SIZE|\$2,400|\$4,000|60\.00%/);
     assert.match(elements[id].innerHTML, /\$24\.00/); // Cost/km stays on shoes.
