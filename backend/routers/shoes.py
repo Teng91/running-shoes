@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from backend import models, schemas
 from backend.auth import get_current_user
 from backend.dependencies import OperationKey, get_db, get_settings
-from backend.forecasting import forecasts_for_shoes
+from backend.forecasting import forecasts_for_shoes, shoe_response_fields
 from backend.read_models import shoes as shoe_reads
 from backend.routers.errors import service_errors
 from backend.services import shoes as shoes_service
@@ -23,14 +23,7 @@ def _shoe_outputs(db: Session, user_id: int, shoes: list[models.Shoe]) -> list[s
     forecasts = forecasts_for_shoes(db, user_id, shoes)
     return [
         schemas.ShoeOut.model_validate(shoe).model_copy(
-            update={
-                **shoe_metrics(shoe),
-                **{
-                    key: value
-                    for key, value in forecasts[shoe.id].items()
-                    if key.startswith("forecast_")
-                },
-            }
+            update={**shoe_metrics(shoe), **shoe_response_fields(forecasts[shoe.id])}
         )
         for shoe in shoes
     ]

@@ -284,3 +284,7 @@ SPEC-032：合成資料驗證歷史筆數上限（v4.7.3 起 10,000／10,001）�
 ## SPEC-049 新版部署提示與主動偵測
 
 [規格與具名案例](specs/049-pwa-update-prompt.md) 以 Node 驗證不同版本只顯示提示、不自動重新載入、稍後與再次提示、確認後只重新載入一次；以假時間與事件驗證前景、焦點、連線恢復與 30 分鐘檢查、60 秒合併、隱藏與離線不檢查及失敗不拋錯。`frontend-pwa` 在 Chromium／WebKit 的舊版 worker 遷移與完整升級中，確認提示出現時仍是舊版，按下更新後才載入新 shell。
+
+## SPEC-050 近 90 天月均里程佔比
+
+[規格與具名案例](specs/050-recent-shoe-share.md) 以 API 測試確認跑鞋清單的 `actual_monthly_km_90_days` 與單鞋分析、批次預估一致，且只計 user-scoped 的近 90 天紀錄；以 Node 執行真實的 `renderCharts()`，確認圓餅圖使用近 90 天月均而非計畫月跑量、中間顯示合計、缺值的鞋沒有扇形；表格測試確認現役表格移除「月跑量」欄與行內編輯，數值欄對齊。`frontend-layout` 與 `frontend-e2e` 驗證 40 組版面與 CRUD 流程的欄數。跑鞋頁在讀取途中收到跑步紀錄／目標資料或離開分頁時的重畫，由 `trends.test.cjs` 以真實 resource store 與 cache hook 驗證。

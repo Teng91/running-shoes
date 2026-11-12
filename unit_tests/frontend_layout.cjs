@@ -47,7 +47,7 @@ async function assertLayout(page, label) {
       const overflowing = [...document.querySelectorAll('body *')].filter(node => visible(node) && !node.closest('.table-wrap, pre') && (node.getBoundingClientRect().right > innerWidth + 1 || node.getBoundingClientRect().left < -1 || node.scrollWidth > node.clientWidth + 1));
       problems.push(`page overflow ${document.documentElement.scrollWidth}/${innerWidth}: ` + overflowing.slice(0, 8).map(node => node.id || node.className || node.tagName).join(', '));
     }
-    for (const [id, expected] of [['shoe-table', 12], ['retired-table', 10], ['spending-table', 9]]) {
+    for (const [id, expected] of [['shoe-table', 11], ['retired-table', 10], ['spending-table', 9]]) {
       const tbody = document.getElementById(id);
       if (!visible(tbody.closest('table'))) continue;
       const headers = [...tbody.closest('table').querySelectorAll('thead th')].map(th => th.textContent);
@@ -223,7 +223,7 @@ function alignmentIssues() {
       if (buttons.some(button => !near(box(button).height, innerWidth <= 760 ? 44 : 36))) issues.push('table action density');
     }
   }
-  for (const [id, numeric] of Object.entries({ 'shoe-table': [3,4,5,6,7,8], 'retired-table': [3,4,5,6,7], 'run-table': [1], 'spending-table': [4,5,6] })) {
+  for (const [id, numeric] of Object.entries({ 'shoe-table': [3,4,5,6,7], 'retired-table': [3,4,5,6,7], 'run-table': [1], 'spending-table': [4,5,6] })) {
     const table = document.getElementById(id).closest('table');
     if (visible(table) && numeric.some(index => !table.rows[0].cells[index].classList.contains('numeric'))) issues.push(`${id} numeric column contract`);
   }
@@ -339,7 +339,7 @@ async function run(engine, name) {
           expected_mileage: 800, monthly_km: 80, category: 'Daily', size: 'US 9',
           discount_percent: 80, cost_per_km: 33.33, expected_cost_per_km: 5,
           usage_percent: 15 + i * 1.25, remaining_mileage_km: 680 - i * 10,
-          forecast_retirement_date: '2027-06-01', forecast_source: 'recent_90_days', forecast_monthly_km: 80 }));
+          forecast_retirement_date: '2027-06-01', forecast_source: 'recent_90_days', forecast_monthly_km: 80, actual_monthly_km_90_days: 80 - i * 5 }));
         retiredShoes = [{ ...shoes[0], id: 20, is_retired: true }];
         runController.state.rows = shoes.map((shoe, i) => ({ id: i + 1, shoe_id: shoe.id, date: `2026-09-${String(i + 1).padStart(2, '0')}`, km: 18.67, source: 'manual' }));
         monthlyMileages = Array.from({ length: 12 }, (_, i) => ({ id: i + 1, year: 2026, month: i + 1, km: 120 + i }));

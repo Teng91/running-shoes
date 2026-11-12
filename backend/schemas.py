@@ -265,6 +265,7 @@ class ShoeOut(ShoeBase):
     forecast_retirement_date: str | None = None
     forecast_source: Literal["recent_90_days", "planned_monthly_km"] | None = None
     forecast_monthly_km: float = 0
+    actual_monthly_km_90_days: float = 0
     version: int = 0
     baseline_mileage: float = 0
     model_config = ConfigDict(from_attributes=True)

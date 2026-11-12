@@ -8,7 +8,7 @@ from pydantic import BaseModel, ValidationError
 from sqlalchemy.orm import Session
 
 from backend import models, schemas
-from backend.forecasting import forecasts_for_shoes
+from backend.forecasting import forecasts_for_shoes, shoe_response_fields
 from backend.services import goals, history, monthly, runs, shoes
 from backend.services.errors import Conflict, Invalid
 from backend.services.fingerprints import payload_hash
@@ -99,8 +99,7 @@ def _dispatch(db: Session, user_id: int, command: schemas.MutationCommand, confi
     response = handlers.output.model_validate(row).model_dump(mode="json")
     if entity == "shoe":
         response.update(shoe_metrics(row))
-        response.update({key: value for key, value in forecasts_for_shoes(db, user_id, [row])[row.id].items()
-                         if key.startswith("forecast_")})
+        response.update(shoe_response_fields(forecasts_for_shoes(db, user_id, [row])[row.id]))
     return response
 
 

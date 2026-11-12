@@ -39,6 +39,22 @@ def retirement_forecast(shoe: models.Shoe, km_90: float, as_of: date) -> ShoeFor
     }
 
 
+ShoeResponseField = Literal[
+    "forecast_retirement_date", "forecast_source", "forecast_monthly_km", "actual_monthly_km_90_days"
+]
+SHOE_RESPONSE_FIELDS: tuple[ShoeResponseField, ...] = (
+    "forecast_retirement_date",
+    "forecast_source",
+    "forecast_monthly_km",
+    "actual_monthly_km_90_days",
+)
+
+
+def shoe_response_fields(forecast: ShoeForecast) -> dict[str, object]:
+    """Forecast values copied onto shoe list and mutation responses."""
+    return {key: forecast[key] for key in SHOE_RESPONSE_FIELDS}
+
+
 def forecasts_for_shoes(
     db: Session, user_id: int, shoes: Sequence[models.Shoe], *, today: date | None = None
 ) -> dict[int, ShoeForecast]:

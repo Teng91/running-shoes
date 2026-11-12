@@ -53,10 +53,14 @@ test('SPEC-026 inline lifecycle cancels blur writes before removing account DOM'
 test('SPEC-026 resource views invalidate only their dependent panels', () => {
   const context = runContext({ renderedPanels: new Map(['shoes', 'monthly', 'runs'].map(name => [name, 'rendered'])) });
   vm.runInContext('let panelRevision = 0;\n' + extract('invalidatePanels'), context);
-  context.invalidatePanels('goal');
-  assert.deepEqual([...context.renderedPanels.keys()], ['shoes']);
+  context.invalidatePanels('monthly');
+  assert.deepEqual([...context.renderedPanels.keys()], ['shoes', 'runs']);
   assert.equal(vm.runInContext('panelRevision', context), 0);
-  context.invalidatePanels('shoes'); assert.equal(context.renderedPanels.size, 0);
+  // Runs and the goal drop the shoes panel's rotation timeline and distance mix reads.
+  for (const resource of ['shoes', 'runs', 'goal']) {
+    context.renderedPanels = new Map(['shoes', 'monthly', 'runs'].map(name => [name, 'rendered']));
+    context.invalidatePanels(resource); assert.equal(context.renderedPanels.size, 0, resource);
+  }
 });
 
 test('SPEC-026 derived reads coalesce and reject invalidated responses', async () => {

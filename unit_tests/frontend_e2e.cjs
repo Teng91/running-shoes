@@ -139,7 +139,7 @@ async function run() {
       await page.locator('#f-orig').fill('5000');
       await page.locator('#modal').getByRole('button', { name: '儲存' }).click();
       await page.locator('#shoe-table').getByText('Browser Runner v2', { exact: true }).waitFor();
-      assert.equal(await page.locator('#shoe-table tr').first().locator('td').count(), 12);
+      assert.equal(await page.locator('#shoe-table tr').first().locator('td').count(), 11);
       assert.equal(await page.locator('#shoe-table tr').first().locator('td').nth(3).textContent(), '40', 'editing purchase details preserves existing mileage');
       assert.equal(await page.locator('#shoe-table').getByText('US 9.5/27.5cm', { exact: true }).count(), 0);
       await assertPurchaseDetails(page, '使用中');
