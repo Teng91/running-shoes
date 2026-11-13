@@ -40,7 +40,7 @@ sequenceDiagram
 
 ```mermaid
 flowchart LR
-    Lock[package-lock + npm ci] --> E2E[Temp SQLite + real ASGI/CORS]
+    Lock[package-lock + npm ci] --> E2E[Temp SQLite + real ASGI]
     E2E --> Gate[task.py release-check]
     Manifest[assets.json + generated shell] --> Gate
     Gate --> Hash[Health / schema / API / hash / MIME]

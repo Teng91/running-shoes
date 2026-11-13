@@ -228,7 +228,7 @@ async function run() {
       await closeBrowser(null, safari);
     }
     // The same fail-closed command used after deployment runs against this real
-    // FastAPI/CORS server first, with an isolated DB and anonymous browsers.
+    // FastAPI server first, with an isolated DB and anonymous browsers.
     // Keep the event loop draining Uvicorn's log pipes while the gate fetches
     // the full shell; a synchronous child can deadlock a small OS pipe buffer.
     const releaseResult = await promisify(execFile)(python, ['scripts/task.py', 'release-check', '--base-url', baseUrl], {
