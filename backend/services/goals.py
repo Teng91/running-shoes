@@ -17,19 +17,20 @@ def update_goal(db: Session, user_id: int, payload: schemas.RunningGoalUpdate):
                 models.RunningGoal.user_id == user_id
             ).scalar()
             expected_version = int(current_version or 0)
+        yearly_km = goal_service.yearly_goal_km(payload.monthly_km)
         insert_statement = sqlite_insert(models.RunningGoal).values(
             user_id=user_id,
             version=1,
             start_year=payload.start_year,
             monthly_km=payload.monthly_km,
-            yearly_km=goal_service.yearly_goal_km(payload.monthly_km),
+            yearly_km=yearly_km,
         )
         statement = insert_statement.on_conflict_do_update(
             index_elements=["user_id"],
             set_={
                 "start_year": payload.start_year,
                 "monthly_km": payload.monthly_km,
-                "yearly_km": goal_service.yearly_goal_km(payload.monthly_km),
+                "yearly_km": yearly_km,
                 "version": models.RunningGoal.version + 1,
             },
             where=models.RunningGoal.version == expected_version,

@@ -111,3 +111,54 @@ def test_new_spec_traceability_rejects_file_only_and_missing_named_cases(tmp_pat
     assert spec_errors(tmp_path, path, source) == []
     assert any('named test' in error for error in spec_errors(tmp_path, path, source.replace('::test_real', '')))
     assert any('missing named test' in error for error in spec_errors(tmp_path, path, source.replace('::test_real', '::test_missing')))
+
+
+def test_readme_tree_parser_builds_nested_paths_and_ignores_comments():
+    from scripts.document_contracts import readme_tree_paths
+
+    readme = (
+        "# Title\n\n## 目錄結構\n\n```\nrepo/\n"
+        "├── backend/              # API\n"
+        "│   ├── main.py           # entry\n"
+        "│   └── tools/\n"
+        "│       └── search.py# no space before the comment\n"
+        "└── README.md\n```\n\n## Next\n\n```\n├── ignored.py\n```\n"
+    )
+    assert readme_tree_paths(readme) == {
+        "backend/", "backend/main.py", "backend/tools/", "backend/tools/search.py", "README.md",
+    }
+
+
+def test_inventory_rejects_unlisted_modules_stale_entries_and_unplaced_sdd_modules(tmp_path):
+    from scripts.document_contracts import inventory_errors
+
+    for name in ("backend/listed.py", "backend/new_module.py", "frontend/app-new.js", "scripts/tool.cjs"):
+        (tmp_path / name).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / name).write_text("", encoding="utf-8")
+    (tmp_path / "backend" / "__init__.py").write_text("", encoding="utf-8")
+    (tmp_path / "backend" / "settings.py").write_text(
+        'a = env.get("DOCUMENTED_VAR", "")\nb = _positive_int(env, "HIDDEN_LIMIT", 3)\n', encoding="utf-8"
+    )
+    (tmp_path / "README.md").write_text(
+        "`DOCUMENTED_VAR` is set.\n\n"
+        "## 目錄結構\n\n```\nrepo/\n├── backend/\n│   ├── listed.py\n│   ├── settings.py\n│   └── removed.py\n"
+        "└── scripts/\n    └── tool.cjs\n```\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "architecture.md").write_text(
+        "`backend/listed.py`, `settings.py` and `tool.cjs`", encoding="utf-8"
+    )
+    assert inventory_errors(tmp_path) == [
+        "README.md: environment variable HIDDEN_LIMIT read by backend/settings.py is undocumented",
+        "README.md: 目錄結構 does not list backend/new_module.py",
+        "README.md: 目錄結構 does not list frontend/app-new.js",
+        "README.md: 目錄結構 lists a path that does not exist: backend/removed.py",
+        "docs/architecture.md: the SDD does not place backend/new_module.py",
+        "docs/architecture.md: the SDD does not place frontend/app-new.js",
+    ]
+
+
+def test_current_readme_tree_and_sdd_place_every_module():
+    from scripts.document_contracts import inventory_errors
+    assert inventory_errors(check_docs.ROOT) == []

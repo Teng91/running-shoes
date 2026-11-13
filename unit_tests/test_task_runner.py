@@ -80,11 +80,11 @@ def test_browser_ci_pins_runtime_and_preserves_failure_diagnostics():
     import json
 
     root = Path(__file__).resolve().parents[1]
-    package = json.loads((root / "package.json").read_text())
-    lock = json.loads((root / "package-lock.json").read_text())
+    package = json.loads((root / "package.json").read_text(encoding="utf-8"))
+    lock = json.loads((root / "package-lock.json").read_text(encoding="utf-8"))
     version = package["devDependencies"]["playwright"]
     assert lock["packages"]["node_modules/playwright"]["version"] == version
-    workflow = (root / ".github/workflows/verify.yml").read_text()
+    workflow = (root / ".github/workflows/verify.yml").read_text(encoding="utf-8")
     for gate in ("frontend-layout", "frontend-e2e", "frontend-pwa"):
         browser_job = re.search(r'^  ' + gate + r':\n(.*?)(?=^  [a-z]|\Z)', workflow, re.M | re.S)[1]
         assert f"image: mcr.microsoft.com/playwright:v{version}-noble" in browser_job
@@ -95,13 +95,13 @@ def test_browser_ci_pins_runtime_and_preserves_failure_diagnostics():
         assert "--with-deps" not in browser_job
         assert f"python scripts/task.py {gate}" in browser_job
         assert "include-hidden-files: true" in browser_job
-    setup = (root / '.github/actions/browser-setup/action.yml').read_text()
+    setup = (root / '.github/actions/browser-setup/action.yml').read_text(encoding="utf-8")
     assert 'cache: pip' not in setup
     assert 'python -m pip install --require-hashes' in setup
 
 
 def test_diagnostics_roundtrip_requires_capture_upload_download_and_content_verification():
-    source = (Path(__file__).resolve().parents[1] / '.github/workflows/verify.yml').read_text()
+    source = (Path(__file__).resolve().parents[1] / '.github/workflows/verify.yml').read_text(encoding="utf-8")
     capture = source.split('  frontend-layout:', 1)[1].split('  diagnostics-roundtrip:', 1)[0]
     download = source.split('  diagnostics-roundtrip:', 1)[1]
     assert 'python scripts/task.py diagnostics-generate' in capture
@@ -143,7 +143,7 @@ def test_downloaded_diagnostics_validate_checksums_trace_contents_and_safe_paths
 
 def test_browser_jobs_are_independent_and_keep_timeout_diagnostics():
     root = Path(__file__).resolve().parents[1]
-    source = (root / '.github/workflows/verify.yml').read_text()
+    source = (root / '.github/workflows/verify.yml').read_text(encoding="utf-8")
     for gate in ('frontend-layout', 'frontend-e2e', 'frontend-pwa'):
         body = re.search(r'^  ' + gate + r':\n(.*?)(?=^  [a-z]|\Z)', source, re.M | re.S)[1]
         assert 'needs:' not in body

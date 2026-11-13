@@ -2,6 +2,7 @@
 <html lang="zh-TW">
 <head>
 <meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="{{content_security_policy}}">
 <meta name="app-asset-version" content="{{asset_version}}">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>跑鞋追蹤 Dashboard</title>
@@ -37,7 +38,28 @@ body { margin: 0; opacity: 1 !important; }
 @keyframes app-boot-critical-run { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
 @media (prefers-reduced-motion: reduce) { .app-boot { transition: none; } .app-boot-spinner::after { animation: none; width: 100%; opacity: .45; } }
 </style>
-<link id="app-styles" rel="preload" href="/styles.css?v={{asset_version}}" as="style" onload="this.onload=null;this.rel='stylesheet';this.dataset.ready='true';window.dispatchEvent(new Event('appstylesready'))">
+<link id="app-styles" rel="preload" href="/styles.css?v={{asset_version}}" as="style">
+<script>
+// Non-blocking stylesheet: apply the preload once it arrives. A script rather
+// than an onload attribute, so the page CSP can allow it by hash (SPEC-054).
+(function () {
+  var link = document.getElementById('app-styles');
+  var applied = false;
+  function apply() {
+    if (applied) return;
+    applied = true;
+    link.rel = 'stylesheet';
+    link.dataset.ready = 'true';
+    window.dispatchEvent(new Event('appstylesready'));
+  }
+  link.addEventListener('load', apply);
+  // The parser may yield after the <link>; a preload that already finished has
+  // fired its load event, so apply it now instead of waiting forever.
+  try {
+    if (performance.getEntriesByName(link.href).some(function (entry) { return entry.responseEnd > 0; })) apply();
+  } catch (error) {}
+})();
+</script>
 <noscript><link rel="stylesheet" href="/styles.css?v={{asset_version}}"></noscript>
 </head>
 <body>

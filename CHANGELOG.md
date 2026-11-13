@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+## [4.12.0] - 2026-11-13
+
+### Security
+- 頁面加上嚴格的 Content-Security-Policy（SPEC-054）：只允許同源 script，以及建置時以 SHA-256 雜湊放行的三段啟動 script，inline 事件屬性、`eval` 與外部 script 都會被擋下。樣式表上的 inline `onload` 改為可雜湊的 script；離線頁改用不需 script 的「重新連線」連結。
+- 所有回應加上 `X-Content-Type-Options: nosniff`、`X-Frame-Options: DENY`／`frame-ancestors 'none'`、`Referrer-Policy: same-origin`、`Cross-Origin-Opener-Policy: same-origin` 與 `Permissions-Policy`；`.js`／`.mjs` 固定以 `text/javascript` 提供。
+- 移除 `allow_origins=["*"]` 的 CORS 設定，API 只接受同源呼叫。
+- 正式的認證只用 app 注入的密鑰解碼，不再有退回環境預設密鑰的簽章 helper（SPEC-053）。
+
+### Changed
+- `docs-check` 會檢查 README 目錄樹列出每個後端／前端模組與 script、SDD 安排每個應用模組、README 寫了每個執行環境變數（SPEC-053）。README 補上 `OR_MODEL`、`ENVIRONMENT`、`DB_DIR`、`DATABASE_URL`、`FRONTEND_DIR` 與 `FLY_APP_NAME` 的說明。
+- 瀏覽器 E2E、40 組版面與部署後 release-check 遇到任何 CSP 違規都會失敗。
+- 合併重複的 legacy tool-call 掃描、月跑量查詢與 schema 驗證器，行為不變。
+
+### Fixed
+- 在 Windows（CRLF checkout、cp950、Python 3.11）上 5 個測試失敗：前端的 SPEC-052 圖示斷言，以及讀 workflow 與產生中文 release notes 的 Python 測試。共用 helper 改以 LF 讀取來源，Python 測試一律以 UTF-8 讀寫。Asset 4.12.0／shell v62，schema 7 不變。
+
 ## [4.11.0] - 2026-11-13
 
 ### Changed

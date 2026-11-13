@@ -16,7 +16,7 @@ from fastapi.testclient import TestClient
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from backend import llm, models, rate_limits, schemas
-from backend.auth import create_access_token, get_password_hash
+from backend.credentials import get_password_hash
 from backend.dependencies import get_db
 from backend.main import app
 from backend.models import MonthlyMileage, Shoe
@@ -28,6 +28,7 @@ from backend.routers.monthly import (
 )
 from backend.routers.runs import create_run, delete_run, update_run
 from backend.routers.shoes import create_shoe, delete_shoe, update_shoe
+from unit_tests.token_helpers import create_access_token
 
 
 @pytest.fixture
@@ -766,7 +767,7 @@ def test_static_asset_and_non404_http_errors(client):
 
     service_worker = client.get("/service-worker.js")
     assert service_worker.status_code == 200
-    assert "running-shoes-shell-v61" in service_worker.text
+    assert "running-shoes-shell-v62" in service_worker.text
 
     agent_script = client.get("/app-agent.js")
     assert agent_script.status_code == 200

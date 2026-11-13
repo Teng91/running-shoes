@@ -7,9 +7,43 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from backend.settings import megabytes_label
 
+# Applied to every HTTP response (SPEC-054). The page's script/style policy is a
+# build-time <meta> CSP in index.html because it carries hashes of the shell's
+# inline scripts; these header-only directives cannot be delivered by <meta>.
+SECURITY_HEADERS: tuple[tuple[bytes, bytes], ...] = (
+    (b"content-security-policy", b"frame-ancestors 'none'; base-uri 'none'; object-src 'none'; form-action 'self'"),
+    (b"x-content-type-options", b"nosniff"),
+    (b"x-frame-options", b"DENY"),
+    (b"referrer-policy", b"same-origin"),
+    (b"cross-origin-opener-policy", b"same-origin"),
+    (b"permissions-policy", b"camera=(), microphone=(), geolocation=(), payment=(), usb=()"),
+)
 
-class StravaUploadLimitMiddleware:
-    """Reject oversized Strava multipart bodies before form parsing/spooling."""
+
+class SecurityHeadersMiddleware:
+    """Add browser hardening headers without overriding ones a response already set."""
+
+    def __init__(self, app: ASGIApp):
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        async def send_with_security_headers(message: Message) -> None:
+            if message["type"] == "http.response.start":
+                headers = list(message.get("headers", []))
+                present = {name.lower() for name, _value in headers}
+                headers.extend(item for item in SECURITY_HEADERS if item[0] not in present)
+                message = {**message, "headers": headers}
+            await send(message)
+
+        await self.app(scope, receive, send_with_security_headers)
+
+
+class UploadLimitMiddleware:
+    """Reject oversized Strava CSV and backup-restore bodies before form parsing/spooling."""
 
     _paths: ClassVar[frozenset[str]] = frozenset({
         "/api/runs/import/strava",

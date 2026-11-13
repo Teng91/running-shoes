@@ -11,11 +11,11 @@ from scripts.build_frontend import FRONTEND, ROOT, shell_asset_paths
 
 
 def fixture_fetcher():
-    manifest = json.loads((FRONTEND / "assets.json").read_text())
+    manifest = json.loads((FRONTEND / "assets.json").read_text(encoding="utf-8"))
     assets = {url: name for url, name in shell_asset_paths(manifest)}
     assets["/service-worker.js"] = "service-worker.js"
     contract = {}
-    for entry in json.loads((ROOT / "unit_tests/api_contract.json").read_text()):
+    for entry in json.loads((ROOT / "unit_tests/api_contract.json").read_text(encoding="utf-8")):
         method, path = entry.split(" ", 1)
         contract.setdefault(path, {})[method.lower()] = {}
 
@@ -34,7 +34,7 @@ def fixture_fetcher():
 
 def test_release_check_accepts_only_matching_complete_public_shell():
     result = release_check.check_release(fixture_fetcher())
-    expected_version = json.loads((FRONTEND / "assets.json").read_text())["version"]
+    expected_version = json.loads((FRONTEND / "assets.json").read_text(encoding="utf-8"))["version"]
     assert result["version"] == expected_version
     assert result["assets"] == 51
 
@@ -59,7 +59,7 @@ def test_release_check_fails_closed_on_broken_deployments(failure):
         if failure == "auth" and path.startswith("/api/runs/year-summary"):
             status = 200
         if failure == "version" and path == "/":
-            expected_version = json.loads((FRONTEND / "assets.json").read_text())["version"]
+            expected_version = json.loads((FRONTEND / "assets.json").read_text(encoding="utf-8"))["version"]
             body = body.replace(f'content="{expected_version}"'.encode(), b'content="0.0.0"')
         if failure == "module-mime" and path.startswith("/runtime/feature-lifecycle.mjs"):
             headers = {"Content-Type": "text/html"}

@@ -8,7 +8,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from backend.app_factory import lifespan
-from backend.auth import get_password_hash, verify_password
+from backend.credentials import get_password_hash, verify_password
 from backend.database import Base
 from backend.migrations import run_startup_migrations
 from backend.models import MonthlyMileage, Shoe, User

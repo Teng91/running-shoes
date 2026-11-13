@@ -5,7 +5,7 @@ const { chromium, webkit } = require('playwright');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { startArtifacts, saveFailure, closeBrowser, withDeadline } = require('../scripts/browser_artifacts.cjs');
+const { startArtifacts, saveFailure, closeBrowser, withDeadline, trackCspViolations } = require('../scripts/browser_artifacts.cjs');
 
 async function selectTab(page, name) {
   const toggle = page.locator('.mobile-menu-toggle');
@@ -238,6 +238,7 @@ async function run(engine, name) {
         ...(name === 'chromium' && process.env.PLAYWRIGHT_CHROMIUM_CHANNEL ? { channel: process.env.PLAYWRIGHT_CHROMIUM_CHANNEL } : {}) });
       page = await browser.newPage({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, locale: 'zh-TW' });
       await startArtifacts(page.context());
+      const cspViolations = await trackCspViolations(page.context());
       const errors = [];
       let allowBootScript;
       const bootScriptGate = new Promise(resolve => { allowBootScript = resolve; });
@@ -515,6 +516,7 @@ async function run(engine, name) {
         await assertLayout(page, `${name} ${action}`);
       }
       assert.deepEqual(errors, [], 'browser JavaScript errors');
+      assert.deepEqual(cspViolations, [], 'Content-Security-Policy violations (SPEC-054)');
     }, 300000, 'layout engine ' + name);
   } catch (error) {
     await saveFailure(page?.context(), page, 'layout-' + name, error);

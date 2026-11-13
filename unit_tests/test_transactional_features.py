@@ -11,9 +11,9 @@ from sqlalchemy.orm import sessionmaker
 
 from backend import models
 from backend.app_factory import create_app
-from backend.auth import create_access_token
 from backend.database import configure_sqlite_connection
 from backend.settings import settings
+from unit_tests.token_helpers import create_access_token
 
 
 @pytest.fixture

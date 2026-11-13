@@ -2,7 +2,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from backend.auth import get_password_hash
+from backend.credentials import get_password_hash
 from backend.dependencies import get_db
 from backend.main import app
 from backend.models import MonthlyMileage, Shoe, User
@@ -46,9 +46,14 @@ def test_auth_rejects_passwords_over_bcrypt_byte_limit(client, password):
     change = client.post("/api/auth/change-password", json={
         "username": "alice", "old_password": "pass1234", "new_password": password,
     })
+    change_old = client.post("/api/auth/change-password", json={
+        "username": "alice", "old_password": password, "new_password": "pass1234",
+    })
+    # SPEC-053: one shared Password type guards every credential field.
     assert register.status_code == 422
     assert login.status_code == 422
     assert change.status_code == 422
+    assert change_old.status_code == 422
 
 
 def test_register_duplicate_username(client, db):
@@ -422,7 +427,7 @@ def test_shoe_isolation_between_users(client, db):
     db.add(shoe)
     db.commit()
 
-    from backend.auth import create_access_token
+    from unit_tests.token_helpers import create_access_token
     token_b = create_access_token(data={"sub": "bob"})
 
     # Bob cannot see Alice's shoes
@@ -586,7 +591,7 @@ def test_monthly_mileage_isolation_between_users(client, db):
     db.commit()
     db.refresh(entry)
 
-    from backend.auth import create_access_token
+    from unit_tests.token_helpers import create_access_token
     token_b = create_access_token(data={"sub": "bob"})
 
     # Bob cannot see Alice's monthly mileage

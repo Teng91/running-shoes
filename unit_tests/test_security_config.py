@@ -217,7 +217,7 @@ def test_docker_context_excludes_sqlite_sidecars_and_database_backups():
     from fnmatch import fnmatchcase
     from pathlib import Path
 
-    patterns = (Path(__file__).resolve().parents[1] / ".dockerignore").read_text().splitlines()
+    patterns = (Path(__file__).resolve().parents[1] / ".dockerignore").read_text(encoding="utf-8").splitlines()
     for artifact in ("shoes.db", "shoes.db-wal", "shoes.db-shm", "shoes.db.local-snapshot.bak"):
         assert any(fnmatchcase(artifact, pattern) for pattern in patterns), artifact
     assert "backups/" in patterns

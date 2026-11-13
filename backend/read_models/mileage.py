@@ -7,14 +7,8 @@ from backend.read_models.rounding import round_metric
 
 
 def monthly_mileage_stats(db: Session, user_id: int) -> dict:
-    rows = (
-        db.query(models.MonthlyMileage)
-        .filter(models.MonthlyMileage.user_id == user_id)
-        .order_by(models.MonthlyMileage.year, models.MonthlyMileage.month)
-        .all()
-    )
-    recorded_rows = rows
-    rows = [r for r in rows if r.km > 0]
+    recorded_rows = list_monthly_mileages(db, user_id)
+    rows = [r for r in recorded_rows if r.km > 0]
     if not rows:
         return dict(
             ok=True,

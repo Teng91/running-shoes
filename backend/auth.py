@@ -6,25 +6,16 @@ from jwt import InvalidTokenError
 from sqlalchemy.orm import Session
 
 from backend import credentials as credential_codec
-from backend.credentials import ACCESS_TOKEN_EXPIRE_MINUTES as ACCESS_TOKEN_EXPIRE_MINUTES
-from backend.credentials import ALGORITHM as ALGORITHM
-from backend.credentials import get_password_hash as get_password_hash
-from backend.credentials import verify_password as verify_password
 from backend.dependencies import get_db
 from backend.models import User
-from backend.settings import default_secret_key
 
 security = HTTPBearer()
 
 
-def create_access_token(data: dict, *, secret_key: str | None = None) -> str:
-    """Sign a token; without an explicit key, use the environment's default key."""
-    return credential_codec.create_access_token(data, secret_key=secret_key or default_secret_key())
-
-
-def decode_access_token(token: str, *, secret_key: str | None = None) -> dict:
+def decode_access_token(token: str, *, secret_key: str) -> dict:
+    """Decode with the application's injected key; invalid tokens become HTTP 401."""
     try:
-        return credential_codec.decode_access_token(token, secret_key=secret_key or default_secret_key())
+        return credential_codec.decode_access_token(token, secret_key=secret_key)
     except InvalidTokenError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

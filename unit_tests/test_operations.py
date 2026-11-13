@@ -5,9 +5,9 @@ from fastapi.testclient import TestClient
 
 from backend import models, schemas
 from backend.app_factory import create_app
-from backend.auth import create_access_token
 from backend.services.errors import Conflict
 from backend.services.operations import execute_operation
+from unit_tests.token_helpers import create_access_token
 from unit_tests.workspace_helpers import workspace as workspace
 
 

@@ -210,6 +210,9 @@ flowchart LR
     Streams --> Resources[app-resources.js<br/>cache adapters]
     Resources --> Store[runtime/resource-store.mjs<br/>tickets / per-resource completion]
     Resources --> Core[app-core.js<br/>shell / theme / loadData]
+    Resources --> Workspace[app-workspace.js<br/>drafts / durable run queue bridge]
+    Workspace --> WorkspaceNative[runtime/workspace-controller.mjs<br/>injected storage / session]
+    Workspace --> History[app-history.js<br/>audit paging / recover deletion]
     Core --> Store
     Core --> Inline[app-inline-editors.js<br/>live DOM / row snapshots]
     Lifecycle --> Forms[runtime/form-operations.mjs<br/>draft baseline / operations]
@@ -358,26 +361,34 @@ ARIA 與 `agent-mode` 狀態，不以 inline style 決定 shell 幾何，因此�
 
 | 模組 | 責任 | 可以依賴 | 不應依賴 |
 | --- | --- | --- | --- |
-| `backend/main.py` | 最小 ASGI entry point | `app_factory` | routers、database、業務邏輯 |
+| `backend/main.py`、`run.py` | 最小 ASGI entry point；`run.py` 只是本機 `uvicorn --reload` 啟動 | `app_factory` | routers、database、業務邏輯 |
 | `backend/app_factory.py` | app 組裝、密鑰驗證、預設 engine、lifecycle、router/middleware 與 SPA fallback | settings、routers、database | domain 計算 |
 | `backend/settings.py` | typed environment configuration | Python stdlib | routers、database、FastAPI |
 | `backend/clock.py` | 唯一的應用時區、`local_now()` 與 `local_today()` | Python stdlib | routers、database、FastAPI |
 | `backend/dependencies.py`、`routers/errors.py` | app settings／request session（`get_db`）dependency 與 domain error 的 HTTP mapping | FastAPI、settings、service errors | 業務 transaction |
-| `backend/seeding.py`、`middleware.py` | 可選 seed 與 request body guard | settings、models／ASGI | `backend.main` |
-| `backend/rate_limits.py` | auth／AI 的 SQLite 固定視窗限額，於 app engine 的獨立交易消耗 | settings、SQLAlchemy engine | 請求 session、routers、`backend.main` |
-| `backend/routers/` | HTTP 參數、認證 dependency、response | auth、domain/service、models | `backend.main` |
-| `backend/services/` | 配額、版本、里程與 application transaction owner | models、schemas、read models、persistence | FastAPI、routers、`backend.main` |
-| `backend/read_models/` | user-scoped native statistics／身份消歧義 | models、純 domain、SQLAlchemy | HTTP frameworks、routers、tools |
+| `backend/seeding.py` | 可選 seed | settings、models | `backend.main` |
+| `backend/middleware.py`、`observability.py` | 純 ASGI transport guard：安全標頭（SPEC-054）、Strava／備份上傳大小限制、request ID 與不含內容的結構化 log | ASGI、settings | routers、database、業務邏輯 |
+| `backend/rate_limits.py` | auth／AI／備份預覽的 SQLite 固定視窗限額，於 app engine 的獨立交易消耗 | settings、SQLAlchemy engine | 請求 session、routers、`backend.main` |
+| `backend/routers/` | HTTP 參數、認證 dependency、response；`workspace.py` 是回執、歷史與帳號還原的 adapter | auth、domain/service、read models | `backend.main`、資料庫 query |
+| `backend/services/` | 配額、版本、里程與 application transaction owner；`accounts.py` 註冊／改密碼、`fingerprints.py` 回執與備份的 payload 指紋、`retention.py` 每帳號保留上限 | models、schemas、read models、persistence | FastAPI、routers、`backend.main` |
+| `backend/read_models/` | user-scoped native statistics：`shoes.py`、`shoe_statistics.py`、`shoe_matching.py`（名稱消歧義）、`runs.py`、`run_statistics.py`、`mileage.py`、`spending.py`、`trends.py`、`highlights.py`、`saved_reports.py`、`strava_preview.py`，共用 `rounding.py` | models、純 domain、SQLAlchemy | HTTP frameworks、routers、tools |
 | `backend/shoe_metrics.py` | 折數、成本、壽命共同算術 | models | HTTP、AI、UI |
 | `backend/migrations.py` | ordered/idempotent schema upgrade 與版本 | models、database | routers、frontend |
 | `backend/analytics.py`、`goals.py`、`reports.py` | 可重用的唯讀統計與月報提示詞 | models、read models | FastAPI app、frontend |
 | `backend/exporting.py`、`strava_import.py` | 輸入／輸出轉換 | models 或純資料 | FastAPI／HTTP exception |
-| `backend/tools/` | Agent JSON adapter、tool definitions、legacy parser | read models、受信任 adapter | route 與 UI state |
+| `backend/tools/` | `db_tools.py` Agent JSON adapter 與 registry、`tool_definitions.py` schema、`legacy_calls.py` 舊模型文字 tool call parser、`search_tool.py` 不可信網路搜尋 | read models、受信任 adapter | route 與 UI state |
+| `backend/llm.py` | OpenRouter adapter 與今日免費模型快取；只回傳 `user_facing_error()` 文字 | OpenAI SDK、環境變數 | database、routers |
 | `backend/agent.py` | LLM／tool loop runner | planner、tools、protocol、LLM adapter | HTTP response、frontend state |
 | `backend/agent_planner.py` | deterministic query plan | Python stdlib | database、FastAPI、LLM network |
 | `backend/agent_tools.py` | user-scoped tool dispatch | trusted tools、database session | routers、SSE serialization |
 | `backend/agent_protocol.py` | SSE event 與來源摘要 serialization | search result contract | database、FastAPI |
 | `backend/database.py`、`models.py` | ORM base、連線 pragma、engine 工廠與 schema；import 無 I/O | SQLAlchemy | router、FastAPI、frontend |
+| `backend/schemas.py` | Pydantic request／response 契約與輸入驗證（密碼 72 bytes、兩位小數、partial update 禁止 null） | pydantic、clock | database、FastAPI app |
+
+`backend/llm.py` 是**程序層級**的 adapter：OpenRouter API key 直接讀環境變數，`OR_MODEL` 與
+`LLM_MAX_OUTPUT_TOKENS` 取自環境 `settings`，今日免費模型清單也是整個程序共用的快取。因此
+`create_app(config)` 注入的 `Settings` 不會改變這三項；同一程序內的多個 app 共用同一份模型目錄。
+這是刻意的取捨：模型目錄是外部的全域狀態，逐 app 注入只會讓快取鍵與測試 mock 變複雜（SPEC-053）。
 
 依賴方向由入口往內：`main → app factory → router → domain/service → persistence/adapters`。CI 的
 `architecture-check` 會阻止 router 反向 import `backend.main`、service 穿透 HTTP layer，並檢查
@@ -641,6 +652,10 @@ flowchart LR
 - **限流**：`rate_limits.consume()` 把同一請求的所有視窗放在一個交易，滿了就整筆回滾；限額來自 `app.state.settings`，不再保留記憶體桶。
 - **稽核 trigger**：每次啟動依目前欄位重建，避免舊欄位清單使快照不完整或使寫入失敗。
 - **Strava**：`strava_import.parse_activity_dates()` 把 UTC 時間戳轉為 `clock.APP_TIMEZONE` 日期。`date_corrections()` 只修正仍停在舊 UTC 日期的既有活動，`services/strava_imports.py` 在匯入交易中移動日期與月跑量。
+- **v4.12.0**：文件清單與安全標頭（SPEC-053／SPEC-054，[ADR-0016](adr/0016-build-time-hashed-page-csp.md)）。
+  - `docs-check` 由 `document_contracts.inventory_errors()` 確認 README 目錄樹列出每個模組與 script、本文件安排每個應用模組、README 寫了 `settings.py` 讀取的每個環境變數。
+  - `build_frontend.py` 把 inline script 的 SHA-256 寫進 `index.html` 的 CSP `<meta>`。`middleware.SecurityHeadersMiddleware` 在每個回應加上 `frame-ancestors`、`nosniff` 等標頭，CORS middleware 移除。
+  - 正式的 `auth.py` 只用注入的密鑰解碼，測試的簽章 helper 移到 `unit_tests/token_helpers.py`。依賴方向不變。
 - **v4.11.0**：圖示改版（SPEC-052）。`frontend/icons/app-icon.svg` 是主畫面圖示的向量來源，`scripts/render_icons.cjs` 是本機產生 PNG 的工具，不屬於建置或 CI；模組邊界不變。
 - **v4.10.0**：視覺改版（SPEC-051）。顏色集中在 `frontend/css/01-foundation.css` 的主題 token（`:root` 暗色、`body.light-theme` 亮色）；圖表模組只透過 `getThemeColor(token, fallback)` 讀色，`app-charts.js` 設定 Chart.js 全域字型與 tooltip。模組邊界與依賴方向不變。
 - **v4.9.0**：跑鞋頁的「近 90 天月均里程佔比」改用 ShoeOut 的 `actual_monthly_km_90_days`，現役表格移除計畫月跑量欄（SPEC-050）。跑步紀錄或目標資料到達時，`invalidatePanels()` 也會讓跑鞋分頁失效，因為輪替時間軸與距離分布的讀取會被這些到達作廢。
