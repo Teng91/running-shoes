@@ -34,6 +34,20 @@ async function saveFailure(context, page, label, error, { timeoutMs = 5000 } = {
   } catch { console.error('Could not save browser failure artifacts.'); }
 }
 
+// SPEC-054: report Content-Security-Policy violations from every page and
+// navigation in the context, so a blocked inline script or asset fails a check
+// instead of silently degrading the page.
+async function trackCspViolations(context) {
+  const violations = [];
+  await context.exposeBinding('__reportCspViolation', (_source, detail) => violations.push(detail));
+  await context.addInitScript(() => {
+    document.addEventListener('securitypolicyviolation', event => {
+      window.__reportCspViolation(`${event.effectiveDirective || event.violatedDirective} blocked ${event.blockedURI || 'inline'} (${event.sourceFile || location.pathname}:${event.lineNumber})`);
+    });
+  });
+  return violations;
+}
+
 async function closeBrowser(context, browser, { timeoutMs = 5000 } = {}) {
   const errors = [];
   for (const [label, target] of [['context close', context], ['browser close', browser]]) {
@@ -44,4 +58,4 @@ async function closeBrowser(context, browser, { timeoutMs = 5000 } = {}) {
   if (errors.length) throw new AggregateError(errors, 'Browser cleanup failed');
 }
 
-module.exports = { withDeadline, startArtifacts, saveFailure, closeBrowser };
+module.exports = { withDeadline, startArtifacts, saveFailure, closeBrowser, trackCspViolations };

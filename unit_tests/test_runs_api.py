@@ -4,7 +4,7 @@ from dataclasses import replace
 import pytest
 from fastapi.testclient import TestClient
 
-from backend.auth import get_password_hash
+from backend.credentials import get_password_hash
 from backend.dependencies import get_db
 from backend.main import app
 from backend.models import MonthlyMileage, Shoe, User
@@ -321,7 +321,7 @@ def test_run_log_update_rejects_explicit_nulls(client, db, user_with_token, payl
 
 
 def test_run_log_rejects_another_users_shoe_and_record(client, db):
-    from backend.auth import create_access_token
+    from unit_tests.token_helpers import create_access_token
 
     alice = User(username="run-alice", hashed_password=get_password_hash("pass1234"))
     bob = User(username="run-bob", hashed_password=get_password_hash("pass1234"))

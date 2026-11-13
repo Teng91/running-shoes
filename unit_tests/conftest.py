@@ -7,9 +7,10 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from backend.auth import create_access_token, get_password_hash
+from backend.credentials import get_password_hash
 from backend.database import Base
 from backend.models import MonthlyMileage, Shoe, User
+from unit_tests.token_helpers import create_access_token
 
 
 @contextmanager

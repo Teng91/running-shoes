@@ -18,3 +18,4 @@ require('./frontend/trends.test.cjs');
 require('./frontend/monthly-records.test.cjs');
 require('./frontend/highlights.test.cjs');
 require('./frontend/visual-theme.test.cjs');
+require('./frontend/security-policy.test.cjs');

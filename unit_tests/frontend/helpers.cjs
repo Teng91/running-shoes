@@ -51,10 +51,13 @@ function runContext(globals) {
   }
   return context;
 }
-const htmlSource = fs.readFileSync('frontend/index.html', 'utf8');
+// Git may check sources out with CRLF on Windows; browsers normalize HTML line
+// endings and CI uses LF, so assertions always see LF.
+const readText = file => fs.readFileSync(file, 'utf8').replace(/\r\n/g, '\n');
+const htmlSource = readText('frontend/index.html');
 const scriptPaths = JSON.parse(fs.readFileSync('frontend/assets.json', 'utf8')).scripts.map(file => 'frontend/' + file);
-const scriptSource = scriptPaths.map(path => fs.readFileSync(path, 'utf8')).join('\n');
-const styleSource = fs.readFileSync('frontend/styles.css', 'utf8');
+const scriptSource = scriptPaths.map(readText).join('\n');
+const styleSource = readText('frontend/styles.css');
 const source = `${htmlSource}\n${styleSource}\n${scriptSource}`;
 
 
@@ -136,4 +139,4 @@ function transportContext() {
   return context;
 }
 
-module.exports = { runContext, test, assert, fs, path, vm: { ...vm, createContext: featureContext }, htmlSource, scriptPaths, scriptSource, styleSource, source, authOperationContext, streamContext, editContext, tableHeaders, extract, transportContext };
+module.exports = { runContext, test, assert, fs, path, readText, vm: { ...vm, createContext: featureContext }, htmlSource, scriptPaths, scriptSource, styleSource, source, authOperationContext, streamContext, editContext, tableHeaders, extract, transportContext };

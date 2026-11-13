@@ -1,6 +1,7 @@
 """SPEC-048: pushes to main deploy, check and release in a safe, least-privilege order."""
 
 import json
+import os
 import re
 import subprocess
 import sys
@@ -81,8 +82,10 @@ def test_release_tags_only_new_versions_after_the_release_check():
     script = textwrap.dedent(WORKFLOW.split("<<'PY'\n", 1)[1].split("\n          PY\n", 1)[0])
 
     def notes(version: str) -> subprocess.CompletedProcess:
+        # The release job runs on a UTF-8 Linux runner; match it on Windows code pages too.
         return subprocess.run([sys.executable, "-c", script, version], cwd=ROOT, capture_output=True,
-                              text=True, encoding="utf-8", check=True)
+                              text=True, encoding="utf-8", check=True,
+                              env={**os.environ, "PYTHONIOENCODING": "utf-8"})
 
     changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8").replace("\r\n", "\n")
     start = changelog.index(f"## [{package}]")

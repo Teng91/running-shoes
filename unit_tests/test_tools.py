@@ -353,3 +353,10 @@ def test_shoe_usage_analytics_returns_backend_calculated_wear_data(seeded_db):
     assert usage["historical_adjustment_km"] == 530
     assert "average_run_km" not in usage
     assert "average_pace_seconds_per_km" not in usage
+
+
+def test_legacy_markers_strip_every_allowed_call_but_parse_only_object_arguments():
+    """SPEC-053: one bare-JSON scanner serves both functions without changing either contract."""
+    text = 'A {"tool":"web_search","arguments":[]} B {"tool":"shoe_summary"} C {"tool":"x","arguments":{}}'
+    assert db_tools.parse_tool_calls(text) == [{"name": "shoe_summary", "arguments": {}}]
+    assert db_tools.strip_tool_markers(text) == 'A  B  C {"tool":"x","arguments":{}}'

@@ -1,5 +1,6 @@
 """FastAPI application factory and composition lifecycle."""
 
+import mimetypes
 from collections.abc import Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -8,7 +9,6 @@ from typing import cast
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
@@ -17,7 +17,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from backend import migrations
 from backend.backup_contract import MAX_BACKUP_BYTES
 from backend.database import create_database_engine
-from backend.middleware import StravaUploadLimitMiddleware
+from backend.middleware import SecurityHeadersMiddleware, UploadLimitMiddleware
 from backend.observability import RequestContextMiddleware
 from backend.routers import (
     agent,
@@ -40,6 +40,16 @@ from backend.settings import Settings, runtime_settings
 from backend.settings import settings as default_settings
 
 SessionFactory = Callable[[], Session]
+
+# Responses carry X-Content-Type-Options: nosniff (SPEC-054), so a script or
+# stylesheet served as text/plain would be refused. Pin the shell's types so a
+# host MIME registry (for example on Windows) cannot change them.
+STATIC_MEDIA_TYPES = (
+    (".js", "text/javascript"),
+    (".mjs", "text/javascript"),
+    (".css", "text/css"),
+    (".webmanifest", "application/manifest+json"),
+)
 
 
 async def validation_exception_handler(request: Request, exc: Exception) -> Response:
@@ -102,9 +112,12 @@ def create_app(
     """Build an isolated application from explicit runtime dependencies.
 
     This is the only place that validates secrets and creates the default
-    engine; importing backend modules performs no I/O.
+    engine; importing backend modules performs no database or network I/O
+    (``backend.settings`` only reads the environment and an optional ``.env``).
     """
     selected_settings = runtime_settings(config or default_settings)
+    for suffix, media_type in STATIC_MEDIA_TYPES:
+        mimetypes.add_type(media_type, suffix)
     if db_engine is None:
         selected_settings.database_dir.mkdir(parents=True, exist_ok=True)
         db_engine = create_database_engine(selected_settings.database_url)
@@ -123,17 +136,13 @@ def create_app(
     app.state.restore_slot = Lock()
 
     app.add_middleware(
-        StravaUploadLimitMiddleware,
+        UploadLimitMiddleware,
         max_bytes=selected_settings.max_strava_request_bytes,
         max_backup_bytes=MAX_BACKUP_BYTES,
     )
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],
-        allow_credentials=False,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+    # The SPA and API share one origin, so no CORS middleware is installed:
+    # browsers refuse cross-origin API reads (SPEC-054).
+    app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(RequestContextMiddleware)
     for router in (
         auth.router,

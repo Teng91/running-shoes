@@ -10,13 +10,13 @@ from sqlalchemy.orm import sessionmaker
 
 from backend import models
 from backend.app_factory import create_app
-from backend.auth import create_access_token
 from backend.database import Base, configure_sqlite_connection
 from backend.dependencies import get_db
 from backend.main import app
 from backend.migrations import run_startup_migrations, schema_version
 from backend.read_models.runs import year_run_summary
 from backend.settings import settings
+from unit_tests.token_helpers import create_access_token
 
 
 @pytest.fixture
@@ -235,9 +235,9 @@ def test_schema_seven_rollback_restores_the_schema_six_contract_and_reupgrades(t
         db.commit()
     connection = engine.raw_connection()
     try:
-        connection.executescript(Path("scripts/rollback_schema_seven.sql").read_text())
+        connection.executescript(Path("scripts/rollback_schema_seven.sql").read_text(encoding="utf-8"))
         with pytest.raises(Exception, match="CHECK constraint failed"):
-            connection.executescript(Path("scripts/rollback_schema_seven.sql").read_text())
+            connection.executescript(Path("scripts/rollback_schema_seven.sql").read_text(encoding="utf-8"))
         connection.rollback()
     finally:
         connection.close()

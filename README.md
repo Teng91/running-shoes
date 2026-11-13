@@ -39,6 +39,8 @@ Fly.io 帳號或其他支援 Docker 的平台。
 running-shoes/
 ├── .github/
 │   ├── actions/browser-setup/ # 三個 browser jobs 共用的鎖版環境
+│   ├── dependabot.yml    # GitHub Actions 每月更新、Python 只收安全性更新
+│   ├── pull_request_template.md # PR 需連結 spec／ADR 與驗證結果
 │   └── workflows/
 │       └── verify.yml    # Push／PR 完整 harness 驗證；push 到 main 再自動快照、部署、檢查與發版
 ├── .claude/
@@ -47,9 +49,10 @@ running-shoes/
 │   ├── main.py           # 最小 ASGI 入口
 │   ├── app_factory.py    # 可注入的 FastAPI 組裝、lifecycle 與 SPA fallback
 │   ├── settings.py       # Immutable typed runtime configuration
-│   ├── dependencies.py   # Request-scoped app settings dependency
+│   ├── clock.py          # 唯一的應用時區、local_now()／local_today()
+│   ├── dependencies.py   # Request-scoped app settings 與 DB session（get_db）
 │   ├── seeding.py        # 使用注入 session factory 的可選預設資料
-│   ├── middleware.py     # Strava request body transport guard
+│   ├── middleware.py     # 安全標頭（CSP frame-ancestors、nosniff 等）與 Strava／備份上傳大小限制
 │   ├── routers/
 │   │   ├── auth.py       # 註冊、登入與密碼管理 routes
 │   │   ├── goals.py      # 跑量目標 routes
@@ -63,9 +66,15 @@ running-shoes/
 │   │   ├── strava.py     # Strava upload／import routes
 │   │   ├── workspace.py  # 操作回執、歷史與帳號還原 adapters
 │   │   ├── runs.py       # 跑步日誌 CRUD routes
-│   │   └── shoes.py      # 跑鞋 CRUD HTTP routes
+│   │   ├── shoes.py      # 跑鞋 CRUD HTTP routes
+│   │   └── errors.py     # Service domain error 對應 HTTP 狀態碼
 │   ├── services/
+│   │   ├── errors.py      # Transport 無關的 application errors
 │   │   ├── account_restore.py # 預覽、來源 mapping 與原子合併還原
+│   │   ├── account_import_plan.py # User-scoped 來源比對，預覽與執行共用匯入計畫
+│   │   ├── account_import_changes.py # 預覽與執行共用的欄位 patch 與預估里程
+│   │   ├── account_import.py # 在呼叫端交易內執行匯入計畫（不自行 commit）
+│   │   ├── run_identity.py # 刪除墓碑與復原後的來源別名（呼叫端持有交易）
 │   │   ├── operations.py  # 操作身分、版本及回執的統一寫入入口
 │   │   ├── history.py     # User-scoped 歷史與防衝突誤刪復原
 │   │   ├── identifiers.py # 單調遞增 run／month 主鍵配置
@@ -86,12 +95,12 @@ running-shoes/
 │   ├── backup_contract.py # 有界 v1／v2／v3 備份格式與參照驗證
 │   ├── migrations.py     # 有版本的 SQLite schema upgrade
 │   ├── observability.py  # Request ID 與不含敏感內容的結構化 HTTP log
-│   ├── rate_limits.py    # Auth／AI SQLite 固定視窗限流（獨立交易、注入設定）
+│   ├── rate_limits.py    # Auth／AI／備份預覽 SQLite 固定視窗限流（獨立交易、注入設定）
 │   ├── auth.py           # HTTP JWT 認證 adapter
 │   ├── credentials.py    # 不依賴 HTTP 的 bcrypt／JWT primitives
 │   ├── database.py       # ORM base、SQLite pragma 與 engine 工廠（import 無 I/O）
 │   ├── models.py         # 資料表定義
-│   ├── schemas.py        # Pydantic schema
+│   ├── schemas.py        # Pydantic request／response schema 與輸入驗證
 │   ├── agent.py          # AI 助手 runner 與公開 orchestration entry point
 │   ├── agent_planner.py  # Deterministic intent 與最小查詢計畫
 │   ├── agent_tools.py    # 受信任工具 dispatch
@@ -103,7 +112,18 @@ running-shoes/
 │   ├── forecasting.py    # 共用退役預估與 user-scoped 批次查詢
 │   ├── shoe_metrics.py   # 共用折數、成本與壽命算術
 │   ├── read_models/      # API／月報／AI 共用的 user-scoped native statistics 與清單查詢
-│   │   └── shoe_statistics.py # SQL 聚合與每雙鞋 12 筆 recent window
+│   │   ├── shoes.py      # 鞋櫃、生命週期與名稱身分查詢
+│   │   ├── shoe_statistics.py # SQL 聚合與每雙鞋 12 筆 recent window
+│   │   ├── shoe_matching.py # 名稱消歧義；有歧義時絕不自動選一筆
+│   │   ├── runs.py       # 跑步清單、月曆摘要與匯入紀錄
+│   │   ├── run_statistics.py # 目標／首頁／月報共用的日曆範圍與距離彙總
+│   │   ├── mileage.py    # 月跑量歷史統計（月報與 AI 工具共用）
+│   │   ├── spending.py   # 依日曆計算的支出統計
+│   │   ├── trends.py     # 熱力圖、連續天數、每週跑量、目標線與輪替時間軸
+│   │   ├── highlights.py # 今天穿哪雙、年度回顧與距離分布
+│   │   ├── saved_reports.py # 已保存月報的摘要與內容
+│   │   ├── strava_preview.py # Strava CSV 配對預覽
+│   │   └── rounding.py   # 共用彙總四捨五入 round_metric
 │   ├── analytics.py      # 首頁洞察與單鞋使用分析
 │   ├── strava_import.py  # 純 Strava CSV 解析、篩選與領域錯誤
 │   ├── exporting.py      # CSV／XLSX 安全匯出列與檔名
@@ -112,12 +132,12 @@ running-shoes/
 │   │   ├── db_tools.py   # JSON adapters 與受信任工具 registry
 │   │   ├── tool_definitions.py # 工具 schema，與查詢／派發分離
 │   │   ├── legacy_calls.py # 舊模型文字 tool calls 相容解析
-│   │   └── search_tool.py# 上網搜尋市售鞋款（DuckDuckGo）
+│   │   └── search_tool.py # 上網搜尋市售鞋款（DuckDuckGo）
 │   └── run.py            # 本機開發啟動入口
 ├── frontend/
 │   ├── index.html        # 由 templates/ 產生的完整 Dashboard HTML
 │   ├── assets.json       # Script 順序、CSS 來源與 PWA revision 的單一清單
-│   ├── templates/        # Shell、七個彈窗與 worker 的可編輯來源
+│   ├── templates/        # Shell、六個彈窗片段與 worker 的可編輯來源
 │   ├── css/              # 依責任拆分的樣式來源，產生單一 styles.css
 │   ├── runtime/
 │   │   ├── feature-lifecycle.mjs # 功能生命週期
@@ -125,7 +145,8 @@ running-shoes/
 │   │   ├── resource-store.mjs # 請求合併、ownership、錯誤與快取失效策略
 │   │   ├── workspace-controller.mjs # 注入帳號 storage／session 的草稿與同步佇列
 │   │   ├── run-controller.mjs # 注入 transport/session 的跑步 state
-│   │   └── strava-controller.mjs # 預覽、匯入與視窗操作所有權
+│   │   ├── strava-controller.mjs # 預覽、匯入與視窗操作所有權
+│   │   └── account-restore-controller.mjs # 還原預覽的操作、session 與清理所有權
 │   ├── app-lifecycle.js  # Legacy handler 與原生 runtime 的過渡橋接
 │   ├── app-inline-editors.js # 表格輸入 DOM、列快照與 session 清理
 │   ├── app-dates.js      # 日曆日期與跨日限制／恢復
@@ -162,13 +183,14 @@ running-shoes/
 │   ├── styles.css        # 自動產生的單一樣式資產，請修改 css/ 來源
 │   ├── manifest.webmanifest # PWA 名稱、顏色與圖示設定
 │   ├── service-worker.js # App shell 快取與離線 fallback
-│   ├── offline.html      # 無快取頁面可用時的離線提示
+│   ├── offline.html      # 無快取頁面可用時的離線提示（無 script，嚴格 CSP）
 │   ├── icons/            # PWA、iOS 主畫面圖示與向量來源 app-icon.svg（node scripts/render_icons.cjs 產生 PNG）
 │   ├── vendor/           # 固定版本的 Chart.js 與 marked.js 離線資源
 │   └── favicon.svg
 ├── docs/
 │   ├── architecture.md   # SDD：現況架構圖、模組邊界與演進順序
 │   ├── testing-strategy.md # TDD：測試層級、追蹤矩陣與完成條件
+│   ├── user-guide.md     # 給使用者的操作說明
 │   ├── specs/            # Feature spec 範本與 acceptance criteria
 │   └── adr/              # 重要架構決策與取捨紀錄
 ├── scripts/
@@ -184,13 +206,25 @@ running-shoes/
 │   ├── browser_runner.py # Browser 程序 deadline、錯誤落檔與子程序收尾
 │   ├── browser_artifacts.cjs # 先存 error、限時 screenshot／trace／close
 │   ├── smoke_test.py     # 部署後 health 與 OpenAPI smoke check
+│   ├── release_check.py  # 部署後匿名唯讀檢查：schema、API、資產 hash／MIME
+│   ├── release_browser.cjs # release-check 的匿名瀏覽器 boot、離線 shell 與 CSP 檢查
+│   ├── browser_probe.cjs # 確認 Playwright Chromium／WebKit 在本機真的能啟動
+│   ├── worker_update.cjs # Service worker 更新觀察器（瀏覽器與 Node 測試共用）
+│   ├── diagnostics_drill.cjs # 產生合成瀏覽器失敗，演練診斷落檔
+│   ├── verify_diagnostics.py # 只用標準函式庫驗證下載的合成診斷
+│   ├── render_icons.cjs  # 本機由 icons/app-icon.svg 產生 PNG 圖示（不在 CI 執行）
+│   ├── rollback_schema_seven.sql # Schema 7 → 6 的文件化回滾
+│   ├── rollback_preview_schema.sql # 只捨棄暫存還原預覽的回滾
 │   └── task.py           # 跨平台 setup、測試、eval 與完整驗證入口
 ├── unit_tests/           # Pytest、Agent eval、前端邏輯與版面回歸測試
 │   ├── agent_eval_cases.json # Agent 工具選擇與安全行為案例
 │   ├── frontend_regressions.cjs # Node 回歸測試單一入口
 │   ├── frontend/         # 依責任拆分的 Node suite 與共享 helpers
 │   ├── frontend_layout.cjs # Playwright 跨瀏覽器版面測試
-│   └── frontend_e2e.cjs  # 真實 FastAPI + 暫存 SQLite 的瀏覽器 CRUD
+│   ├── frontend_e2e.cjs  # 真實 FastAPI + 暫存 SQLite 的瀏覽器 CRUD（含 CSP 違規檢查）
+│   ├── frontend_pwa.cjs  # 真正 Service Worker 的升級、離線與恢復
+│   ├── browser_waits.cjs # 需要 await 的頁面條件等待（waitForAsync）
+│   └── token_helpers.py  # 測試專用 token 簽章（正式程式一律使用注入的密鑰）
 ├── AGENTS.md             # Coding Agent 專案規則與完成條件
 ├── CLAUDE.md             # 讓 Claude Code 匯入共用的 AGENTS.md
 ├── CHANGELOG.md          # 版本演進與 release 摘要
@@ -199,7 +233,10 @@ running-shoes/
 ├── requirements.txt      # 含雜湊的完整正式環境鎖定檔
 ├── requirements-dev.in   # 測試、lint、型別與安全掃描直接依賴
 ├── requirements-dev.txt  # 含雜湊的完整開發／CI 鎖定檔
+├── package.json          # 版號（發版依據）與 Playwright 開發依賴
+├── package-lock.json     # 鎖定的 npm 依賴
 ├── Dockerfile            # Docker 部署用
+├── .dockerignore         # 排除 SQLite、備份與 .env
 ├── fly.toml              # Fly.io 部署設定
 └── .gitignore
 ```
@@ -273,7 +310,8 @@ venv/bin/python -c "import sys; from ddgs import DDGS; print(sys.executable); pr
 
 ```bash
 OPENROUTER_API_KEY=<你的 OpenRouter API Key>   # 取得: https://openrouter.ai/keys
-# 選填：固定某個免費且支援 tools 的模型
+# 選填：偏好的模型 ID；只有在當天的免費、支援 tools 模型清單中才會排到第一個，不會啟用付費或已下架模型
+# OR_MODEL=<model-id>
 # 選填：每個帳號每分鐘最多 AI 請求數（預設 20）
 AGENT_RATE_LIMIT_PER_MINUTE=20
 # 選填：同一 IP／全站每分鐘 AI 請求上限（預設 30／120）
@@ -297,6 +335,21 @@ LLM_MAX_OUTPUT_TOKENS=4096
 ```
 
 `.env` 會被自動載入，不需要手動 `export`。沒設定也不影響 Dashboard 的其他功能，只是 AI 助手無法使用。
+`OPENROUTER_API_KEY`、`OR_MODEL` 與 `LLM_MAX_OUTPUT_TOKENS` 由整個伺服器程序共用，改了要重新啟動伺服器才生效。
+
+### 執行環境與部署設定
+
+以下變數控制執行環境，本機開發通常都不用設定：
+
+| 變數 | 預設 | 用途 |
+| --- | --- | --- |
+| `ENVIRONMENT` | `development` | 不是 `development` 就視為正式環境：缺少 `SECRET_KEY` 或少於 32 bytes 時拒絕啟動。Docker 與 Fly.io 設為 `production`。 |
+| `SECRET_KEY` | 開發用固定值（啟動時警告） | JWT 簽章密鑰；更換後所有人都要重新登入。 |
+| `DB_DIR` | 專案根目錄 | SQLite `shoes.db` 所在目錄；Fly.io 為掛載的 `/data`。 |
+| `DATABASE_URL` | `sqlite:///<DB_DIR>/shoes.db` | 完整資料庫連線字串；設定後優先於 `DB_DIR`。 |
+| `FRONTEND_DIR` | `frontend/` | 提供靜態前端的目錄。 |
+| `SEED_DATA` | 未設定 | 設為 `true` 時寫入範例資料，必須同時設定 `MIGRATION_PASSWORD`。 |
+| `FLY_APP_NAME` | Fly.io 自動設定 | 有值時才信任 Fly 代理的 `Fly-Client-IP` 做每 IP 限流。 |
 
 ## 功能特色
 
@@ -325,6 +378,7 @@ LLM_MAX_OUTPUT_TOKENS=4096
 - **安全的編輯與串流**：跑步／月跑量／跑鞋視窗保存開啟時的 ID、版本與 session；重新載入後仍由後端檢查衝突。跑鞋儲存、刪除與移動防止重送，晚到回應不關閉新草稿。AI／月報共用串流處理，AI 中斷會保留可見內容、提示重試，不把半截答案放進歷史
 - **按需圖表**：只建立或更新目前分頁的圖表；未變更的分頁可重用，資料或主題更新後在切入時重繪，年度跑步資料只在月跑量分頁需要時載入
 - **個人跑量目標**：預設自 2026 年起每月 125 km，年度目標自動以月目標 × 12 計算；目標、首頁與 AI 月報統一以逐筆跑步日誌計算。月跑量分頁的年度目標卡依上方年份一次列出 12 個月是否達標、年度累計與今天應有的進度、年底前每週需求及本月進度；「調整目標」展開後才能修改每月目標與開始計算的年份
+- **瀏覽器安全防護**：頁面有嚴格的 Content-Security-Policy，只允許同源 script 與建置時算好雜湊的三段啟動 script，inline 事件屬性、`eval` 與外部 script 都會被瀏覽器擋下；所有回應帶 `nosniff`、禁止被嵌入 iframe 等安全標頭；API 只接受同源呼叫（不開放 CORS）
 - **多使用者隔離**：每人資料完全獨立，支援註冊/登入/改密碼；認證表單防重送，切換表單／session 使舊操作失效。切換帳號會清除洞察快取並取消 AI 串流，過期回應不覆蓋新登入或 UI 狀態
 
 ## 跑步日誌
@@ -459,8 +513,10 @@ python3 scripts/build_frontend.py --check
 產物是 `index.html`、`styles.css` 與 `service-worker.js`，一併納入 Git；不是手動維護的第二份來源。
 `verify` 與 `docs-check` 都會檢查來源／產物一致。CSS 保留原始 cascade 順序，瀏覽器仍只下載單一樣式檔。
 原生 `.mjs` runtime 也包含在 PWA 原子 shell，並檢查 JavaScript MIME。
-公開同源 shell cache 的查詢忽略 CORS `Vary: Origin`，避免預快取與原生模組的 Origin 差異
-讓離線啟動失敗；URL／版本仍須完整匹配，`/api/` 一律不快取（SPEC-018）。
+公開同源 shell cache 的查詢忽略 `Vary`（v4.11.0 以前的 CORS middleware 會回 `Vary: Origin`），避免預快取與原生模組的
+Origin 差異讓離線啟動失敗；URL／版本仍須完整匹配，`/api/` 一律不快取（SPEC-018）。
+產生 `index.html` 時會計算每段 inline `<script>` 的 SHA-256，寫進頁面最前面的 CSP `<meta>`；改了模板裡的
+script 卻沒有重新 `--write`，瀏覽器就會擋下它，`--check` 也會失敗（SPEC-054）。
 
 ### 統計與操作規則（SPEC-017）
 
@@ -712,6 +768,16 @@ v3.10.3 使用 Asset 3.10.3／shell v38、schema 6、51 個 release assets。
 `registry.fly.io/running-shoes@sha256:bac44457f12adfde6473e9d9a973b330e1bf69eac7e44feb3fb6ed1f5a55429a`，
 不還原業務資料快照。發布驗證涵蓋 verify、40 組版面、雙引擎 CRUD／PWA、main/tag CI 及正式站匿名 release-check。
 
+### 安全標頭與文件一致性（SPEC-053／SPEC-054，v4.12.0）
+
+- 頁面加上嚴格的 Content-Security-Policy：只允許同源 script，以及建置時以 SHA-256 雜湊放行的三段啟動 script（主題、樣式載入、開機逾時）。原本樣式表上的 inline `onload` 改為可雜湊的 script，離線頁改用不需 script 的「重新連線」連結。
+- 所有回應加上 `X-Content-Type-Options: nosniff`、`X-Frame-Options: DENY`／`frame-ancestors 'none'`、`Referrer-Policy: same-origin`、`Cross-Origin-Opener-Policy: same-origin` 與 `Permissions-Policy`；`.js`／`.mjs` 固定以 `text/javascript` 提供。
+- 移除 `allow_origins=["*"]` 的 CORS 設定：前端與 API 同源，其他網站的頁面無法再讀取 API 回應。
+- `docs-check` 會檢查 README 目錄結構列出每個後端／前端模組與 script，且 SDD 有安排每個應用模組；漏列或列了不存在的檔案都會失敗（SPEC-053）。
+- 程式整理：測試專用的 token 簽章移到 `unit_tests/token_helpers.py`，正式的認證只用注入的密鑰；合併重複的 legacy tool-call 掃描、月跑量查詢與 schema 驗證器。
+
+Asset 4.12.0／shell v62、schema 7 不變，可直接回滾至 v4.11.0 image（回滾後恢復舊的 CORS 與無安全標頭）。
+
 ### 主畫面與分頁圖示改版（SPEC-052，v4.11.0）
 
 - PWA 與 iOS 主畫面圖示改為碳黑底、volt「速度線＋箭頭」標誌配磨耗進度環，和介面內的品牌標誌一致；Android 的圓形裁切也不會切到進度環。
@@ -901,7 +967,7 @@ Playwright／Chromium／WebKit 齊全時，也會執行版面測試。
 避免每次停止都重跑。Hook 不會呼叫其他模型、外部 API，或傳送提示、diff、原始碼與測試輸出。
 GitHub Actions 仍會在 push／pull request 執行 `verify`，並以三個可獨立重跑的 browser jobs 執行完整版面矩陣、真實 CRUD E2E 與 PWA 升級／離線測試；push 到 main 時再依序快照、部署、檢查並發版（見「日常開發流程、自動部署與發版」）；Dependabot 每月以單一 PR 合併 GitHub Actions 更新；Python 只接收安全性更新 PR，例行升級依下方 `uv pip compile --universal` 步驟手動重編鎖定檔（Dependabot 產生的鎖定檔會遺失 Windows 條件）。
 
-本次驗證基線為 Python **627 passed**、前端回歸測試 **177 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
+本次驗證基線為 Python **638 passed**、前端回歸測試 **182 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
 版面檢查涵蓋 WebKit／Chromium、亮／暗模式與 10 組直橫向尺寸，共 40 組設定，檢查四個功能分頁與月報、三個認證表單、圖表、全部彈窗、行內編輯、停用／錯誤及空資料狀態。
 
 主要表單、工具列與彈窗操作統一為 44px 控制項；桌面表格內的緊湊操作為 36px，手機至少 44px。

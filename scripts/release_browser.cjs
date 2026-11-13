@@ -1,7 +1,7 @@
 // Anonymous, read-only deployment smoke. No account, token or production mutations.
 const { chromium, webkit } = require('playwright');
 const assert = require('node:assert/strict');
-const { startArtifacts, saveFailure, closeBrowser, withDeadline } = require('./browser_artifacts.cjs');
+const { startArtifacts, saveFailure, closeBrowser, withDeadline, trackCspViolations } = require('./browser_artifacts.cjs');
 const [origin, version, cacheName] = process.argv.slice(2);
 
 (async () => {
@@ -12,6 +12,7 @@ const [origin, version, cacheName] = process.argv.slice(2);
         browser = await engine.launch({ headless: true, timeout: 30000 });
         context = await browser.newContext({ viewport: { width: 390, height: 844 } });
         await startArtifacts(context);
+        const cspViolations = await trackCspViolations(context);
         const blockedWrites = [];
         await context.route('**/*', route => {
           if (!['GET', 'HEAD'].includes(route.request().method())) {
@@ -46,6 +47,7 @@ const [origin, version, cacheName] = process.argv.slice(2);
           assert.equal(await page.locator('meta[name="app-asset-version"]').getAttribute('content'), version);
         }
         assert.deepEqual(errors, []);
+        assert.deepEqual(cspViolations, [], 'Content-Security-Policy violations (SPEC-054)');
         assert.deepEqual(blockedWrites, [], 'anonymous release check must never write to the server');
         console.log(`PASS release ${engine.name()} v${version}: anonymous mobile boot/runtime/cache${engine === chromium ? '/offline reload' : ''}`);
       }, 90000, 'release engine ' + engine.name());

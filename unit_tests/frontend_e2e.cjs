@@ -7,7 +7,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { spawn, execFile } = require('node:child_process');
 const { promisify } = require('node:util');
-const { startArtifacts, saveFailure, closeBrowser, withDeadline } = require('../scripts/browser_artifacts.cjs');
+const { startArtifacts, saveFailure, closeBrowser, withDeadline, trackCspViolations } = require('../scripts/browser_artifacts.cjs');
 const checkSessionIsolation = require('./frontend_sessions.cjs');
 const checkFrontendSafety = require('./frontend_safety.cjs');
 const checkConsistency = require('./frontend_consistency.cjs');
@@ -96,6 +96,7 @@ async function run() {
     browser = await chromium.launch({ headless: true, timeout: 30000 });
     page = await browser.newPage({ locale: 'zh-TW' });
     await startArtifacts(page.context());
+    const cspViolations = await trackCspViolations(page.context());
     const pageErrors = [];
     page.on('pageerror', error => pageErrors.push(error.message));
     page.on('dialog', dialog => dialog.accept());
@@ -201,6 +202,7 @@ async function run() {
       await page.locator('#spending-table').getByText('Browser Runner v2', { exact: true }).waitFor({ state: 'detached' });
 
       assert.deepEqual(pageErrors, [], 'browser JavaScript errors');
+      assert.deepEqual(cspViolations, [], 'Content-Security-Policy violations (SPEC-054)');
       assert.ok(fs.existsSync(databasePath), 'FastAPI used the isolated temporary database');
       console.log('PASS Chromium: registration, login, shoe CRUD, run CRUD, and persistence');
     }, 90000, 'Chromium real CRUD');

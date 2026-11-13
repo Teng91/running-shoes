@@ -345,8 +345,8 @@ def test_update_http_mode_and_legacy_preview_compatibility(workspace):
     from fastapi.testclient import TestClient
 
     from backend.app_factory import create_app
-    from backend.auth import create_access_token
     from backend.services.fingerprints import payload_hash
+    from unit_tests.token_helpers import create_access_token
     with workspace.sessions() as db:
         raw = json.dumps(archive(db)).encode()
         preview = account_restore.preview_restore(db, 2, raw, workspace.config)
@@ -500,7 +500,7 @@ def test_discard_preview_http_requires_its_account(workspace):
     from fastapi.testclient import TestClient
 
     from backend.app_factory import create_app
-    from backend.auth import create_access_token
+    from unit_tests.token_helpers import create_access_token
     with workspace.sessions() as db:
         preview = account_restore.preview_restore(db, 2, json.dumps(archive(db)).encode(), workspace.config)
     app = create_app(workspace.config, db_engine=workspace.engine, session_factory=workspace.sessions)
@@ -529,8 +529,8 @@ def test_preview_schema_rollback_preserves_business_rows(workspace):
         before = db.query(models.AuditEvent).count()
     connection = workspace.engine.raw_connection()
     try:
-        connection.executescript(Path('scripts/rollback_schema_seven.sql').read_text())
-        connection.executescript(Path('scripts/rollback_preview_schema.sql').read_text())
+        connection.executescript(Path('scripts/rollback_schema_seven.sql').read_text(encoding="utf-8"))
+        connection.executescript(Path('scripts/rollback_preview_schema.sql').read_text(encoding="utf-8"))
     finally:
         connection.close()
     assert schema_version(workspace.engine) == 5
@@ -547,8 +547,8 @@ def test_export_contract_limits_and_explicit_history_omission(workspace):
     from fastapi.testclient import TestClient
 
     from backend.app_factory import create_app
-    from backend.auth import create_access_token
     from backend.backup_contract import ARCHIVE_LIMITS
+    from unit_tests.token_helpers import create_access_token
     with workspace.sessions() as db:
         history = {'user_id': 1, 'operation_id': 'synthetic-export-boundary', 'reason': 'shoe.update',
                    'entity': 'shoes', 'entity_id': 1, 'action': 'update', 'before_json': None,
@@ -984,7 +984,7 @@ def test_startup_discards_every_accounts_expired_previews_only(workspace, tmp_pa
 
 
 def _bearer(workspace, name):
-    from backend.auth import create_access_token
+    from unit_tests.token_helpers import create_access_token
     return {'Authorization': 'Bearer ' + create_access_token({'sub': name}, secret_key=workspace.config.secret_key or None)}
 
 

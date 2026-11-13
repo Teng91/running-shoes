@@ -47,6 +47,16 @@ def _validate_password(value: str) -> str:
     return value
 
 
+Password = Annotated[str, AfterValidator(_validate_password)]
+
+
+def _reject_explicit_nulls(value, label: str):
+    """Partial updates may omit fields, but an explicit null is a client error."""
+    if isinstance(value, dict) and any(item is None for item in value.values()):
+        raise ValueError(f"{label} fields may be omitted but must not be null")
+    return value
+
+
 def _validate_non_blank(value: str) -> str:
     if not value.strip():
         raise ValueError("must not be blank")
@@ -85,22 +95,12 @@ def _round_two_decimals(value: float) -> float:
 
 class UserCreate(BaseModel):
     username: Username
-    password: str
-
-    @field_validator("password")
-    @classmethod
-    def validate_password(cls, value: str) -> str:
-        return _validate_password(value)
+    password: Password
 
 
 class UserLogin(BaseModel):
     username: Username
-    password: str
-
-    @field_validator("password")
-    @classmethod
-    def validate_password(cls, value: str) -> str:
-        return _validate_password(value)
+    password: Password
 
 
 class UserOut(BaseModel):
@@ -158,13 +158,8 @@ class ReportGenerateRequest(BaseModel):
 
 class UserChangePassword(BaseModel):
     username: Username
-    old_password: str
-    new_password: str
-
-    @field_validator("old_password", "new_password")
-    @classmethod
-    def validate_password(cls, value: str) -> str:
-        return _validate_password(value)
+    old_password: Password
+    new_password: Password
 
 
 # ── Shoe Schemas ──────────────────────────────────────────────
@@ -251,9 +246,7 @@ class ShoeUpdate(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def reject_explicit_nulls(cls, value):
-        if isinstance(value, dict) and any(item is None for item in value.values()):
-            raise ValueError("shoe fields may be omitted but must not be null")
-        return value
+        return _reject_explicit_nulls(value, "shoe")
 
 
 class ShoeOut(ShoeBase):
@@ -304,9 +297,7 @@ class MonthlyMileageUpdate(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def reject_explicit_nulls(cls, value):
-        if isinstance(value, dict) and any(item is None for item in value.values()):
-            raise ValueError("monthly mileage fields may be omitted but must not be null")
-        return value
+        return _reject_explicit_nulls(value, "monthly mileage")
 
     @field_validator("km")
     @classmethod
@@ -410,9 +401,7 @@ class RunUpdate(BaseModel):
     def reject_explicit_nulls(cls, value):
         # A null version used to reach SQL as `version IS NULL` and always
         # failed as a misleading 409; reject it like shoe and month updates.
-        if isinstance(value, dict) and any(item is None for item in value.values()):
-            raise ValueError("run fields may be omitted but must not be null")
-        return value
+        return _reject_explicit_nulls(value, "run")
 
 
 class RunOut(RunBase):

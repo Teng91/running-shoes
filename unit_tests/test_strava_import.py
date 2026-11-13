@@ -14,7 +14,7 @@ from fastapi.testclient import TestClient
 from backend.clock import local_today
 from backend.dependencies import get_db
 from backend.main import app
-from backend.middleware import StravaUploadLimitMiddleware
+from backend.middleware import UploadLimitMiddleware
 from backend.models import MonthlyMileage, Run, Shoe, StravaImport
 from backend.routers import strava as strava_routes
 from backend.routers.strava import _parse_strava_csv
@@ -405,7 +405,7 @@ def test_strava_request_limit_rejects_before_endpoint_parsing(
         raise AssertionError("endpoint should not parse an oversized multipart body")
 
     guard = app.middleware_stack
-    while not isinstance(guard, StravaUploadLimitMiddleware):
+    while not isinstance(guard, UploadLimitMiddleware):
         guard = guard.app
     monkeypatch.setattr(guard, "max_bytes", 10)
     monkeypatch.setattr("backend.routers.strava._read_strava_upload", fail_if_endpoint_reads)
@@ -441,7 +441,7 @@ def test_strava_request_limit_counts_chunked_body_without_content_length(monkeyp
         "path": "/api/runs/import/strava/preview",
         "headers": [],
     }
-    middleware = StravaUploadLimitMiddleware(downstream, max_bytes=10, max_backup_bytes=10)
+    middleware = UploadLimitMiddleware(downstream, max_bytes=10, max_backup_bytes=10)
     asyncio.run(middleware(scope, receive, send))
     assert sent[0]["type"] == "http.response.start"
     assert sent[0]["status"] == 413
@@ -488,7 +488,7 @@ def test_upload_limit_messages_follow_the_configured_limits(path, message):
     async def downstream(_scope, _receive, _send):
         raise AssertionError("oversized request must not reach the route")
 
-    middleware = StravaUploadLimitMiddleware(downstream, max_bytes=3 * 1024 * 1024, max_backup_bytes=5 * 1024 * 1024)
+    middleware = UploadLimitMiddleware(downstream, max_bytes=3 * 1024 * 1024, max_backup_bytes=5 * 1024 * 1024)
     scope = {"type": "http", "method": "POST", "path": path,
              "headers": [(b"content-length", str(6 * 1024 * 1024).encode())]}
     asyncio.run(middleware(scope, receive, send))

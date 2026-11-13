@@ -8,7 +8,7 @@ test('startup and login show progress until the application is ready', () => {
   assert.match(htmlSource, /__appBootLegacyPoll/);
   assert.match(htmlSource, /Critical startup UI must not depend[\s\S]+body \{ margin: 0; opacity: 1 !important; \}/);
   assert.match(htmlSource, /id="app-styles" rel="preload" href="\/styles\.css\?v=[^"]+" as="style"/);
-  assert.match(htmlSource, /dataset\.ready='true';window\.dispatchEvent\(new Event\('appstylesready'\)\)/);
+  assert.match(htmlSource, /link\.dataset\.ready = 'true';\s+window\.dispatchEvent\(new Event\('appstylesready'\)\);/);
   assert.match(source, /\.app-boot\.is-hidden \{ opacity: 0; visibility: hidden/);
   assert.match(source, /@media \(prefers-reduced-motion: reduce\)/);
   assert.doesNotMatch(source, /body \{[^}]*opacity:\s*0/);
@@ -159,10 +159,9 @@ function loadUiActions(globals = {}) {
 
 test('SPEC-047 markup declares UI actions instead of inline JavaScript handlers', () => {
   const inline = /\son(?:click|dblclick|change|input|submit|keydown|keyup|focus|blur|error|load)=/g;
-  const htmlHandlers = htmlSource.match(inline) || [];
-  // The non-blocking stylesheet loader must run before any application script.
-  assert.deepEqual(htmlHandlers, [' onload=']);
-  assert.match(htmlSource, /<link id="app-styles" rel="preload"[^>]* onload=/);
+  // SPEC-054 moved the last exception, the stylesheet onload, into a hashed script.
+  assert.deepEqual(htmlSource.match(inline) || [], []);
+  assert.match(htmlSource, /<link id="app-styles" rel="preload" href="[^"]+" as="style">\n<script>/, 'the stylesheet loader runs before any application script');
   assert.equal((scriptSource.match(inline) || []).length, 0, 'generated rows declare data actions');
   assert.match(htmlSource, /getElementById\('app-boot-retry'\)\.addEventListener\('click'/, 'boot retry works without the app bundle');
 });

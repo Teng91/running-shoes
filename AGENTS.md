@@ -10,7 +10,13 @@
 - `backend/shoe_metrics.py`: canonical shoe cost, discount and lifecycle arithmetic.
 - `backend/read_models/`: user-scoped native statistics shared by HTTP, reports and AI adapters; never import tools or HTTP frameworks.
 - `backend/seeding.py`: optional default data using an injected session factory.
-- `backend/middleware.py`: request-level transport guards.
+- `backend/middleware.py`: request-level transport guards: security headers on every response (SPEC-054) and Strava/backup upload size limits.
+- `backend/observability.py`: request IDs and metadata-only structured HTTP logs; never log bodies, tokens or passwords.
+- `backend/auth.py`: HTTP bearer adapter; always decodes with the app's injected key (tests sign through `unit_tests/token_helpers.py`).
+- `backend/models.py`, `schemas.py`: ORM tables and Pydantic request/response contracts with input validation.
+- `backend/analytics.py`, `goals.py`, `reports.py`: read-only home insights, goal progress and monthly-report snapshots; their writes live in `backend/services/`.
+- `backend/exporting.py`, `strava_import.py`: pure CSV/XLSX export rows and Strava CSV parsing; `backend/services/exports.py`, `strava_imports.py` own the use cases.
+- `backend/services/mileage.py`: transactional shoe/month mileage deltas shared by run and import writes.
 - `backend/routers/`: feature-oriented HTTP routes; routers must never import `backend.main` and never build database queries (read models, services or `migrations.ready_schema_version` own them).
 - `backend/services/`: framework-independent application services; services must not import FastAPI or routers.
 - `backend/services/transactions.py`: SQLite writer reservation and commit/rollback ownership; validate quotas and versions only after acquiring the reservation.
@@ -22,12 +28,12 @@
 - `backend/read_models/highlights.py`: user-scoped next-shoe suggestion, year review and distance mix.
 - `backend/read_models/saved_reports.py`: user-scoped saved monthly report summaries and bodies.
 - `backend/read_models/rounding.py`: shared aggregate rounding (`round_metric`); do not redefine local `_round` helpers.
-- `scripts/document_contracts.py`: Markdown links, feature-spec structure, AC completion and traceability path validation.
+- `scripts/document_contracts.py`: Markdown links, feature-spec structure, AC completion, traceability path validation, and the README tree / SDD module inventory (SPEC-053).
 - `backend/credentials.py`: HTTP-independent bcrypt/JWT primitives; runtime secrets are injected.
 - `backend/services/accounts.py`, `goals.py`: account and goal writes, domain errors, and transactions.
 - `backend/services/reports.py`: injected report generation and domain events; `report_storage.py` owns latest-generation conditional transactions.
 - `backend/report_llm.py`, `backend/report_protocol.py`: model and SSE adapters; neither owns persistence.
-- `backend/llm.py`: OpenRouter adapter; users only see `user_facing_error()` text, raw provider error bodies go to the server log.
+- `backend/llm.py`: process-wide OpenRouter adapter (API key, `OR_MODEL`, output-token limit and model cache come from the environment, not `create_app` settings); users only see `user_facing_error()` text, raw provider error bodies go to the server log.
 - `backend/services/fingerprints.py`: canonical payload fingerprints for receipts, backups and import plans; `mutation_receipts` is the only keyed receipt and operation keys never replace authentication.
 - `backend/services/retention.py`: per-account caps for audit events, receipts and run tombstones, applied inside `write_transaction`.
 - `backend/audit_schema.py`: same-transaction domain audit and revision triggers; never audit credentials.
@@ -50,7 +56,7 @@
 - `frontend/templates/`: editable shell, modal and service-worker sources.
 - `frontend/css/`: ordered editable CSS sources; preserve cascade order.
 - `frontend/assets.json`: ordered scripts, native modules, style sources and shell revision.
-- `scripts/build_frontend.py`: deterministic frontend generation; use `--write` after source changes and `--check` to verify.
+- `scripts/build_frontend.py`: deterministic frontend generation, including the page CSP with SHA-256 hashes of the shell's inline scripts; use `--write` after source changes and `--check` to verify.
 - `scripts/release_check.py`, `release_browser.cjs`: anonymous, read-only asset/API/PWA deployment checks; never use real account credentials in traces.
 - `frontend/index.html`, `styles.css`, `service-worker.js`: generated static outputs; commit with their sources, do not edit directly.
 - `frontend/runtime/form-operations.mjs`: session/epoch/operation ownership and draft snapshots/reconciliation shared by feature adapters.
@@ -59,6 +65,7 @@
 - `scripts/browser_runner.py`: outer browser deadlines and bounded process-tree cleanup.
 - `frontend/runtime/feature-lifecycle.mjs`: DOM-independent native module for feature lifecycle ownership.
 - `frontend/runtime/run-controller.mjs`: native run state/operation owner with injected transport, session and key factory; DOM remains in the bridge.
+- `frontend/runtime/strava-controller.mjs`: native Strava preview/import/window ownership; DOM remains in `app-strava.js`.
 - `frontend/app-lifecycle.js`: compatibility bridge and reset registration.
 - `frontend/app-dates.js`: calendar parsing, cross-day limits and draft-safe foreground refresh.
 - `frontend/app-dialogs.js`: modal semantics and keyboard/focus lifecycle.
@@ -83,7 +90,8 @@
 - `frontend/app-shoe-charts.js`: shoe lifecycle, cost, retirement, and allocation charts.
 - `frontend/app-monthly-charts.js`: month/year selectors and monthly/annual mileage charts.
 - `frontend/app-spending.js`: spending cards, charts, and table.
-- `frontend/app-actions.js`: delegated `data-click`/`data-change`/… UI actions; markup and generated rows never contain inline JavaScript handlers.
+- `frontend/app-actions.js`: delegated `data-click`/`data-change`/… UI actions; markup and generated rows never contain inline JavaScript handlers (the page CSP blocks them).
+- `frontend/offline.html`: script-free offline fallback with its own strict CSP.
 - `frontend/app.js`: bootstrap and global dialog event wiring.
 - `frontend/app-agent.js`: AI conversation and streaming presentation.
 - `frontend/app-models.js`: shared provider/model menus.
@@ -109,6 +117,8 @@
 - Add a regression test when fixing a bug or changing externally observable behavior.
 - Update `README.md` when setup, configuration, commands, or user-facing behavior changes.
 - Update the SDD/ADR when module boundaries or dependency direction changes.
+- A new backend/frontend module or script must be added to the README directory tree and placed in `docs/architecture.md`; `docs-check` fails otherwise (SPEC-053).
+- Keep the page CSP strict: no inline event handlers, `eval`, external scripts or `javascript:` URLs. A new inline `<script>` in `frontend/templates/` is allowed only through the hash that `build_frontend.py --write` regenerates (SPEC-054).
 - Start user-visible, data-model, deployment, or architecture work from `docs/specs/template.md`.
 - Before a production migration, create and verify a database backup and document rollback.
 - Pushing to `main` deploys to production once CI passes, and a new `package.json` version is tagged and released. Push to `main` only when the user asks for a release or deploy; otherwise use a branch or `[skip ci]`.

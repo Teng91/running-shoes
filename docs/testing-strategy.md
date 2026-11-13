@@ -39,7 +39,8 @@ flowchart BT
 | 跑步／鞋款／月跑量一致 | transaction 與 edge-case tests | partial commit、差額或 optimistic lock 錯誤 |
 | 匯出與備份安全 | export API tests | 格式、欄位、帳號範圍或 secret 洩漏回歸 |
 | AI 工具安全與選擇 | agent evals + mocked stream tests | prompt/tool policy 或 fallback 回歸 |
-| 前端互動與 XSS 防護 | Node regression tests | state、escaping、分頁或錯誤處理回歸 |
+| 前端互動與 XSS 防護 | Node regression tests + 頁面 CSP 雜湊與 browser 違規檢查（SPEC-054） | state、escaping、分頁或錯誤處理回歸；inline script 未被雜湊或出現 inline handler |
+| 文件與程式一致 | `docs-check` 清單檢查（SPEC-053） | 新模組、script 或環境變數沒有寫進 README／SDD |
 | 固定跑步日誌首頁 | Node startup/lifecycle + Chromium/WebKit SPEC-015 + PWA offline navigation | 舊 activeTab 還原、重開後 agent-mode 殘留、ARIA／手機標籤不同步，或誤清登入與主題 |
 | 響應式版面 | Playwright matrix | 特定引擎、尺寸、主題出現重疊／溢出 |
 | 元件對齊契約 | 40 組 Chromium/WebKit 排版設定（SPEC-016）+ Node presentation tests | 日期／數字／選單不同高、混用按鈕密度、模型列錯位、圖表起點或數字表頭邊界不齊；覆蓋六個分頁、三個認證表單、全部彈窗、編輯／停用／錯誤／行內輸入 |
@@ -284,6 +285,23 @@ SPEC-032：合成資料驗證歷史筆數上限（v4.7.3 起 10,000／10,001）�
 ## SPEC-049 新版部署提示與主動偵測
 
 [規格與具名案例](specs/049-pwa-update-prompt.md) 以 Node 驗證不同版本只顯示提示、不自動重新載入、稍後與再次提示、確認後只重新載入一次；以假時間與事件驗證前景、焦點、連線恢復與 30 分鐘檢查、60 秒合併、隱藏與離線不檢查及失敗不拋錯。`frontend-pwa` 在 Chromium／WebKit 的舊版 worker 遷移與完整升級中，確認提示出現時仍是舊版，按下更新後才載入新 shell。
+
+## SPEC-053 文件清單一致性與程式整理
+
+[規格與具名案例](specs/053-documentation-inventory-and-hygiene.md)：
+- 以暫存 repo 驗證 `inventory_errors()` 會指出 README 目錄樹漏列的模組、列了但不存在的路徑、SDD 沒提到的應用模組，以及 README 沒寫的 `settings.py` 環境變數；目前的 repo 必須全部通過。
+- 方框樹解析器以縮排還原巢狀路徑，並忽略註解。
+- 回歸案例確認合併後的 legacy tool-call 掃描、共用 `Password` 型別（三個端點、新舊密碼）與只用注入密鑰的認證，行為都不變。
+- 前端 helper 以 LF 讀取來源，Windows 的 CRLF checkout 也能通過。
+
+## SPEC-054 安全標頭與頁面 CSP
+
+[規格與具名案例](specs/054-security-headers-and-page-csp.md)：
+- Node 測試解析產生的 `index.html`，用 `node:crypto` 重新計算每段 inline script 的 SHA-256，必須與 CSP 完全相同。
+- 確認政策位於第一個 script 之前、沒有 `'unsafe-inline'` 或外部來源，模板、產生的列與離線頁也沒有 inline 事件屬性。
+- 以 vm 執行樣式表載入器，驗證 preload 在 script 之前或之後完成時都只套用一次。
+- pytest 對 JSON、頁面、SPA fallback、script、401、404、422、413 回應檢查安全標頭，確認跨來源請求沒有 CORS 標頭、`.mjs` 在 `nosniff` 下仍是 `text/javascript`。
+- `frontend-e2e`、`frontend-layout` 與部署後 `release-check` 以 `trackCspViolations()` 收集真實 Chromium／WebKit 的 CSP 違規，有任何違規即失敗。
 
 ## SPEC-052 主畫面與分頁圖示改版
 

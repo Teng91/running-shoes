@@ -163,6 +163,74 @@ def spec_errors(root: Path, path: Path, source: str) -> list[str]:
     return errors
 
 
+# SPEC-053: every module must be findable from the README tree, and every
+# application module must be placed somewhere in the SDD.
+README_TREE_MODULES = (
+    "backend/**/*.py",
+    "frontend/app*.js",
+    "frontend/runtime/*.mjs",
+    "scripts/*.py",
+    "scripts/*.cjs",
+    "scripts/*.sql",
+)
+SDD_MODULES = ("backend/**/*.py", "frontend/app*.js", "frontend/runtime/*.mjs")
+
+
+def repository_modules(root: Path, patterns: tuple[str, ...]) -> list[str]:
+    modules = set()
+    for pattern in patterns:
+        for path in root.glob(pattern):
+            if path.is_file() and "__pycache__" not in path.parts and path.name != "__init__.py":
+                modules.add(path.relative_to(root).as_posix())
+    return sorted(modules)
+
+
+def readme_tree_paths(readme: str) -> set[str]:
+    """Paths listed in the README "目錄結構" tree; directories keep a trailing slash."""
+    section = readme.split("## 目錄結構", 1)[1] if "## 目錄結構" in readme else ""
+    block = re.search(r"```\n(.*?)```", section, re.DOTALL)
+    paths: set[str] = set()
+    stack: list[str] = []
+    for line in (block[1] if block else "").splitlines():
+        marker = re.search(r"[├└]── ", line)
+        if not marker:
+            continue
+        depth = marker.start() // 4
+        name = re.split(r"[\s#]", line[marker.end():], maxsplit=1)[0]
+        del stack[depth:]
+        stack.append(name.rstrip("/"))
+        paths.add("/".join(stack) + ("/" if name.endswith("/") else ""))
+    return paths
+
+
+def settings_environment_variables(root: Path) -> list[str]:
+    """Environment variable names that ``backend/settings.py`` reads."""
+    source = (root / "backend" / "settings.py").read_text(encoding="utf-8")
+    return sorted(set(re.findall(r'(?:env\.get\(|_positive_int\(\s*env,\s*)"([A-Z][A-Z0-9_]+)"', source)))
+
+
+def inventory_errors(root: Path) -> list[str]:
+    errors = []
+    readme = (root / "README.md").read_text(encoding="utf-8")
+    for name in settings_environment_variables(root):
+        if f"`{name}`" not in readme and f"{name}=" not in readme:
+            errors.append(f"README.md: environment variable {name} read by backend/settings.py is undocumented")
+    listed = readme_tree_paths(readme)
+    if not listed:
+        return ["README.md: the 目錄結構 tree is missing"]
+    for module in repository_modules(root, README_TREE_MODULES):
+        if module not in listed:
+            errors.append(f"README.md: 目錄結構 does not list {module}")
+    for entry in sorted(listed):
+        if not (root / entry.rstrip("/")).exists():
+            errors.append(f"README.md: 目錄結構 lists a path that does not exist: {entry}")
+    architecture = (root / "docs" / "architecture.md").read_text(encoding="utf-8")
+    for module in repository_modules(root, SDD_MODULES):
+        if module.rsplit("/", 1)[-1] not in architecture:
+            errors.append(f"docs/architecture.md: the SDD does not place {module}")
+    return errors
+
+
 def document_errors(root: Path) -> list[str]:
     paths = [
         root / name

@@ -5,11 +5,12 @@ from datetime import date
 import pytest
 from fastapi.testclient import TestClient
 
-from backend.auth import create_access_token, get_password_hash
+from backend.credentials import get_password_hash
 from backend.dependencies import get_db
 from backend.main import app
 from backend.models import Run, RunningGoal, Shoe, User
 from backend.read_models.trends import shoe_timeline, training_trends
+from unit_tests.token_helpers import create_access_token
 
 
 @pytest.fixture
