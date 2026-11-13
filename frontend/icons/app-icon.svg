@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Source for the PWA and iOS home-screen icons; render with node scripts/render_icons.cjs.
+       Full-bleed carbon background; ring and mark stay inside the maskable safe zone (r = 204.8). -->
+  <defs>
+    <radialGradient id="glow-volt" cx="26%" cy="18%" r="72%">
+      <stop offset="0" stop-color="#c8ff3c" stop-opacity=".2"/>
+      <stop offset=".6" stop-color="#c8ff3c" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glow-cyan" cx="92%" cy="100%" r="62%">
+      <stop offset="0" stop-color="#2fd8f0" stop-opacity=".16"/>
+      <stop offset="1" stop-color="#2fd8f0" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
+      <path d="M32 0H0V32" fill="none" stroke="#ffffff" stroke-opacity=".04" stroke-width="2"/>
+    </pattern>
+    <linearGradient id="volt" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#e4ff8f"/>
+      <stop offset="1" stop-color="#b4f01f"/>
+    </linearGradient>
+    <filter id="bloom" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="16" result="blur"/>
+      <feColorMatrix in="blur" type="matrix" values="0 0 0 0 .78  0 0 0 0 1  0 0 0 0 .24  0 0 0 .55 0"/>
+      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect width="512" height="512" fill="#07090c"/>
+  <rect width="512" height="512" fill="url(#grid)"/>
+  <rect width="512" height="512" fill="url(#glow-volt)"/>
+  <rect width="512" height="512" fill="url(#glow-cyan)"/>
+  <!-- Wear ring: dim track, volt progress from 12 o'clock, cyan "current" tick. -->
+  <circle cx="256" cy="256" r="182" fill="none" stroke="#1d242d" stroke-width="18"/>
+  <circle cx="256" cy="256" r="182" fill="none" stroke="url(#volt)" stroke-width="18" stroke-linecap="round"
+          stroke-dasharray="780 1200" transform="rotate(-90 256 256)"/>
+  <circle cx="256" cy="256" r="182" fill="none" stroke="#2fd8f0" stroke-width="18" stroke-linecap="round"
+          stroke-dasharray="70 1200" stroke-dashoffset="-850" transform="rotate(-90 256 256)"/>
+  <!-- Brand mark (same paths as the in-app 32-unit mark): speed lines and arrow. -->
+  <g filter="url(#bloom)" transform="translate(102 104) scale(9.5)" fill="url(#volt)">
+    <path d="M6 9.5h7l-1.6 3h-7z"/>
+    <path d="M4 14.5h9l-1.6 3h-9z" opacity=".7"/>
+    <path d="M6 19.5h7l-1.6 3h-7z" opacity=".45"/>
+    <path d="M14 6h7l8 10-8 10h-7l8-10z"/>
+  </g>
+</svg>

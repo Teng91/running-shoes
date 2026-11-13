@@ -22,7 +22,7 @@
 2. 點選 Safari 的「分享」按鈕。
 3. 選擇「加入主畫面」，再按「新增」。
 
-之後可從主畫面以獨立 App 視窗開啟，並使用跑鞋搭配里程進度環的專屬圖示。PWA 本身免費，不需要 TestFlight 或 Apple Developer 帳號。圖表與 Markdown 套件使用專案內固定版本並包含在離線 app shell；application CSS／JavaScript 會以同一版號快取，避免更新後混用新舊介面資產。登入、資料同步與 AI 功能仍需要網路連線。離線時會保留登入狀態，待重新連線後繼續使用。
+之後可從主畫面以獨立 App 視窗開啟，並使用「速度線＋箭頭」標誌搭配磨耗進度環的專屬圖示。PWA 本身免費，不需要 TestFlight 或 Apple Developer 帳號。圖表與 Markdown 套件使用專案內固定版本並包含在離線 app shell；application CSS／JavaScript 會以同一版號快取，避免更新後混用新舊介面資產。登入、資料同步與 AI 功能仍需要網路連線。離線時會保留登入狀態，待重新連線後繼續使用。
 
 如果主畫面仍顯示舊圖示，請先刪除原本的主畫面捷徑，再從 Safari 重新執行「加入主畫面」，讓 iOS 重新取得圖示。
 
@@ -163,7 +163,7 @@ running-shoes/
 │   ├── manifest.webmanifest # PWA 名稱、顏色與圖示設定
 │   ├── service-worker.js # App shell 快取與離線 fallback
 │   ├── offline.html      # 無快取頁面可用時的離線提示
-│   ├── icons/            # PWA、iOS 主畫面圖示與高解析度來源檔
+│   ├── icons/            # PWA、iOS 主畫面圖示與向量來源 app-icon.svg（node scripts/render_icons.cjs 產生 PNG）
 │   ├── vendor/           # 固定版本的 Chart.js 與 marked.js 離線資源
 │   └── favicon.svg
 ├── docs/
@@ -712,6 +712,14 @@ v3.10.3 使用 Asset 3.10.3／shell v38、schema 6、51 個 release assets。
 `registry.fly.io/running-shoes@sha256:bac44457f12adfde6473e9d9a973b330e1bf69eac7e44feb3fb6ed1f5a55429a`，
 不還原業務資料快照。發布驗證涵蓋 verify、40 組版面、雙引擎 CRUD／PWA、main/tag CI 及正式站匿名 release-check。
 
+### 主畫面與分頁圖示改版（SPEC-052，v4.11.0）
+
+- PWA 與 iOS 主畫面圖示改為碳黑底、volt「速度線＋箭頭」標誌配磨耗進度環，和介面內的品牌標誌一致；Android 的圓形裁切也不會切到進度環。
+- 瀏覽器分頁圖示改用同一個 volt 標誌的 SVG，並保留 PNG 備援。
+- 已加入 iOS 主畫面的捷徑不會自動換圖示，請刪除後從 Safari 重新「加入主畫面」；Android 會在 Chrome 下次檢查時自動更新。
+
+Asset 4.11.0／shell v61、schema 7 不變，可直接回滾至 v4.10.0 image。
+
 ### 運動科技風視覺改版（SPEC-051，v4.10.0）
 
 - 整個介面改成運動科技風：碳黑底加細格線、螢光黃綠主色、DIN 風格數字、斜線「速度條」標記與英文區塊小標；登入頁、開機畫面與側欄使用新的「速度線＋箭頭」標誌，分頁圖示改為線條 SVG。
@@ -893,7 +901,7 @@ Playwright／Chromium／WebKit 齊全時，也會執行版面測試。
 避免每次停止都重跑。Hook 不會呼叫其他模型、外部 API，或傳送提示、diff、原始碼與測試輸出。
 GitHub Actions 仍會在 push／pull request 執行 `verify`，並以三個可獨立重跑的 browser jobs 執行完整版面矩陣、真實 CRUD E2E 與 PWA 升級／離線測試；push 到 main 時再依序快照、部署、檢查並發版（見「日常開發流程、自動部署與發版」）；Dependabot 每月以單一 PR 合併 GitHub Actions 更新；Python 只接收安全性更新 PR，例行升級依下方 `uv pip compile --universal` 步驟手動重編鎖定檔（Dependabot 產生的鎖定檔會遺失 Windows 條件）。
 
-本次驗證基線為 Python **627 passed**、前端回歸測試 **175 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
+本次驗證基線為 Python **627 passed**、前端回歸測試 **177 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
 版面檢查涵蓋 WebKit／Chromium、亮／暗模式與 10 組直橫向尺寸，共 40 組設定，檢查四個功能分頁與月報、三個認證表單、圖表、全部彈窗、行內編輯、停用／錯誤及空資料狀態。
 
 主要表單、工具列與彈窗操作統一為 44px 控制項；桌面表格內的緊湊操作為 36px，手機至少 44px。

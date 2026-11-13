@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [4.11.0] - 2026-11-13
+
+### Changed
+- 主畫面與分頁圖示改版（SPEC-052）：PWA、iOS 主畫面圖示改為碳黑底配 volt「速度線＋箭頭」標誌與磨耗進度環，瀏覽器分頁的 `favicon.svg` 改用同一個標誌（取代紫色「R」）。圖示有向量來源 `frontend/icons/app-icon.svg`，以 `node scripts/render_icons.cjs` 產生 PNG。已加入 iOS 主畫面的捷徑需刪除後重新「加入主畫面」才會換圖示。Asset 4.11.0／shell v61，schema 7 不變。
+
 ## [4.10.0] - 2026-11-13
 
 ### Changed

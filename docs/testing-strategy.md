@@ -285,6 +285,10 @@ SPEC-032：合成資料驗證歷史筆數上限（v4.7.3 起 10,000／10,001）�
 
 [規格與具名案例](specs/049-pwa-update-prompt.md) 以 Node 驗證不同版本只顯示提示、不自動重新載入、稍後與再次提示、確認後只重新載入一次；以假時間與事件驗證前景、焦點、連線恢復與 30 分鐘檢查、60 秒合併、隱藏與離線不檢查及失敗不拋錯。`frontend-pwa` 在 Chromium／WebKit 的舊版 worker 遷移與完整升級中，確認提示出現時仍是舊版，按下更新後才載入新 shell。
 
+## SPEC-052 主畫面與分頁圖示改版
+
+[規格與具名案例](specs/052-app-icon-refresh.md) 以 Node 讀取 PNG 標頭，確認 manifest 宣告的 192／512 圖示與 180px `apple-touch-icon` 的實際尺寸、manifest 圖示可 maskable；比對向量來源 `app-icon.svg` 與 `favicon.svg` 的標誌路徑和介面品牌標誌完全相同，並計算進度環外緣落在半徑 40% 的 maskable 安全區內。模板測試確認 SVG 分頁圖示優先、PNG 備援，且所有圖示都在 service worker 預先快取清單中；`frontend-pwa` 驗證新 shell 版本的升級流程。
+
 ## SPEC-051 運動科技風視覺改版
 
 [規格與具名案例](specs/051-sports-tech-visual-refresh.md) 以 Node 解析產生的 `styles.css`，確認圖表程式讀取的每個 `getThemeColor()` token 在暗色與亮色主題都有定義、舊的靛藍／綠色不再寫死；以 token 名稱 stub 驗證磨耗色階門檻、每週跑量與輪替時間軸的配色，以及月曆輸出 `has-run` 與 `--day-load` 而非 inline 顏色。模板測試確認分頁使用線條 SVG 且標籤仍為最後一個 span、英文小標與描邊字以 `content: … / ""` 排除在無障礙名稱外，手機標題列不使用會改變 fixed 定位的 filter／transform。`frontend-layout` 的 40 組版面確認幾何不變。

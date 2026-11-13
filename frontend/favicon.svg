@@ -1,4 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <rect width="32" height="32" rx="6" fill="#1a1d2e"/>
-  <text x="8" y="24" font-family="system-ui,sans-serif" font-size="22" font-weight="bold" fill="#818cf8">R</text>
+  <rect width="32" height="32" rx="7" fill="#07090c"/>
+  <g fill="#c8ff3c" transform="translate(16.3 16) scale(.9) translate(-15.7 -16)">
+    <path d="M6 9.5h7l-1.6 3h-7z"/>
+    <path d="M4 14.5h9l-1.6 3h-9z" opacity=".7"/>
+    <path d="M6 19.5h7l-1.6 3h-7z" opacity=".45"/>
+    <path d="M14 6h7l8 10-8 10h-7l8-10z"/>
+  </g>
 </svg>
