@@ -13,7 +13,8 @@ function trendsContext(nodes, globals = {}) {
   return runContext({
     document: { getElementById: id => nodes[id], querySelector: () => ({ dataset: { panel: globals.panel || 'monthly' } }) },
     chartInstances: {}, renderedPanels: new Map(), runningGoal: { start_year: 2026 },
-    getThemeColor: () => '#000', brandColor: () => '#123456', shoeColor: () => '#123456', fitChartLabel: label => label,
+    // Returns the token name so assertions show which theme color each mark uses (SPEC-051).
+    getThemeColor: token => token, brandColor: () => '#123456', shoeColor: () => '#123456', fitChartLabel: label => label,
     Chart: function(_, config) { this.config = config; this.destroy = () => {}; },
     console: { error: assert.fail }, ...globals,
   });
@@ -54,7 +55,7 @@ test('SPEC-038 trends render a Monday-first heatmap, weekly spikes and the goal 
   assert.equal(nodes['run-heatmap'].parentElement.scrollLeft, 900, 'phones start at the latest weeks');
 
   const weekly = context.chartInstances.weekly.config.data.datasets[0];
-  assert.deepEqual(weekly.backgroundColor, ['#6366f1', '#f97316', 'rgba(99,102,241,.45)']);
+  assert.deepEqual(weekly.backgroundColor, ['--chart-1', '--chart-warn', '--chart-1-soft'], 'spikes stay orange, the partial week is muted');
   assert.match(nodes['weekly-note'].textContent, /橘色的 1 週比前 4 週平均多 30%/);
   assert.equal(context.chartInstances.cumulative.config.data.datasets.length, 2);
   assert.match(nodes['cumulative-note'].textContent, /累計 36\.0 km，超前目標進度 16\.3 km；照目前速度全年約 2190 km（目標 1200 km）/);
@@ -89,7 +90,7 @@ test('SPEC-038 rotation timeline names active shoes and calls out idle ones with
   await context.renderShoeTimeline();
   const { config } = context.chartInstances.timeline;
   assert.deepEqual(config.data.labels, ['PUMA Nitro', 'Mizuno Rider（日常）']);
-  assert.deepEqual(config.data.datasets[0].backgroundColor, ['#f97316', '#123456']);
+  assert.deepEqual(config.data.datasets[0].backgroundColor, ['--chart-warn', '#123456']);
   const [start, end] = config.data.datasets[0].data[1];
   assert.equal(end - start, (88 + 1) * 86400000, 'bars include their last day');
   assert.equal(nodes['shoe-timeline-canvas'].style.height, '140px');

@@ -114,7 +114,7 @@ function renderSpendingChart() {
       datasets: [{
         label: '花費',
         data: paid,
-        backgroundColor: '#6366f1',
+        backgroundColor: getThemeColor('--chart-2', '#2fd8f0'),
         borderRadius: 4,
       }],
     },
@@ -167,7 +167,7 @@ function renderSpendingYearlyChart() {
       datasets: [{
         label: '年度花費',
         data: paidTotals,
-        backgroundColor: '#6366f1',
+        backgroundColor: getThemeColor('--chart-2', '#2fd8f0'),
         borderRadius: 4,
       }],
     },

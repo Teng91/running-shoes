@@ -76,7 +76,7 @@ test('shoe purchase columns live only in spending details, with aligned table ro
     document: { getElementById: id => elements[id] },
     shoes: [shoe], retiredShoes: [{ ...shoe, id: 8, is_retired: true }],
     brandColor: () => '#123456', shoeColor: () => '#123456', progressColor: () => '#123456',
-    shoeCategories: s => s.categories,
+    getThemeColor: (_, fallback) => fallback, shoeCategories: s => s.categories,
   });
   vm.runInContext(['esc', 'calc', 'fmtPct', 'fmtCostPerKm', 'fmtDate',
     'renderTable', 'renderRetiredTable'].map(extract).join('\n'), context);

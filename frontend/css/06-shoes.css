@@ -1,13 +1,15 @@
 /* Shoe alerts */
 .shoe-alerts { display: grid; gap: 8px; margin: -12px 0 28px; }
-.shoe-alert { border: 1px solid var(--border); border-left: 3px solid var(--orange); background: rgba(249,115,22,0.08); border-radius: 8px; padding: 10px 12px; font-size: 13px; }
-.shoe-alert.urgent { border-left-color: var(--red); background: rgba(239,68,68,0.10); }
+.shoe-alert { border: 1px solid rgba(255, 138, 31, .3); border-left: 3px solid var(--orange); background: rgba(255, 138, 31, .07); border-radius: var(--radius); padding: 10px 12px; font-size: 13px; }
+.shoe-alert.urgent { border-color: rgba(255, 77, 94, .35); border-left-color: var(--red); background: rgba(255, 77, 94, .09); }
 .shoe-alert strong { color: var(--text); }
 .shoe-alert span { color: var(--text-dim); }
 .category-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: -12px 0 28px; }
-.category-card { border: 1px solid var(--border); background: var(--card); border-radius: 8px; padding: 10px 12px; font-size: 13px; }
-.category-card.need { border-color: var(--red); background: rgba(239,68,68,0.10); }
-.category-card strong { display: block; margin-bottom: 4px; }
+.category-card { position: relative; border: 1px solid var(--border); background: var(--card); border-radius: var(--radius); padding: 10px 12px 10px 16px; font-size: 13px; box-shadow: var(--shadow-card); }
+.category-card::before { content: ""; position: absolute; top: 10px; bottom: 10px; left: 0; width: 3px; border-radius: 0 3px 3px 0; background: var(--chart-1); }
+.category-card.need { border-color: rgba(255, 77, 94, .45); background: rgba(255, 77, 94, .09); }
+.category-card.need::before { background: var(--red); }
+.category-card strong { display: block; margin-bottom: 4px; font-weight: 800; letter-spacing: .04em; }
 .category-card span { color: var(--text-dim); }
 @media (max-width: 700px) { .category-grid { grid-template-columns: 1fr 1fr; } }
 
@@ -28,29 +30,31 @@
   padding: 8px 6px;
   border: 1px solid var(--border);
   border-radius: 8px;
-  background: var(--bg);
+  background: var(--field-bg);
   font-size: 13px;
   color: var(--text);
   cursor: pointer;
+  transition: border-color .15s, background .15s;
 }
 .category-checkboxes label:has(input:checked) {
-  border-color: var(--accent);
-  background: rgba(99,102,241,0.12);
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
 }
 .category-checkboxes input[type="checkbox"] {
   flex: 0 0 14px;
   width: 14px;
   height: 14px;
   margin: 0;
-  accent-color: var(--accent);
+  accent-color: var(--chart-1);
 }
 .form-row .category-field { grid-column: 1 / -1; }
 
 /* Inline edit */
-.inline-input { width: 90px; height: var(--control-compact-height); line-height: var(--control-line-height); padding: 6px 8px; background: var(--bg); border: 1px solid var(--accent); border-radius: 4px; color: var(--text); font-size: 13px; text-align: right; font-variant-numeric: tabular-nums; }
+.inline-input { width: 90px; height: var(--control-compact-height); line-height: var(--control-line-height); padding: 6px 8px; background: var(--field-bg); border: 1px solid var(--accent-line); border-radius: 4px; color: var(--text); font-family: var(--font-num); font-size: 14px; text-align: right; font-variant-numeric: tabular-nums; box-shadow: 0 0 0 3px rgba(var(--accent-rgb), .14); }
+.inline-input:focus { outline: none; }
 
 /* Color dots for brands */
-.brand-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+.brand-dot { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 8px; transform: skewX(-14deg); }
 
 @media (max-width: 900px) {
   .charts { grid-template-columns: 1fr; }

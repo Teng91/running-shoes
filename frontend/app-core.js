@@ -77,10 +77,10 @@ function applyTheme(theme) {
   const btn = document.getElementById('theme-toggle-btn');
   if (theme === 'light') {
     document.body.classList.add('light-theme');
-    if (btn) btn.textContent = '🌙 暗色模式';
+    if (btn) btn.textContent = '☾︎ 暗色模式';
   } else {
     document.body.classList.remove('light-theme');
-    if (btn) btn.textContent = '☀️ 亮色模式';
+    if (btn) btn.textContent = '☀︎ 亮色模式';
   }
 }
 
