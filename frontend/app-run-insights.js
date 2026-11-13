@@ -160,7 +160,7 @@ function renderRunCalendar(filtered, month) {
       const shoe = runShoe(run.shoe_id);
       return `<button class="calendar-run" data-click="open-run" data-run-id="${run.id}">${esc(shoe?.model || '跑鞋')}</button>`;
     }).join('');
-    return `<div class="calendar-day${date === today ? ' today' : ''}" style="background:rgba(34,197,94,${intensity})" data-click="select-calendar-date" data-date="${date}"><div class="calendar-number">${day}</div>${total ? `<div class="calendar-total">${total.toFixed(2)} km</div>` : ''}${items}</div>`;
+    return `<div class="calendar-day${total ? ' has-run' : ''}${date === today ? ' today' : ''}" style="--day-load:${intensity.toFixed(2)}" data-click="select-calendar-date" data-date="${date}"><div class="calendar-number">${day}</div>${total ? `<div class="calendar-total">${total.toFixed(2)} km</div>` : ''}${items}</div>`;
   });
   target.innerHTML = [...weekdays, ...blanks, ...cells].join('');
 }
@@ -238,7 +238,7 @@ function renderShoeAnalytics(data) {
   const gridColor = getThemeColor('--chart-grid', '#334155');
   chartInstances.shoeAnalytics = new Chart(document.getElementById('chart-shoe-analytics'), {
     type: 'bar',
-    data: { labels: data.monthly_history.map(item => `${item.year}/${item.month}`), datasets: [{ label: '里程', data: data.monthly_history.map(item => item.km), backgroundColor: '#22c55e', borderRadius: 4 }] },
+    data: { labels: data.monthly_history.map(item => `${item.year}/${item.month}`), datasets: [{ label: '里程', data: data.monthly_history.map(item => item.km), backgroundColor: getThemeColor('--chart-1', '#c8ff3c'), borderRadius: 4 }] },
     options: { maintainAspectRatio:false, plugins:{ legend:{display:false}, tooltip:{callbacks:{label:context => `${Number(context.raw).toFixed(2)} km · ${data.monthly_history[context.dataIndex].count} 次`}}}, scales:{x:{grid:{display:false},ticks:{color:textColor}},y:{beginAtZero:true,grid:{color:gridColor},ticks:{color:textColor,callback:value => value + ' km'}}} },
   });
 }

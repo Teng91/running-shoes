@@ -31,10 +31,10 @@ const shoeShareLabels = {
       const km = shareKm(value);
       const percentage = value / total * 100;
 
-      ctx.font = '700 10px "Segoe UI", system-ui, sans-serif';
+      ctx.font = '700 11px "DIN Alternate", Bahnschrift, "Segoe UI", system-ui, sans-serif';
       ctx.strokeText(`${km} km`, x, y - 6);
       ctx.fillText(`${km} km`, x, y - 6);
-      ctx.font = '700 9px "Segoe UI", system-ui, sans-serif';
+      ctx.font = '700 10px "DIN Alternate", Bahnschrift, "Segoe UI", system-ui, sans-serif';
       ctx.strokeText(`${percentage.toFixed(1)}%`, x, y + 6);
       ctx.fillText(`${percentage.toFixed(1)}%`, x, y + 6);
     });
@@ -72,8 +72,8 @@ function renderCharts() {
       }, {
         label: '剩餘里程',
         data: calcs.map(c => c.remainingMileage),
-        backgroundColor: '#22c55e44',
-        borderColor: '#22c55e',
+        backgroundColor: getThemeColor('--chart-track', 'rgba(255,255,255,.07)'),
+        borderColor: getThemeColor('--chart-muted', '#6b7684'),
         borderWidth: 1,
         borderRadius: 4,
       }]
@@ -280,7 +280,7 @@ async function renderShoeTimeline() {
     if (!shoe) return `鞋款 #${row.shoe_id}`;
     return `${shoe.brand} ${shoe.model}${shoe.nickname ? `（${shoe.nickname}）` : ''}`;
   });
-  const colors = rows.map(row => (row.idle ? '#f97316' : shoeColor(row.shoe_id)));
+  const colors = rows.map(row => (row.idle ? getThemeColor('--chart-warn', '#ff8a1f') : shoeColor(row.shoe_id)));
   const toTime = iso => { const [y, m, d] = iso.split('-').map(Number); return new Date(y, m - 1, d).getTime(); };
   const today = toTime(timeline.as_of);
   // A single-day bar still needs visible width, so each bar ends after its last day.
@@ -335,12 +335,13 @@ async function renderShoeTimeline() {
         const { ctx, chartArea, scales: { x } } = chart;
         const position = x.getPixelForValue(today);
         if (position < chartArea.left || position > chartArea.right) return;
+        const todayColor = getThemeColor('--chart-2', '#2fd8f0');
         ctx.save();
-        ctx.strokeStyle = '#22c55e';
+        ctx.strokeStyle = todayColor;
         ctx.setLineDash([4, 4]);
         ctx.beginPath(); ctx.moveTo(position, chartArea.top); ctx.lineTo(position, chartArea.bottom); ctx.stroke();
-        ctx.fillStyle = '#22c55e';
-        ctx.font = '10px "Segoe UI", system-ui, sans-serif';
+        ctx.fillStyle = todayColor;
+        ctx.font = '10px "DIN Alternate", Bahnschrift, "Segoe UI", system-ui, sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'bottom';
         ctx.fillText('今天', position, chartArea.top - 3);

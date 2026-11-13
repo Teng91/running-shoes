@@ -641,6 +641,7 @@ flowchart LR
 - **限流**：`rate_limits.consume()` 把同一請求的所有視窗放在一個交易，滿了就整筆回滾；限額來自 `app.state.settings`，不再保留記憶體桶。
 - **稽核 trigger**：每次啟動依目前欄位重建，避免舊欄位清單使快照不完整或使寫入失敗。
 - **Strava**：`strava_import.parse_activity_dates()` 把 UTC 時間戳轉為 `clock.APP_TIMEZONE` 日期。`date_corrections()` 只修正仍停在舊 UTC 日期的既有活動，`services/strava_imports.py` 在匯入交易中移動日期與月跑量。
+- **v4.10.0**：視覺改版（SPEC-051）。顏色集中在 `frontend/css/01-foundation.css` 的主題 token（`:root` 暗色、`body.light-theme` 亮色）；圖表模組只透過 `getThemeColor(token, fallback)` 讀色，`app-charts.js` 設定 Chart.js 全域字型與 tooltip。模組邊界與依賴方向不變。
 - **v4.9.0**：跑鞋頁的「近 90 天月均里程佔比」改用 ShoeOut 的 `actual_monthly_km_90_days`，現役表格移除計畫月跑量欄（SPEC-050）。跑步紀錄或目標資料到達時，`invalidatePanels()` 也會讓跑鞋分頁失效，因為輪替時間軸與距離分布的讀取會被這些到達作廢。
 - **v4.8.0**：`app-updates.js` 在頁面開著時以 `registration.update()` 檢查新部署（前景、焦點、連線恢復、每 30 分鐘，60 秒內只一次）；新 shell 啟用後只顯示 `#app-update-notice`，由使用者確認才重新載入（SPEC-049）。
 - **v4.7.3（部署）**：push 到 main 由 `.github/workflows/verify.yml` 在測試後依序做 Fly volume 快照、`flyctl deploy`、匿名 release-check 與新版號的 tag／Release；部署 job 是唯一持有 `FLY_API_TOKEN` 的地方，發版 job 是唯一可寫入 repo 的地方（SPEC-048）。

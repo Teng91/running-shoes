@@ -24,7 +24,7 @@ select:not([multiple]) {
   line-height: var(--control-line-height);
 }
 .form-group input[type="file"] { min-height: var(--control-height); padding: 6px; line-height: 30px; overflow: hidden; }
-input::file-selector-button { height: 30px; margin-right: 8px; padding: 0 10px; border: 0; border-radius: 5px; background: var(--btn-bg); color: var(--text); font: inherit; line-height: 30px; }
+input::file-selector-button { height: 30px; margin-right: 8px; padding: 0 10px; border: 1px solid var(--border-strong); border-radius: 5px; background: var(--btn-bg); color: var(--text); font: inherit; font-weight: 600; line-height: 28px; cursor: pointer; }
 /* Native iOS date controls can keep an intrinsic width inside a grid. */
 input[type="date"], input[type="month"] {
   display: block; appearance: none; -webkit-appearance: none;
@@ -101,5 +101,5 @@ input::-webkit-datetime-edit { padding: 0; }
 /* Feature lifecycle additions. Keep shared controls and responsive gutters intact. */
 [hidden] { display: none !important; }
 body.dialog-open { overflow: hidden; }
-.app-version { color: var(--text-dim); font-size: 11px; text-align: right; margin-bottom: 8px; }
+.app-version { color: var(--text-dim); font-family: var(--font-mono); font-size: 11px; letter-spacing: .08em; text-align: right; margin-bottom: 8px; }
 #run-paging { justify-content: flex-end; margin-top: 12px; }

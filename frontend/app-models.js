@@ -42,6 +42,6 @@ async function refreshAgentModels() {
     alert('刷新模型列表失敗：' + e.message);
   } finally {
     btn.disabled = false;
-    btn.textContent = '🔄 刷新模型列表';
+    btn.textContent = '↻ 刷新模型列表';
   }
 }

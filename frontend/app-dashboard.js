@@ -14,12 +14,13 @@ function fmtPct(v) { return (v * 100).toFixed(2) + '%'; }
 function fmtMoney(v) { return '$' + Math.round(v).toLocaleString(); }
 function fmtDate(d) { if (!d) return '-'; return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`; }
 function fmtCostPerKm(v) { return v !== null ? '$' + v.toFixed(2) : '-'; }
+// Wear ramp from the theme tokens (--wear-1 fresh … --wear-5 worn out).
 function progressColor(pct) {
-  if (pct < 0.2) return '#16a34a';
-  if (pct < 0.4) return '#4ade80';
-  if (pct < 0.6) return '#eab308';
-  if (pct < 0.8) return '#f97316';
-  return '#ef4444';
+  if (pct < 0.2) return getThemeColor('--wear-1', '#c8ff3c');
+  if (pct < 0.4) return getThemeColor('--wear-2', '#8be04e');
+  if (pct < 0.6) return getThemeColor('--wear-3', '#ffd23f');
+  if (pct < 0.8) return getThemeColor('--wear-4', '#ff8a1f');
+  return getThemeColor('--wear-5', '#ff4d5e');
 }
 
 function brandColor(brand, seq) {

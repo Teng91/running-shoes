@@ -96,7 +96,7 @@ async function renderShoeStackedChart() {
   }));
   if (deletedKm.some(km => km > 0)) {
     datasets.push({ label: '已刪除的鞋款', data: deletedKm.map(v => parseFloat(v.toFixed(2))),
-      backgroundColor: '#94a3b8', borderRadius: 2 });
+      backgroundColor: getThemeColor('--chart-muted', '#6b7684'), borderRadius: 2 });
   }
 
   const textColor = getThemeColor('--text-dim', '#8b8d9a');
@@ -146,7 +146,7 @@ function renderYearlyTotalChart() {
       datasets: [{
         label: '年總跑量',
         data: totals,
-        backgroundColor: '#6366f1',
+        backgroundColor: getThemeColor('--chart-1', '#c8ff3c'),
         borderRadius: 4,
       }]
     },
@@ -171,7 +171,7 @@ function renderYearlyTotalChart() {
           if (!bar) return;
           ctx.save();
           ctx.fillStyle = mainTextColor;
-          ctx.font = 'bold 11px "Segoe UI", system-ui, sans-serif';
+          ctx.font = 'bold 12px "DIN Alternate", Bahnschrift, "Segoe UI", system-ui, sans-serif';
           ctx.textAlign = 'center';
           ctx.fillText(v.toFixed(0), bar.x, bar.y - 6);
           ctx.restore();
@@ -207,7 +207,7 @@ function renderMonthlyYearChart() {
       datasets: [{
         label: year + ' 年月跑量 (km)',
         data: values,
-        backgroundColor: '#22c55e',
+        backgroundColor: getThemeColor('--chart-1', '#c8ff3c'),
         borderRadius: 4,
       }]
     },
@@ -229,16 +229,17 @@ function renderMonthlyYearChart() {
         if (avg <= 0) return;
         const yPx = y.getPixelForValue(avg);
         if (yPx < chartArea.top || yPx > chartArea.bottom) return;
+        const lineColor = getThemeColor('--chart-line', '#ffd23f');
         ctx.save();
-        ctx.strokeStyle = '#eab308';
+        ctx.strokeStyle = lineColor;
         ctx.lineWidth = 1.5;
         ctx.setLineDash([5, 4]);
         ctx.beginPath();
         ctx.moveTo(chartArea.left, yPx);
         ctx.lineTo(chartArea.right, yPx);
         ctx.stroke();
-        ctx.fillStyle = '#eab308';
-        ctx.font = '11px "Segoe UI", system-ui, sans-serif';
+        ctx.fillStyle = lineColor;
+        ctx.font = '11px "DIN Alternate", Bahnschrift, "Segoe UI", system-ui, sans-serif';
         ctx.textAlign = 'right';
         ctx.fillText('月均 ' + avg.toFixed(1) + ' km', chartArea.right - 6, yPx - 6);
         ctx.restore();
@@ -347,14 +348,17 @@ function renderWeeklyChart(trends) {
   const weeks = trends.weekly;
   const threshold = trends.thresholds.spike_percent;
   const labels = weeks.map(week => { const [, m, d] = week.week_start.split('-'); return `${Number(m)}/${Number(d)}`; });
-  const colors = weeks.map(week => week.spike ? '#f97316' : week.partial ? 'rgba(99,102,241,.45)' : '#6366f1');
+  const [primary, partial, spike] = [['--chart-1', '#c8ff3c'], ['--chart-1-soft', 'rgba(200,255,60,.38)'], ['--chart-warn', '#ff8a1f']]
+    .map(([token, fallback]) => getThemeColor(token, fallback));
+  const colors = weeks.map(week => week.spike ? spike : week.partial ? partial : primary);
+  const averageColor = getThemeColor('--chart-line', '#ffd23f');
   chartInstances.weekly = new Chart(document.getElementById('chart-weekly'), {
     data: {
       labels,
       datasets: [
         { type: 'bar', label: '週跑量', data: weeks.map(week => week.km), backgroundColor: colors, borderRadius: 4, order: 2 },
-        { type: 'line', label: '4 週平均', data: weeks.map(week => week.average_km), borderColor: '#eab308',
-          backgroundColor: '#eab308', borderWidth: 2, pointRadius: 0, tension: .3, order: 1 },
+        { type: 'line', label: '4 週平均', data: weeks.map(week => week.average_km), borderColor: averageColor,
+          backgroundColor: averageColor, borderWidth: 2, pointRadius: 0, tension: .3, order: 1 },
       ],
     },
     options: {
@@ -405,12 +409,12 @@ function renderCumulativeChart(trends) {
   const toPoints = values => values.map((km, index) => ({ x: index, y: km }));
   const monthStarts = Array.from({ length: 12 }, (_, month) => Math.round((new Date(year, month, 1) - new Date(year, 0, 1)) / 86400000));
   const datasets = [{
-    label: '實際累計', data: toPoints(cumulative.actual_km), borderColor: '#22c55e',
-    backgroundColor: 'rgba(34,197,94,.12)', fill: true, borderWidth: 2, pointRadius: 0, tension: .1,
+    label: '實際累計', data: toPoints(cumulative.actual_km), borderColor: getThemeColor('--chart-1', '#c8ff3c'),
+    backgroundColor: getThemeColor('--chart-1-fill', 'rgba(200,255,60,.12)'), fill: true, borderWidth: 2, pointRadius: 0, tension: .1,
   }];
   if (cumulative.goal_active) {
     datasets.push({
-      label: '目標進度', data: toPoints(cumulative.goal_km), borderColor: '#94a3b8',
+      label: '目標進度', data: toPoints(cumulative.goal_km), borderColor: getThemeColor('--chart-muted', '#6b7684'),
       borderDash: [6, 4], borderWidth: 1.5, pointRadius: 0, fill: false,
     });
   }
@@ -456,7 +460,8 @@ function renderCumulativeChart(trends) {
 // ====== Year-over-year monthly mileage ======
 // Monthly totals come from the backend; the chart overlays one line per year and
 // emphasises the year chosen in the shared selector.
-const YEAR_LINE_COLORS = ['#6366f1', '#22c55e', '#f97316', '#38bdf8', '#e879f9', '#facc15'];
+// The emphasised year takes the theme's distance color; the others stay distinct from it.
+const YEAR_LINE_COLORS = ['#2fb8d8', '#ff8a1f', '#9b7bff', '#ff4f8b', '#e0b400', '#8893a2'];
 
 function renderYearOverYearChart() {
   if (chartInstances.yearOverYear) { chartInstances.yearOverYear.destroy(); delete chartInstances.yearOverYear; }
@@ -472,8 +477,8 @@ function renderYearOverYearChart() {
   const textColor = getThemeColor('--text-dim', '#8b8d9a');
   const gridColor = getThemeColor('--chart-grid', '#f1f5f9');
   const datasets = years.map((year, index) => {
-    const color = YEAR_LINE_COLORS[index % YEAR_LINE_COLORS.length];
     const emphasis = year === chosen;
+    const color = emphasis ? getThemeColor('--chart-1', '#c8ff3c') : YEAR_LINE_COLORS[index % YEAR_LINE_COLORS.length];
     return {
       label: String(year), data: byYear.get(year), borderColor: color, backgroundColor: color,
       borderWidth: emphasis ? 3 : 1.5, pointRadius: emphasis ? 3 : 0, spanGaps: false, tension: .25,
