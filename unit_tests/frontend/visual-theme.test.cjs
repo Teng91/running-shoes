@@ -1,4 +1,4 @@
-const { test, assert, vm, htmlSource, styleSource, scriptSource, extract } = require('./helpers.cjs');
+const { test, assert, fs, vm, htmlSource, styleSource, scriptSource, extract } = require('./helpers.cjs');
 
 // SPEC-051: the sports-tech theme is a token contract between CSS and the chart code.
 function block(selector) {
@@ -70,4 +70,47 @@ test('SPEC-051 decoration never re-anchors the fixed phone tab bar or shifts mea
   assert.doesNotMatch(sidebar, /^\s*(-webkit-)?(backdrop-filter|filter|transform)\s*:/m, 'the tab bar lives inside the phone header');
   assert.match(styleSource, /@keyframes panel-in \{ from \{ opacity: 0; \} to \{ opacity: 1; \} \}/);
   assert.match(styleSource, /@media \(prefers-reduced-motion: reduce\) \{\n  \.tab-panel\.active \{ animation: none; \}/);
+});
+
+// SPEC-052: home-screen and tab icons carry the same volt mark as the in-app brand.
+const pathData = svg => [...svg.matchAll(/<path d="([^"]+)"/g)].map(match => match[1]);
+function pngSize(file) {
+  const bytes = fs.readFileSync(file);
+  assert.equal(bytes.subarray(1, 4).toString('latin1'), 'PNG', `${file} is a PNG`);
+  return [bytes.readUInt32BE(16), bytes.readUInt32BE(20)];
+}
+
+test('SPEC-052 home-screen icons are rendered at their declared sizes from the volt mark source', () => {
+  const manifest = JSON.parse(fs.readFileSync('frontend/manifest.webmanifest', 'utf8'));
+  assert.deepEqual(manifest.icons.map(icon => icon.src), ['/icons/icon-192.png', '/icons/icon-512.png']);
+  for (const icon of manifest.icons) {
+    const [width, height] = pngSize(`frontend${icon.src}`);
+    assert.equal(`${width}x${height}`, icon.sizes);
+    assert.match(icon.purpose, /\bmaskable\b/);
+  }
+  assert.deepEqual(pngSize('frontend/icons/apple-touch-icon.png'), [180, 180]);
+  assert.equal(fs.existsSync('frontend/icons/app-icon-source.png'), false, 'the indigo raster source is retired');
+
+  const source = fs.readFileSync('frontend/icons/app-icon.svg', 'utf8');
+  const brand = htmlSource.slice(htmlSource.indexOf('<div class="app-brand-mark"'), htmlSource.indexOf('</svg>', htmlSource.indexOf('<div class="app-brand-mark"')));
+  // The mark group (after the background grid pattern) reuses the in-app brand paths exactly.
+  assert.deepEqual(pathData(source.slice(source.indexOf('<g filter='))), pathData(brand));
+  assert.match(source, /<rect width="512" height="512" fill="#07090c"\/>/, 'full-bleed opaque background for iOS and masks');
+  // Android masks may crop to a circle of radius 40% (204.8px of 512): the whole ring must fit inside.
+  for (const ring of source.matchAll(/<circle cx="256" cy="256" r="(\d+)"[^>]*stroke-width="(\d+)"/g)) {
+    assert.ok(Number(ring[1]) + Number(ring[2]) / 2 <= 204.8, `ring r=${ring[1]} stays in the maskable safe zone`);
+  }
+});
+
+test('SPEC-052 the browser tab uses the volt SVG mark with a PNG fallback', () => {
+  const favicon = fs.readFileSync('frontend/favicon.svg', 'utf8');
+  const brand = htmlSource.slice(htmlSource.indexOf('<div class="app-brand-mark"'), htmlSource.indexOf('</svg>', htmlSource.indexOf('<div class="app-brand-mark"')));
+  assert.deepEqual(pathData(favicon), pathData(brand));
+  assert.match(favicon, /fill="#07090c"[\s\S]*fill="#c8ff3c"/);
+  assert.doesNotMatch(favicon, /#818cf8|<text/);
+  assert.match(htmlSource, /<link rel="icon" type="image\/svg\+xml" href="\/favicon\.svg">\n<link rel="icon" type="image\/png" sizes="192x192" href="\/icons\/icon-192\.png">\n<link rel="apple-touch-icon" href="\/icons\/apple-touch-icon\.png">/);
+  const worker = fs.readFileSync('frontend/service-worker.js', 'utf8');
+  for (const asset of ['/favicon.svg', '/icons/icon-192.png', '/icons/icon-512.png', '/icons/apple-touch-icon.png']) {
+    assert.ok(worker.includes(`'${asset}',`), `${asset} is precached`);
+  }
 });
