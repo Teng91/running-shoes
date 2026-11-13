@@ -1,6 +1,6 @@
 # SPEC-054：安全標頭與頁面 Content-Security-Policy
 
-- 狀態：Accepted（AC-7 待 CI 的 Chromium／WebKit 執行後改為 Implemented）
+- 狀態：Implemented
 - Owner：Running Shoes maintainers
 - 關聯 issue／ADR：[ADR-0016](../adr/0016-build-time-hashed-page-csp.md)、[SPEC-047](047-review-hardening-and-decoupling.md)、[SPEC-053](053-documentation-inventory-and-hygiene.md)
 
@@ -59,7 +59,7 @@
   - 實作時，公司代理擋下了 Playwright 的下載，所以先以本機 headless Edge（Chromium）手動驗證：
     - 對照頁中沒有雜湊的 inline script 與外部樣式表會被擋下並回報違規。
     - 正式頁面匿名載入、登入、切換四個分頁（含圖表）、開啟跑鞋視窗、切換主題、呈現 Markdown、Service Worker 接管，以及離線頁，全程沒有 CSP 違規或頁面例外。
-    - WebKit 與自動化檢查仍待 CI。
+    - 分支 CI（GitHub Actions run 43420497443）在 Chromium／WebKit 通過 `frontend-e2e`、40 組 `frontend-layout` 與 `frontend-pwa`，沒有 CSP 違規。
   - CI 的 `frontend-e2e` 與 `frontend-layout` 在 Chromium／WebKit 確認沒有 CSP 違規。
   - 部署後 `release-check` 在正式站再確認一次。
 - 回滾方式與資料相容性：部署 v4.11.0 image 即恢復舊的 CORS 與無安全標頭。舊 shell 不含 CSP，與新後端相容。
@@ -72,7 +72,7 @@
 - [x] AC-4：Given JSON、頁面、SPA fallback、靜態 script、401、404、422 與 413 回應，When 回應送出，Then 都帶齊安全標頭；回應自己設定的同名標頭不被覆蓋。
 - [x] AC-5：Given 其他網站的 Origin 發出簡單請求或 preflight，When 呼叫 API，Then 回應沒有任何 `Access-Control-Allow-*` 標頭。
 - [x] AC-6：Given `nosniff`，When 提供 `.js`、`.mjs` 與 `.css`，Then Content-Type 固定為 `text/javascript` 與 `text/css`。
-- [ ] AC-7：Given 真實的 Chromium／WebKit，When 執行 CRUD E2E、40 組版面與部署後 release-check，Then 只要出現 CSP 違規，檢查就失敗。
+- [x] AC-7：Given 真實的 Chromium／WebKit，When 執行 CRUD E2E、40 組版面與部署後 release-check，Then 只要出現 CSP 違規，檢查就失敗。
 
 ## Test traceability
 
