@@ -87,7 +87,8 @@ async function run() {
     if (candidateGate && url.pathname === '/release-marker.js') { candidateStarted(); await candidateGate; }
     if (process.env.PWA_DEBUG) console.log('PWA fixture request', url.pathname, url.search);
     response.setHeader('Cache-Control', 'no-store');
-    // Match production CORSMiddleware: module requests have Origin, precache requests do not.
+    // v4.11 and older production (CORSMiddleware) varied module responses by Origin; keep
+    // simulating it so the worker's Vary-ignoring shell lookup stays covered (SPEC-018).
     response.setHeader('Vary', 'Origin');
     if (request.headers.origin) response.setHeader('Access-Control-Allow-Origin', request.headers.origin);
     if (url.pathname === '/runtime/feature-lifecycle.mjs' && request.headers.origin) moduleOriginRequests++;
