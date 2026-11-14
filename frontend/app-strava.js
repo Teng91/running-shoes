@@ -102,6 +102,7 @@ async function previewStravaFile() {
     summary.innerHTML = `找到 <strong>${stravaController.state.preview.run_count}</strong> 筆跑步活動；` +
       `其中 ${stravaController.state.preview.importable_count} 筆（${Number(stravaController.state.preview.importable_km).toFixed(2)} km）可匯入，` +
       `已有 ${stravaController.state.preview.duplicate_count} 筆重複。` +
+      stravaDeletedText(stravaController.state.preview) +
       stravaDateCorrectionText(stravaController.state.preview) +
       (unknown ? `有 ${unknown} 個鞋款需要手動配對或略過。` : '待匯入鞋款已全部自動配對。');
     const shoeOptions = allRunShoes().map(shoe => `<option value="${shoe.id}">${esc(shoeLabel(shoe))}</option>`).join('');
@@ -126,6 +127,12 @@ async function previewStravaFile() {
 }
 
 // SPEC-047: Strava exports UTC times; older imports stored the UTC date, which a re-import corrects.
+// Activities whose runs were deleted stay deleted (SPEC-055); history recovery restores one.
+function stravaDeletedText(preview) {
+  const count = Number(preview?.deleted_count || 0);
+  return count ? `另有 ${count} 筆先前刪除過的活動不會重新匯入（可從異動歷史復原）。` : '';
+}
+
 function stravaDateCorrectionText(preview) {
   const count = Number(preview?.date_correction_count || 0);
   if (!count) return '';
@@ -179,7 +186,7 @@ async function importStrava() {
     resourceStore.invalidate(['strava-history']);
     if (stravaController.ownsImport(operation)) {
       closeStravaModal();
-      alert(`已匯入 ${result.imported} 筆跑步紀錄${result.skipped_unmapped ? `，略過 ${result.skipped_unmapped} 筆未配對鞋款` : ''}${result.synced_mileage ? `，並同步 ${result.synced_mileage.toFixed(2)} km 至跑鞋與月跑量` : ''}${result.corrected_dates ? `，修正 ${result.corrected_dates} 筆跑步日期為台灣時間` : ''}。`);
+      alert(`已匯入 ${result.imported} 筆跑步紀錄${result.skipped_unmapped ? `，略過 ${result.skipped_unmapped} 筆未配對鞋款` : ''}${result.skipped_deleted ? `，略過 ${result.skipped_deleted} 筆先前刪除的活動` : ''}${result.synced_mileage ? `，並同步 ${result.synced_mileage.toFixed(2)} km 至跑鞋與月跑量` : ''}${result.corrected_dates ? `，修正 ${result.corrected_dates} 筆跑步日期為台灣時間` : ''}。`);
     }
     await loadData({ mutation: 'strava' });
   } catch (e) {

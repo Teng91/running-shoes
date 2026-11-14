@@ -212,7 +212,7 @@ def test_schema_seven_drops_superseded_run_receipts_without_changing_business_ro
         connection.execute(text("INSERT INTO schema_metadata VALUES ('schema_version', '6')"))
     for _ in range(2):
         run_startup_migrations(engine, sessions)
-        assert schema_version(engine) == 7
+        assert schema_version(engine) == 8
     assert "run_creation_requests" not in inspect(engine).get_table_names()
     with sessions() as db:
         assert db.query(models.User).one().username == "preserved"
@@ -235,6 +235,7 @@ def test_schema_seven_rollback_restores_the_schema_six_contract_and_reupgrades(t
         db.commit()
     connection = engine.raw_connection()
     try:
+        connection.executescript(Path("scripts/rollback_schema_eight.sql").read_text(encoding="utf-8"))
         connection.executescript(Path("scripts/rollback_schema_seven.sql").read_text(encoding="utf-8"))
         with pytest.raises(Exception, match="CHECK constraint failed"):
             connection.executescript(Path("scripts/rollback_schema_seven.sql").read_text(encoding="utf-8"))
@@ -244,8 +245,41 @@ def test_schema_seven_rollback_restores_the_schema_six_contract_and_reupgrades(t
     assert schema_version(engine) == 6
     assert "run_creation_requests" in inspect(engine).get_table_names()
     run_startup_migrations(engine, sessions)
-    assert schema_version(engine) == 7
+    assert schema_version(engine) == 8
     assert "run_creation_requests" not in inspect(engine).get_table_names()
     with sessions() as db:
+        assert db.query(models.Shoe).one().mileage == 42
+    engine.dispose()
+
+
+def test_schema_eight_rollback_keeps_rows_and_reupgrades(tmp_path):
+    """SPEC-055: the documented 8 -> 7 rollback is guarded, keeps every row and re-upgrades."""
+    from pathlib import Path
+
+    engine = create_engine(f"sqlite:///{tmp_path / 'rollback8.sqlite'}", connect_args={"check_same_thread": False})
+    event.listen(engine, "connect", lambda connection, _: configure_sqlite_connection(connection))
+    sessions = sessionmaker(bind=engine, autoflush=False)
+    run_startup_migrations(engine, sessions)
+    with sessions() as db:
+        user = models.User(username="rollback8", hashed_password="synthetic")
+        db.add(user)
+        db.flush()
+        db.add(models.Shoe(user_id=user.id, brand="A", model="B", date="2026-01-01", mileage=42))
+        db.add(models.RunTombstone(user_id=user.id, run_id=99, strava_id="strava-1"))
+        db.commit()
+    script = Path("scripts/rollback_schema_eight.sql").read_text(encoding="utf-8")
+    connection = engine.raw_connection()
+    try:
+        connection.executescript(script)
+        with pytest.raises(Exception, match="CHECK constraint failed"):
+            connection.executescript(script)
+        connection.rollback()
+    finally:
+        connection.close()
+    assert schema_version(engine) == 7
+    run_startup_migrations(engine, sessions)
+    assert schema_version(engine) == 8
+    with sessions() as db:
+        assert db.query(models.RunTombstone).one().strava_id == "strava-1"
         assert db.query(models.Shoe).one().mileage == 42
     engine.dispose()

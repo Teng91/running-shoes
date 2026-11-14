@@ -97,6 +97,7 @@ def delete_run(db: Session, user_id: int, run_id: int, expected_version: int | N
         if not run:
             raise NotFound("Run not found")
         run_values = (run.shoe_id, run.date, run.km)
+        strava_id = getattr(run, "strava_id", None)
         version = getattr(run, "version", 0) if expected_version is None else expected_version
         changed = (
             db.query(models.Run)
@@ -109,6 +110,6 @@ def delete_run(db: Session, user_id: int, run_id: int, expected_version: int | N
         )
         if not changed:
             raise Conflict("跑步紀錄已被更新，請重新載入後再刪除")
-        record_tombstone(db, user_id, run_id)
+        record_tombstone(db, user_id, run_id, strava_id)
         apply_run_mileage_deltas(db, user_id, [run_values], -1)
         return {"ok": True}

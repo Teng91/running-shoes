@@ -1,0 +1,81 @@
+// SPEC-055: correctness fixes that the dashboard, run log and login form render.
+const { runContext, test, assert, vm, extract, htmlSource, source } = require('./helpers.cjs');
+
+function nodes() {
+  return new Proxy({}, { get: (target, id) => target[id] ||= {
+    id, value: '', textContent: '', innerHTML: '', hidden: false, disabled: false, dataset: {}, style: {},
+  } });
+}
+const esc = value => String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const lifecycleConstants = source.match(/const LIFECYCLE_MONITOR_PERCENT = \d+;\s*const LIFECYCLE_REPLACE_SOON_PERCENT = \d+;/)[0];
+
+test('SPEC-055 every lifespan alert uses the shared 80% watch and 90% replace thresholds', () => {
+  const elements = nodes();
+  const shoe = (id, usage) => ({ id, brand: 'B', model: `M${id}`, categories: ['Daily'], usage_percent: usage });
+  const context = runContext({ document: { getElementById: id => elements[id] }, esc,
+    shoes: [shoe(1, 95), shoe(2, 85), shoe(3, 79.9)] });
+  vm.runInContext(`${lifecycleConstants}\n${['calc', 'shoeCategories', 'renderAlerts'].map(extract).join('\n')}`, context);
+  context.renderAlerts();
+  const html = elements['shoe-alerts'].innerHTML;
+  assert.match(html, /shoe-alert urgent">\s*<strong>B M1<\/strong>：<span>已使用 95%，可以準備換鞋/);
+  assert.match(html, /shoe-alert">\s*<strong>B M2<\/strong>：<span>已使用 85%，開始注意/);
+  assert.doesNotMatch(html, /M3/, 'below 80% raises no alert');
+  assert.match(lifecycleConstants, /MONITOR_PERCENT = 80;\s*const LIFECYCLE_REPLACE_SOON_PERCENT = 90;/);
+  assert.doesNotMatch(extract('renderCards') + extract('renderAlerts'), /lifeProgress >= 0\.[89]/, 'no local copy of the thresholds');
+});
+
+test('SPEC-055 run log cards name the selected month instead of this month', () => {
+  const elements = nodes();
+  const runs = [{ id: 1, date: '2026-09-03', km: 10, shoe_id: 7 }, { id: 2, date: '2026-09-05', km: 5, shoe_id: 7 }];
+  const context = runContext({ document: { getElementById: id => elements[id] }, esc,
+    selectedRunMonth: () => '2026-09', monthRuns: () => runs, RUN_PAGE_SIZE: 200,
+    runController: { state: { summary: null, offset: 0, hasMore: false, day: null } },
+    runShoe: id => ({ id, brand: 'Mizuno', model: 'Neo' }), shoeColor: () => '#000',
+    renderStravaStatus() {}, renderRunCalendar() {}, renderRunShoeChart() {}, loadDashboardAnalytics() {} });
+  vm.runInContext(extract('renderRunLog'), context);
+  context.renderRunLog();
+  const cards = elements['run-stats'].innerHTML;
+  assert.match(cards, /9 月總里程<\/div><div class="card-value">15\.00 km/);
+  assert.match(cards, /9 月主力鞋<\/div><div class="card-value">Neo/);
+  assert.doesNotMatch(cards, /本月/);
+});
+
+test('SPEC-055 a retired shoe analysis says retired instead of forecasting a date', () => {
+  const elements = nodes();
+  const context = runContext({ document: { getElementById: id => elements[id] }, esc, chartInstances: {} });
+  vm.runInContext(extract('renderShoeAnalytics'), context);
+  const data = retired => ({
+    shoe: { brand: 'Mizuno', model: 'Sky', is_retired: retired, categories: ['Daily'], purchase_date: '2025-01-01' },
+    lifecycle: { total_mileage_km: 500, usage_percent: 62.5, remaining_mileage_km: 300, forecast_monthly_km: 0,
+      forecast_retirement_date: retired ? null : '2027-03-01', forecast_source: retired ? 'retired' : 'planned_monthly_km' },
+    usage: { count: 0, km_30_days: 0, km_90_days: 0, actual_monthly_km_90_days: 0, last_run_date: null, first_run_date: null },
+    monthly_history: [], recent_runs: [],
+  });
+  context.renderShoeAnalytics(data(true));
+  assert.match(elements['shoe-analysis-content'].innerHTML, /預估退役<\/div><div class="insight-card-value">已退役<\/div><div class="insight-card-sub">退役後不再預估/);
+  context.renderShoeAnalytics(data(false));
+  assert.match(elements['shoe-analysis-content'].innerHTML, /預估退役<\/div><div class="insight-card-value">2027\/03\/01<\/div><div class="insight-card-sub">依計畫月跑量/);
+});
+
+test('SPEC-055 the Strava preview explains activities deleted earlier', () => {
+  const context = runContext({});
+  vm.runInContext(extract('stravaDeletedText'), context);
+  assert.equal(context.stravaDeletedText({ deleted_count: 0 }), '');
+  assert.equal(context.stravaDeletedText({ deleted_count: 2 }), '另有 2 筆先前刪除過的活動不會重新匯入（可從異動歷史復原）。');
+  assert.match(extract('importStrava'), /skipped_deleted \? `，略過 \$\{result\.skipped_deleted\} 筆先前刪除的活動`/);
+});
+
+test('SPEC-055 sign-in fields let password managers fill and save credentials', () => {
+  assert.doesNotMatch(htmlSource, /autocomplete="off"/);
+  for (const id of ['login-username', 'reg-username', 'change-username']) {
+    assert.match(htmlSource, new RegExp(`id="${id}" autocomplete="username"`));
+  }
+  for (const id of ['login-password', 'change-old-password']) {
+    assert.match(htmlSource, new RegExp(`id="${id}" type="password" autocomplete="current-password"`));
+  }
+  for (const id of ['reg-password', 'reg-password2', 'change-new-password', 'change-new-password2']) {
+    assert.match(htmlSource, new RegExp(`id="${id}" type="password" autocomplete="new-password"`));
+  }
+  // The standard capability meta sits next to the legacy iOS one.
+  assert.match(htmlSource, /<meta name="mobile-web-app-capable" content="yes">\s*<meta name="apple-mobile-web-app-capable" content="yes">/);
+});

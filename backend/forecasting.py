@@ -13,7 +13,7 @@ from backend.clock import local_today
 
 class ShoeForecast(TypedDict):
     forecast_retirement_date: str | None
-    forecast_source: Literal["recent_90_days", "planned_monthly_km"]
+    forecast_source: Literal["recent_90_days", "planned_monthly_km", "retired"]
     forecast_monthly_km: float
     actual_monthly_km_90_days: float
     remaining_mileage_km: float
@@ -22,6 +22,15 @@ class ShoeForecast(TypedDict):
 def retirement_forecast(shoe: models.Shoe, km_90: float, as_of: date) -> ShoeForecast:
     actual_rate = round(km_90 / 90 * 30.4375, 2) if km_90 > 0 else 0.0
     remaining = round(max(0, shoe.expected_mileage - shoe.mileage), 2)
+    if shoe.is_retired:
+        # A retired pair has no future retirement date, whatever lifespan remains.
+        return {
+            "forecast_retirement_date": None,
+            "forecast_source": "retired",
+            "forecast_monthly_km": actual_rate,
+            "actual_monthly_km_90_days": actual_rate,
+            "remaining_mileage_km": remaining,
+        }
     rate = actual_rate or round(shoe.monthly_km, 2)
     forecast_date = None
     if remaining > 0 and rate > 0:

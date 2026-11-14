@@ -25,6 +25,11 @@ const BRAND_COLORS = {
   'Salomon': ['#F97316', '#FDBA74', '#EA580C'],
 };
 
+// Lifespan alert policy, mirrored from backend/shoe_metrics.py (SPEC-055): watch from 80%,
+// prepare a replacement from 90%. A Python test keeps both sides equal.
+const LIFECYCLE_MONITOR_PERCENT = 80;
+const LIFECYCLE_REPLACE_SOON_PERCENT = 90;
+
 const byDate = (a, b) => new Date(a.date) - new Date(b.date);
 let shoes = [];
 let retiredShoes = [];

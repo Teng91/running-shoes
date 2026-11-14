@@ -10,6 +10,7 @@ from backend import models
 from backend.read_models.strava_preview import build_preview
 from backend.services.identifiers import allocate_id
 from backend.services.mileage import apply_run_mileage_deltas
+from backend.services.run_identity import deleted_strava_ids
 from backend.services.transactions import write_transaction
 from backend.strava_import import date_corrections
 
@@ -36,12 +37,14 @@ class ImportResult:
     synced_mileage: float
     total_run_rows: int
     corrected_dates: int = 0
+    skipped_deleted: int = 0
 
     def as_dict(self) -> dict[str, int | float]:
         return {
             "corrected_dates": self.corrected_dates,
             "imported": self.imported,
             "skipped_duplicate": self.skipped_duplicate,
+            "skipped_deleted": self.skipped_deleted,
             "skipped_unmapped": self.skipped_unmapped,
             "skipped_invalid": self.skipped_invalid,
             "filtered_out": self.filtered_out,
@@ -87,8 +90,8 @@ def import_runs(
             if strava_id is not None
         }
         corrected = _correct_utc_dates(db, user_id, date_corrections(rows, existing_dates))
-        runs, duplicate_count, unmapped_count = _prepare_runs(
-            rows, user_id, normalized_mapping, set(existing_dates)
+        runs, duplicate_count, unmapped_count, deleted_count = _prepare_runs(
+            rows, user_id, normalized_mapping, set(existing_dates), deleted_strava_ids(db, user_id)
         )
         for run in runs:
             run.id = allocate_id(db, "runs")
@@ -129,6 +132,7 @@ def import_runs(
             synced_mileage=synced_mileage,
             total_run_rows=len(rows),
             corrected_dates=corrected,
+            skipped_deleted=deleted_count,
         )
 
 
@@ -183,17 +187,23 @@ def _prepare_runs(
     user_id: int,
     mapping: dict[str, int | None],
     existing_ids: set[str],
-) -> tuple[list[models.Run], int, int]:
+    deleted_ids: set[str],
+) -> tuple[list[models.Run], int, int, int]:
     seen: set[str] = set()
     runs: list[models.Run] = []
     duplicate_count = 0
     unmapped_count = 0
+    deleted_count = 0
     for row in rows:
         strava_id = str(row["strava_id"])
         if strava_id in existing_ids or strava_id in seen:
             duplicate_count += 1
             continue
         seen.add(strava_id)
+        if strava_id in deleted_ids:
+            # The user deleted this activity; only history recovery brings it back.
+            deleted_count += 1
+            continue
         shoe_id = mapping.get(str(row["gear"]))
         if shoe_id is None:
             unmapped_count += 1
@@ -207,7 +217,7 @@ def _prepare_runs(
                 strava_id=strava_id,
             )
         )
-    return runs, duplicate_count, unmapped_count
+    return runs, duplicate_count, unmapped_count, deleted_count
 
 
 def _trim_history(db: Session, user_id: int, history_limit: int) -> None:

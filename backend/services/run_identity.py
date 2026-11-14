@@ -4,7 +4,7 @@ The caller owns the transaction. Deletion tombstones live in their own table, so
 audit history can be pruned without letting a restored backup resurrect a run.
 """
 
-from sqlalchemy import String, cast
+from sqlalchemy import String, cast, func
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
@@ -12,12 +12,22 @@ from backend import models
 from backend.services.errors import Invalid
 
 
-def record_tombstone(db: Session, user_id: int, run_id: int) -> None:
-    db.execute(
-        sqlite_insert(models.RunTombstone)
-        .values(user_id=user_id, run_id=run_id)
-        .on_conflict_do_nothing(index_elements=["user_id", "run_id"])
+def record_tombstone(db: Session, user_id: int, run_id: int, strava_id: str | None = None) -> None:
+    statement = sqlite_insert(models.RunTombstone).values(
+        user_id=user_id, run_id=run_id, strava_id=strava_id
     )
+    db.execute(statement.on_conflict_do_update(
+        index_elements=["user_id", "run_id"],
+        set_={"strava_id": func.coalesce(models.RunTombstone.strava_id, statement.excluded.strava_id)},
+    ))
+
+
+def deleted_strava_ids(db: Session, user_id: int) -> set[str]:
+    """Strava activities this account deleted; a CSV re-import must not recreate them."""
+    rows = db.query(models.RunTombstone.strava_id).filter(
+        models.RunTombstone.user_id == user_id, models.RunTombstone.strava_id.isnot(None),
+    )
+    return {strava_id for (strava_id,) in rows if strava_id}
 
 
 def add_local_tombstones(db: Session, user_id: int, mappings: dict[tuple[str, str], int]) -> None:

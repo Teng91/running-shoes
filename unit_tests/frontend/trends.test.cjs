@@ -1,4 +1,4 @@
-const { runContext, test, assert, vm, extract, htmlSource } = require('./helpers.cjs');
+const { runContext, test, assert, vm, extract, htmlSource, source } = require('./helpers.cjs');
 
 function elements() {
   return new Proxy({}, { get: (target, id) => target[id] ||= {
@@ -20,7 +20,9 @@ function trendsContext(nodes, globals = {}) {
   });
 }
 
-const trendRenderers = ['renderTrends', 'heatLevel', 'renderRunHeatmap', 'renderWeeklyChart', 'renderCumulativeChart'];
+const trendRenderers = ['renderTrends', 'heatLevel', 'renderRunHeatmap', 'renderWeeklyChart', 'weeklyGoalText',
+  'renderCumulativeChart', 'renderLongRunChart', 'longRunText', 'renderWeekdayChart', 'weekdayText'];
+const weekdayLabels = source.match(/const WEEKDAY_LABELS = [^\n]+/)[0];
 
 const sample = {
   year: 2026, end_date: '2026-01-06', thresholds: { spike_percent: 30, spike_min_base_km: 5 },
@@ -39,7 +41,7 @@ test('SPEC-038 trends render a Monday-first heatmap, weekly spikes and the goal 
   const nodes = elements(); nodes['year-select'].value = '2026';
   const urls = [];
   const context = trendsContext(nodes, { apiGet: async url => { urls.push(url); return sample; } });
-  vm.runInContext(`let trendsRequestId = 0;\n${trendRenderers.map(extract).join('\n')}`, context);
+  vm.runInContext(`let trendsRequestId = 0;\n${weekdayLabels}\n${trendRenderers.map(extract).join('\n')}`, context);
   await context.renderTrends();
   assert.deepEqual(urls, ['/analytics/trends?year=2026']);
   const html = nodes['run-heatmap'].innerHTML;
@@ -66,7 +68,7 @@ test('SPEC-038 future years render no charts and malformed trends are not cached
   let calls = 0;
   const context = trendsContext(nodes, { console: { error() {} },
     apiGet: async () => (++calls === 1 ? { daily: 'bad' } : { ...sample, year: 2027, end_date: null, daily: [], weekly: [] }) });
-  vm.runInContext(`let trendsRequestId = 0;\n${trendRenderers.map(extract).join('\n')}`, context);
+  vm.runInContext(`let trendsRequestId = 0;\n${weekdayLabels}\n${trendRenderers.map(extract).join('\n')}`, context);
   await context.renderTrends();
   assert.equal(context.chartInstances.weekly, undefined);
   await context.renderTrends();
@@ -177,4 +179,66 @@ test('SPEC-038 trend sections are present with an accessible scroll region and l
   }
   assert.match(htmlSource, /class="heatmap-scroll" tabindex="0" role="region" aria-label="可左右滑動的年度熱力圖"/);
   assert.match(htmlSource, /0／&lt;5／5–10／10–15／≥15 km/);
+});
+
+const analysis = {
+  ...sample,
+  weekly_goal: { active: true, km: 23.01 },
+  weekly: sample.weekly.map((week, index) => ({ ...week, longest_km: [8, 21.1, 12][index], goal_met: [false, true, false][index] })),
+  weekday: [
+    { weekday: 0, km: 21, run_days: 1 }, { weekday: 1, km: 0, run_days: 0 }, { weekday: 2, km: 0, run_days: 0 },
+    { weekday: 3, km: 3, run_days: 1 }, { weekday: 4, km: 12, run_days: 1 }, { weekday: 5, km: 0, run_days: 0 },
+    { weekday: 6, km: 0, run_days: 0 },
+  ],
+};
+
+test('SPEC-056 the weekly chart draws the weekly goal and counts finished weeks that met it', async () => {
+  const nodes = elements(); nodes['year-select'].value = '2026';
+  const context = trendsContext(nodes, { apiGet: async () => analysis });
+  vm.runInContext(`let trendsRequestId = 0;\n${weekdayLabels}\n${trendRenderers.map(extract).join('\n')}`, context);
+  await context.renderTrends();
+  const datasets = context.chartInstances.weekly.config.data.datasets;
+  assert.deepEqual([...datasets].map(set => set.label), ['週跑量', '4 週平均', '週目標']);
+  assert.deepEqual([...datasets[2].data], [23.01, 23.01, 23.01]);
+  assert.deepEqual([...datasets[2].borderDash], [6, 4]);
+  assert.match(nodes['weekly-note'].textContent, /^本週 21\.0／23\.0 km；週目標 23\.0 km，已結束的 2 週有 1 週達標。橘色的 1 週/);
+
+  // Before the goal's start year the chart keeps its two series and the plain note.
+  const inactive = elements(); inactive['year-select'].value = '2026';
+  const before = trendsContext(inactive, { apiGet: async () => ({ ...analysis, weekly_goal: { active: false, km: 23.01 } }) });
+  vm.runInContext(`let trendsRequestId = 0;\n${weekdayLabels}\n${trendRenderers.map(extract).join('\n')}`, before);
+  await before.renderTrends();
+  assert.equal(before.chartInstances.weekly.config.data.datasets.length, 2);
+  assert.match(inactive['weekly-note'].textContent, /^橘色的 1 週/);
+});
+
+test('SPEC-056 long-run and weekday charts lay out the backend values', async () => {
+  const nodes = elements(); nodes['year-select'].value = '2026';
+  const context = trendsContext(nodes, { apiGet: async () => analysis });
+  vm.runInContext(`let trendsRequestId = 0;\n${weekdayLabels}\n${trendRenderers.map(extract).join('\n')}`, context);
+  await context.renderTrends();
+  const longRun = context.chartInstances.longRun.config;
+  assert.deepEqual([...longRun.data.labels], ['12/22', '12/29', '1/5']);
+  assert.deepEqual([...longRun.data.datasets[0].data], [8, 21.1, 12]);
+  assert.equal(longRun.data.datasets[0].borderColor, '--chart-2');
+  assert.equal(nodes['long-run-note'].textContent, '近 16 週最長 21.1 km（12/29 那週）；近 4 週平均最長一次 13.7 km。');
+
+  const weekday = context.chartInstances.weekday.config;
+  assert.deepEqual([...weekday.data.labels], ['週一', '週二', '週三', '週四', '週五', '週六', '週日']);
+  assert.deepEqual([...weekday.data.datasets[0].data], [21, 0, 0, 3, 12, 0, 0]);
+  assert.equal(weekday.options.plugins.tooltip.callbacks.label({ dataIndex: 4 }), '12.0 km · 1 天 · 平均 12.0 km');
+  assert.equal(nodes['weekday-title'].textContent, '2026 年星期幾跑量');
+  assert.equal(nodes['weekday-note'].textContent, '跑最多的是週一（21.0 km、1 天）；週二、週三、週六、週日這一年沒跑過。');
+  assert.match(htmlSource, /<canvas id="chart-long-run"><\/canvas>[\s\S]*<canvas id="chart-weekday"><\/canvas>/);
+});
+
+test('SPEC-056 future years draw no long-run or weekday chart', async () => {
+  const nodes = elements(); nodes['year-select'].value = '2027';
+  const context = trendsContext(nodes, { apiGet: async () => ({ ...analysis, year: 2027, end_date: null, daily: [], weekly: [] }) });
+  vm.runInContext(`let trendsRequestId = 0;\n${weekdayLabels}\n${trendRenderers.map(extract).join('\n')}`, context);
+  await context.renderTrends();
+  assert.equal(context.chartInstances.longRun, undefined);
+  assert.equal(context.chartInstances.weekday, undefined);
+  assert.match(nodes['long-run-note'].textContent, /還沒開始/);
+  assert.match(nodes['weekday-note'].textContent, /還沒開始/);
 });

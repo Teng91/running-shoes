@@ -77,4 +77,26 @@ def test_batch_forecast_is_scoped_bounded_and_matches_analysis(db, user_with_tok
     # SPEC-050: the shoe list carries the same 90-day monthly average as the analysis window.
     assert active[0].actual_monthly_km_90_days == round(300 / 90 * 30.4375, 2)
     assert retired[0].actual_monthly_km_90_days == 0
-    assert retired[0].forecast_source == "planned_monthly_km"
+    # SPEC-055: a retired pair is never given a future retirement date.
+    assert retired[0].forecast_source == "retired"
+    assert retired[0].forecast_retirement_date is None
+
+
+def test_retired_shoes_have_no_retirement_forecast_in_analysis_or_ai_tools(db, user_with_token):
+    """SPEC-055: a retired pair never gets a future retirement date, whatever lifespan remains."""
+    import json
+
+    from backend.tools import db_tools
+
+    user, _ = user_with_token
+    shoe = models.Shoe(user_id=user.id, brand="Mizuno", model="Sky", date="2025-01-01", mileage=500,
+                       expected_mileage=800, monthly_km=60, is_retired=True)
+    db.add(shoe)
+    db.flush()
+    db.add(models.Run(user_id=user.id, shoe_id=shoe.id, date="2026-10-01", km=30))
+    db.commit()
+    lifecycle = analytics.shoe_analytics(db, user.id, shoe.id, today=date(2026, 10, 19))["lifecycle"]
+    assert (lifecycle["forecast_retirement_date"], lifecycle["forecast_source"]) == (None, "retired")
+    assert lifecycle["remaining_mileage_km"] == 300
+    tool = json.loads(db_tools.shoe_usage_analytics(db, user.id))["shoes"][0]
+    assert (tool["forecast_retirement_date"], tool["forecast_source"]) == (None, "retired")

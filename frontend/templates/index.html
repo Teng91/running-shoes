@@ -7,6 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>跑鞋追蹤 Dashboard</title>
 <meta name="theme-color" content="#07090c">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="跑鞋追蹤">
@@ -105,16 +106,16 @@ window.__appBootLegacyPoll = window.setInterval(function () {
 <div class="container" id="auth-view" style="display:none;">
 
   <!-- Login Form -->
-  <form class="auth-box" id="login-form" autocomplete="off" data-submit="login">
+  <form class="auth-box" id="login-form" data-submit="login">
     <div class="auth-mark" aria-hidden="true"><svg viewBox="0 0 32 32" fill="currentColor" aria-hidden="true"><path d="M6 9.5h7l-1.6 3h-7z"/><path d="M4 14.5h9l-1.6 3h-9z" opacity=".7"/><path d="M6 19.5h7l-1.6 3h-7z" opacity=".45"/><path d="M14 6h7l8 10-8 10h-7l8-10z"/></svg></div>
     <h1 data-eyebrow="RUN · GEAR · DATA">跑鞋追蹤</h1>
     <div class="form-group">
       <label for="login-username">帳號</label>
-      <input id="login-username" autocomplete="off" placeholder="Username">
+      <input id="login-username" autocomplete="username" autocapitalize="none" placeholder="Username">
     </div>
     <div class="form-group">
       <label for="login-password">密碼</label>
-      <input id="login-password" type="password" autocomplete="off" placeholder="Password">
+      <input id="login-password" type="password" autocomplete="current-password" placeholder="Password">
     </div>
     <div class="auth-error" id="auth-error"></div>
     <button type="submit" class="btn btn-primary" style="width:100%;margin-top:8px;">登入</button>
@@ -131,15 +132,15 @@ window.__appBootLegacyPoll = window.setInterval(function () {
     <h1 data-eyebrow="NEW ATHLETE">註冊帳號</h1>
     <div class="form-group">
       <label for="reg-username">帳號</label>
-      <input id="reg-username" placeholder="Username">
+      <input id="reg-username" autocomplete="username" autocapitalize="none" placeholder="Username">
     </div>
     <div class="form-group">
       <label for="reg-password">密碼</label>
-      <input id="reg-password" type="password" placeholder="Password">
+      <input id="reg-password" type="password" autocomplete="new-password" placeholder="Password">
     </div>
     <div class="form-group">
       <label for="reg-password2">確認密碼</label>
-      <input id="reg-password2" type="password" placeholder="Confirm Password">
+      <input id="reg-password2" type="password" autocomplete="new-password" placeholder="Confirm Password">
     </div>
     <div class="auth-error" id="reg-error"></div>
     <button type="submit" class="btn btn-primary" style="width:100%;margin-top:8px;">註冊</button>
@@ -154,19 +155,19 @@ window.__appBootLegacyPoll = window.setInterval(function () {
     <h1 data-eyebrow="ACCOUNT SECURITY">更改密碼</h1>
     <div class="form-group">
       <label for="change-username">帳號</label>
-      <input id="change-username" placeholder="Username">
+      <input id="change-username" autocomplete="username" autocapitalize="none" placeholder="Username">
     </div>
     <div class="form-group">
       <label for="change-old-password">舊密碼</label>
-      <input id="change-old-password" type="password" placeholder="Old Password">
+      <input id="change-old-password" type="password" autocomplete="current-password" placeholder="Old Password">
     </div>
     <div class="form-group">
       <label for="change-new-password">新密碼</label>
-      <input id="change-new-password" type="password" placeholder="New Password">
+      <input id="change-new-password" type="password" autocomplete="new-password" placeholder="New Password">
     </div>
     <div class="form-group">
       <label for="change-new-password2">確認新密碼</label>
-      <input id="change-new-password2" type="password" placeholder="Confirm New Password">
+      <input id="change-new-password2" type="password" autocomplete="new-password" placeholder="Confirm New Password">
     </div>
     <div class="auth-error" id="change-error"></div>
     <button type="submit" class="btn btn-primary" style="width:100%;margin-top:8px;">更改密碼</button>
@@ -436,6 +437,18 @@ window.__appBootLegacyPoll = window.setInterval(function () {
           <div class="chart-title-row"><h3 id="cumulative-title">年度目標進度</h3></div>
           <div class="chart-canvas"><canvas id="chart-cumulative"></canvas></div>
           <p class="chart-note" id="cumulative-note"></p>
+        </div>
+      </div>
+      <div class="charts">
+        <div class="chart-box">
+          <div class="chart-title-row"><h3>每週最長一次（近 16 週）</h3></div>
+          <div class="chart-canvas"><canvas id="chart-long-run"></canvas></div>
+          <p class="chart-note" id="long-run-note"></p>
+        </div>
+        <div class="chart-box">
+          <div class="chart-title-row"><h3 id="weekday-title">星期幾跑量</h3></div>
+          <div class="chart-canvas"><canvas id="chart-weekday"></canvas></div>
+          <p class="chart-note" id="weekday-note"></p>
         </div>
       </div>
     </section>

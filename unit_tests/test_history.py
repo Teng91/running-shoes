@@ -117,7 +117,7 @@ def test_schema_five_upgrade_preserves_existing_business_data(workspace):
         connection.execute(text("ALTER TABLE users DROP COLUMN data_revision"))
     for _ in range(2):
         run_startup_migrations(workspace.engine, workspace.sessions)
-    assert schema_version(workspace.engine) == 7
+    assert schema_version(workspace.engine) == 8
     assert "audit_events" in inspect(workspace.engine).get_table_names()
     with workspace.sessions() as db:
         assert db.get(models.Shoe, identifier).mileage == 123
@@ -280,3 +280,26 @@ def test_restore_refuses_to_overwrite_later_changes(workspace):
         db.expire_all()
         assert db.query(models.MonthlyMileage).filter_by(year=2025, month=5).one().km == 60
         assert db.query(models.AuditEvent).filter_by(restored=True).count() == 0
+
+
+def test_schema_eight_backfills_deleted_strava_activities_from_audit_history(workspace):
+    """SPEC-055: runs deleted before schema 8 keep their Strava activity once upgraded."""
+    from backend.services.run_identity import deleted_strava_ids
+
+    with workspace.sessions() as db:
+        shoe = add_shoe(db)
+        strava_id = add_run(db, shoe.id).id
+        manual_id = add_run(db, shoe.id).id
+        db.query(models.Run).filter_by(id=strava_id).update({"strava_id": "strava-77"})
+        db.commit()
+        runs.delete_run(db, 1, strava_id)
+        runs.delete_run(db, 1, manual_id)
+        assert deleted_strava_ids(db, 1) == {"strava-77"}
+        assert deleted_strava_ids(db, 2) == set()
+    with workspace.engine.begin() as connection:
+        connection.exec_driver_sql("UPDATE run_tombstones SET strava_id = NULL")
+        connection.exec_driver_sql("UPDATE schema_metadata SET value='7' WHERE key='schema_version'")
+    run_startup_migrations(workspace.engine, workspace.sessions)
+    with workspace.sessions() as db:
+        rows = {row.run_id: row.strava_id for row in db.query(models.RunTombstone).filter_by(user_id=1)}
+        assert rows == {strava_id: "strava-77", manual_id: None}

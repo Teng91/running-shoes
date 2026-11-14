@@ -2,7 +2,7 @@
 
 跑鞋追蹤 Dashboard — 記錄每雙跑鞋的里程、成本與生命週期，並以跑步日誌追蹤每次跑步的日期、公里數及穿著鞋款。支援每月跑量與鞋款里程圖表，並內建 AI 跑鞋推薦助手。支援多使用者帳號，每人資料獨立隔離，也可在手機上安裝為 PWA。
 
-版本演進與相容性說明集中於 [`CHANGELOG.md`](CHANGELOG.md)，設計與測試規格位於 `docs/`。
+版本演進摘要在 [`CHANGELOG.md`](CHANGELOG.md)，各版本的相容性與回滾細節在 [`docs/release-notes.md`](docs/release-notes.md)，設計與測試規格位於 `docs/`。
 
 ## 使用方式
 
@@ -190,6 +190,7 @@ running-shoes/
 ├── docs/
 │   ├── architecture.md   # SDD：現況架構圖、模組邊界與演進順序
 │   ├── testing-strategy.md # TDD：測試層級、追蹤矩陣與完成條件
+│   ├── release-notes.md  # 各版本的行為變更、相容性與回滾說明（新到舊）
 │   ├── user-guide.md     # 給使用者的操作說明
 │   ├── specs/            # Feature spec 範本與 acceptance criteria
 │   └── adr/              # 重要架構決策與取捨紀錄
@@ -213,6 +214,7 @@ running-shoes/
 │   ├── diagnostics_drill.cjs # 產生合成瀏覽器失敗，演練診斷落檔
 │   ├── verify_diagnostics.py # 只用標準函式庫驗證下載的合成診斷
 │   ├── render_icons.cjs  # 本機由 icons/app-icon.svg 產生 PNG 圖示（不在 CI 執行）
+│   ├── rollback_schema_eight.sql # Schema 8 → 7 的文件化回滾
 │   ├── rollback_schema_seven.sql # Schema 7 → 6 的文件化回滾
 │   ├── rollback_preview_schema.sql # 只捨棄暫存還原預覽的回滾
 │   └── task.py           # 跨平台 setup、測試、eval 與完整驗證入口
@@ -357,16 +359,17 @@ LLM_MAX_OUTPUT_TOKENS=4096
 - **跑鞋全生命週期追蹤**：記錄品牌、鞋款、用途類別 (Daily / Speed / Tempo / Race，可多選)、購買日期、尺寸、價格、里程、預期壽命、月跑量
 - **購鞋資訊集中管理**：現役／退役跑鞋清單聚焦使用狀態；尺寸、買價、原價、折數統一在「跑鞋 → 支出明細」查看。新增／編輯跑鞋仍保留原有尺寸與價格欄位，不刪除既有資料
 - **鞋櫃類別覆蓋分析**：判斷某雙鞋退役後其所有用途是否仍有其他現役鞋覆蓋，避免不必要地補鞋 (支援多用途鞋款)
-- **智慧試算**：自動計算每 km／每次穿著成本、折數、生命進度，並依近 90 天實際使用預估退役日期
+- **智慧試算**：自動計算每 km／每次穿著成本、折數、生命進度，並依近 90 天實際使用預估退役日期；已退役的鞋不再預估
+- **一致的換鞋提醒**：所有頁面、提醒與 AI 工具共用同一套門檻：達預期壽命 80% 開始注意、90% 可以準備換鞋（標紅）
 - **一致的退役預估**：跑鞋清單、時間軸及單鞋分析共用後端預估；有近 90 天紀錄時使用實際月均，否則回退計畫月跑量。清單日期提示及分析卡片會標示依據；無法預估或已達壽命時不虛構日期
 - **圖表視覺化**：生命進度條、每 km 成本比較、退役時間軸、近 90 天月均里程佔比（各現役鞋近 90 天實際月均，圓餅圖直接標示公里數與百分比，中間為合計，Chart.js）
-- **訓練趨勢**：月跑量分頁的年度跑步熱力圖與連續天數、近 16 週每週跑量（4 週平均線，比前 4 週平均多 30% 以上的週次標橘色）、年度累計跑量對照目標線；跑鞋分頁的輪替時間軸只列現役鞋，並標出超過 30 天沒穿的鞋
+- **訓練趨勢**：月跑量分頁的年度跑步熱力圖與連續天數、近 16 週每週跑量（4 週平均線、週目標虛線，比前 4 週平均多 30% 以上的週次標橘色）、每週最長一次的趨勢（準備長距離比賽用）、這一年星期幾的跑量分布、年度累計跑量對照目標線；週目標＝年度目標 × 7 ÷ 全年天數，和年度目標線同一斜率（SPEC-056）；跑鞋分頁的輪替時間軸只列現役鞋，並標出超過 30 天沒穿的鞋
 - **運動科技風介面**：碳黑底配細格線，螢光黃綠（volt）代表距離與主要操作，青色代表金額與「目前」，數字使用 DIN 風格字體（iOS／macOS 的 DIN Alternate、Windows 的 Bahnschrift，沒有時回退系統字體），分頁與品牌使用線條 SVG 圖示
 - **亮色 / 暗色主題切換**：側欄（手機在「帳號」選單）一鍵切換，全域 UI 元素與所有 Chart.js 圖表（網格線、刻度文字、數據標籤、跑鞋磨耗色階）都讀同一組 CSS 主題 token 自動對應色調，偏好透過 `localStorage` 自動記憶
 - **安全的里程統計**：跑鞋與月跑量都明確區分「逐筆跑步日誌」與「歷史／手動調整」（月跑量的手動調整自 v4.1.2 起不再提供網頁編輯，資料保留），手動總數不能低於日誌合計；所有新輸入的里程與金額統一保存至小數點後兩位
 - **跑步日誌**：預設首頁，可記錄日期、公里數與鞋款並同步里程；完成日期不得晚於今天
 - **今天穿哪雙**：跑步表單下方依休息天數建議現役鞋（快到退役里程的鞋排最後），可一鍵選入
-- **年度回顧與對比**：月跑量分頁頂端唯一的年份選單切換年度回顧、訓練趨勢與所有年度圖表；年度月跑量對比把每年畫成一條線
+- **年度回顧與對比**：月跑量分頁頂端唯一的年份選單切換年度回顧、訓練趨勢與所有年度圖表；年度月跑量對比把每年畫成一條線。進行中的年份與前一年**同期**（1/1 到同一天）比較，已結束的年份才比全年（SPEC-055）
 - **一致的鞋款顏色**：同一雙鞋在所有圖表與表格使用相同顏色；跑鞋分頁另有每雙現役鞋的距離分布（<5 紅、5–10 黃、10–15 綠、15–20 藍、≥20 km 紫）
 - **跑步洞察首頁**：當月會以相同天數比較上月同期，並顯示近 7 天趨勢、月目標、月底里程預測及鞋款壽命提醒
 - **手機跑步摘要**：六張摘要卡片統一以兩欄三列排列，同列等高；分析載入／失敗訊息與鞋款提醒維持全寬
@@ -433,7 +436,7 @@ LLM_MAX_OUTPUT_TOKENS=4096
 
 Strava 匯出的活動時間是 UTC，系統會換算成台灣日期：清晨 6:30 的跑步（UTC 前一天 22:30）記在當天，不會跑到前一天或上個月。v4.7.0 以前匯入的紀錄只取了 UTC 日期；用涵蓋那段時間的匯出檔重新預覽時，會顯示「另有 N 筆既有紀錄的日期會依台灣時間修正」，匯入時一併修正並把里程移到正確月份。只修正仍停在舊 UTC 日期的紀錄，自己改過日期的不會被覆蓋。
 
-Strava 匯入後會自動同步跑鞋總里程與對應月份的月跑量，只有本次真正新增的活動會計入。每筆匯入資料會保留 Strava 活動 ID，因此重複選擇同一份 CSV 不會重複建立紀錄或再次增加里程。匯入仍受 `MAX_RUNS_PER_USER` 上限限制，CSV 最大為 10 MB、最多 50,000 筆資料列；後端會逐列解析，並在 multipart 解析前限制整體上傳請求為 11 MB。切換檔案或日期時，舊的預覽請求會被取消且結果不會覆蓋最新選擇。
+Strava 匯入後會自動同步跑鞋總里程與對應月份的月跑量，只有本次真正新增的活動會計入。每筆匯入資料會保留 Strava 活動 ID，因此重複選擇同一份 CSV 不會重複建立紀錄或再次增加里程。刪除過的 Strava 跑步也不會因為再次匯入而回來：預覽會顯示「另有 N 筆先前刪除過的活動不會重新匯入」，真的要找回可以到異動歷史復原（SPEC-055）。匯入仍受 `MAX_RUNS_PER_USER` 上限限制，CSV 最大為 10 MB、最多 50,000 筆資料列；後端會逐列解析，並在 multipart 解析前限制整體上傳請求為 11 MB。切換檔案或日期時，舊的預覽請求會被取消且結果不會覆蓋最新選擇。
 
 系統另保存成功匯入的摘要（不保存 CSV 內容），每個帳號保留最近 50 次並提供最近 10 次結果，包含時間、日期區間、新增里程與新增／重複／未配對／格式略過筆數。跑步日誌會顯示最近一次結果，下次開啟匯入視窗時則以最近匯入結束日的隔天作為起始日、今天作為結束日；若紀錄已到今天或未來，起始日會安全地停在今天。
 
@@ -441,7 +444,7 @@ Strava 匯入後會自動同步跑鞋總里程與對應月份的月跑量，只�
 
 內建的 AI 助手會依你的**實際資料**給換鞋與選鞋建議：
 
-- 讀取你的跑鞋清單、剩餘壽命、每月跑量趨勢（只看你自己的資料）
+- 讀取你的跑鞋清單、剩餘壽命、每月跑量趨勢、目標進度、訓練趨勢、年度回顧與買鞋支出（只看你自己的資料）
 - 找出接近預期壽命、該準備替換的鞋
 - 上網搜尋市售鞋款、規格、評價、價格；網址由後端驗證後顯示為安全來源卡片
 - 以繁體中文對話，過程逐步顯示推理與工具呼叫（SSE 串流）
@@ -452,9 +455,10 @@ Strava 匯入後會自動同步跑鞋總里程與對應月份的月跑量，只�
 - 搜尋結果會過濾不安全網址、去除重複項目，並優先排列官方與可信評測來源；成功結果快取 15 分鐘，價格類查詢快取 5 分鐘
 - 搜尋標題與摘要會限制長度，並以不可信的原生 tool 結果傳給模型，避免網頁文字偽裝成使用者或系統指令
 - 「我最新的月跑量／跑鞋里程」等私人資料問題會優先查後端資料庫；「最新市售跑鞋」才會查網路
+- 「今年目標達成多少」「最近每週跑量有沒有暴增」「回顧我今年」「買鞋花了多少」會先取得對應的後端統計（SPEC-057），回答直接引用首頁與月跑量分頁相同的數字
 - 每則回答下方會由後端標示「即時搜尋」、「近期搜尋快取」、「不需要搜尋」或「搜尋失敗」，並列出可點擊的來源卡片與實際搜尋關鍵字
 
-目前提供 8 個 Agent 工具：
+目前提供 12 個 Agent 工具：
 
 | Tool | 用途 |
 | --- | --- |
@@ -464,7 +468,11 @@ Strava 匯入後會自動同步跑鞋總里程與對應月份的月跑量，只�
 | `nearing_end_of_life` | 找出達提醒門檻的現役鞋，並判斷同類別是否已有替代鞋 |
 | `compare_shoes` | 比較兩雙鞋的用途、里程、壽命與每公里成本 |
 | `shoe_category_status` | 分析 Daily / Speed / Tempo / Race 覆蓋及補鞋需求 |
-| `shoe_usage_analytics` | 分析穿著次數、近期里程與實際退役預測 |
+| `shoe_usage_analytics` | 分析穿著次數、近期里程與實際退役預測（已退役的鞋不預估） |
+| `running_goal_progress` | 年度目標進度：每月是否達標、年度累計、今天應有進度與每週需求 |
+| `training_trends` | 近 16 週每週跑量、跑量暴增週、每週最長一次、週目標、連續天數與星期幾分布 |
+| `year_review` | 年度回顧：總跑量與前一年同期比較、最長一次、最多的一週與月份、最常穿的鞋、買鞋花費 |
+| `spending_summary` | 買鞋總花費、原價、省下金額、平均折數、平均每月花費與最近月份明細 |
 | `web_search` | 搜尋市售鞋款、規格、評價與價格來源 |
 
 需要設定 `OPENROUTER_API_KEY`（見上方）。前端預設選取 OpenRouter 本日總使用量前 50 名中，
@@ -499,7 +507,7 @@ history 筆數與整段對話總字數，並套用每帳號、每 IP 與全站�
 | `GET /api/reports` | 列出目前帳號所有已儲存的報告（不含內文） |
 | `GET /api/reports/{year}/{month}` | 取得指定月份的完整報告內容 |
 
-## 測試
+## 開發與測試
 
 ### 前端來源與產物
 
@@ -518,17 +526,7 @@ Origin 差異讓離線啟動失敗；URL／版本仍須完整匹配，`/api/` �
 產生 `index.html` 時會計算每段 inline `<script>` 的 SHA-256，寫進頁面最前面的 CSP `<meta>`；改了模板裡的
 script 卻沒有重新 `--write`，瀏覽器就會擋下它，`--check` 也會失敗（SPEC-054）。
 
-### 統計與操作規則（SPEC-017）
-
-- 月跑量 API 空白或無效不會寫入；清零必須明確輸入 `0`。歷史／手動調整與日誌里程分開保留（網頁編輯介面已於 SPEC-039 移除）。
-- 月跑量頁、首頁、月報目標皆只計逐筆日誌；鞋款成本／壽命指標由 `shoe_metrics.py` 統一計算。
-- 新增／編輯跑步或 Strava 配對時，日期早於該鞋購買日會提醒確認（仍可儲存），避免跑步記到錯的鞋。
-- 刪鞋不移除日誌或年度堆疊里程；已刪除鞋款的里程合併為一個灰色「已刪除的鞋款」系列，不顯示內部編號。
-- AI 遇到同名鞋回傳含購買日期及狀態的候選，必須詢問後以 ID 選定；批次使用分析不逐鞋查詢。
-- 支出平均依後端日曆月份計算，不受瀏覽器時區影響；按需載入，失敗可在該區重試，不阻擋首頁。
-- PWA 回到前景或跨日時更新日期上限，不改目前分頁／月份／草稿。登入換帳號則清除前帳號狀態與草稿。
-- 彈窗支援 Tab、Shift+Tab、Escape 及返回原按鈕；關閉不等於撤回已送出的交易。
-- 畫面顯示版本；新版完整安裝後提示更新，需使用者確認才重新載入，避免自動丟失尚未儲存內容。
+### 測試與驗證指令
 
 專案提供跨平台工程 harness，會自動選用 Windows `venv/Scripts/python.exe`、
 Unix `venv/bin/python` 或目前的 Python。Windows、macOS、Linux、Coding Agent 與 CI
@@ -617,345 +615,6 @@ CI 的 `frontend-pwa` job 上傳獨立 `browser-diagnostics-roundtrip` artifact�
 WebKit 離線 shell 由 `frontend-pwa` 的 fixture transport 中斷驗證；API probe 在 HTTP headers 後截斷 response body，完整讀取 JSON 並檢查 server 請求計數，避免 headers 前 TCP 中斷讓裸 fetch 一直 pending。這些不取代引擎之外的實機驗證。
 這個 task 不登入、不送出資料、不發布或回滾；正式 origin 必須是 HTTPS，HTTP 只允許 loopback。
 
-### 請求、重試與跨分頁（SPEC-019）
-
-- 月份／分頁載入錯誤有自己的提示，重試成功不掩蓋其他區塊的載入錯誤。
-- 同源其他分頁登入、登出或換帳號時，本頁立即清理舊資料及取消未完成普通請求，回登入畫面；不刪除其他分頁的新憑證。這不是登出所有裝置。
-- JSON CRUD／登入讀取有 20 秒 deadline（涵蓋 headers 與 body）；CSV upload 為 90 秒。GET 在 timeout／network／502–504 最多重試一次；寫入不自動重試。SSE 維持原串流取消流程，不套用 JSON deadline。
-- `POST /api/runs` 支援可選 `Idempotency-Key`（16–128 字元，英數及 `._:-`），同帳號、同 key／內容會重播原始回應，不重複寫入日誌及里程；內容不一致回 409。無 key 的舊客戶端維持相容。
-- 前端保留失敗新增表單的 key；原表單人工重試沿用，修改內容、成功或換帳號即建立新操作。同日同距離的兩次真實跑步不會被誤判重複。刪除後重播舊 key 不會復活日誌。
-
-### 交易與草稿安全（SPEC-020，v3.5.0）
-
-- 新增日誌等待回應期間，可繼續修改下一筆草稿；成功只清除仍符合送出快照的輸入，不覆蓋新日期、里程、鞋款或查看月份。
-- 跑步、鞋款與月跑量的寫入由 application services 統一管理；取得 SQLite writer reservation 後才讀取配額與業務版本。並行新增不會突破鞋款／日誌上限，里程與重送回執維持同一交易。
-- `create_app(config=...)` 的鞋款、日誌、註冊、Strava 配額及上傳限制由該 app instance 注入；測試不必改 router 全域常數。
-- `runtime/run-controller.mjs` 擁有跑步明細／分頁／年度 cache、編輯快照與新增操作，明確注入 transport、session 與 key factory。DOM bridge 保留既有 handler，帳號切換統一清理 controller。
-- 首頁、目標與月報共用日期區間邊界；月報的月份／上月同期／年度累積以一次 SQL 聚合取得，不再每月各查一次，仍不把手動歷史調整算成逐筆日誌目標。
-- v3.5.0 維持 schema 2，不需資料 migration。回滾至 v3.4.0 image 可讀寫相同資料；重新發布舊來源仍需新 shell revision，不以舊備份覆蓋正式資料。
-
-### 表單保護、暱稱與部分刷新（SPEC-023，v3.6.0）
-
-- 月跑量新增成功只清除與送出時相同的年月及里程草稿；舊回應不會解鎖新操作、覆蓋新帳號錯誤或關閉重開的視窗。
-- 跑步、月跑量與鞋款共用原生表單操作模組。等待期間改過的編輯草稿會保留，成功回應的版本用於下一次儲存。
-- 新增／編輯鞋款可設定最多 80 字的暱稱（留空表示沒有暱稱）。跑步與 Strava 選單顯示暱稱、品牌型號、購買日期和 #ID，區分同款鞋；鞋款表、CSV／XLSX 與帳號備份保留暱稱。
-- 月跑量異動只重讀月跑量；鞋款異動重讀現役與退役清單；跑步異動重讀鞋款、月跑量、明細與摘要。首次登入及手動重試仍完整讀取，匯入另更新 Strava 歷史。
-- 購鞋支出快取只因鞋款異動失效；逐筆目標與年度統計因日誌異動失效。不同資源分別檢查請求身分及登入 session，舊完整讀取不會蓋掉新的部分刷新，其他來源成功也不會掩蓋尚未恢復的載入錯誤。
-- 認證與目標寫入位於 `backend/services/accounts.py`／`goals.py`，密碼與 token primitives 位於 `backend/credentials.py`；router 保留輸入、rate limits 及 HTTP 轉換。
-- v3.6.0 使用 asset revision 3.6.0／shell v28。Schema 3 新增 `shoes.nickname`，舊鞋預設空字串，保留原始里程與版本；新舊資料庫均提供 server default。
-
-Schema 3 正式上線前，必須執行異地備份、checksum 與隔離還原演練。優先 forward fix；若要回滾 v3.5.1，先停止所有 writes、另做 schema 3 備份並確認只有新增 nickname 欄位，
-再於停止的資料庫執行 `UPDATE schema_metadata SET value='2' WHERE key='schema_version' AND value='3';`，保留 nickname 欄位和新業務資料，部署已驗證的 schema 2 image。
-不要以舊快照覆蓋新資料。重新發布舊來源仍須新 shell revision。
-
-### 草稿狀態轉移與資源模組（SPEC-024，v3.6.1）
-
-- 鞋款移至退役／現役成功後，保留的新草稿會同步最新模式、月跑量與版本；再次儲存只提交實際修改的欄位，避免撤銷剛完成的狀態轉移。
-- 目標以 server baseline 比較草稿，失焦、主題切換與背景重繪皆保留未儲存內容；儲存期間的新修改也會保留，帳號切換會清理。
-- `runtime/resource-store.mjs` 不依賴 DOM 或 HTTP，注入 session 與快取 hooks；同資源／key 的並行讀取共用 pending request，成功與錯誤各自管理，失效或換帳號後拒絕舊結果。
-- `app-resources.js` 註冊既有快取 adapters；`app-core.js` 負責 reader 組合、套用結果與 render。某個來源失敗仍能更新其他成功來源，完整／部分刷新沿用 SPEC-023 的異動範圍。
-- v3.6.1 使用 asset revision 3.6.1／shell v29；schema 仍為 3，沒有資料 migration，API method/path 不變。
-
-### 匯入所有權與逐資源呈現（SPEC-025，v3.7.0）
-
-- 編輯原鞋款已刪除的日誌，跨日／背景刷新仍保留「請重新選擇」；明確選取替代鞋款後才能儲存，避免自動轉移里程。
-- Strava 預覽、匯入與視窗操作由 `runtime/strava-controller.mjs` 管理。取消／重開後，舊成功或失敗不關閉新視窗、不清除新預覽，也不解鎖其他提交；已完成的匯入仍刷新資料。
-- Strava 歷史納入 resource store；匯入成功使舊讀取失效，新歷史及下次預設日期不會被晚到的舊回應覆蓋。
-- 鞋款移至現役／退役保留點擊前和等待期間的其他未儲存欄位；再次儲存只更新這些欄位並使用新版本。狀態操作本身仍更新月跑量。
-- 各資源完成即套用及呈現，慢來源不再阻擋已完成資料或持續蓋住啟動畫面；整批 Promise 仍可等待全部完成，失敗按來源保留。
-- 單鞋及批次分析共用 SQL read model：三次查詢取得全歷史統計、12 個月聚合及每雙鞋最多 12 筆最近紀錄，不載入全部 Run entities；統計欄位及日期政策維持相容。
-- PWA worker observer 同時觀測既有與新 installing candidate，deadline 涵蓋 update 呼叫與終態；失敗文字附註冊狀態時間線、目前階段及最近合成 HTTP 請求。中斷資產 fixture 在 headers 後截斷宣告的 body，避免 WebKit TCP 重試使錯誤掛起；worker 拒絕長度不符的未壓縮回應，避免截斷內容仍被當成成功。
-- Asset revision 3.7.0／shell v30；schema 維持 3。部署前做異地備份及隔離還原演練，回滾可直接部署相容 schema 3 的 v3.6.1 image；不以舊資料覆寫正式站。
-
-### 離線 worker 更新與佇列驗證（v3.7.1）
-
-- v3.7.0 main CI 的 trace 顯示 worker update 卡在尚無 installing candidate 的 script request；相同 tag 的 PWA 已通過，不能以此略過 main 失敗。
-- WebKit 離線 fixture 對 worker script 回 503，避免背景 register/update 在 TCP drop 後持續重試。每次恢復連線前，明確驗證離線 `registration.update()` 在 10 秒內失敗，然後驗證下一個在線候選正常處理；離線 shell／API exclusion 與 failed-upgrade gates 保留。
-- v3.7.1 使用 asset revision 3.7.1／shell v31，仍是 44 個資產、schema 3。v3.7.0 tag 保留原始內容；正式發布及部署使用後續通過檢查的修正版。
-
-### 首次顯示目標表單的草稿保護（v3.7.2）
-
-- 切換月跑量時，在欄位可操作前同步初始化目標草稿 baseline；圖表仍於下一個 animation frame 繪製。即使在第一個 frame 前輸入並失焦，後續重繪及晚到的目標回應也不覆蓋草稿。
-- 雙引擎 E2E 明確暫停首次 panel frame，先輸入再釋放，以固定重現原先的時序缺口。正式版本為 asset revision 3.7.2／shell v32，44 個資產、schema 3。
-
-### 行內草稿、衍生資源與月報生成（SPEC-026，v3.8.0）
-
-- 新增跑步草稿所選鞋款被刪除後，保留「請重新選擇」，直到明確選擇替代鞋款；重繪或跨日不默默換鞋。
-- 資源完成只失效依賴它的分頁。鞋款／月跑量行內編輯保留輸入 DOM 與表格列快照；背景刷新、主題或跨日重繪不觸發部分數字儲存。Enter／使用者離開欄位才提交原始 id／version，Escape 取消，換帳號清理。
-- 年度彙總、目標進度與首頁洞察透過 resource store 合併同 key 的 pending 與成功結果；失效後拒絕舊回應，失敗可重試。完整刷新導致的有效日誌失效可以啟動新讀取，單純重繪不增加請求。
-- Strava 匯入期間停用配對選單；失敗可在同一視窗重新調整。舊操作不解鎖替換視窗。
-- 月報採「最新開始的生成」：同帳號同月份的新請求開始後，舊請求即使較晚完成也不保存，串流回傳錯誤而非成功。新請求失敗／取消時保留先前成功報告，不讓舊請求重新取得資格。不同帳號／月份互不撤銷；LLM 等待不持有資料庫交易。
-- Schema 4 僅新增 `report_generations`，每帳號／月份一筆最新身分，不產生可見的空月報；既有報告、里程與版本不改寫。Asset 3.8.0／shell v33，共 45 個資產。
-
-Schema 4 上線前，執行異地備份、checksum 與隔離還原驗證。回滾優先 forward fix；若需回 v3.7.2，先停止所有實例與寫入、另備份 schema 4，確認新增表是唯一 schema 差異，
-再對停止寫入的資料庫執行 `UPDATE schema_metadata SET value='3' WHERE key='schema_version' AND value='4';`，保留新增表與業務資料，部署已驗證的 v3.7.2 image。禁止混跑兩版月報生成服務；回滾後失去生成順序保護。還原部署前快照會遺失後續寫入，僅作災難復原選項。
-
-### 可恢復的帳號工作區（SPEC-027，v3.9.0）
-
-側欄「資料與同步」提供草稿、同步佇列、備份合併還原及異動歷史。Asset 3.9.0／shell v34，共 50 個資產；發布流程包含正式備份、隔離還原驗證、CI 與部署後匿名 release-check。
-
-- 跑步、月跑量與目標表單自動存入 IndexedDB；鞋款、跑步、月份的彈窗／行內編輯保留原 ID、version 與輸入，可在工作區選擇恢復或捨棄。重開仍使用原版本，伺服器有新異動會回報衝突。資料按 origin／帳號分區，登出保留本機資料，另一帳號不可顯示或同步；共用裝置可按「清除此帳號的本機資料」。
-- 僅新增跑步支援離線寫入。先以同一 IndexedDB 交易持久化 payload／operation ID 並消耗對應草稿，成功才清除仍相同的表單；等待時的新輸入保留。尚未同步不計入統計。連線且開啟 App、回到前景或按同步按鈕時重試；不承諾關閉 App 後背景同步。
-- 多分頁以 120 秒原子 lease 避免同時發送，失聯重播同 operation ID，由伺服器交易回執防止重複。401 暫停等待重新登入；刪鞋、版本／配額或格式錯誤會列為「需要處理」，必須明確重新配對或移除，絕不默默換鞋。移除／清除會失去尚未同步紀錄，介面會先確認。瀏覽器儲存不可用時保留輸入並提示，連線可使用一般新增。
-- 最近鞋款、月跑量、目標及目前月份跑步另存本機快照；它們可能過期，不作為伺服器權威。Service worker 只快取公開 shell，IndexedDB 不存 token／密碼。瀏覽器回收空間或使用者清除網站資料會移除本機草稿／佇列，請定期同步、下載備份；本機資料不是加密保險箱。
-- 完整備份以同一資料庫讀取快照匯出，並行新增不會產生跨集合不一致。備份 JSON v2 包含穩定來源身分、鞋款基礎里程、月份歷史調整與異動歷史。選檔後先驗證／預覽，確認才在一個交易合併，保留既有暱稱、月份調整、目標與月報；不按同品牌型號合併鞋款。相同來源 ID／Strava ID 不重建，mapping 保留已刪紀錄的身分，重複匯入不撤銷後續刪除。新跑步正常累加里程。Strava 匯入摘要保留既有項目，剩餘容量內按新到舊合併，超額略過並在預覽列出，不清除既有摘要。舊 v1 格式仍接受，只保證完全相同檔案重複匯入不重建。
-- 預覽僅限本人、有效 20 分鐘；預覽後資料異動須重新預覽。上限 10 MB、5,000 雙鞋、10,000 筆跑步／歷史、2,412 個月份／月報及 1,000 筆匯入歷史（v4.7.3 起），並受目標帳號配額限制；預覽有每帳號與全站頻率限制，每個伺服器程序一次只處理一個預覽或還原；拒絕非有限數值、無效參照、未知欄位與認證內容，失敗整筆回滾。超過還原限制的大型完整匯出不會截斷，需另行規劃資料搬移；不會靜默部分還原。
-- Schema 5 起，鞋款、跑步、月跑量、目標每次寫入都在同一交易記錄前後值、原因及操作身分；升級前的歷史無法回溯產生。v4.7.0 起每個帳號保留最新 5,000 筆異動紀錄，更早的無法再顯示或復原；v4.7.1 起從備份帶入的唯讀歷史另計 5,000 筆，不會擠掉本機紀錄。刪除過的跑步身分另存，不受影響。歷史分頁僅限本人；可復原刪除的跑步／鞋款及清除的月份，仍檢查原鞋款、目前版本、配額與 Strava 重複。復原會重新計算里程，原事件只可復原一次；備份帶入的歷史明確標為唯讀。
-- `/api/operations` 統一 operation ID、更新／刪除 expected_version、成功回執與錯誤 `{detail, error: {code, message}}`。既有 CRUD 保留相容性，新增／帶版本的異動可附 `Idempotency-Key`；未提供版本的舊式刪除不取得新契約的重播保護。年度、目標與洞察已移除相容鏡像 Map，統一由 resource store 擁有請求與快取。
-
-Schema 5 增加 user metadata、回執、預覽、mapping、異動、context 與主鍵配置表；既有業務資料／里程不改寫。Run／month ID 不因刪除而重用，避免恢復草稿寫到新紀錄；allocator 僅讀全域最大主鍵與 sequence 這類配置 metadata，不讀取其他帳號的業務值。上線前必須建立、校驗正式備份並完成隔離還原演練。若回滾至 v3.8.0，先停止所有寫入、另備份 schema 5，保留新增表／欄位／triggers，將 `schema_metadata` marker 降至 4，再切回舊映像及通過 readiness／匿名 release-check；舊版不再保證離線操作回執與主鍵不重用，不能混跑新舊寫入。重新升級需保留本機 queue 並使用新 shell revision。
-
-### 雲端下載與本機匯入更新（SPEC-028／029，v3.10.0）
-
-v3.10.0 使用 Asset 3.10.0／shell v35、schema 5、50 個資產。詳見 [使用指南](docs/user-guide.md) 與 [資料搬移規格](docs/specs/029-account-data-transfer.md)。
-
-- `POST /api/account-restore/preview?mode=merge|update` 預設只新增；update 僅接受 v2，明確更新同來源鞋款與跑步、檔案內月份調整、目標及月報。模式與資料一起綁定本人預覽 hash／revision，apply 不接受切換模式。
-- 更新保留接收端額外資料、已刪除跑步及不存在於檔案的內容；不是整個帳號的鏡像取代。鞋款刪除狀態依檔案更新，不按同品牌型號合併。所有總里程於後端重算，月報匯入會撤銷同月份舊生成的保存資格。
-- 同步按鈕與下載在目前視窗顯示明確結果；接收網站／帳號、來源與更新筆數在確認前可見。使用者確認匯入才修改目前網站的資料，部署驗證不執行正式帳號匯入。
-- 無 schema migration；回滾可直接部署 v3.9.0 image，維持 schema 5。新版已成功匯入的資料仍為既有格式；未完成的新預覽需重新預覽。部署前照常建立、校驗正式備份並完成隔離還原演練。
-
-### Schema 2 上線與回滾
-
-v3.4.0 只新增 `run_creation_requests` 表與 user/key 唯一約束，沒有改寫既有鞋款、日誌或里程。
-部署前必須用下方異地備份工具下載快照並完成 checksum 與隔離還原演練；舊 v3.3.1 不接受 schema 2 marker，不能直接切回舊 image。
-優先 forward fix。若確實回滾，停止所有 app writes、另做 schema 2 備份，確認 schema 2 只有新增 receipt 表後，
-在停止的資料庫上執行 `UPDATE schema_metadata SET value='1' WHERE key='schema_version' AND value='2';`，保留 receipt 表與業務資料，再部署已驗證的 v3.3.1 image。
-重新發布舊程式仍須新的 shell revision。不要以舊快照覆蓋已新增的正式資料；完整還原只用於確認可接受資料回溯的災難復原。
-
-### 匯入操作隔離（SPEC-030，v3.10.1）
-
-v3.10.1 使用 Asset 3.10.1／shell v36、schema 6、51 個 release assets。
-[SPEC-030](docs/specs/030-import-operation-isolation.md) 修正跨帳號清除、無變更匯入的假衝突及預覽完成順序問題。
-每份預覽獨立有效 20 分鐘，同帳號最多 8 份、合計 64 MiB；關閉／換檔會以本人
-`DELETE /api/account-restore/preview/{token}` 捨棄不用的 token，失敗由到期清理回收。其他分頁與晚到請求不會撤銷仍有效的預覽；業務資料變更仍需重新預覽。
-相同內容的更新不增加版本或異動紀錄，額外資料的編輯仍可正常儲存。
-
-Schema 5→6 只以交易重建 `restore_previews` 的 `(user_id, token)` 主鍵並保留現有預覽，不修改業務表。
-部署前建立異地備份、校驗與隔離還原，並在私有副本重複升級驗證資料不變。
-回滾優先 forward fix；確需回 v3.10.0，先進入維護環境停止所有 HTTP／背景寫入、另做 schema 6 備份，
-以 Python `sqlite3.Connection.executescript` 在掛載的資料庫執行
-[`scripts/rollback_preview_schema.sql`](scripts/rollback_preview_schema.sql)，再部署先前 v3.10.0 immutable image
-`registry.fly.io/running-shoes@sha256:a6281907140cc065db385eb68769ed86fc2cbbb4757678c48d04755d361bbb78`。
-此程序只捨棄暫存預覽、恢復 schema 5 預覽主鍵及 marker，不以舊快照覆蓋跑步資料；不得混跑兩版。
-重新上線後需重新預覽並執行匿名 release-check。
-
-### 可靠帳號資料搬移（SPEC-032，v3.10.2）
-
-v3.10.2 使用 Asset 3.10.2／shell v37、schema 6、51 個 release assets。
-[SPEC-032](docs/specs/032-trustworthy-account-transfer.md) 將提交成功與畫面載入分開：若匯入已完成但讀取失敗，
-按「重新載入資料」只重新讀取，不會再次匯入；提交回應不確定時仍沿用原操作重試。
-預覽分別顯示新增、實際變更與內容相同，並保留已刪除跑步及額外本機資料。
-
-`GET /api/export/account?include_history=true` 預設包含全部異動歷史；兩個下載入口均可明確取消「包含異動歷史」，
-產生檔名以 `_without_history.json` 結尾的資料檔，業務資料不會省略。匯出與匯入共用集合、格式、秘密檢查及容量上限（v4.7.3 起為 10 MiB），
-下載前驗證可重新匯入；超限會顯示原因，不產生檔案、不靜默截斷。每份最多 5,000 雙鞋、10,000 筆跑步、
-2,412 個月份／月報、1,000 筆 Strava 摘要及 10,000 筆異動歷史（v4.7.3 起；原為 20 MiB、50,000 筆）。取消歷史後仍超限時，需使用下方管理員完整資料庫備份流程。
-
-本版無 schema migration。部署前完成異地備份及隔離還原；若需回滾可直接使用 v3.10.1 immutable image
-`registry.fly.io/running-shoes@sha256:ba35ff3051b2c627ebf3b59fdb091747e93db2c0fc3a91c14320ca8411bde804`，
-schema 6 保持相容，不還原舊業務快照。
-
-### 復原與同步身分（SPEC-033，v3.10.3）
-
-v3.10.3 使用 Asset 3.10.3／shell v38、schema 6、51 個 release assets。
-[SPEC-033](docs/specs/033-recovery-and-sync-identity.md) 補足刪除、復原與再次匯入的組合操作：
-同帳號舊備份不重建已刪跑步；明確復原後，原來源及舊 ID 的對應會跟隨復原紀錄，後續更新匯入仍可修改該筆資料。
-每次離線送出使用獨立租約，重新登入接手後不受舊請求的延遲結果影響。
-同步已送出而畫面讀取失敗時會明確提示重新整理；誤刪復原已成功而讀取失敗時，按「重新載入資料」只重試讀取。
-核心刷新驗證由 resource bridge 共用；跑步來源復原別名由 `backend/services/run_identity.py` 管理，服務仍由呼叫端持有交易。
-
-本版無 schema migration，回滾可使用 v3.10.2 immutable image
-`registry.fly.io/running-shoes@sha256:bac44457f12adfde6473e9d9a973b330e1bf69eac7e44feb3fb6ed1f5a55429a`，
-不還原業務資料快照。發布驗證涵蓋 verify、40 組版面、雙引擎 CRUD／PWA、main/tag CI 及正式站匿名 release-check。
-
-### 安全標頭與文件一致性（SPEC-053／SPEC-054，v4.12.0）
-
-- 頁面加上嚴格的 Content-Security-Policy：只允許同源 script，以及建置時以 SHA-256 雜湊放行的三段啟動 script（主題、樣式載入、開機逾時）。原本樣式表上的 inline `onload` 改為可雜湊的 script，離線頁改用不需 script 的「重新連線」連結。
-- 所有回應加上 `X-Content-Type-Options: nosniff`、`X-Frame-Options: DENY`／`frame-ancestors 'none'`、`Referrer-Policy: same-origin`、`Cross-Origin-Opener-Policy: same-origin` 與 `Permissions-Policy`；`.js`／`.mjs` 固定以 `text/javascript` 提供。
-- 移除 `allow_origins=["*"]` 的 CORS 設定：前端與 API 同源，其他網站的頁面無法再讀取 API 回應。
-- `docs-check` 會檢查 README 目錄結構列出每個後端／前端模組與 script，且 SDD 有安排每個應用模組；漏列或列了不存在的檔案都會失敗（SPEC-053）。
-- 程式整理：測試專用的 token 簽章移到 `unit_tests/token_helpers.py`，正式的認證只用注入的密鑰；合併重複的 legacy tool-call 掃描、月跑量查詢與 schema 驗證器。
-
-Asset 4.12.0／shell v62、schema 7 不變，可直接回滾至 v4.11.0 image（回滾後恢復舊的 CORS 與無安全標頭）。
-
-### 主畫面與分頁圖示改版（SPEC-052，v4.11.0）
-
-- PWA 與 iOS 主畫面圖示改為碳黑底、volt「速度線＋箭頭」標誌配磨耗進度環，和介面內的品牌標誌一致；Android 的圓形裁切也不會切到進度環。
-- 瀏覽器分頁圖示改用同一個 volt 標誌的 SVG，並保留 PNG 備援。
-- 已加入 iOS 主畫面的捷徑不會自動換圖示，請刪除後從 Safari 重新「加入主畫面」；Android 會在 Chrome 下次檢查時自動更新。
-
-Asset 4.11.0／shell v61、schema 7 不變，可直接回滾至 v4.10.0 image。
-
-### 運動科技風視覺改版（SPEC-051，v4.10.0）
-
-- 整個介面改成運動科技風：碳黑底加細格線、螢光黃綠主色、DIN 風格數字、斜線「速度條」標記與英文區塊小標；登入頁、開機畫面與側欄使用新的「速度線＋箭頭」標誌，分頁圖示改為線條 SVG。
-- 亮色主題重新配色：螢光黃綠只用在按鈕等底色，文字與線條改用深綠，跑鞋表格的生命進度、圖表與熱力圖在白底上都看得清楚。
-- 圖表、跑鞋磨耗色階、熱力圖與跑步月曆都改讀 CSS 主題 token，月曆依當天距離顯示由下往上的亮度。版面尺寸、操作流程與資料都不變。
-
-Asset 4.10.0／shell v60、schema 7 不變，可直接回滾至 v4.9.0 image。
-
-### 近 90 天月均里程佔比與圖表空白修正（SPEC-050，v4.9.0）
-
-- 跑鞋頁的圓餅圖改為「近 90 天月均里程佔比」：每雙現役鞋的數字就是單鞋分析裡的「實際月均」，中間顯示合計；近 90 天沒穿的鞋不佔扇形。
-- 現役表格移除「月跑量」欄。計畫月跑量仍在編輯視窗，近 90 天沒有紀錄的鞋，退役預估以它回退。
-- 「跑鞋輪替時間軸」與「每雙鞋的距離分布」用跑步紀錄繪製。讀取途中跑步紀錄或目標資料才到，或中途切到別的分頁，以前會留下空白的圖，要重新整理才恢復；現在會自動重畫。
-
-Asset 4.9.0／shell v59、schema 7 不變，可直接回滾至 v4.8.0 image。
-
-### 新版部署提示（SPEC-049，v4.8.0）
-
-- App 開著時也會檢查有沒有新部署：回到前景、視窗取得焦點、網路恢復，以及每 30 分鐘一次（同時觸發的只算一次，隱藏或離線時不檢查）。
-- 偵測到新版時右下角（手機在底部分頁列上方）跳出「有新版本 v<版號>」，按「立即更新」才重新載入；按「稍後」先隱藏，下次開啟 App 就是新版。重新載入時表單草稿會保留，AI 對話會清除。
-- v4.0.0～v4.7.3 偵測到新版會直接重新載入；已開著 v4.7.3 的頁面升級到本版時仍會自動載入一次，之後改為提示。
-
-Asset 4.8.0／shell v58、51 個 release assets、schema 7 不變，可直接回滾至 v4.7.3 image。
-
-### 備份還原上限與頻率限制（SPEC-047 修訂，v4.7.3）
-
-- 帳號備份 JSON 上限從 20 MB 降為 10 MB，跑步與異動歷史各從 50,000 筆降為 10,000 筆。帳號本身最多只能有 5,000 筆跑步（`MAX_RUNS_PER_USER` 預設）及 5,000＋5,000 筆保留歷史，配額內的完整帳號匯出約 7 MB，仍可下載與還原。`MAX_RUNS_PER_USER` 設超過 10,000 時，跑步數超過的帳號需改用管理員完整資料庫備份。
-- 備份預覽每個帳號每分鐘最多 20 次、全站 60 次（選檔或切換匯入模式都會重新預覽；`RESTORE_PREVIEW_RATE_LIMIT_PER_MINUTE`／`RESTORE_PREVIEW_GLOBAL_RATE_LIMIT_PER_MINUTE`）；每個伺服器程序一次只處理一個預覽或還原，其他請求立即回 429「請稍後再試」，不排隊。
-- 原因：解析一份上傳的備份會用到檔案大小數倍的記憶體，舊上限下一份刻意做大的檔案就可能讓 256 MB 的機器記憶體不足而重啟；預覽也不再同時保留兩份完整副本。
-
-Asset 4.7.3／shell v57、51 個 release assets、schema 7 不變，可直接回滾至 v4.7.2 image（回滾後恢復舊上限與無頻率限制）。
-
-### 備份檔名、AI 錯誤訊息與 router 解耦（SPEC-047 修訂，v4.7.2）
-
-- 帳號備份 JSON 的檔名改用台灣時間，不再在凌晨標成前一天。
-- AI 對話與月報出錯時顯示整理過的訊息（例如「這個免費模型目前請求過多或今日額度已滿」），不再顯示模型供應商的原始錯誤內容；詳細內容只寫進伺服器 log。
-- 所有 router 都不再自行查詢資料庫，改由 read model 或 service 負責。
-
-Asset 4.7.2／shell v56、51 個 release assets、schema 7 不變，可直接回滾至 v4.7.1 image。
-
-### 保留上限與小修正（SPEC-047 修訂，v4.7.1）
-
-- 匯入含異動歷史的備份不再擠掉本機可復原的紀錄：本機與備份帶入的歷史各保留最新 5,000 筆。
-- 過期的還原預覽改在每次啟動時清除，避免占用磁碟。
-- 年目標固定兩位小數；`MODEL_REFRESH_COOLDOWN_SECONDS` 上限 3600 秒。
-
-Asset 4.7.1／shell v55、51 個 release assets、schema 7 不變，無資料 migration，可直接回滾至 v4.7.0 image。
-
-### 程式審查修正、有界歷史與模組解耦（SPEC-047，v4.7.0）
-
-[SPEC-047](docs/specs/047-review-hardening-and-decoupling.md) 修正一次全面程式審查找到的問題：
-
-- **Strava 日期**：改用台灣日期，重新匯入可修正舊紀錄。
-- **小修正**：跑步更新送 `expected_version: null` 改回 422；匯出檔名改用台灣時間；同月份新增跑步不再浪費月跑量 ID。
-- **登入鎖定**：同一網路對同一帳號輸錯 10 次只暫停該網路 15 分鐘，帳號擁有者換個網路仍可登入；跨網路累計 100 次才暫停整個帳號。
-- **保留上限**：每帳號保留最新 5,000 筆異動紀錄、1,000 筆操作回執與 50,000 筆刪除身分。
-- **SECRET_KEY**：正式環境要求至少 32 bytes。
-
-內部改動：
-
-- import 時不再做 I/O；限流只用 SQLite 一套計數，且不 commit 請求交易。
-- 稽核 trigger 每次啟動依目前欄位重建。
-- 前端改以 `data-*` 屬性委派事件。
-- 測試不再留下未關閉的 SQLite 連線。
-
-Asset 4.7.0／shell v54、51 個 release assets、schema 6 → 7。
-
-上線步驟：
-
-1. 部署前建立並驗證異地備份，在私有副本重複升級兩次，確認業務資料不變。
-2. 確認 Fly 的 `SECRET_KEY` 至少 32 bytes。
-3. 部署後執行匿名 `release-check`。
-4. 用自己的 Strava 匯出檔預覽一次，確認清晨跑步的修正方向正確（例如 10/31 → 11/01）再匯入。
-
-回滾步驟：
-
-1. 停止寫入並另做 schema 7 備份。
-2. 以 Python `sqlite3.Connection.executescript` 執行 [`scripts/rollback_schema_seven.sql`](scripts/rollback_schema_seven.sql)，重建空的舊回執表並把 marker 改回 6。
-3. 部署 v4.6.0 image。
-
-### 冷啟動加速、購買日前跑步提醒與瀏覽器偵測（SPEC-046，v4.6.0）
-
-[SPEC-046](docs/specs/046-cold-start-purchase-date-warnings-and-browser-probe.md) 讓後端啟動不再載入 OpenAI SDK（第一次 AI 請求才載入），Docker image 預先編譯 `backend/`，縮短 Fly 閒置停機後第一次開啟的等待；
-新增／編輯跑步與 Strava 配對時，日期早於鞋款購買日會提醒（不阻擋）；`verify-all` 與 Stop hook 改以實際啟動 Chromium／WebKit 判斷瀏覽器可用性，缺 Linux 系統函式庫時跳過並提示 `sudo npx playwright install-deps chromium webkit`。
-schema 6 不變、Asset 4.6.0／shell v53，可回滾至 v4.5.1 image。
-
-### 清除舊空表與已刪除鞋款標籤（SPEC-045，v4.5.1）
-
-[SPEC-045](docs/specs/045-legacy-tables-and-deleted-shoe-labels.md) 啟動時刪除不再使用的空表 `operation_history`、`app_settings`（仍有資料則保留），資料庫由 19 張表變為 17 張；
-年度堆疊圖把已刪除鞋款合併為「已刪除的鞋款」，不再顯示 `#15` 這類內部編號。鞋款／跑步主鍵維持全域穩定編號，刪除不重排。
-schema 維持 6、Asset 4.5.1／shell v52，可直接回滾至 v4.5.0 image。
-
-### 月跑量年度目標總覽（SPEC-044，v4.5.0）
-
-[SPEC-044](docs/specs/044-annual-goal-overview.md) 移除「查看月份」選單，月跑量分頁改以一張年度目標卡同時顯示 12 個月的達標狀態、年度進度與本月進度；
-目標設定收進「調整目標」，開始年份改為選單並說明用途。新增唯讀 `GET /api/running-goal/year`；Asset 4.5.0／shell v51、schema 6 不變，可回滾至 v4.4.0 image。
-
-### 支出併入跑鞋分頁（SPEC-043，v4.4.0）
-
-[SPEC-043](docs/specs/043-spending-in-shoes-tab.md) 移除「支出」分頁，支出卡片、兩張支出圖與支出明細移到跑鞋分頁最下方，內容不變；導覽剩 4 個分頁。
-Asset 4.4.0／shell v50、schema 6 不變，可回滾至 v4.3.0 image。
-
-### 移除跑步摘要卡、距離分布配色與 AI 分頁合併（SPEC-042，v4.3.0）
-
-[SPEC-042](docs/specs/042-run-log-tiles-distance-colors-and-ai-tab.md) 移除跑步日誌頂端的四張摘要卡與個人紀錄（保留「今天穿哪雙」）；
-每雙鞋的距離分布改為 5 km 一段並用紅、黃、綠、藍、紫區分；AI 助手與月報合併為一個「AI」分頁，在面板內切換。
-Asset 4.3.0／shell v49、schema 6 不變，可回滾至 v4.2.0 image。
-
-### 年度回顧、首頁摘要與手機底部分頁列（SPEC-040，v4.2.0）
-
-[SPEC-040](docs/specs/040-highlights-review-and-mobile-navigation.md) 新增年度回顧、跑步日誌頂端摘要（本週、連續天數、目標進度環、累計里程碑）、近 30 天里程碑與個人新紀錄、「今天穿哪雙」建議、每雙鞋距離分布與年度月跑量對比；
-月跑量分頁統一為一個年份選單，同一雙鞋在所有圖表顏色一致，手機版改用固定底部分頁列。全部由後端計算，只使用既有跑步日誌與鞋款資料。
-Asset 4.2.0／shell v48、schema 6 不變，無資料 migration，可回滾至 v4.1.3 image。
-
-### 輪替時間軸只列現役鞋（SPEC-038 修訂，v4.1.3）
-
-跑鞋分頁的輪替時間軸不再顯示已退役的鞋，只列出仍在輪替中的現役鞋與閒置提醒；`GET /api/analytics/shoe-timeline` 同步排除退役鞋。
-Asset 4.1.3／shell v47、schema 6 不變，可回滾至 v4.1.2 image。
-
-### 移除月跑量紀錄表（SPEC-039，v4.1.2）
-
-[SPEC-039](docs/specs/039-compact-monthly-records.md) 移除月跑量分頁底部的「月跑量紀錄」表格、新增表單與月份編輯對話框（v4.1.1 曾先改為收合）。
-月跑量仍由跑步日誌自動累加，既有歷史／手動調整資料、圖表、目標、報告、備份與 `/api/monthly-mileage` 都保留。
-Asset 4.1.2／shell v46、50 個 release assets、schema 6 不變，可回滾至 v4.1.1 image。
-
-### 訓練趨勢與跑鞋輪替（SPEC-038，v4.1.0）
-
-[SPEC-038](docs/specs/038-training-trends-and-shoe-rotation.md) 在月跑量分頁新增年度跑步熱力圖（含有跑天數、最長／目前連續天數）、
-近 16 週每週跑量與 4 週平均（比前 4 週平均多 30% 以上標示暴增），以及年度累計跑量對照目標線與全年推估；
-跑鞋分頁新增輪替時間軸，標出超過 30 天沒穿的現役鞋。全部由後端計算，只使用既有跑步日誌。
-Asset 4.1.0／shell v44、schema 6 不變，無資料 migration，可回滾至 v4.0.3 image。
-
-### 本機資料庫自動重新連線（SPEC-037，v4.0.3）
-
-[SPEC-037](docs/specs/037-reconnecting-local-workspace-store.md) 修正瀏覽器（特別是 iPhone Safari）在背景或記憶體壓力下關閉本機資料庫後，
-離線待送跑步與草稿無法讀寫直到重新整理的問題；下一次讀寫會自動重新連線。本版也更新依賴並穩定 WebKit 瀏覽器測試。
-Asset 4.0.3／shell v43、schema 6 不變，無資料 migration，可回滾至 v4.0.2 image。
-
-### 安全強化與跨平台安裝（SPEC-036，v4.0.1）
-
-[SPEC-036](docs/specs/036-security-hardening-and-portable-locks.md) 修正 AI／月報 Markdown 的 XSS，
-被自身上限拒絕的請求不再消耗全站額度。新註冊與改密碼需至少 8 個字元；同一帳號 15 分鐘內密碼錯誤 10 次後，
-該帳號的登入與改密碼會暫停 15 分鐘（其他帳號不受影響）。鎖定檔改為跨平台編譯，Windows 可直接執行 setup。
-Asset 4.0.1／shell v42、schema 6 不變，可回滾至 v4.0.0 image。
-
-### 穩定測試版（v4.0.0）
-
-目前上線測試的穩定版，預期不再特別調整。PWA 在部署新版後會自動載入最新版；跑步紀錄和鞋款選單不再顯示內部數字編號。
-
-### 資料與同步操作簡化（SPEC-035，v3.10.5）
-
-目前前端使用 Asset 3.10.5／shell v40、schema 6。同步區依待送跑步及網路狀態顯示動作；草稿、備份／匯入、歷史和本機清理預設收合。
-
-### 來源復原搬移與跨分頁同步（SPEC-034，v3.10.4）
-
-v3.10.4 使用 Asset 3.10.4／shell v39、schema 6、51 個 release assets。
-[SPEC-034](docs/specs/034-portable-recovery-and-sync-refresh.md) 修正來源網站復原後再次搬移的重複跑步、浮點尾差造成的假更新，以及其他分頁送出後畫面未刷新的問題。
-
-新下載使用 **備份 JSON v3**，每筆跑步的 `aliases` 保留同一來源復原前的 ID；省略異動歷史仍保留這項來源身分。
-單檔最多 50,000 個別名，共用 20 MiB 限制，超限拒絕下載，不靜默裁切。別名須唯一且不能指向不同跑步；若既有對應已衝突，預覽會拒絕，不會自動刪除或合併資料。
-新版仍接受 v1/v2；v1 指紋沿用舊算法，避免升版後重建舊檔。舊 App 不接受 v3，請先更新接收端再匯入，不能手動刪除別名或改版本以繞過檢查。
-
-里程累積與比較統一兩位精度，既有儲存浮點尾差不會觸發無意義的版本更新。
-「更新雲端資料」即使沒有待送出紀錄也會讀取雲端；回到前景或同帳號另一分頁成功送出時同樣刷新，保留未送出的輸入。
-支援 BroadcastChannel 的瀏覽器會接收跨分頁提交通知；通知不可用時，回到前景或按「更新雲端資料」仍可刷新。通知期間又收到提交會補做一次讀取，舊帳號通知不影響目前帳號。
-
-無 schema migration。部署前驗證正式異地備份及隔離還原；回滾可部署 v3.10.3 image
-`registry.fly.io/running-shoes@sha256:5def65ac422062ac5a7e4c932d5d8dd4c76c5e1a184e46d11759d9781e4af690`。
-回滾後 v3 檔案需保留至接收端重新升級才能匯入，DB 對應仍相容，不還原舊業務快照。
-
 ### AI 開發規範與自動驗證
 
 `AGENTS.md` 是 Codex 等 Coding Agent 共用的專案規範；`CLAUDE.md` 會把同一份規範匯入
@@ -967,7 +626,7 @@ Playwright／Chromium／WebKit 齊全時，也會執行版面測試。
 避免每次停止都重跑。Hook 不會呼叫其他模型、外部 API，或傳送提示、diff、原始碼與測試輸出。
 GitHub Actions 仍會在 push／pull request 執行 `verify`，並以三個可獨立重跑的 browser jobs 執行完整版面矩陣、真實 CRUD E2E 與 PWA 升級／離線測試；push 到 main 時再依序快照、部署、檢查並發版（見「日常開發流程、自動部署與發版」）；Dependabot 每月以單一 PR 合併 GitHub Actions 更新；Python 只接收安全性更新 PR，例行升級依下方 `uv pip compile --universal` 步驟手動重編鎖定檔（Dependabot 產生的鎖定檔會遺失 Windows 條件）。
 
-本次驗證基線為 Python **638 passed**、前端回歸測試 **182 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
+本次驗證基線為 Python **653 passed**、前端回歸測試 **191 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
 版面檢查涵蓋 WebKit／Chromium、亮／暗模式與 10 組直橫向尺寸，共 40 組設定，檢查四個功能分頁與月報、三個認證表單、圖表、全部彈窗、行內編輯、停用／錯誤及空資料狀態。
 
 主要表單、工具列與彈窗操作統一為 44px 控制項；桌面表格內的緊湊操作為 36px，手機至少 44px。
@@ -993,6 +652,33 @@ Software Design Description（含 Mermaid 架構圖與拆分順序），
 
 現役與退役鞋皆只使用 Daily、Speed、Tempo、Race 四種用途分類。啟動時會移除既有資料中的 Trail、Walk 與舊 Other 標記，保留其他類別、里程及退役狀態；清理後沒有用途的鞋會顯示「未分類」，不會自動改成 Daily。清理會更新受影響鞋款的版本，重複啟動不會再次修改已清理資料。
 新增跑鞋預設勾選 Daily，也可以取消所有類別；編輯未分類鞋款會保留空分類。換鞋提醒會檢查每個用途是否都有現役替代鞋，未分類鞋款則提示先分類。
+
+## 統計與操作規則
+
+### 資料與畫面規則（SPEC-017）
+
+- 月跑量 API 空白或無效不會寫入；清零必須明確輸入 `0`。歷史／手動調整與日誌里程分開保留（網頁編輯介面已於 SPEC-039 移除）。
+- 月跑量頁、首頁、月報目標皆只計逐筆日誌；鞋款成本／壽命指標由 `shoe_metrics.py` 統一計算。
+- 新增／編輯跑步或 Strava 配對時，日期早於該鞋購買日會提醒確認（仍可儲存），避免跑步記到錯的鞋。
+- 刪鞋不移除日誌或年度堆疊里程；已刪除鞋款的里程合併為一個灰色「已刪除的鞋款」系列，不顯示內部編號。
+- AI 遇到同名鞋回傳含購買日期及狀態的候選，必須詢問後以 ID 選定；批次使用分析不逐鞋查詢。
+- 支出平均依後端日曆月份計算，不受瀏覽器時區影響；按需載入，失敗可在該區重試，不阻擋首頁。
+- PWA 回到前景或跨日時更新日期上限，不改目前分頁／月份／草稿。登入換帳號則清除前帳號狀態與草稿。
+- 彈窗支援 Tab、Shift+Tab、Escape 及返回原按鈕；關閉不等於撤回已送出的交易。
+- 畫面顯示版本；新版完整安裝後提示更新，需使用者確認才重新載入，避免自動丟失尚未儲存內容。
+
+### 請求、重試與跨分頁（SPEC-019）
+
+- 月份／分頁載入錯誤有自己的提示，重試成功不掩蓋其他區塊的載入錯誤。
+- 同源其他分頁登入、登出或換帳號時，本頁立即清理舊資料及取消未完成普通請求，回登入畫面；不刪除其他分頁的新憑證。這不是登出所有裝置。
+- JSON CRUD／登入讀取有 20 秒 deadline（涵蓋 headers 與 body）；CSV upload 為 90 秒。GET 在 timeout／network／502–504 最多重試一次；寫入不自動重試。SSE 維持原串流取消流程，不套用 JSON deadline。
+- `POST /api/runs` 支援可選 `Idempotency-Key`（16–128 字元，英數及 `._:-`），同帳號、同 key／內容會重播原始回應，不重複寫入日誌及里程；內容不一致回 409。無 key 的舊客戶端維持相容。
+- 前端保留失敗新增表單的 key；原表單人工重試沿用，修改內容、成功或換帳號即建立新操作。同日同距離的兩次真實跑步不會被誤判重複。刪除後重播舊 key 不會復活日誌。
+
+## 版本紀錄
+
+每個版本的摘要在 [CHANGELOG.md](CHANGELOG.md)；上線時的行為變更、資料相容性與回滾細節（v3.5.0 起）在
+[docs/release-notes.md](docs/release-notes.md)。README 只描述目前的功能與操作方式。
 
 ## AI 開發萬用指示
 
@@ -1256,6 +942,58 @@ venv/bin/python -m backend.run
 
 任何人都可以在登入頁面註冊帳號，每個使用者的跑鞋資料完全隔離，互看不到。
 
-## API 文件
+## API 一覽
 
-啟動後開啟 `http://localhost:8000/docs` 查看 Swagger API 文件。
+除了 `/health/live`、`/health/ready` 與登入／註冊，所有端點都需要 `Authorization: Bearer <token>`，而且只讀寫目前帳號的資料。
+啟動後也可以開啟 `http://localhost:8000/docs` 查看 Swagger 文件。`docs-check` 會確認下表列出 `unit_tests/api_contract.json` 的每一個端點（SPEC-058）。
+
+| 分類 | API | 用途 |
+| --- | --- | --- |
+| 帳號 | `POST /api/auth/register` | 註冊帳號（受註冊總數與頻率限制） |
+| 帳號 | `POST /api/auth/login` | 登入並取得 7 天有效的 Bearer token |
+| 帳號 | `GET /api/auth/me` | 取得目前登入的帳號 |
+| 帳號 | `POST /api/auth/change-password` | 以舊密碼更換密碼；舊 token 立即失效 |
+| 跑鞋 | `GET /api/shoes/active` | 現役跑鞋，含成本、壽命與退役預估 |
+| 跑鞋 | `GET /api/shoes/retired` | 退役跑鞋 |
+| 跑鞋 | `POST /api/shoes` | 新增跑鞋 |
+| 跑鞋 | `PUT /api/shoes/{shoe_id}` | 編輯跑鞋（可帶 `expected_version`） |
+| 跑鞋 | `DELETE /api/shoes/{shoe_id}` | 刪除跑鞋，保留歷史跑步紀錄 |
+| 跑鞋 | `GET /api/shoes/{shoe_id}/analytics` | 單鞋的使用、成本與退役預估 |
+| 跑步日誌 | `GET /api/runs` | 跑步紀錄；可用 `year`、`month`、`day`、`limit`、`offset` 篩選 |
+| 跑步日誌 | `GET /api/runs/summary` | 指定月份的月曆與鞋款彙總 |
+| 跑步日誌 | `GET /api/runs/year-summary` | 指定年份的每月／每鞋里程矩陣 |
+| 跑步日誌 | `POST /api/runs` | 新增跑步（可帶 `Idempotency-Key`） |
+| 跑步日誌 | `PUT /api/runs/{run_id}` | 編輯跑步 |
+| 跑步日誌 | `DELETE /api/runs/{run_id}` | 刪除跑步；Strava 活動會記住，重新匯入不會回來 |
+| Strava | `POST /api/runs/import/strava/preview` | 預覽 CSV 的跑步活動、重複／已刪除筆數與鞋款配對 |
+| Strava | `POST /api/runs/import/strava` | 依鞋款配對匯入 |
+| Strava | `GET /api/runs/import/strava/history` | 最近 10 次匯入摘要 |
+| 月跑量 | `GET /api/monthly-mileage` | 每月跑量（日誌合計加歷史調整） |
+| 月跑量 | `POST /api/monthly-mileage` | 新增月份的歷史跑量 |
+| 月跑量 | `PUT /api/monthly-mileage/{entry_id}` | 修改月份跑量（不能低於日誌合計） |
+| 月跑量 | `DELETE /api/monthly-mileage/{entry_id}` | 清除月份的歷史調整 |
+| 目標 | `GET /api/running-goal` | 每月目標與開始年份 |
+| 目標 | `PUT /api/running-goal` | 修改目標（年度目標＝每月 × 12） |
+| 目標 | `GET /api/running-goal/progress` | 指定月份的目標進度 |
+| 目標 | `GET /api/running-goal/year` | 年度目標總覽 |
+| 分析 | `GET /api/analytics/dashboard` | 跑步日誌頁的趨勢、目標、月底預測與換鞋提醒 |
+| 分析 | `GET /api/analytics/trends` | 熱力圖、連續天數、每週跑量與最長一次、週目標、星期幾分布、年度累計 |
+| 分析 | `GET /api/analytics/shoe-timeline` | 現役鞋的輪替時間軸 |
+| 分析 | `GET /api/analytics/home` | 「今天穿哪雙」建議 |
+| 分析 | `GET /api/analytics/year-review` | 年度回顧（含前一年同期比較） |
+| 分析 | `GET /api/analytics/shoe-distance-mix` | 每雙現役鞋的距離分布 |
+| 支出 | `GET /api/spending/summary` | 總花費、折數與平均月支出 |
+| 支出 | `GET /api/spending/monthly` | 每月買鞋花費 |
+| AI | `GET /api/agent/providers` | 可用的免費工具模型 |
+| AI | `POST /api/agent/models/refresh` | 重新整理模型清單（有冷卻時間） |
+| AI | `POST /api/agent/chat/stream` | AI 對話（SSE 串流） |
+| 月報 | `POST /api/reports/generate` | 產生月報（SSE 串流） |
+| 月報 | `GET /api/reports` | 已保存的月報列表 |
+| 月報 | `GET /api/reports/{year}/{month}` | 指定月份的完整月報 |
+| 匯出與備份 | `GET /api/export` | 匯出跑鞋 CSV 或 XLSX（`format`）；`mode` 選全部、現役或退役 |
+| 匯出與備份 | `GET /api/export/account` | 完整 JSON 帳號備份（`include_history` 可關閉異動歷史） |
+| 匯出與備份 | `POST /api/account-restore/preview` | 驗證備份並產生合併預覽（`mode` 為 merge 或 update） |
+| 匯出與備份 | `POST /api/account-restore/apply` | 套用預覽 token，一個交易合併 |
+| 匯出與備份 | `DELETE /api/account-restore/preview/{token}` | 捨棄不用的預覽 |
+| 工作區 | `POST /api/operations` | 帶操作 ID 與版本的統一異動，成功回執可重播 |
+| 工作區 | `GET /api/history` | 異動歷史分頁（`before`、`limit`） |

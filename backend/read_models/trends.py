@@ -26,9 +26,10 @@ def trends_end(year: int, as_of: date) -> date | None:
     return as_of if year == as_of.year else date(year, 12, 31)
 
 
-def _daily_km(db: Session, user_id: int, start: date, end: date) -> dict[date, float]:
+def _daily_km(db: Session, user_id: int, start: date, end: date) -> dict[date, tuple[float, float]]:
+    """Per day: (total distance, longest single run)."""
     rows = (
-        db.query(models.Run.date, func.sum(models.Run.km))
+        db.query(models.Run.date, func.sum(models.Run.km), func.max(models.Run.km))
         .filter(
             models.Run.user_id == user_id,
             models.Run.date >= start.isoformat(),
@@ -37,7 +38,7 @@ def _daily_km(db: Session, user_id: int, start: date, end: date) -> dict[date, f
         .group_by(models.Run.date)
         .all()
     )
-    return {date.fromisoformat(day): float(km or 0) for day, km in rows}
+    return {date.fromisoformat(day): (float(km or 0), float(longest or 0)) for day, km, longest in rows}
 
 
 def run_streaks(days: list[date], end: date) -> dict:
@@ -56,18 +57,19 @@ def run_streaks(days: list[date], end: date) -> dict:
     }
 
 
-def _weekly(daily: dict[date, float], end: date) -> list[dict]:
+def _weekly(daily: dict[date, tuple[float, float]], end: date, weekly_goal: float | None) -> list[dict]:
     last_monday = end - timedelta(days=end.weekday())
     first_monday = last_monday - timedelta(weeks=WEEKS + ROLLING_WEEKS - 1)
     totals = []
     for index in range(WEEKS + ROLLING_WEEKS):
         monday = first_monday + timedelta(weeks=index)
-        totals.append((monday, sum(daily.get(monday + timedelta(days=d), 0.0) for d in range(7))))
+        days = [daily.get(monday + timedelta(days=d), (0.0, 0.0)) for d in range(7)]
+        totals.append((monday, sum(km for km, _ in days), max(longest for _, longest in days)))
     weeks = []
     for index in range(ROLLING_WEEKS, len(totals)):
-        monday, km = totals[index]
-        baseline = sum(value for _, value in totals[index - ROLLING_WEEKS:index]) / ROLLING_WEEKS
-        rolling = sum(value for _, value in totals[index - ROLLING_WEEKS + 1:index + 1]) / ROLLING_WEEKS
+        monday, km, longest = totals[index]
+        baseline = sum(value for _, value, _ in totals[index - ROLLING_WEEKS:index]) / ROLLING_WEEKS
+        rolling = sum(value for _, value, _ in totals[index - ROLLING_WEEKS + 1:index + 1]) / ROLLING_WEEKS
         change = (km - baseline) / baseline * 100 if baseline > 0 else None
         weeks.append({
             "week_start": monday.isoformat(),
@@ -77,8 +79,21 @@ def _weekly(daily: dict[date, float], end: date) -> list[dict]:
             "change_percent": round_metric(change, 1) if change is not None else None,
             "spike": bool(baseline >= SPIKE_MIN_BASE_KM and change is not None and change > SPIKE_PERCENT),
             "partial": monday + timedelta(days=6) > end,
+            "longest_km": round_metric(longest),
+            "goal_met": weekly_goal is not None and km + 0.005 >= weekly_goal,
         })
     return weeks
+
+
+def _weekday_mix(daily: dict[date, tuple[float, float]], start: date, end: date) -> list[dict]:
+    """Monday-first distance and running days per weekday between start and end."""
+    rows = [{"weekday": weekday, "km": 0.0, "run_days": 0} for weekday in range(7)]
+    for day, (km, _) in daily.items():
+        if start <= day <= end and km > 0:
+            row = rows[day.weekday()]
+            row["km"] = float(row["km"]) + km
+            row["run_days"] = int(row["run_days"]) + 1
+    return [{**row, "km": round_metric(float(row["km"]))} for row in rows]
 
 
 def training_trends(db: Session, user_id: int, year: int, as_of: date) -> dict:
@@ -87,16 +102,21 @@ def training_trends(db: Session, user_id: int, year: int, as_of: date) -> dict:
     days_in_year = goals.days_in_year(year)
     yearly_goal = goal["yearly_km"]
     goal_line = [goals.yearly_goal_to_date(yearly_goal, year, day + 1) for day in range(days_in_year)]
+    goal_active = year >= goal["start_year"]
+    # The weekly target has the annual goal line's slope: yearly goal x 7 / days in the year.
+    weekly_goal_km = goals.yearly_goal_to_date(yearly_goal, year, 7)
     base = {
         "year": year,
         "end_date": end.isoformat() if end else None,
         "thresholds": {"spike_percent": SPIKE_PERCENT, "spike_min_base_km": SPIKE_MIN_BASE_KM},
+        "weekly_goal": {"active": goal_active, "km": weekly_goal_km},
     }
     if end is None:
         return {
             **base, "daily": [], "streaks": run_streaks([], as_of), "weekly": [],
+            "weekday": _weekday_mix({}, as_of, as_of),
             "cumulative": {
-                "goal_active": year >= goal["start_year"], "yearly_goal_km": yearly_goal,
+                "goal_active": goal_active, "yearly_goal_km": yearly_goal,
                 "actual_km": [], "goal_km": goal_line, "ytd_km": 0.0, "expected_km": 0.0,
                 "delta_km": 0.0, "projected_km": 0.0,
             },
@@ -105,22 +125,23 @@ def training_trends(db: Session, user_id: int, year: int, as_of: date) -> dict:
     year_start = date(year, 1, 1)
     weekly_start = end - timedelta(days=end.weekday()) - timedelta(weeks=WEEKS + ROLLING_WEEKS - 1)
     daily = _daily_km(db, user_id, min(year_start, weekly_start), end)
-    year_days = sorted(day for day, km in daily.items() if day >= year_start and km > 0)
+    year_days = sorted(day for day, (km, _) in daily.items() if day >= year_start and km > 0)
 
     elapsed = (end - year_start).days + 1
     actual, running = [], 0.0
     for offset in range(elapsed):
-        running += daily.get(year_start + timedelta(days=offset), 0.0)
+        running += daily.get(year_start + timedelta(days=offset), (0.0, 0.0))[0]
         actual.append(round_metric(running))
     ytd = actual[-1] if actual else 0.0
     expected = goal_line[elapsed - 1]
     return {
         **base,
-        "daily": [{"date": day.isoformat(), "km": round_metric(daily[day])} for day in year_days],
+        "daily": [{"date": day.isoformat(), "km": round_metric(daily[day][0])} for day in year_days],
         "streaks": run_streaks(year_days, end),
-        "weekly": _weekly(daily, end),
+        "weekly": _weekly(daily, end, weekly_goal_km if goal_active else None),
+        "weekday": _weekday_mix(daily, year_start, end),
         "cumulative": {
-            "goal_active": year >= goal["start_year"],
+            "goal_active": goal_active,
             "yearly_goal_km": yearly_goal,
             "actual_km": actual,
             "goal_km": goal_line,

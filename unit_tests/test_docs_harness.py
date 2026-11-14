@@ -11,7 +11,7 @@ def test_docs_harness_reads_frontend_test_count():
 
 
 def test_docs_harness_reads_agent_tool_count():
-    assert check_docs.agent_tool_count() == 8
+    assert check_docs.agent_tool_count() == 12
 
 
 def test_docs_harness_reads_layout_matrix_count():
@@ -162,3 +162,24 @@ def test_inventory_rejects_unlisted_modules_stale_entries_and_unplaced_sdd_modul
 def test_current_readme_tree_and_sdd_place_every_module():
     from scripts.document_contracts import inventory_errors
     assert inventory_errors(check_docs.ROOT) == []
+
+
+def test_api_reference_requires_every_contract_route_exactly(tmp_path):
+    """SPEC-058: a route counts as documented only as its own `METHOD /path` code span."""
+    from scripts.document_contracts import api_reference_errors
+
+    (tmp_path / "unit_tests").mkdir()
+    (tmp_path / "unit_tests" / "api_contract.json").write_text(
+        json.dumps(["GET /api/runs", "GET /api/runs/summary", "GET /api/running-goal/year", "PUT /api/shoes/{shoe_id}"]),
+        encoding="utf-8",
+    )
+    (tmp_path / "README.md").write_text(
+        "| `GET /api/runs/summary` | x |\n| `GET /api/running-goal/year?year=` | y |\n`PUT /api/shoes/{shoe_id}`\n",
+        encoding="utf-8",
+    )
+    assert api_reference_errors(tmp_path) == ["README.md: API 一覽 does not document GET /api/runs"]
+
+
+def test_current_readme_documents_every_api_route():
+    from scripts.document_contracts import api_reference_errors
+    assert api_reference_errors(check_docs.ROOT) == []

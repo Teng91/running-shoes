@@ -28,9 +28,9 @@ function renderRunLog() {
   const favorite = favoriteEntry ? runShoe(favoriteEntry[0]) : null;
   const monthLabel = `${parseInt(month.slice(5), 10)} 月`;
   document.getElementById('run-stats').innerHTML = [
-    { label: '本月總里程', value: `${total.toFixed(2)} km`, sub: `${summary ? summary.run_count : filtered.length} 次跑步` },
+    { label: `${monthLabel}總里程`, value: `${total.toFixed(2)} km`, sub: `${summary ? summary.run_count : filtered.length} 次跑步` },
     { label: '跑步天數', value: `${days} 天`, sub: days ? `平均每天 ${(total / days).toFixed(2)} km` : '還沒有紀錄' },
-    { label: '本月主力鞋', value: favorite ? esc(favorite.model) : '—', sub: favoriteEntry ? `${favoriteEntry[1].km.toFixed(2)} km` : '還沒有紀錄' },
+    { label: `${monthLabel}主力鞋`, value: favorite ? esc(favorite.model) : '—', sub: favoriteEntry ? `${favoriteEntry[1].km.toFixed(2)} km` : '還沒有紀錄' },
   ].map(card => `<div class="card"><div class="card-label">${card.label}</div><div class="card-value">${card.value}</div><div class="card-sub">${card.sub}</div></div>`).join('');
   renderStravaStatus();
   document.getElementById('run-table-title').textContent = `${monthLabel}跑步紀錄`;
@@ -220,15 +220,18 @@ function renderShoeAnalytics(data) {
   const { shoe, lifecycle: life, usage } = data;
   document.getElementById('shoe-analysis-title').textContent = `${shoe.brand} ${shoe.model}`;
   document.getElementById('shoe-analysis-sub').textContent = `${shoe.is_retired ? '已退役' : '使用中'} · ${shoe.categories.join(' / ') || '未分類'} · 購入 ${shoe.purchase_date.replace(/-/g, '/')}`;
-  const forecast = life.forecast_retirement_date ? life.forecast_retirement_date.replace(/-/g, '/') : '無法預估';
+  // A retired pair has no forecast (SPEC-055); say so instead of "cannot forecast".
+  const retired = life.forecast_source === 'retired';
+  const forecast = retired ? '已退役' : life.forecast_retirement_date ? life.forecast_retirement_date.replace(/-/g, '/') : '無法預估';
   const source = life.forecast_source === 'recent_90_days' ? '依近 90 天實際使用' : '依計畫月跑量';
+  const forecastSub = retired ? '退役後不再預估' : `${source} · ${Number(life.forecast_monthly_km).toFixed(1)} km／月`;
   const cards = [
     { label: '總里程', value: `${Number(life.total_mileage_km).toFixed(2)} km`, sub: '' },
     { label: '穿著次數', value: `${usage.count} 次`, sub: usage.count ? '已納入逐筆日誌' : '尚無日誌紀錄' },
     { label: '近 30／90 天', value: `${Number(usage.km_30_days).toFixed(1)} / ${Number(usage.km_90_days).toFixed(1)} km`, sub: `實際月均 ${Number(usage.actual_monthly_km_90_days).toFixed(1)} km` },
     { label: '最後使用', value: usage.last_run_date ? usage.last_run_date.replace(/-/g, '/') : '—', sub: usage.first_run_date ? `首次紀錄 ${usage.first_run_date.replace(/-/g, '/')}` : '尚無日誌紀錄' },
     { label: '壽命進度', value: life.usage_percent === null ? '—' : `${Number(life.usage_percent).toFixed(1)}%`, sub: `剩餘 ${Number(life.remaining_mileage_km).toFixed(2)} km` },
-    { label: '預估退役', value: forecast, sub: `${source} · ${Number(life.forecast_monthly_km).toFixed(1)} km／月` },
+    { label: '預估退役', value: forecast, sub: forecastSub },
   ];
   const recentRows = data.recent_runs.length ? data.recent_runs.map(run => `<tr><td>${run.date.replace(/-/g, '/')}</td><td class="numeric">${Number(run.km).toFixed(2)} km</td></tr>`).join('') : '<tr><td colspan="2" class="empty-state">尚無逐筆跑步紀錄。</td></tr>';
   document.getElementById('shoe-analysis-content').innerHTML = `<div class="shoe-analysis-grid">${cards.map(card => `<div class="insight-card"><div class="insight-card-label">${card.label}</div><div class="insight-card-value">${card.value}</div>${card.sub ? `<div class="insight-card-sub">${card.sub}</div>` : ''}</div>`).join('')}</div><div class="shoe-analysis-section"><h3>近 12 個月使用趨勢</h3><div class="shoe-analysis-chart"><canvas id="chart-shoe-analytics"></canvas></div></div><div class="shoe-analysis-section"><h3>最近跑步</h3><div class="table-wrap" tabindex="0" role="region" aria-label="跑鞋最近跑步"><table><thead><tr><th>日期</th><th class="numeric">距離</th></tr></thead><tbody>${recentRows}</tbody></table></div></div>`;

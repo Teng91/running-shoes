@@ -6,7 +6,7 @@ from backend import analytics, models
 from backend.read_models.rounding import round_metric
 from backend.read_models.shoe_matching import resolve_shoe
 from backend.schemas import SHOE_CATEGORIES
-from backend.shoe_metrics import shoe_metrics
+from backend.shoe_metrics import MONITOR_USAGE_PERCENT, REPLACE_SOON_USAGE_PERCENT, shoe_metrics
 
 
 def _lifecycle(shoe: models.Shoe) -> dict:
@@ -22,9 +22,9 @@ def _lifecycle(shoe: models.Shoe) -> dict:
         }
 
     usage_percent = round_metric(shoe_metrics(shoe)["usage_percent"], 1)
-    if usage_percent >= 90:
+    if usage_percent >= REPLACE_SOON_USAGE_PERCENT:
         lifecycle_status = "replace_soon"
-    elif usage_percent >= 80:
+    elif usage_percent >= MONITOR_USAGE_PERCENT:
         lifecycle_status = "monitor"
     else:
         lifecycle_status = "healthy"

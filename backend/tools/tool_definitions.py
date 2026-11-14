@@ -102,6 +102,71 @@ TOOL_DEFINITIONS: list[dict] = [
     {
         "type": "function",
         "function": {
+            "name": "running_goal_progress",
+            "description": "以 JSON 取得年度跑量目標進度：每月是否達標、年度累計、今天應有進度與每週需求，皆由後端依逐筆跑步日誌計算。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "year": {
+                        "type": "integer",
+                        "minimum": 1900,
+                        "maximum": 2100,
+                        "description": "選填，西元年份；省略時為今年。",
+                    },
+                },
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "training_trends",
+            "description": "以 JSON 取得訓練趨勢：近 16 週每週跑量、跑量暴增週、每週最長一次、週目標、連續天數與星期幾分布。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "year": {
+                        "type": "integer",
+                        "minimum": 1900,
+                        "maximum": 2100,
+                        "description": "選填，西元年份；省略時為今年。",
+                    },
+                },
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "year_review",
+            "description": "以 JSON 取得年度回顧：總跑量、與前一年同期比較、最長一次、最多的一週與月份、最常穿的鞋與買鞋花費。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "year": {
+                        "type": "integer",
+                        "minimum": 1900,
+                        "maximum": 2100,
+                        "description": "選填，西元年份；省略時為今年。",
+                    },
+                },
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "spending_summary",
+            "description": "以 JSON 取得買鞋支出：總花費、原價、省下金額、平均折數、平均每月花費與最近月份明細。",
+            "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "web_search",
             "description": "以 JSON 搜尋市售跑鞋、規格、評價或價格，結果欄位為 title、snippet、url；只在需要外部資訊時使用。",
             "parameters": {

@@ -69,7 +69,7 @@ function renderCards() {
   const avgCostPerKm = totalMileage > 0 ? totalPrice / totalMileage : 0;
   const alertCount = shoes.filter(s => {
     const c = calc(s);
-    return c.lifeProgress >= 0.8;
+    return c.lifeProgress * 100 >= LIFECYCLE_MONITOR_PERCENT;
   }).length;
 
   const cards = [
@@ -119,7 +119,7 @@ function renderCategorySummary() {
 function renderAlerts() {
   const container = document.getElementById('shoe-alerts');
   const alerts = shoes.map(s => ({ shoe: s, calc: calc(s) }))
-    .filter(({ calc: c }) => c.lifeProgress >= 0.8)
+    .filter(({ calc: c }) => c.lifeProgress * 100 >= LIFECYCLE_MONITOR_PERCENT)
     .sort((a, b) => b.calc.lifeProgress - a.calc.lifeProgress);
 
   if (alerts.length === 0) {
@@ -127,7 +127,7 @@ function renderAlerts() {
     return;
   }
   container.innerHTML = alerts.map(({ shoe: s, calc: c }) => {
-    const urgent = c.lifeProgress >= 0.9;
+    const urgent = c.lifeProgress * 100 >= LIFECYCLE_REPLACE_SOON_PERCENT;
     const pct = Math.round(c.lifeProgress * 100);
     const categories = shoeCategories(s);
     const uncovered = categories.filter(category => !shoes.some(other =>

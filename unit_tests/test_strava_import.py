@@ -555,3 +555,38 @@ def test_reimport_moves_runs_stored_on_the_old_utc_date(client, db, user_with_to
 
     again = upload(client, "/api/runs/import/strava", token, mapping, csv_content=UTC_SHIFT_CSV).json()
     assert again["corrected_dates"] == 0
+
+
+def test_deleted_strava_activity_is_not_reimported_and_preview_counts_it(client, db, user_with_token):
+    """SPEC-055: deleting an imported run keeps that activity deleted across CSV re-imports."""
+    from backend.models import User
+    from unit_tests.token_helpers import create_access_token
+
+    user, token = user_with_token
+    shoe = Shoe(user_id=user.id, brand="Mizuno", model="Wave Sky 7", date="2026-01-01", mileage=0)
+    db.add(shoe)
+    db.commit()
+    mapping = f'{{"Mizuno Wave Sky 7": {shoe.id}, "": null}}'
+    assert upload(client, "/api/runs/import/strava", token, mapping).json()["imported"] == 1
+    run = db.query(Run).filter(Run.user_id == user.id).one()
+    assert client.delete(f"/api/runs/{run.id}", headers=_auth_header(token)).status_code == 200
+
+    preview = upload(client, "/api/runs/import/strava/preview", token).json()
+    assert (preview["deleted_count"], preview["duplicate_count"], preview["importable_count"]) == (1, 0, 1)
+    assert [group["gear"] for group in preview["gear_groups"]] == [""], "the deleted activity needs no mapping"
+    result = upload(client, "/api/runs/import/strava", token, mapping).json()
+    assert (result["imported"], result["skipped_deleted"], result["synced_mileage"]) == (0, 1, 0)
+    db.refresh(shoe)
+    assert shoe.mileage == 0
+    assert db.query(Run).filter(Run.user_id == user.id).count() == 0
+
+    # Another account's deletion never hides the same activity from this one.
+    other = User(username="strava-other", hashed_password="synthetic")
+    db.add(other)
+    db.flush()
+    other_shoe = Shoe(user_id=other.id, brand="Mizuno", model="Wave Sky 7", date="2026-01-01")
+    db.add(other_shoe)
+    db.commit()
+    other_token = create_access_token({"sub": other.username})
+    other_mapping = f'{{"Mizuno Wave Sky 7": {other_shoe.id}, "": null}}'
+    assert upload(client, "/api/runs/import/strava", other_token, other_mapping).json()["imported"] == 1

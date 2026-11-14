@@ -30,7 +30,7 @@ function onYearChange() {
 
 // ====== Monthly Mileage Charts ======
 function renderMonthlyCharts() {
-  ['monthlyYear', 'shoeStacked', 'yearlyTotal', 'yearOverYear', 'weekly', 'cumulative'].forEach(key => {
+  ['monthlyYear', 'shoeStacked', 'yearlyTotal', 'yearOverYear', 'weekly', 'cumulative', 'longRun', 'weekday'].forEach(key => {
     if (chartInstances[key]) { chartInstances[key].destroy(); delete chartInstances[key]; }
   });
   populateYearSelect();
@@ -282,6 +282,8 @@ async function renderTrends() {
   renderRunHeatmap(trends);
   renderWeeklyChart(trends);
   renderCumulativeChart(trends);
+  renderLongRunChart(trends);
+  renderWeekdayChart(trends);
 }
 
 function heatLevel(km) {
@@ -352,15 +354,20 @@ function renderWeeklyChart(trends) {
     .map(([token, fallback]) => getThemeColor(token, fallback));
   const colors = weeks.map(week => week.spike ? spike : week.partial ? partial : primary);
   const averageColor = getThemeColor('--chart-line', '#ffd23f');
+  const weeklyGoal = trends.weekly_goal?.active ? Number(trends.weekly_goal.km) : null;
+  const datasets = [
+    { type: 'bar', label: '週跑量', data: weeks.map(week => week.km), backgroundColor: colors, borderRadius: 4, order: 2 },
+    { type: 'line', label: '4 週平均', data: weeks.map(week => week.average_km), borderColor: averageColor,
+      backgroundColor: averageColor, borderWidth: 2, pointRadius: 0, tension: .3, order: 1 },
+  ];
+  // SPEC-056: the weekly target shares the annual goal line's slope (backend-computed).
+  if (weeklyGoal) {
+    const goalColor = getThemeColor('--chart-muted', '#6b7684');
+    datasets.push({ type: 'line', label: '週目標', data: weeks.map(() => weeklyGoal), borderColor: goalColor,
+      backgroundColor: goalColor, borderDash: [6, 4], borderWidth: 1.5, pointRadius: 0, order: 0 });
+  }
   chartInstances.weekly = new Chart(document.getElementById('chart-weekly'), {
-    data: {
-      labels,
-      datasets: [
-        { type: 'bar', label: '週跑量', data: weeks.map(week => week.km), backgroundColor: colors, borderRadius: 4, order: 2 },
-        { type: 'line', label: '4 週平均', data: weeks.map(week => week.average_km), borderColor: averageColor,
-          backgroundColor: averageColor, borderWidth: 2, pointRadius: 0, tension: .3, order: 1 },
-      ],
-    },
+    data: { labels, datasets },
     options: {
       maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
@@ -390,9 +397,115 @@ function renderWeeklyChart(trends) {
     },
   });
   const spikes = weeks.filter(week => week.spike).length;
-  note.textContent = spikes
+  const spikeText = spikes
     ? `橘色的 ${spikes} 週比前 4 週平均多 ${threshold}% 以上；跑量增加太快時注意恢復。`
     : `近 16 週沒有比前 4 週平均多 ${threshold}% 以上的週次。`;
+  note.textContent = weeklyGoal ? `${weeklyGoalText(weeks, weeklyGoal)}${spikeText}` : spikeText;
+}
+
+function weeklyGoalText(weeks, weeklyGoal) {
+  const finished = weeks.filter(week => !week.partial);
+  const met = finished.filter(week => week.goal_met).length;
+  const current = weeks[weeks.length - 1];
+  const now = current?.partial ? `本週 ${current.km.toFixed(1)}／${weeklyGoal.toFixed(1)} km；` : '';
+  return `${now}週目標 ${weeklyGoal.toFixed(1)} km，已結束的 ${finished.length} 週有 ${met} 週達標。`;
+}
+
+// ====== Weekly long run (SPEC-056) ======
+function renderLongRunChart(trends) {
+  if (chartInstances.longRun) { chartInstances.longRun.destroy(); delete chartInstances.longRun; }
+  const note = document.getElementById('long-run-note');
+  if (!trends.weekly.length) {
+    note.textContent = '這一年還沒開始，沒有每週資料。';
+    return;
+  }
+  const weeks = trends.weekly;
+  const textColor = getThemeColor('--text-dim', '#8b8d9a');
+  const gridColor = getThemeColor('--chart-grid', '#f1f5f9');
+  const lineColor = getThemeColor('--chart-2', '#2fb8d8');
+  chartInstances.longRun = new Chart(document.getElementById('chart-long-run'), {
+    type: 'line',
+    data: {
+      labels: weeks.map(week => { const [, m, d] = week.week_start.split('-'); return `${Number(m)}/${Number(d)}`; }),
+      datasets: [{ label: '最長一次', data: weeks.map(week => Number(week.longest_km || 0)), borderColor: lineColor,
+        backgroundColor: lineColor, borderWidth: 2, pointRadius: 3, tension: .25 }],
+    },
+    options: {
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: {
+          title: items => `${weeks[items[0].dataIndex].week_start} 起的一週`,
+          label: ctx => ctx.raw > 0 ? `最長一次 ${ctx.raw.toFixed(2)} km` : '這週沒有跑步',
+        } },
+      },
+      scales: {
+        x: { grid: { display: false }, ticks: { color: textColor, font: { size: 10 }, maxRotation: 0, autoSkip: true } },
+        y: { grid: { color: gridColor }, ticks: { color: textColor, callback: v => v + ' km' }, beginAtZero: true },
+      },
+    },
+  });
+  note.textContent = longRunText(weeks);
+}
+
+function longRunText(weeks) {
+  const best = weeks.reduce((top, week) => (Number(week.longest_km || 0) > Number(top?.longest_km || 0) ? week : top), null);
+  if (!best) return '近 16 週沒有跑步紀錄。';
+  const recent = weeks.slice(-4).map(week => Number(week.longest_km || 0));
+  const average = recent.reduce((sum, km) => sum + km, 0) / recent.length;
+  const [, m, d] = best.week_start.split('-');
+  return `近 16 週最長 ${Number(best.longest_km).toFixed(1)} km（${Number(m)}/${Number(d)} 那週）；近 4 週平均最長一次 ${average.toFixed(1)} km。`;
+}
+
+// ====== Weekday distribution (SPEC-056) ======
+const WEEKDAY_LABELS = ['週一', '週二', '週三', '週四', '週五', '週六', '週日'];
+
+function renderWeekdayChart(trends) {
+  if (chartInstances.weekday) { chartInstances.weekday.destroy(); delete chartInstances.weekday; }
+  const note = document.getElementById('weekday-note');
+  document.getElementById('weekday-title').textContent = `${trends.year} 年星期幾跑量`;
+  const rows = Array.isArray(trends.weekday) ? trends.weekday : [];
+  if (!trends.end_date || rows.length !== 7) {
+    note.textContent = '這一年還沒開始。';
+    return;
+  }
+  const textColor = getThemeColor('--text-dim', '#8b8d9a');
+  const gridColor = getThemeColor('--chart-grid', '#f1f5f9');
+  chartInstances.weekday = new Chart(document.getElementById('chart-weekday'), {
+    type: 'bar',
+    data: {
+      labels: WEEKDAY_LABELS,
+      datasets: [{ label: '里程', data: rows.map(row => row.km), backgroundColor: getThemeColor('--chart-1', '#c8ff3c'), borderRadius: 4 }],
+    },
+    options: {
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: {
+          label: ctx => {
+            const row = rows[ctx.dataIndex];
+            const average = row.run_days ? ` · 平均 ${(row.km / row.run_days).toFixed(1)} km` : '';
+            return `${row.km.toFixed(1)} km · ${row.run_days} 天${average}`;
+          },
+        } },
+      },
+      scales: {
+        x: { grid: { display: false }, ticks: { color: textColor, font: { size: 11 } } },
+        y: { grid: { color: gridColor }, ticks: { color: textColor, callback: v => v + ' km' }, beginAtZero: true },
+      },
+    },
+  });
+  note.textContent = weekdayText(rows);
+}
+
+function weekdayText(rows) {
+  const days = rows.reduce((sum, row) => sum + row.run_days, 0);
+  if (!days) return '這一年還沒有跑步紀錄。';
+  const most = rows.reduce((top, row) => (row.km > top.km ? row : top), rows[0]);
+  const rest = rows.filter(row => row.run_days === 0).map(row => WEEKDAY_LABELS[row.weekday]);
+  return `跑最多的是${WEEKDAY_LABELS[most.weekday]}（${most.km.toFixed(1)} km、${most.run_days} 天）`
+    + (rest.length ? `；${rest.join('、')}這一年沒跑過。` : '；每個星期幾都有跑。');
 }
 
 function renderCumulativeChart(trends) {
@@ -547,8 +660,10 @@ async function renderYearReview() {
   if (!review.has_runs) { target.innerHTML = '<p class="chart-note">這一年還沒有跑步紀錄。</p>'; return; }
   const km = value => `${Number(value).toFixed(1)} km`;
   const md = iso => { const [, m, d] = iso.split('-').map(Number); return `${m}/${d}`; };
+  // An unfinished year is compared with the same span of the previous year (SPEC-055).
+  const versus = review.complete ? `${year - 1} 年` : `${year - 1} 年同期`;
   const change = review.previous_year_km
-    ? `比 ${year - 1} 年 ${review.total_km >= review.previous_year_km ? '+' : ''}${((review.total_km / review.previous_year_km - 1) * 100).toFixed(0)}%（${km(review.previous_year_km)}）`
+    ? `比 ${versus} ${review.total_km >= review.previous_year_km ? '+' : ''}${((review.total_km / review.previous_year_km - 1) * 100).toFixed(0)}%（${km(review.previous_year_km)}）`
     : '';
   const goal = review.goal.active && review.goal.percent != null ? `年度目標 ${km(review.goal.yearly_km)} 的 ${review.goal.percent}%` : '';
   const longest = review.longest_run;

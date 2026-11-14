@@ -648,10 +648,15 @@ flowchart LR
 ```
 
 - **組合根**：`create_app()` 唯一驗證密鑰並建立預設 engine。匯入任何 backend 模組都不建立目錄、engine，也不結束程序。測試與 app 透過 `app.state.session_factory` 取得 session，清除 dependency override 後也不會落到預設資料庫。
-- **寫入交易**：`write_transaction` commit 前呼叫 `retention`，只清理該帳號超出上限的稽核、回執與墓碑。`run_tombstones` 由 `delete_run` 寫入、匯入計畫讀取；稽核紀錄只負責歷史與復原。
+- **寫入交易**：`write_transaction` commit 前呼叫 `retention`，只清理該帳號超出上限的稽核、回執與墓碑。`run_tombstones` 由 `delete_run` 寫入（schema 8 起連同 Strava 活動 ID），備份匯入計畫與 Strava 預覽／匯入（`run_identity.deleted_strava_ids`）讀取；稽核紀錄只負責歷史與復原。
 - **限流**：`rate_limits.consume()` 把同一請求的所有視窗放在一個交易，滿了就整筆回滾；限額來自 `app.state.settings`，不再保留記憶體桶。
 - **稽核 trigger**：每次啟動依目前欄位重建，避免舊欄位清單使快照不完整或使寫入失敗。
 - **Strava**：`strava_import.parse_activity_dates()` 把 UTC 時間戳轉為 `clock.APP_TIMEZONE` 日期。`date_corrections()` 只修正仍停在舊 UTC 日期的既有活動，`services/strava_imports.py` 在匯入交易中移動日期與月跑量。
+- **v4.13.0**：資料正確性、訓練分析與 AI 統計工具（SPEC-055～058）。
+  - Schema 8 在 `run_tombstones` 加上 `strava_id`；`services/strava_imports.py` 與 `read_models/strava_preview.py` 透過 `run_identity` 略過刪除過的活動。回滾腳本是 `scripts/rollback_schema_eight.sql`。
+  - 換鞋提醒門檻集中在 `shoe_metrics.py`（`MONITOR_USAGE_PERCENT`、`REPLACE_SOON_USAGE_PERCENT`），`read_models/shoes.py`、`highlights.py` 與 `analytics.py` 共用；前端 `app-state.js` 鏡像同樣的值。`forecasting.retirement_forecast` 不為已退役的鞋產生日期。
+  - `read_models/trends.py` 回傳週目標、每週最長一次與星期分布；`tools/db_tools.py` 新增 4 個 adapter，只呼叫 `goals`、`trends`、`highlights`、`spending` 這些既有 read model，依賴方向仍是 tools → read models。
+  - `document_contracts.api_reference_errors()` 以 `unit_tests/api_contract.json` 檢查 README 的 API 一覽。
 - **v4.12.0**：文件清單與安全標頭（SPEC-053／SPEC-054，[ADR-0016](adr/0016-build-time-hashed-page-csp.md)）。
   - `docs-check` 由 `document_contracts.inventory_errors()` 確認 README 目錄樹列出每個模組與 script、本文件安排每個應用模組、README 寫了 `settings.py` 讀取的每個環境變數。
   - `build_frontend.py` 把 inline script 的 SHA-256 寫進 `index.html` 的 CSP `<meta>`。`middleware.SecurityHeadersMiddleware` 在每個回應加上 `frame-ancestors`、`nosniff` 等標頭，CORS middleware 移除。
