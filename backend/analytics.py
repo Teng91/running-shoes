@@ -14,7 +14,7 @@ from backend.forecasting import retirement_forecast
 from backend.read_models.rounding import round_metric
 from backend.read_models.run_statistics import month_bounds, run_period
 from backend.read_models.shoe_statistics import shoe_run_statistics
-from backend.shoe_metrics import shoe_metrics
+from backend.shoe_metrics import MONITOR_USAGE_PERCENT, REPLACE_SOON_USAGE_PERCENT, shoe_metrics
 
 
 def _shift_month(year: int, month: int, delta: int) -> tuple[int, int]:
@@ -216,10 +216,10 @@ def dashboard_analytics(
         if shoe.expected_mileage <= 0:
             continue
         pct = shoe.mileage / shoe.expected_mileage * 100
-        if pct >= 80:
+        if pct >= MONITOR_USAGE_PERCENT:
             alerts.append({
                 "type": "lifecycle",
-                "severity": "urgent" if pct >= 100 else "warning",
+                "severity": "urgent" if pct >= REPLACE_SOON_USAGE_PERCENT else "warning",
                 "shoe_id": shoe.id,
                 "message": f"{shoe.brand} {shoe.model} 已使用 {pct:.1f}% 預期壽命",
             })

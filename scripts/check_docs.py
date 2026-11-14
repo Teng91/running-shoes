@@ -90,9 +90,9 @@ def release_asset_count(manifest: dict | None = None) -> int:
 
 
 def main() -> None:
-    from scripts.document_contracts import document_errors, inventory_errors
+    from scripts.document_contracts import api_reference_errors, document_errors, inventory_errors
 
-    errors = document_errors(ROOT) + inventory_errors(ROOT)
+    errors = document_errors(ROOT) + inventory_errors(ROOT) + api_reference_errors(ROOT)
     if errors:
         fail("\n" + "\n".join(errors))
 

@@ -2,6 +2,25 @@
 
 ## [Unreleased]
 
+## [4.13.0] - 2026-11-15
+
+### Added
+- 訓練趨勢新增週目標、每週最長一次與星期幾分析（SPEC-056）：每週跑量圖加上週目標虛線（年度目標 × 7 ÷ 全年天數）與達標週數，新增「每週最長一次（近 16 週）」與「星期幾跑量」兩張圖。
+- AI 助手新增 4 個工具（SPEC-057）：`running_goal_progress`、`training_trends`、`year_review`、`spending_summary`，直接引用首頁與月跑量分頁相同的後端統計，共 12 個工具。
+- README 新增完整的「API 一覽」（48 個端點），`docs-check` 會擋下漏列的端點（SPEC-058）。
+
+### Fixed
+- 刪掉的 Strava 跑步不再因重新匯入同一份 CSV 而回來（SPEC-055）。刪除時記住 Strava 活動 ID（schema 8），預覽顯示「另有 N 筆先前刪除過的活動不會重新匯入」；升級前刪除的活動在稽核紀錄還在時一併回填。需要找回時從異動歷史復原。
+- 年度回顧在年份進行中時改與前一年同期比較，不再拿今年到今天的里程比去年全年。
+- 已退役的鞋不再顯示「預估退役日期」，AI 使用分析也一樣。
+- 換鞋提醒門檻統一為 80% 注意、90% 準備換鞋；跑步日誌頁的洞察原本要到 100% 才標為緊急。
+- 跑步日誌卡片改顯示所選月份（例如「9 月總里程」），不再寫死「本月」。
+- 登入、註冊與改密碼欄位改用標準 `autocomplete`，密碼管理器可以填入帳密（取代 SPEC-005 停用自動完成的決定，登出時仍清空欄位）；加上標準的 `mobile-web-app-capable` meta。
+
+### Changed
+- README 的版本說明移到 [`docs/release-notes.md`](docs/release-notes.md)，「## 測試」整理為「開發與測試」與「統計與操作規則」（SPEC-058）。
+- 依賴更新：`opentelemetry-api` 1.45.1 → 1.45.2（CVE-2026-126360）。Asset 4.13.0／shell v63，schema 8，回滾見 `scripts/rollback_schema_eight.sql`。
+
 ## [4.12.0] - 2026-11-13
 
 ### Security
@@ -248,8 +267,6 @@
 ### Changed
 - 抽出跑步來源身分 service 與共用核心資料刷新驗證，補上組合流程回歸及使用指南。
 - Asset 3.10.3／shell v38；schema 6 不變。
-
-## [Unreleased]
 
 ## [3.10.2] - 2026-10-24
 

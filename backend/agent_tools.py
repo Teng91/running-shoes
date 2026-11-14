@@ -42,6 +42,10 @@ def execute_tool(
             shoe_b=shoe_b if isinstance(shoe_b, str) else "",
             **identifiers,
         )
+    if name in {"running_goal_progress", "training_trends", "year_review"}:
+        year = args.get("year")
+        valid = isinstance(year, int) and not isinstance(year, bool) and 1900 <= year <= 2100
+        return fn(db, user_id, year=year if valid else None)
     if name in {"shoe_category_status", "shoe_usage_analytics"}:
         shoe_name = args.get("shoe_name", "")
         shoe_id = args.get("shoe_id")

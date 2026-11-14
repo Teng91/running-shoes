@@ -212,11 +212,21 @@ class MutationReceipt(Base):
 
 
 class RunTombstone(Base):
-    """A locally deleted run identifier, so restoring a backup never resurrects it."""
+    """A locally deleted run, so neither a backup nor a Strava re-import resurrects it."""
 
     __tablename__ = "run_tombstones"
+    __table_args__ = (
+        Index(
+            "idx_run_tombstones_user_strava",
+            "user_id",
+            "strava_id",
+            sqlite_where=text("strava_id IS NOT NULL"),
+        ),
+    )
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), primary_key=True)
     run_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # Strava activity of the deleted run (schema 8); NULL for manual runs.
+    strava_id: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
 class EntitySequence(Base):

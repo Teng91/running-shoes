@@ -13,7 +13,7 @@ from backend.audit_schema import install_audit_triggers
 from backend.credentials import get_password_hash
 from backend.database import Base
 
-CURRENT_SCHEMA_VERSION = 7
+CURRENT_SCHEMA_VERSION = 8
 
 
 def _migrate_preview_tokens(engine: Engine) -> None:
@@ -71,6 +71,32 @@ def _migrate_schema_seven(engine: Engine, applied_version: int) -> None:
         # Schema-2 run receipts were superseded by mutation_receipts, which every
         # keyed run creation already writes in the same transaction.
         connection.exec_driver_sql("DROP TABLE IF EXISTS run_creation_requests")
+
+
+def _migrate_schema_eight(engine: Engine, applied_version: int) -> None:
+    """Remember the Strava activity of each deleted run (SPEC-055)."""
+    with engine.begin() as connection:
+        columns = {column["name"] for column in inspect(connection).get_columns("run_tombstones")}
+        if "strava_id" not in columns:
+            connection.exec_driver_sql("ALTER TABLE run_tombstones ADD COLUMN strava_id VARCHAR")
+        connection.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS idx_run_tombstones_user_strava "
+            "ON run_tombstones (user_id, strava_id) WHERE strava_id IS NOT NULL"
+        )
+        if applied_version < 8:
+            # Deletions made before schema 8 (or while rolled back to 7) only kept
+            # the run ID. Recover the activity from the run's own deletion event
+            # while that audit row is still retained.
+            connection.exec_driver_sql(
+                "UPDATE run_tombstones SET strava_id = ("
+                "SELECT json_extract(audit_events.before_json, '$.strava_id') FROM audit_events "
+                "WHERE audit_events.user_id = run_tombstones.user_id "
+                "AND audit_events.entity = 'runs' AND audit_events.action = 'delete' "
+                "AND audit_events.imported = 0 AND audit_events.entity_id = run_tombstones.run_id "
+                "AND json_extract(audit_events.before_json, '$.strava_id') IS NOT NULL "
+                "ORDER BY audit_events.id DESC LIMIT 1"
+                ") WHERE strava_id IS NULL"
+            )
 
 
 READY_TABLES = {"users", "shoes", "runs", "monthly_mileages"}
@@ -308,6 +334,7 @@ def run_startup_migrations(
     if applied_version < 6:
         _migrate_preview_tokens(engine)
     _migrate_schema_seven(engine, applied_version)
+    _migrate_schema_eight(engine, applied_version)
     with engine.begin() as connection:
         for table in ("runs", "monthly_mileages"):
             connection.execute(text(

@@ -61,6 +61,34 @@
     "expected_database_tools": [],
     "expected_web_queries": 0,
     "tools_offered": false
+  },
+  {
+    "id": "goal-progress",
+    "message": "今年目標達成多少？",
+    "expected_database_tools": ["running_goal_progress"],
+    "expected_web_queries": 0,
+    "tools_offered": true
+  },
+  {
+    "id": "training-load-spike",
+    "message": "我最近每週跑量有沒有暴增？",
+    "expected_database_tools": ["monthly_mileage_stats", "training_trends"],
+    "expected_web_queries": 0,
+    "tools_offered": true
+  },
+  {
+    "id": "year-review",
+    "message": "幫我回顧我今年跑得怎麼樣",
+    "expected_database_tools": ["year_review"],
+    "expected_web_queries": 0,
+    "tools_offered": true
+  },
+  {
+    "id": "shoe-spending",
+    "message": "我買鞋總共花了多少錢？",
+    "expected_database_tools": ["spending_summary"],
+    "expected_web_queries": 0,
+    "tools_offered": true
   }
 ]
 

@@ -162,3 +162,13 @@ test('SPEC-040 phones use a fixed bottom tab bar while the header menu keeps acc
   assert.match(extract('loadSpendingData'), /dataset\.panel === 'shoes'\) renderSpendingCharts\(\)/);
   assert.match(styleSource, /calc\(84px \+ env\(safe-area-inset-bottom\)\)/, 'content clears the tab bar');
 });
+
+test('SPEC-055 an unfinished year is compared with the same span of the previous year', async () => {
+  const nodes = elements(); nodes['year-select'].value = '2026';
+  const ongoing = { ...review, year: 2026, end_date: '2026-11-15', complete: false, total_km: 1100,
+    previous_year_km: 1000, previous_year_end: '2025-11-15' };
+  const ctx = context(nodes, { panel: 'monthly', apiGet: async () => ongoing });
+  vm.runInContext(`let yearReviewRequestId = 0;\n${['brandColor', 'shoeColor', 'shoeName', 'reviewCard', 'renderYearReview'].map(extract).join('\n')}`, ctx);
+  await ctx.renderYearReview();
+  assert.match(nodes['year-review'].innerHTML, /比 2025 年同期 \+10%（1000\.0 km）/);
+});

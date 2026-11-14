@@ -9,6 +9,8 @@ _TOOL_INTENT_TERMS = (
     "全馬", "比賽", "競速", "越野", "daily", "tempo", "speed", "race", "trail",
     "資料", "數字", "結果", "重新查", "不對", "錯了", "類別", "缺什麼", "搜尋",
     "查詢", "幫我查", "上網", "search", "new balance", "nb", "rebel",
+    "目標", "達標", "達成", "趨勢", "暴增", "連續", "每週", "週跑量", "星期", "最長",
+    "回顧", "今年", "去年", "花費", "支出", "花了", "預算",
 )
 AFFIRMATIVE_REPLIES = (
     "對", "對的", "好", "好的", "是", "是的", "沒錯", "可以", "查吧", "幫我查",
@@ -30,6 +32,12 @@ _MONTHLY_DATA_TERMS = ("月跑量", "跑量", "跑量趨勢")
 _SHOE_DATA_TERMS = ("我的跑鞋", "我的鞋", "鞋櫃", "鞋況", "跑鞋里程")
 _LIFECYCLE_TERMS = ("壽命", "退役", "快壞", "換鞋", "剩餘里程")
 _CATEGORY_TERMS = ("缺什麼", "缺少", "類別", "覆蓋", "補鞋")
+# SPEC-057: native statistics the dashboard already computes.
+_GOAL_TERMS = ("目標", "達標", "達成")
+_TREND_TERMS = ("趨勢", "暴增", "連續", "每週", "週跑量", "星期", "最長", "訓練量")
+_REVIEW_TERMS = ("回顧", "今年跑", "去年", "這一年", "整年")
+_SPENDING_TERMS = ("花費", "支出", "花了", "花多少", "預算")
+_PERSONAL_MARKERS = ("我", "我的", "目前", "最近", "今年", "本週", "這週")
 _USAGE_ANALYTICS_TERMS = (
     "穿幾次", "穿著次數", "使用次數", "輪替", "平均距離", "最後穿", "最近里程", "實際月跑量",
 )
@@ -113,7 +121,7 @@ def build_query_plan(user_message: str, history: list[dict] | None = None) -> Qu
         subject = search_subject(effective_message)
         web_queries = (f"{subject} 官方 規格", f"{subject} 評價 價格 台灣")
     database_tool_list: list[str] = []
-    has_personal_marker = any(marker in lowered for marker in ("我", "我的", "目前", "最近"))
+    has_personal_marker = any(marker in lowered for marker in _PERSONAL_MARKERS)
     if has_personal_marker:
         needs_usage = any(term in lowered for term in _USAGE_ANALYTICS_TERMS)
         if any(term in lowered for term in _SHOE_DATA_TERMS) and not needs_usage:
@@ -126,6 +134,14 @@ def build_query_plan(user_message: str, history: list[dict] | None = None) -> Qu
             database_tool_list.append("shoe_category_status")
         if needs_usage:
             database_tool_list.append("shoe_usage_analytics")
+        if any(term in lowered for term in _GOAL_TERMS):
+            database_tool_list.append("running_goal_progress")
+        if any(term in lowered for term in _TREND_TERMS):
+            database_tool_list.append("training_trends")
+        if any(term in lowered for term in _REVIEW_TERMS):
+            database_tool_list.append("year_review")
+        if any(term in lowered for term in _SPENDING_TERMS):
+            database_tool_list.append("spending_summary")
     if any(term in lowered for term in _PERSONAL_FIT_TERMS):
         database_tool_list.extend(("list_my_shoes", "monthly_mileage_stats"))
     return QueryPlan(

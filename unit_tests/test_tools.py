@@ -360,3 +360,57 @@ def test_legacy_markers_strip_every_allowed_call_but_parse_only_object_arguments
     text = 'A {"tool":"web_search","arguments":[]} B {"tool":"shoe_summary"} C {"tool":"x","arguments":{}}'
     assert db_tools.parse_tool_calls(text) == [{"name": "shoe_summary", "arguments": {}}]
     assert db_tools.strip_tool_markers(text) == 'A  B  C {"tool":"x","arguments":{}}'
+
+
+def test_native_statistics_tools_reuse_read_models_and_stay_user_scoped(db, user_with_token, monkeypatch):
+    """SPEC-057: goal, trends, review and spending tools return backend values only for this user."""
+    from datetime import date
+
+    from backend.models import RunningGoal
+
+    user, _ = user_with_token
+    other = User(username="tools-other", hashed_password="synthetic")
+    db.add(other)
+    db.flush()
+    mine = Shoe(user_id=user.id, brand="Mizuno", model="Neo", date="2026-03-01", price=3000, orig_price=4000)
+    theirs = Shoe(user_id=other.id, brand="Private", model="Secret", date="2026-03-01", price=9999, orig_price=9999)
+    db.add_all([mine, theirs, RunningGoal(user_id=user.id, start_year=2026, monthly_km=100)])
+    db.flush()
+    db.add_all([Run(user_id=user.id, shoe_id=mine.id, date="2026-10-05", km=21.1),
+                Run(user_id=user.id, shoe_id=mine.id, date="2025-10-05", km=10),
+                Run(user_id=other.id, shoe_id=theirs.id, date="2026-10-06", km=99)])
+    db.commit()
+    monkeypatch.setattr(db_tools, "local_today", lambda: date(2026, 10, 14))
+
+    goal = _result(db_tools.running_goal_progress(db, user.id))
+    assert (goal["tool"], goal["year"], goal["ytd_km"], goal["yearly_km"]) == ("running_goal_progress", 2026, 21.1, 1200)
+    assert len(goal["months"]) == 12 and goal["months"][9]["km"] == 21.1
+
+    trends = _result(db_tools.training_trends(db, user.id))
+    assert trends["run_days"] == 1 and len(trends["weekly"]) == 16
+    assert trends["weekday"][0] == {"weekday": 0, "km": 21.1, "run_days": 1, "name": "週一"}
+    assert set(trends["cumulative"]) == {"goal_active", "yearly_goal_km", "ytd_km", "expected_km", "delta_km", "projected_km"}
+    assert "daily" not in trends, "day-level arrays are trimmed from the model context"
+
+    review = _result(db_tools.year_review(db, user.id, year=2026))
+    assert review["top_shoe"]["shoe_name"] == review["longest_run"]["shoe_name"] == "Mizuno Neo"
+    assert (review["total_km"], review["previous_year_km"], review["previous_year_end"]) == (21.1, 10, "2025-10-14")
+
+    spending = _result(db_tools.spending_summary(db, user.id))
+    assert (spending["total_paid"], spending["average_discount_percent"]) == (3000, 75)
+    assert spending["recent_monthly"] == [{"year": 2026, "month": 3, "total_paid": 3000, "total_orig": 4000}]
+    for payload in (goal, trends, review, spending):
+        assert "Secret" not in json.dumps(payload, ensure_ascii=False)
+
+
+def test_native_statistics_tools_validate_the_year_argument(seeded_db):
+    """SPEC-057: an invalid year falls back to the current year instead of reaching SQL."""
+    from backend import agent_tools
+
+    db, uid = seeded_db
+    for year in ("2026", True, 1800, 2200, None):
+        out = _result(agent_tools.execute_tool("year_review", {"year": year}, db, uid))
+        assert out["tool"] == "year_review" and out["year"] == db_tools.local_today().year
+    assert _result(agent_tools.execute_tool("training_trends", {"year": 2025}, db, uid))["year"] == 2025
+    assert {tool["function"]["name"] for tool in db_tools.TOOL_DEFINITIONS} >= {
+        "running_goal_progress", "training_trends", "year_review", "spending_summary"}

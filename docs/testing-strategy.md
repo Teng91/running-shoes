@@ -40,7 +40,10 @@ flowchart BT
 | 匯出與備份安全 | export API tests | 格式、欄位、帳號範圍或 secret 洩漏回歸 |
 | AI 工具安全與選擇 | agent evals + mocked stream tests | prompt/tool policy 或 fallback 回歸 |
 | 前端互動與 XSS 防護 | Node regression tests + 頁面 CSP 雜湊與 browser 違規檢查（SPEC-054） | state、escaping、分頁或錯誤處理回歸；inline script 未被雜湊或出現 inline handler |
-| 文件與程式一致 | `docs-check` 清單檢查（SPEC-053） | 新模組、script 或環境變數沒有寫進 README／SDD |
+| 文件與程式一致 | `docs-check` 清單檢查（SPEC-053）與 API 一覽檢查（SPEC-058） | 新模組、script、環境變數或 API 端點沒有寫進 README／SDD |
+| 刪除與匯入身分 | Strava 匯入 API tests + schema 8 升級／回滾 tests（SPEC-055） | 刪除的 Strava 活動被重新匯入、里程重複累加，或回滾失去資料 |
+| 統計口徑一致 | read model tests + Node rendering + 前後端門檻比對（SPEC-055／056） | 年度同期比較、退役預估、換鞋門檻或週目標在不同頁面不一致 |
+| AI 統計工具 | tool adapter tests + agent evals（SPEC-057） | 工具重算數字、洩漏其他帳號資料、輸出逐日大陣列或意圖未取得對應工具 |
 | 固定跑步日誌首頁 | Node startup/lifecycle + Chromium/WebKit SPEC-015 + PWA offline navigation | 舊 activeTab 還原、重開後 agent-mode 殘留、ARIA／手機標籤不同步，或誤清登入與主題 |
 | 響應式版面 | Playwright matrix | 特定引擎、尺寸、主題出現重疊／溢出 |
 | 元件對齊契約 | 40 組 Chromium/WebKit 排版設定（SPEC-016）+ Node presentation tests | 日期／數字／選單不同高、混用按鈕密度、模型列錯位、圖表起點或數字表頭邊界不齊；覆蓋六個分頁、三個認證表單、全部彈窗、編輯／停用／錯誤／行內輸入 |
@@ -285,6 +288,26 @@ SPEC-032：合成資料驗證歷史筆數上限（v4.7.3 起 10,000／10,001）�
 ## SPEC-049 新版部署提示與主動偵測
 
 [規格與具名案例](specs/049-pwa-update-prompt.md) 以 Node 驗證不同版本只顯示提示、不自動重新載入、稍後與再次提示、確認後只重新載入一次；以假時間與事件驗證前景、焦點、連線恢復與 30 分鐘檢查、60 秒合併、隱藏與離線不檢查及失敗不拋錯。`frontend-pwa` 在 Chromium／WebKit 的舊版 worker 遷移與完整升級中，確認提示出現時仍是舊版，按下更新後才載入新 shell。
+
+## SPEC-055 資料正確性修正與 Strava 刪除記憶
+
+[規格與具名案例](specs/055-correctness-fixes-and-strava-deletions.md)：
+- API 測試匯入、刪除再匯入同一份 CSV，確認預覽與結果計入刪除筆數、不建立跑步也不加里程，另一個帳號不受影響。
+- 以暫存 SQLite 把 tombstone 的活動 ID 清空、marker 改回 7 後重新啟動，確認從稽核紀錄回填；8 → 7 回滾腳本有守衛、保留資料並可再升級。
+- read model 測試涵蓋年度同期比較（含 2/29）、已退役鞋的預估，以及 95%／85%／79.9% 在提醒、壽命狀態與前端常數的一致門檻。
+- Node 測試以 vm 執行提醒、跑步日誌卡片、單鞋分析與 Strava 預覽文字，並檢查登入欄位的 `autocomplete` 值。
+
+## SPEC-056 週目標、每週最長一次與星期幾分析
+
+[規格與具名案例](specs/056-weekly-goal-long-run-and-weekday-analysis.md) 以 pytest 驗證週目標斜率、同日多跑的最長一次、達標判斷與只計當年的星期分布；Node 以假 Chart 驗證週目標虛線與說明、兩張新圖的資料與文字，以及未來年份不建立圖表。版面矩陣把月跑量分頁的圖表數改為 8，檢查新圖不溢出、不被擠壓。
+
+## SPEC-057 AI 助手使用現有統計
+
+[規格與具名案例](specs/057-ai-tools-for-native-statistics.md) 以兩個帳號的資料呼叫 4 個新工具，比對 read model 數字、鞋名與輸出裁剪，確認另一個帳號的資料不出現；`year` 參數的各種不合法值都退回今年。Agent eval 新增目標、暴增、回顧與支出 4 個意圖案例。
+
+## SPEC-058 README API 一覽與版本說明分離
+
+[規格與具名案例](specs/058-readme-api-reference-and-release-notes.md) 以暫存 repo 驗證 `api_reference_errors()` 只接受完整的 `` `METHOD /path` ``（較長路徑不能代替），目前的 README 必須列出 contract 的每個端點；`docs/release-notes.md` 的連結由文件契約一併檢查。
 
 ## SPEC-053 文件清單一致性與程式整理
 

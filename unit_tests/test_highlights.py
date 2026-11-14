@@ -146,3 +146,21 @@ def test_highlight_endpoints_are_user_scoped(client, db, user_with_token):
     for path in ("/api/analytics/home", "/api/analytics/year-review?year=2026", "/api/analytics/shoe-distance-mix"):
         assert client.get(path).status_code == 401
     assert client.get("/api/analytics/year-review?year=1800", headers=headers).status_code == 422
+
+
+def test_year_review_compares_an_unfinished_year_with_the_same_span_last_year(db, user_with_token):
+    """SPEC-055: mid-year, the previous year is counted only through the same day."""
+    from backend.read_models.highlights import _same_day_previous_year
+
+    user, _ = user_with_token
+    shoe = _shoe(db, user.id)
+    _runs(db, user.id, shoe.id, ("2025-03-01", 30), ("2025-11-15", 5), ("2025-11-16", 100),
+          ("2025-12-31", 100), ("2026-02-01", 40))
+
+    ongoing = year_review(db, user.id, 2026, date(2026, 11, 15))
+    assert ongoing["complete"] is False
+    assert (ongoing["previous_year_km"], ongoing["previous_year_end"]) == (35, "2025-11-15")
+    finished = year_review(db, user.id, 2026, date(2027, 1, 5))
+    assert finished["complete"] is True
+    assert (finished["previous_year_km"], finished["previous_year_end"]) == (235, "2025-12-31")
+    assert _same_day_previous_year(date(2028, 2, 29)) == date(2027, 2, 28)

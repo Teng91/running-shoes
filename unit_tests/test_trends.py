@@ -149,3 +149,33 @@ def test_trend_endpoints_are_user_scoped(client, db, user_with_token):
     assert [row["km"] for row in other_trends["daily"]] == [42]
     assert client.get("/api/analytics/trends?year=2026").status_code == 401
     assert client.get("/api/analytics/trends?year=1800", headers=headers).status_code == 422
+
+
+def test_weekly_goal_longest_run_and_weekday_mix(db, user_with_token):
+    """SPEC-056: the weekly target follows the annual goal line; each week has its longest run."""
+    user, _ = user_with_token
+    db.add(RunningGoal(user_id=user.id, start_year=2026, monthly_km=100))
+    shoe = _shoe(db, user.id)
+    # Monday 10-05 has two runs (25 km, longest 15); Saturday 10-10 a 21.1 km long run.
+    _runs(db, user.id, shoe.id, ("2025-12-29", 9), ("2026-10-05", 10), ("2026-10-05", 15),
+          ("2026-10-10", 21.1), ("2026-10-12", 5))
+
+    result = training_trends(db, user.id, 2026, date(2026, 10, 14))
+
+    assert result["weekly_goal"] == {"active": True, "km": round(1200 * 7 / 365, 2)}
+    weeks = {week["week_start"]: week for week in result["weekly"]}
+    assert (weeks["2026-10-05"]["km"], weeks["2026-10-05"]["longest_km"], weeks["2026-10-05"]["goal_met"]) == (46.1, 21.1, True)
+    assert (weeks["2026-10-12"]["longest_km"], weeks["2026-10-12"]["goal_met"]) == (5, False)
+    assert weeks["2026-09-28"]["longest_km"] == 0
+    weekday = result["weekday"]
+    assert [row["weekday"] for row in weekday] == list(range(7))
+    # The 2025-12-29 Monday belongs to the previous year and is not counted.
+    assert weekday[0] == {"weekday": 0, "km": 30, "run_days": 2}
+    assert weekday[5] == {"weekday": 5, "km": 21.1, "run_days": 1}
+    assert sum(row["run_days"] for row in weekday) == 3
+
+    before_goal = training_trends(db, user.id, 2025, date(2026, 10, 14))
+    assert before_goal["weekly_goal"]["active"] is False
+    assert not any(week["goal_met"] for week in before_goal["weekly"])
+    future = training_trends(db, user.id, 2027, date(2026, 10, 14))
+    assert future["weekday"] == [{"weekday": day, "km": 0, "run_days": 0} for day in range(7)]

@@ -35,8 +35,9 @@ test('successful login and logout clear every authentication field', () => {
   assert.deepEqual(ids.map(id => elements[id].value), ids.map(() => ''));
   assert.match(extract('clearAuth'), /resetAuthInputs\(\)/);
   assert.match(extract('handleLogin'), /setAuth\(data\.access_token, username\);[\s\S]+resetAuthInputs\(\)/);
-  assert.match(htmlSource, /id="login-form" autocomplete="off"/);
-  assert.match(htmlSource, /id="login-password" type="password" autocomplete="off"/);
+  // SPEC-055 supersedes the disabled autocomplete: fields are still cleared on every
+  // auth transition, and password managers may fill them on the owner's request.
+  assert.match(htmlSource, /id="login-password" type="password" autocomplete="current-password"/);
 });
 
 test('mobile page gutters preserve standalone safe-area insets', () => {

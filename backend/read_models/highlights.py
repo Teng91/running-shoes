@@ -10,9 +10,9 @@ from sqlalchemy.orm import Session
 from backend import goals, models
 from backend.read_models.rounding import round_metric
 from backend.read_models.trends import run_streaks, trends_end
-from backend.shoe_metrics import shoe_metrics
+from backend.shoe_metrics import REPLACE_SOON_USAGE_PERCENT, shoe_metrics
 
-NEAR_END_PERCENT = 90.0
+NEAR_END_PERCENT = REPLACE_SOON_USAGE_PERCENT
 # Distance buckets (km) in 5 km steps; 20 km and longer share the last bucket.
 DISTANCE_BUCKETS = ((0.0, 5.0, "<5"), (5.0, 10.0, "5–10"), (10.0, 15.0, "10–15"),
                     (15.0, 20.0, "15–20"), (20.0, None, "≥20"))
@@ -102,7 +102,10 @@ def year_review(db: Session, user_id: int, year: int, as_of: date) -> dict:
                 models.Shoe.date >= start.isoformat(), models.Shoe.date <= date(year, 12, 31).isoformat())
         .one()
     )
-    previous_km, _ = _km_between(db, user_id, date(year - 1, 1, 1), date(year - 1, 12, 31))
+    # Compare the same calendar span: a year still in progress is measured
+    # against the previous year through the same day, never its full total.
+    previous_end = _same_day_previous_year(end)
+    previous_km, _ = _km_between(db, user_id, date(year - 1, 1, 1), previous_end)
     elapsed = (end - start).days + 1
     goal_active = year >= goal["start_year"]
     return {
@@ -120,12 +123,18 @@ def year_review(db: Session, user_id: int, year: int, as_of: date) -> dict:
         "shoe_spend": round_metric(bought[1]),
         "cost_per_km": round_metric(float(bought[1]) / total) if total > 0 else None,
         "previous_year_km": round_metric(previous_km) if previous_km > 0 else None,
+        "previous_year_end": previous_end.isoformat(),
         "goal": {
             "active": goal_active,
             "yearly_km": goal["yearly_km"],
             "percent": round_metric(total / goal["yearly_km"] * 100, 1) if goal_active and goal["yearly_km"] > 0 else None,
         },
     }
+
+
+def _same_day_previous_year(day: date) -> date:
+    """The same month/day one year earlier; 29 February maps to 28 February."""
+    return day.replace(year=day.year - 1, day=min(day.day, 28 if day.month == 2 else day.day))
 
 
 def _records_in(runs: list) -> dict:

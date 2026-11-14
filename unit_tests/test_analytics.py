@@ -315,3 +315,23 @@ def test_shoe_analytics_empty_history_has_zero_metrics(db, user_with_token):
     assert result["usage"]["cost_per_wear"] is None
     assert result["recent_runs"] == []
     assert result["monthly_history"][0] == {"year": 2025, "month": 2, "km": 0, "count": 0}
+
+
+def test_lifespan_thresholds_are_one_policy_for_alerts_status_and_frontend(db, user_with_token):
+    """SPEC-055: watch from 80%, replace from 90% on every page, alert and tool."""
+    from pathlib import Path
+
+    from backend.read_models.shoes import list_my_shoes
+    from backend.shoe_metrics import MONITOR_USAGE_PERCENT, REPLACE_SOON_USAGE_PERCENT
+
+    user, _ = user_with_token
+    for model, mileage in (("Worn", 760), ("Half", 680), ("Fresh", 632)):
+        db.add(Shoe(user_id=user.id, brand="T", model=model, date="2026-01-01", mileage=mileage, expected_mileage=800))
+    db.commit()
+    alerts = analytics.dashboard_analytics(db, user.id, 2026, 10, today=date(2026, 10, 19))["alerts"]
+    assert {alert["message"].split()[1]: alert["severity"] for alert in alerts} == {"Worn": "urgent", "Half": "warning"}
+    statuses = {shoe["model"]: shoe["lifecycle_status"] for shoe in list_my_shoes(db, user.id)["shoes"]}
+    assert statuses == {"Worn": "replace_soon", "Half": "monitor", "Fresh": "healthy"}
+    state = Path("frontend/app-state.js").read_text(encoding="utf-8")
+    assert f"const LIFECYCLE_MONITOR_PERCENT = {MONITOR_USAGE_PERCENT:g};" in state
+    assert f"const LIFECYCLE_REPLACE_SOON_PERCENT = {REPLACE_SOON_USAGE_PERCENT:g};" in state

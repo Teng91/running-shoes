@@ -25,7 +25,7 @@ def fixture_fetcher():
             kind = mimetypes.guess_type(name)[0] or "application/octet-stream"
             return 200, {"Content-Type": kind}, (FRONTEND / name).read_bytes()
         if path in ("/health/live", "/health/ready"):
-            return 200, {}, json.dumps({"status": "ok", "schema_version": 7}).encode()
+            return 200, {}, json.dumps({"status": "ok", "schema_version": 8}).encode()
         if path == "/openapi.json":
             return 200, {}, json.dumps({"paths": contract}).encode()
         return 401, {}, b""

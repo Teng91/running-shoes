@@ -7,6 +7,7 @@ test('replacement alerts require backup for every purpose and handle unclassifie
     shoes: [{ id: 1, brand: 'A', model: 'Target', categories: ['Daily', 'Tempo'], progress: .95 },
       { id: 2, categories: ['Daily'], progress: .1 }],
     calc: s => ({ lifeProgress: s.progress }), shoeCategories: s => s.categories, esc: s => s,
+    LIFECYCLE_MONITOR_PERCENT: 80, LIFECYCLE_REPLACE_SOON_PERCENT: 90,
   });
   vm.runInContext(extract('renderAlerts'), context);
   context.renderAlerts();

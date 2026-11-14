@@ -2,6 +2,12 @@
 
 from backend.models import Shoe
 
+# One lifespan policy for every page, alert and AI tool (SPEC-055): from 80% of the
+# expected mileage watch the pair; from 90% prepare a replacement. The frontend mirrors
+# these values in app-state.js and a test keeps the two in sync.
+MONITOR_USAGE_PERCENT = 80.0
+REPLACE_SOON_USAGE_PERCENT = 90.0
+
 
 def shoe_metrics(shoe: Shoe) -> dict[str, float | None]:
     return {

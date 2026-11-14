@@ -1,6 +1,7 @@
 """Static Markdown links and feature-spec structure/traceability contracts."""
 
 import ast
+import json
 import re
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
@@ -252,3 +253,18 @@ def document_errors(root: Path) -> list[str]:
         if path.parent == root / "docs" / "specs" and re.match(r"\d{3}-.*\.md$", path.name):
             errors.extend(spec_errors(root, path, source))
     return errors
+
+
+def api_reference_errors(root: Path) -> list[str]:
+    """Every route in the API contract is documented in README as `METHOD /path` (SPEC-058).
+
+    A route matches only when the backtick closes or a query string follows, so
+    documenting `GET /api/runs/summary` never stands in for `GET /api/runs`.
+    """
+    contract = json.loads((root / "unit_tests" / "api_contract.json").read_text(encoding="utf-8"))
+    readme = (root / "README.md").read_text(encoding="utf-8")
+    return [
+        f"README.md: API 一覽 does not document {route}"
+        for route in contract
+        if not re.search("`" + re.escape(route) + r"(?:`|\?)", readme)
+    ]

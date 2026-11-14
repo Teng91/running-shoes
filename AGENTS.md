@@ -7,7 +7,7 @@
 - `backend/settings.py`: immutable typed runtime configuration.
 - `backend/clock.py`: the single application timezone, `local_now()` and `local_today()`; never hard-code UTC offsets or use the server zone elsewhere.
 - `backend/forecasting.py`: shared retirement policy and batched user-scoped forecasts.
-- `backend/shoe_metrics.py`: canonical shoe cost, discount and lifecycle arithmetic.
+- `backend/shoe_metrics.py`: canonical shoe cost, discount and lifecycle arithmetic, plus the single 80%/90% lifespan alert thresholds (mirrored in `frontend/app-state.js`).
 - `backend/read_models/`: user-scoped native statistics shared by HTTP, reports and AI adapters; never import tools or HTTP frameworks.
 - `backend/seeding.py`: optional default data using an injected session factory.
 - `backend/middleware.py`: request-level transport guards: security headers on every response (SPEC-054) and Strava/backup upload size limits.
@@ -44,15 +44,16 @@
 - `backend/services/account_import_changes.py`: query-free field patches and projected mileage shared by preview and execution.
 - `backend/services/account_import.py`: plan execution inside the caller-owned transaction; no independent commits.
 - `backend/services/history.py`: user-scoped audit and conflict-aware deletion recovery.
-- `backend/services/run_identity.py`: user-scoped deletion tombstones (`run_tombstones`, never inferred from audit rows) and recovered source aliases; caller-owned transactions.
+- `backend/services/run_identity.py`: user-scoped deletion tombstones (`run_tombstones`, never inferred from audit rows; schema 8 keeps the Strava activity so a CSV re-import never recreates a deleted run) and recovered source aliases; caller-owned transactions.
 - `backend/services/identifiers.py`: monotonic run/month primary-key allocation metadata.
-- `backend/migrations.py`: ordered SQLite schema upgrades and the current schema version; `scripts/rollback_schema_seven.sql` is the documented 7 → 6 rollback.
+- `backend/migrations.py`: ordered SQLite schema upgrades and the current schema version (8); `scripts/rollback_schema_eight.sql` and `scripts/rollback_schema_seven.sql` are the documented 8 → 7 and 7 → 6 rollbacks.
 - `backend/rate_limits.py`: SQLite fixed-window throttling for authentication, AI and backup previews, consumed all-or-nothing on its own transaction with limits from app settings; never commits the request session.
 - `docs/architecture.md`: current SDD, module boundaries, diagrams, and evolution sequence.
+- `docs/release-notes.md`: per-version behavior, compatibility and rollback notes (newest first); README describes only current behavior.
 - `.github/workflows/verify.yml`: CI for every push/PR; on `main` it also snapshots the production database, deploys with `FLY_API_TOKEN` (deploy job only), runs `release-check`, and tags/releases a new `package.json` version from `CHANGELOG.md` (SPEC-048).
 - `docs/testing-strategy.md`: test design, traceability matrix, and definition of done.
 - `backend/agent.py`: LLM and tool-loop runner; planning, dispatch, and SSE serialization live in `backend/agent_*.py` modules.
-- `backend/tools/`: trusted database and web-search tools used by the agent.
+- `backend/tools/`: trusted database and web-search tools used by the agent; database tools are thin adapters over existing read models (goals, trends, highlights, spending, shoes, mileage) and never recompute values.
 - `frontend/templates/`: editable shell, modal and service-worker sources.
 - `frontend/css/`: ordered editable CSS sources; preserve cascade order.
 - `frontend/assets.json`: ordered scripts, native modules, style sources and shell revision.
@@ -118,6 +119,7 @@
 - Update `README.md` when setup, configuration, commands, or user-facing behavior changes.
 - Update the SDD/ADR when module boundaries or dependency direction changes.
 - A new backend/frontend module or script must be added to the README directory tree and placed in `docs/architecture.md`; `docs-check` fails otherwise (SPEC-053).
+- A new or changed API route must update `unit_tests/api_contract.json` and the README「API 一覽」table; `docs-check` fails otherwise (SPEC-058). Version-specific notes go to `CHANGELOG.md` and `docs/release-notes.md`, not README.
 - Keep the page CSP strict: no inline event handlers, `eval`, external scripts or `javascript:` URLs. A new inline `<script>` in `frontend/templates/` is allowed only through the hash that `build_frontend.py --write` regenerates (SPEC-054).
 - Start user-visible, data-model, deployment, or architecture work from `docs/specs/template.md`.
 - Before a production migration, create and verify a database backup and document rollback.

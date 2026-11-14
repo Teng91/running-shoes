@@ -5,6 +5,7 @@ from typing import cast
 from sqlalchemy.orm import Session
 
 from backend import models
+from backend.services.run_identity import deleted_strava_ids
 from backend.strava_import import _normalize_gear, date_corrections
 
 
@@ -23,6 +24,7 @@ def build_preview(
         if strava_id is not None
     }
     existing_ids = set(existing_dates)
+    deleted_ids = deleted_strava_ids(db, user_id)
     shoes = (
         db.query(models.Shoe)
         .filter(
@@ -39,6 +41,7 @@ def build_preview(
     groups: dict[str, dict[str, object]] = {}
     seen: set[str] = set()
     duplicate_count = 0
+    deleted_count = 0
     importable_km = 0.0
     for row in rows:
         strava_id = str(row["strava_id"])
@@ -46,6 +49,9 @@ def build_preview(
             duplicate_count += 1
             continue
         seen.add(strava_id)
+        if strava_id in deleted_ids:
+            deleted_count += 1
+            continue
         importable_km += float(cast(float, row["km"]))
         gear = str(row["gear"])
         group = groups.setdefault(
@@ -66,9 +72,10 @@ def build_preview(
     return {
         "total_rows": len(rows) + invalid,
         "run_count": len(rows),
-        "importable_count": len(rows) - duplicate_count,
+        "importable_count": len(rows) - duplicate_count - deleted_count,
         "importable_km": round(importable_km, 2),
         "duplicate_count": duplicate_count,
+        "deleted_count": deleted_count,
         "date_correction_count": len(corrections),
         "date_correction_samples": corrections[:5],
         "invalid_count": invalid,

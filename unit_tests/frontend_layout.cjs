@@ -274,12 +274,15 @@ async function run(engine, name) {
           const days = Array.from({ length: 300 }, (_, index) => new Date(Date.UTC(year, 0, 1 + index)).toISOString().slice(0, 10));
           return route.fulfill({ json: {
             year, end_date: `${year}-10-27`, thresholds: { spike_percent: 30, spike_min_base_km: 5 },
+            weekly_goal: { active: true, km: 28.77 },
+            weekday: Array.from({ length: 7 }, (_, weekday) => ({ weekday, km: [180, 120, 0, 95.5, 60, 320.2, 210][weekday],
+              run_days: [24, 18, 0, 15, 10, 40, 30][weekday] })),
             daily: days.filter((_, index) => index % 3 !== 1).map((date, index) => ({ date, km: (index % 5) * 4.5 + 2 })),
             streaks: { longest_days: 12, longest_end: `${year}-05-24`, current_days: 3 },
             weekly: Array.from({ length: 16 }, (_, index) => ({
               week_start: new Date(Date.UTC(year, 6, 13 + index * 7)).toISOString().slice(0, 10),
               km: 20 + (index % 4) * 6, average_km: 26, baseline_km: 24, change_percent: index % 4 === 3 ? 42.5 : -4,
-              spike: index % 4 === 3, partial: index === 15,
+              spike: index % 4 === 3, partial: index === 15, longest_km: 8 + (index % 5) * 3.5, goal_met: index % 4 !== 0,
             })),
             cumulative: { goal_active: true, yearly_goal_km: 1500,
               actual_km: Array.from({ length: 300 }, (_, index) => index * 4.3),
@@ -386,7 +389,7 @@ async function run(engine, name) {
             await selectTab(page, tab);
             await page.waitForTimeout(100);
             await assertLayout(page, `${name} ${theme} ${width} ${tab}`);
-            const expected = { runs: 1, shoes: 8, monthly: 6, agent: 0, report: 0 }[tab];
+            const expected = { runs: 1, shoes: 8, monthly: 8, agent: 0, report: 0 }[tab];
             if (tab === 'monthly') {
               assert.equal(await page.locator('#run-heatmap .heatmap-grid .heat-cell:not(.blank)').count(), 365, 'heatmap renders every day');
               assert.equal(await page.locator('#goal-overview .goal-month').count(), 12, 'goal shows every month');
