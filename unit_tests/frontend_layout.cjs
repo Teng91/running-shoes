@@ -276,7 +276,7 @@ async function run(engine, name) {
             year, end_date: `${year}-10-27`, thresholds: { spike_percent: 30, spike_min_base_km: 5 },
             weekly_goal: { active: true, km: 28.77 },
             weekday: Array.from({ length: 7 }, (_, weekday) => ({ weekday, km: [180, 120, 0, 95.5, 60, 320.2, 210][weekday],
-              run_days: [24, 18, 0, 15, 10, 40, 30][weekday] })),
+              run_days: [24, 18, 0, 15, 10, 40, 30][weekday], runs: [25, 18, 0, 16, 10, 41, 30][weekday] })),
             daily: days.filter((_, index) => index % 3 !== 1).map((date, index) => ({ date, km: (index % 5) * 4.5 + 2 })),
             streaks: { longest_days: 12, longest_end: `${year}-05-24`, current_days: 3 },
             weekly: Array.from({ length: 16 }, (_, index) => ({

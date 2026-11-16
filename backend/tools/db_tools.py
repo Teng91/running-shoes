@@ -119,7 +119,7 @@ def training_trends(db: Session, user_id: int, year: int | None = None) -> str:
             "spike": "比前 4 週平均多 thresholds.spike_percent% 以上的週次，代表跑量增加太快",
             "goal_met": "該週跑量是否達到 weekly_goal.km（年度目標 × 7 ÷ 全年天數）",
             "partial": "進行中、尚未結束的一週",
-            "weekday": "這一年每個星期幾的總里程與有跑步的天數",
+            "weekday": "這一年每個星期幾的總里程、有跑步的天數（run_days）與跑步次數（runs）",
         },
         weekly=data["weekly"],
         weekday=[{**row, "name": WEEKDAY_NAMES[row["weekday"]]} for row in data["weekday"]],

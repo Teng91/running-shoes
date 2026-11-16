@@ -357,7 +357,8 @@ function renderWeeklyChart(trends) {
   const weeklyGoal = trends.weekly_goal?.active ? Number(trends.weekly_goal.km) : null;
   const datasets = [
     { type: 'bar', label: '週跑量', data: weeks.map(week => week.km), backgroundColor: colors, borderRadius: 4, order: 2 },
-    { type: 'line', label: '4 週平均', data: weeks.map(week => week.average_km), borderColor: averageColor,
+    // The unfinished week would drag the average down, so it has no point yet.
+    { type: 'line', label: '4 週平均', data: weeks.map(week => (week.partial ? null : week.average_km)), borderColor: averageColor,
       backgroundColor: averageColor, borderWidth: 2, pointRadius: 0, tension: .3, order: 1 },
   ];
   // SPEC-056: the weekly target shares the annual goal line's slope (backend-computed).
@@ -376,7 +377,7 @@ function renderWeeklyChart(trends) {
         tooltip: {
           callbacks: {
             title: items => `${weeks[items[0].dataIndex].week_start} 起的一週`,
-            label: ctx => `${ctx.dataset.label}: ${ctx.raw.toFixed(2)} km`,
+            label: ctx => (ctx.raw == null ? `${ctx.dataset.label}: 本週結束後計算` : `${ctx.dataset.label}: ${ctx.raw.toFixed(2)} km`),
             afterBody: items => {
               const week = weeks[items[0].dataIndex];
               const lines = [];
@@ -400,15 +401,19 @@ function renderWeeklyChart(trends) {
   const spikeText = spikes
     ? `橘色的 ${spikes} 週比前 4 週平均多 ${threshold}% 以上；跑量增加太快時注意恢復。`
     : `近 16 週沒有比前 4 週平均多 ${threshold}% 以上的週次。`;
-  note.textContent = weeklyGoal ? `${weeklyGoalText(weeks, weeklyGoal)}${spikeText}` : spikeText;
+  note.textContent = weeklyGoal ? `${weeklyGoalText(weeks, weeklyGoal, trends)}${spikeText}` : spikeText;
 }
 
-function weeklyGoalText(weeks, weeklyGoal) {
+function weeklyGoalText(weeks, weeklyGoal, trends) {
   const finished = weeks.filter(week => !week.partial);
   const met = finished.filter(week => week.goal_met).length;
   const current = weeks[weeks.length - 1];
   const now = current?.partial ? `本週 ${current.km.toFixed(1)}／${weeklyGoal.toFixed(1)} km；` : '';
-  return `${now}週目標 ${weeklyGoal.toFixed(1)} km，已結束的 ${finished.length} 週有 ${met} 週達標。`;
+  // A month is about 4.35 weeks: the weekly target follows the annual goal, not month ÷ 4.
+  const days = trends?.cumulative?.goal_km?.length || 365;
+  const yearly = Number(trends?.cumulative?.yearly_goal_km || 0);
+  const basis = yearly ? `（年度目標 ${yearly.toFixed(0)} km ÷ ${(days / 7).toFixed(1)} 週）` : '';
+  return `${now}週目標 ${weeklyGoal.toFixed(1)} km${basis}，已結束的 ${finished.length} 週有 ${met} 週達標。`;
 }
 
 // ====== Weekly long run (SPEC-056) ======
@@ -427,7 +432,8 @@ function renderLongRunChart(trends) {
     type: 'line',
     data: {
       labels: weeks.map(week => { const [, m, d] = week.week_start.split('-'); return `${Number(m)}/${Number(d)}`; }),
-      datasets: [{ label: '最長一次', data: weeks.map(week => Number(week.longest_km || 0)), borderColor: lineColor,
+      // An unfinished week without a run yet is not a 0 km long run.
+      datasets: [{ label: '最長一次', data: weeks.map(week => (week.partial && !Number(week.longest_km) ? null : Number(week.longest_km || 0))), borderColor: lineColor,
         backgroundColor: lineColor, borderWidth: 2, pointRadius: 3, tension: .25 }],
     },
     options: {
@@ -437,7 +443,8 @@ function renderLongRunChart(trends) {
         legend: { display: false },
         tooltip: { callbacks: {
           title: items => `${weeks[items[0].dataIndex].week_start} 起的一週`,
-          label: ctx => ctx.raw > 0 ? `最長一次 ${ctx.raw.toFixed(2)} km` : '這週沒有跑步',
+          label: ctx => (ctx.raw > 0 ? `最長一次 ${ctx.raw.toFixed(2)} km` : '這週沒有跑步'),
+          afterBody: items => (weeks[items[0].dataIndex].partial ? ['本週進行中'] : []),
         } },
       },
       scales: {
@@ -452,10 +459,13 @@ function renderLongRunChart(trends) {
 function longRunText(weeks) {
   const best = weeks.reduce((top, week) => (Number(week.longest_km || 0) > Number(top?.longest_km || 0) ? week : top), null);
   if (!best) return '近 16 週沒有跑步紀錄。';
-  const recent = weeks.slice(-4).map(week => Number(week.longest_km || 0));
-  const average = recent.reduce((sum, km) => sum + km, 0) / recent.length;
+  // Average only finished weeks: the current week may not have had its long run yet.
+  const recent = weeks.filter(week => !week.partial).slice(-4).map(week => Number(week.longest_km || 0));
   const [, m, d] = best.week_start.split('-');
-  return `近 16 週最長 ${Number(best.longest_km).toFixed(1)} km（${Number(m)}/${Number(d)} 那週）；近 4 週平均最長一次 ${average.toFixed(1)} km。`;
+  const headline = `近 16 週最長 ${Number(best.longest_km).toFixed(1)} km（${Number(m)}/${Number(d)} 那週）`;
+  if (!recent.length) return `${headline}。`;
+  const average = recent.reduce((sum, km) => sum + km, 0) / recent.length;
+  return `${headline}；過去 ${recent.length} 週（不含本週）平均最長一次 ${average.toFixed(1)} km。`;
 }
 
 // ====== Weekday distribution (SPEC-056) ======
@@ -485,8 +495,9 @@ function renderWeekdayChart(trends) {
         tooltip: { callbacks: {
           label: ctx => {
             const row = rows[ctx.dataIndex];
-            const average = row.run_days ? ` · 平均 ${(row.km / row.run_days).toFixed(1)} km` : '';
-            return `${row.km.toFixed(1)} km · ${row.run_days} 天${average}`;
+            const runs = weekdayRuns(row);
+            const average = runs ? ` · 平均每次 ${(row.km / runs).toFixed(1)} km` : '';
+            return `${row.km.toFixed(1)} km · ${row.run_days} 天 ${runs} 次${average}`;
           },
         } },
       },
@@ -499,13 +510,19 @@ function renderWeekdayChart(trends) {
   note.textContent = weekdayText(rows);
 }
 
+// Runs per weekday; a response without the count falls back to running days.
+function weekdayRuns(row) {
+  return Number(row.runs ?? row.run_days) || 0;
+}
+
 function weekdayText(rows) {
   const days = rows.reduce((sum, row) => sum + row.run_days, 0);
   if (!days) return '這一年還沒有跑步紀錄。';
   const most = rows.reduce((top, row) => (row.km > top.km ? row : top), rows[0]);
+  const runs = weekdayRuns(most);
   const rest = rows.filter(row => row.run_days === 0).map(row => WEEKDAY_LABELS[row.weekday]);
-  return `跑最多的是${WEEKDAY_LABELS[most.weekday]}（${most.km.toFixed(1)} km、${most.run_days} 天）`
-    + (rest.length ? `；${rest.join('、')}這一年沒跑過。` : '；每個星期幾都有跑。');
+  return `跑最多的是${WEEKDAY_LABELS[most.weekday]}：${most.km.toFixed(1)} km、${runs} 次，平均每次跑 ${(most.km / runs).toFixed(1)} km`
+    + (rest.length ? `；${rest.join('、')}這一年沒跑過。` : '。');
 }
 
 function renderCumulativeChart(trends) {
