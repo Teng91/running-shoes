@@ -42,6 +42,18 @@ def test_deploy_runs_only_for_main_after_every_test_job():
     assert needs(workflow_jobs["release"]) == {"release-check"}
 
 
+def test_ci_runs_once_per_commit_and_skips_documentation_only_changes():
+    """Branches are tested through their pull request (not push + pull_request twice), and
+    Markdown/docs-only changes skip the paid harness; the image ships no documentation."""
+    triggers = WORKFLOW.split("\non:\n", 1)[1].split("\n\n", 1)[0]
+    docs_only = '    paths-ignore:\n      - "**.md"\n      - "docs/**"'
+    assert triggers == ("  push:\n    branches: [main]\n" + docs_only + "\n  pull_request:\n" + docs_only
+                        + "\n  workflow_dispatch:")
+    dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
+    copied = re.findall(r"^COPY (\S+)", dockerfile, re.M)
+    assert not [path for path in copied if path.endswith(".md") or path.startswith("docs")], copied
+
+
 def test_only_the_deploy_job_receives_the_fly_token():
     workflow_jobs = jobs()
     for name, block in workflow_jobs.items():

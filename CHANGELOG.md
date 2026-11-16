@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Changed
+- CI 只在 push 到 `main` 與 pull request 時執行；其他分支透過 PR 測試，同一個 commit 不再被 push 和 pull request 各跑一次。只改 Markdown 或 `docs/` 時不跑。部署、發版流程不變。
+
 ## [4.14.1] - 2026-11-16
 
 ### Fixed

@@ -626,7 +626,7 @@ Playwright／Chromium／WebKit 齊全時，也會執行版面測試。
 避免每次停止都重跑。Hook 不會呼叫其他模型、外部 API，或傳送提示、diff、原始碼與測試輸出。
 GitHub Actions 仍會在 push／pull request 執行 `verify`，並以三個可獨立重跑的 browser jobs 執行完整版面矩陣、真實 CRUD E2E 與 PWA 升級／離線測試；push 到 main 時再依序快照、部署、檢查並發版（見「日常開發流程、自動部署與發版」）；Dependabot 每月以單一 PR 合併 GitHub Actions 更新；Python 只接收安全性更新 PR，例行升級依下方 `uv pip compile --universal` 步驟手動重編鎖定檔（Dependabot 產生的鎖定檔會遺失 Windows 條件）。
 
-本次驗證基線為 Python **653 passed**、前端回歸測試 **196 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
+本次驗證基線為 Python **654 passed**、前端回歸測試 **196 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
 版面檢查涵蓋 WebKit／Chromium、亮／暗模式與 10 組直橫向尺寸，共 40 組設定，檢查四個功能分頁與月報、三個認證表單、圖表、全部彈窗、行內編輯、停用／錯誤及空資料狀態。
 
 主要表單、工具列與彈窗操作統一為 44px 控制項；桌面表格內的緊湊操作為 36px，手機至少 44px。
@@ -760,7 +760,8 @@ unset MIGRATION_PASSWORD_VALUE
 
 其他行為：
 
-- Pull request、其他分支與 tag 只跑測試，不會部署。
+- Pull request 只跑測試，不會部署。其他分支與 tag 的 push 不跑：要測試就開 PR（同一個 commit 不會被 push 和 pull request 各跑一次，省 GitHub Actions 的分鐘數）。
+- 只改 Markdown 或 `docs/` 的 push 與 PR 不跑（正式環境的 image 只有 `backend/`、`frontend/` 與備份程式）；文件檢查請在本機執行 `python3 scripts/task.py docs-check`。
 - commit 訊息含 `[skip ci]` 時整個 workflow 都不跑。
 - main 的執行一次跑一個，正在部署的不會被取消；排隊時 GitHub 只保留最新的一個，中間那次會被跳過，最後部署的一定是最新的 main。
 - 想手動重新部署：GitHub → Actions → Verify and deploy → Run workflow（選 `main`）。偶發失敗時用 **Re-run failed jobs**，後面被跳過的部署與發版會跟著重跑。
