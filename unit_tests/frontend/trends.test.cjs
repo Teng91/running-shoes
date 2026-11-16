@@ -21,7 +21,7 @@ function trendsContext(nodes, globals = {}) {
 }
 
 const trendRenderers = ['renderTrends', 'heatLevel', 'renderRunHeatmap', 'renderWeeklyChart', 'weeklyGoalText',
-  'renderCumulativeChart', 'renderLongRunChart', 'longRunText', 'renderWeekdayChart', 'weekdayText'];
+  'renderCumulativeChart', 'renderLongRunChart', 'longRunText', 'renderWeekdayChart', 'weekdayRuns', 'weekdayText'];
 const weekdayLabels = source.match(/const WEEKDAY_LABELS = [^\n]+/)[0];
 
 const sample = {
@@ -184,11 +184,11 @@ test('SPEC-038 trend sections are present with an accessible scroll region and l
 const analysis = {
   ...sample,
   weekly_goal: { active: true, km: 23.01 },
-  weekly: sample.weekly.map((week, index) => ({ ...week, longest_km: [8, 21.1, 12][index], goal_met: [false, true, false][index] })),
+  weekly: sample.weekly.map((week, index) => ({ ...week, longest_km: [8, 21, 12][index], goal_met: [false, true, false][index] })),
   weekday: [
-    { weekday: 0, km: 21, run_days: 1 }, { weekday: 1, km: 0, run_days: 0 }, { weekday: 2, km: 0, run_days: 0 },
-    { weekday: 3, km: 3, run_days: 1 }, { weekday: 4, km: 12, run_days: 1 }, { weekday: 5, km: 0, run_days: 0 },
-    { weekday: 6, km: 0, run_days: 0 },
+    { weekday: 0, km: 21, run_days: 1, runs: 1 }, { weekday: 1, km: 0, run_days: 0, runs: 0 }, { weekday: 2, km: 0, run_days: 0, runs: 0 },
+    { weekday: 3, km: 3, run_days: 1, runs: 1 }, { weekday: 4, km: 12, run_days: 1, runs: 2 }, { weekday: 5, km: 0, run_days: 0, runs: 0 },
+    { weekday: 6, km: 0, run_days: 0, runs: 0 },
   ],
 };
 
@@ -201,7 +201,11 @@ test('SPEC-056 the weekly chart draws the weekly goal and counts finished weeks 
   assert.deepEqual([...datasets].map(set => set.label), ['週跑量', '4 週平均', '週目標']);
   assert.deepEqual([...datasets[2].data], [23.01, 23.01, 23.01]);
   assert.deepEqual([...datasets[2].borderDash], [6, 4]);
-  assert.match(nodes['weekly-note'].textContent, /^本週 21\.0／23\.0 km；週目標 23\.0 km，已結束的 2 週有 1 週達標。橘色的 1 週/);
+  // v4.14.1: the note states the basis (annual goal over 52.1 weeks, not month ÷ 4).
+  assert.match(nodes['weekly-note'].textContent, /^本週 21\.0／23\.0 km；週目標 23\.0 km（年度目標 1200 km ÷ 52\.1 週），已結束的 2 週有 1 週達標。橘色的 1 週/);
+  // The unfinished week has no 4-week average point, so the line does not dip.
+  assert.deepEqual([...datasets[1].data], [20, 25, null]);
+  assert.equal(context.chartInstances.weekly.config.options.plugins.tooltip.callbacks.label({ raw: null, dataset: datasets[1] }), '4 週平均: 本週結束後計算');
 
   // Before the goal's start year the chart keeps its two series and the plain note.
   const inactive = elements(); inactive['year-select'].value = '2026';
@@ -219,17 +223,32 @@ test('SPEC-056 long-run and weekday charts lay out the backend values', async ()
   await context.renderTrends();
   const longRun = context.chartInstances.longRun.config;
   assert.deepEqual([...longRun.data.labels], ['12/22', '12/29', '1/5']);
-  assert.deepEqual([...longRun.data.datasets[0].data], [8, 21.1, 12]);
+  assert.deepEqual([...longRun.data.datasets[0].data], [8, 21, 12], 'a long run already done this week is shown');
   assert.equal(longRun.data.datasets[0].borderColor, '--chart-2');
-  assert.equal(nodes['long-run-note'].textContent, '近 16 週最長 21.1 km（12/29 那週）；近 4 週平均最長一次 13.7 km。');
+  assert.deepEqual([...longRun.options.plugins.tooltip.callbacks.afterBody([{ dataIndex: 2 }])], ['本週進行中']);
+  // v4.14.1: only finished weeks count toward the recent average.
+  assert.equal(nodes['long-run-note'].textContent, '近 16 週最長 21.0 km（12/29 那週）；過去 2 週（不含本週）平均最長一次 14.5 km。');
 
   const weekday = context.chartInstances.weekday.config;
   assert.deepEqual([...weekday.data.labels], ['週一', '週二', '週三', '週四', '週五', '週六', '週日']);
   assert.deepEqual([...weekday.data.datasets[0].data], [21, 0, 0, 3, 12, 0, 0]);
-  assert.equal(weekday.options.plugins.tooltip.callbacks.label({ dataIndex: 4 }), '12.0 km · 1 天 · 平均 12.0 km');
+  assert.equal(weekday.options.plugins.tooltip.callbacks.label({ dataIndex: 4 }), '12.0 km · 1 天 2 次 · 平均每次 6.0 km');
   assert.equal(nodes['weekday-title'].textContent, '2026 年星期幾跑量');
-  assert.equal(nodes['weekday-note'].textContent, '跑最多的是週一（21.0 km、1 天）；週二、週三、週六、週日這一年沒跑過。');
+  assert.equal(nodes['weekday-note'].textContent, '跑最多的是週一：21.0 km、1 次，平均每次跑 21.0 km；週二、週三、週六、週日這一年沒跑過。');
+  const everyDay = analysis.weekday.map(row => ({ ...row, km: row.km || 5, run_days: row.run_days || 1, runs: row.runs || 1 }));
+  assert.equal(context.weekdayText(everyDay), '跑最多的是週一：21.0 km、1 次，平均每次跑 21.0 km。', 'no filler when every weekday has runs');
+  assert.equal(context.weekdayRuns({ run_days: 3 }), 3, 'an older response without run counts uses running days');
   assert.match(htmlSource, /<canvas id="chart-long-run"><\/canvas>[\s\S]*<canvas id="chart-weekday"><\/canvas>/);
+});
+
+test('SPEC-056 an unfinished week without a run is not drawn as a 0 km long run', async () => {
+  const nodes = elements(); nodes['year-select'].value = '2026';
+  const quiet = { ...analysis, weekly: analysis.weekly.map((week, index) => ({ ...week, longest_km: [8, 21, 0][index] })) };
+  const context = trendsContext(nodes, { apiGet: async () => quiet });
+  vm.runInContext(`let trendsRequestId = 0;\n${weekdayLabels}\n${trendRenderers.map(extract).join('\n')}`, context);
+  await context.renderTrends();
+  assert.deepEqual([...context.chartInstances.longRun.config.data.datasets[0].data], [8, 21, null]);
+  assert.match(nodes['long-run-note'].textContent, /過去 2 週（不含本週）平均最長一次 14\.5 km/);
 });
 
 test('SPEC-056 future years draw no long-run or weekday chart', async () => {

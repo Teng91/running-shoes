@@ -38,6 +38,11 @@
   - `renderWeekdayChart()` 畫週一到週日的里程，tooltip 顯示天數與平均，說明跑最多的星期幾與沒跑過的日子。
   - 兩張圖放在訓練趨勢第二列，沿用 `.charts`／`.chart-box` 版面；月跑量分頁的圖表由 6 張變 8 張。
 - 所有數字仍由後端計算，前端只排版（SPEC-038 的原則）。
+- **修訂（v4.14.1，使用者回饋）**：
+  - 進行中的一週還沒跑長距離時，「近 4 週平均最長一次」把它當 0 km 一起平均，數字偏低，折線也掉到 0。改為只平均已結束的週（「過去 4 週（不含本週）」），本週沒跑步時不畫點，已跑過則照常顯示並在 tooltip 標「本週進行中」。
+  - 每週跑量圖的「4 週平均」同樣不為進行中的週畫點，避免線尾下墜。
+  - 週目標說明列出計算依據「年度目標 ÷ 52.1 週」。一個月約 4.35 週，若以每月目標 ÷ 4，全年會多出約 8%（125 ÷ 4 × 52 ≈ 1625 km）。
+  - 每日查詢多取跑步次數，星期分布回傳 `runs`；說明改為「跑最多的是週六：270.3 km、30 次，平均每次跑 9.0 km」，拿掉沒有資訊量的「每個星期幾都有跑」。
 
 ## Security and data isolation
 
@@ -58,6 +63,7 @@
 - [x] AC-2：Given 啟用中的週目標，When 畫每週跑量圖，Then 多一條虛線「週目標」，說明顯示本週進度與已結束週的達標數；目標未啟用時維持兩條線與原本說明。
 - [x] AC-3：Given 訓練趨勢資料，When 進入月跑量分頁，Then 顯示每週最長一次折線與星期幾長條圖，說明文字與 tooltip 來自後端數字；版面矩陣下圖表全部初始化且不溢出。
 - [x] AC-4：Given 未來年份，When 進入月跑量分頁，Then 兩張新圖都不建立，說明顯示「還沒開始」。
+- [x] AC-5：Given 進行中的一週，When 畫每週跑量與最長一次，Then 該週沒有 4 週平均點、還沒跑步時沒有 0 km 的長跑點，近期平均只用已結束的週；週目標說明列出「年度目標 ÷ 52.1 週」；星期分布以次數算平均每次距離，每天都有跑時不加多餘說明。
 
 ## Test traceability
 
@@ -67,3 +73,4 @@
 | AC-2 | `unit_tests/frontend/trends.test.cjs::SPEC-056 the weekly chart draws the weekly goal and counts finished weeks that met it` |
 | AC-3 | `unit_tests/frontend/trends.test.cjs::SPEC-056 long-run and weekday charts lay out the backend values`、`python3 scripts/task.py frontend-layout` |
 | AC-4 | `unit_tests/frontend/trends.test.cjs::SPEC-056 future years draw no long-run or weekday chart` |
+| AC-5 | `unit_tests/frontend/trends.test.cjs::SPEC-056 an unfinished week without a run is not drawn as a 0 km long run`、`unit_tests/frontend/trends.test.cjs::SPEC-056 long-run and weekday charts lay out the backend values`、`unit_tests/frontend/trends.test.cjs::SPEC-056 the weekly chart draws the weekly goal and counts finished weeks that met it`、`unit_tests/test_trends.py::test_weekly_goal_longest_run_and_weekday_mix` |

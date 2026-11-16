@@ -388,7 +388,7 @@ def test_native_statistics_tools_reuse_read_models_and_stay_user_scoped(db, user
 
     trends = _result(db_tools.training_trends(db, user.id))
     assert trends["run_days"] == 1 and len(trends["weekly"]) == 16
-    assert trends["weekday"][0] == {"weekday": 0, "km": 21.1, "run_days": 1, "name": "週一"}
+    assert trends["weekday"][0] == {"weekday": 0, "km": 21.1, "run_days": 1, "runs": 1, "name": "週一"}
     assert set(trends["cumulative"]) == {"goal_active", "yearly_goal_km", "ytd_km", "expected_km", "delta_km", "projected_km"}
     assert "daily" not in trends, "day-level arrays are trimmed from the model context"
 
