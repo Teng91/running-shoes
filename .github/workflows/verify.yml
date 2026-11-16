@@ -1,12 +1,23 @@
 name: Verify and deploy
 
-# Every push and pull request runs the full harness. A push to main (or a manual
+# Pushes to main and pull requests run the full harness. A push to main (or a manual
 # run on main) then continues: database snapshot → fly deploy → anonymous release
 # check → tag and GitHub Release when package.json carries a new version.
+# Other branches are tested through their pull request, so a PR commit runs once
+# instead of twice (push + pull_request). Changes that only touch Markdown or docs/
+# skip the workflow: the production image ships only backend/, frontend/ and the
+# backup script, and docs-check runs locally (Claude Code Stop hook, task.py).
 # A commit message containing [skip ci] skips the whole workflow.
 on:
   push:
+    branches: [main]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
   pull_request:
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
   workflow_dispatch:
 
 permissions:
