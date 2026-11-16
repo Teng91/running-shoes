@@ -652,6 +652,7 @@ flowchart LR
 - **限流**：`rate_limits.consume()` 把同一請求的所有視窗放在一個交易，滿了就整筆回滾；限額來自 `app.state.settings`，不再保留記憶體桶。
 - **稽核 trigger**：每次啟動依目前欄位重建，避免舊欄位清單使快照不完整或使寫入失敗。
 - **Strava**：`strava_import.parse_activity_dates()` 把 UTC 時間戳轉為 `clock.APP_TIMEZONE` 日期。`date_corrections()` 只修正仍停在舊 UTC 日期的既有活動，`services/strava_imports.py` 在匯入交易中移動日期與月跑量。
+- **v4.14.0**：自動套用新版（SPEC-059）。`app-updates.js` 在新 shell 啟用後，於背景、回到前景未操作或閒置 5 分鐘時重新載入，`appUpdateBusy()` 讀取 AI、月報、請求、彈窗、行內編輯與輸入框狀態來延後；`sessionStorage` 記錄已嘗試的版本避免重整迴圈。`app-agent.js` 以 `saveAgentChat()`／`restoreAgentChat()` 把完成的對話存在分頁的 `sessionStorage`，`app.js` 啟動時還原。模組邊界不變。
 - **v4.13.0**：資料正確性、訓練分析與 AI 統計工具（SPEC-055～058）。
   - Schema 8 在 `run_tombstones` 加上 `strava_id`；`services/strava_imports.py` 與 `read_models/strava_preview.py` 透過 `run_identity` 略過刪除過的活動。回滾腳本是 `scripts/rollback_schema_eight.sql`。
   - 換鞋提醒門檻集中在 `shoe_metrics.py`（`MONITOR_USAGE_PERCENT`、`REPLACE_SOON_USAGE_PERCENT`），`read_models/shoes.py`、`highlights.py` 與 `analytics.py` 共用；前端 `app-state.js` 鏡像同樣的值。`forecasting.retirement_forecast` 不為已退役的鞋產生日期。

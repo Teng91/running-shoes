@@ -167,7 +167,7 @@ test('every startup chooses the run-log home before authentication, ignoring leg
         return { ok: true };
       },
       localStorage: { getItem() { assert.fail('startup must not read a saved tab'); } },
-      showAppView() { assert.equal(active, 'runs'); }, loadAgentModels() {},
+      showAppView() { assert.equal(active, 'runs'); }, restoreAgentChat() {}, loadAgentModels() {},
       loadData: async () => { loads++; }, hideAppBoot() {},
       showLoginView() { loginShown = true; }, console: { warn() {} },
     });

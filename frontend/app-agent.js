@@ -7,6 +7,11 @@ let agentRetryHistory = [];
 registerFeatureReset('agent-chat', resetAgentChat);
 
 const AGENT_GREETING = '你好！我是跑鞋助手，可以幫你查詢跑鞋資料、分析跑量、推薦新鞋。有什麼想問的嗎？';
+// SPEC-059: completed turns live in this tab's sessionStorage, so a reload (including an
+// automatic update) keeps the conversation. Closing the tab, logging out or switching
+// account removes them; other tabs never see them.
+const AGENT_CHAT_STORAGE_KEY = 'agent-chat';
+const AGENT_CHAT_STORED_TURNS = 20;
 
 // 清空對話（登出/切換帳號時呼叫）：重設上下文陣列 + 還原畫面為初始問候語，
 // 避免前一個使用者的對話殘留給下一位（隱私）。
@@ -17,6 +22,7 @@ function resetAgentChat() {
   lastUserText = '';
   agentHistory = [];
   agentRetryHistory = [];
+  saveAgentChat();
   document.getElementById('agent-input').value = '';
   setAgentLoading(false);
   const container = document.getElementById('agent-messages');
@@ -25,6 +31,30 @@ function resetAgentChat() {
       '<div class="agent-message bot"><div class="agent-msg-content">' +
       AGENT_GREETING + '</div></div>';
   }
+}
+
+function saveAgentChat() {
+  try {
+    if (!agentHistory.length || !currentUser) sessionStorage.removeItem(AGENT_CHAT_STORAGE_KEY);
+    else sessionStorage.setItem(AGENT_CHAT_STORAGE_KEY, JSON.stringify({
+      user: currentUser, history: agentHistory.slice(-AGENT_CHAT_STORED_TURNS),
+    }));
+  } catch {}
+}
+
+// Rebuild the saved turns for the same account after a reload; anything else is discarded.
+function restoreAgentChat() {
+  let saved = null;
+  try { saved = JSON.parse(sessionStorage.getItem(AGENT_CHAT_STORAGE_KEY) || 'null'); } catch {}
+  const turns = saved && saved.user === currentUser && Array.isArray(saved.history)
+    ? saved.history.filter(turn => ['user', 'assistant'].includes(turn?.role) && typeof turn.content === 'string' && turn.content)
+    : [];
+  if (!turns.length) {
+    try { sessionStorage.removeItem(AGENT_CHAT_STORAGE_KEY); } catch {}
+    return;
+  }
+  agentHistory = turns.slice(-AGENT_CHAT_STORED_TURNS);
+  turns.forEach(turn => addAgentMessage(turn.role === 'assistant' ? 'bot' : 'user', turn.content));
 }
 
 function addAgentMessage(role, text) {
@@ -291,6 +321,7 @@ async function sendAgentMessage(retryText) {
       );
       if (result.completed) {
         agentHistory = [...requestHistory, { role: 'user', content: text }, { role: 'assistant', content: fullText }];
+        saveAgentChat();
       }
     } else {
       botContent.textContent = '（模型沒有回應，請再試一次或更換模型。）';

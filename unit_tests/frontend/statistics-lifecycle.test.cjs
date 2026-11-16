@@ -1,4 +1,4 @@
-const { runContext, test, assert, fs, vm, extract, htmlSource } = require('./helpers.cjs');
+const { runContext, test, assert, fs, vm, extract, htmlSource, source } = require('./helpers.cjs');
 
 function elements() {
   return new Proxy({}, { get: (target, id) => target[id] ||= {
@@ -129,21 +129,25 @@ test('SPEC-017 native lifecycle keeps cleaning after errors and rejects duplicat
 });
 
 test('SPEC-049 a newer shell shows an update prompt and reloads only after confirmation', () => {
-  const nodes = elements(), handlers = {}; let reloads = 0;
+  const nodes = elements(), handlers = {}, pageListeners = {}; let reloads = 0;
   nodes['app-update-notice'].hidden = true;
   const context = vm.createContext({
-    document: { querySelector: () => ({ content: 'test-old' }), getElementById: id => nodes[id], readyState: 'loading', addEventListener() {} },
+    document: { querySelector: selector => (selector.startsWith('meta') ? { content: 'test-old' } : null), getElementById: id => nodes[id],
+      readyState: 'loading', visibilityState: 'visible', addEventListener: (name, fn) => { pageListeners[name] = fn; } },
     navigator: { serviceWorker: { addEventListener: (name, fn) => handlers[name] = fn } },
-    window: { addEventListener() {}, location: { reload: () => reloads++ } }, setInterval() {},
+    window: { addEventListener() {}, location: { reload: () => reloads++ } }, setInterval() {}, setTimeout() {}, clearTimeout() {},
   });
-  vm.runInContext(['initializeAppUpdates', 'showAppUpdate', 'applyAppUpdate', 'dismissAppUpdate'].map(extract).join('\n'), context);
+  vm.runInContext([source.match(/const APP_UPDATE_ATTEMPT_KEY = [^\n]+/)[0], ...['initializeAppUpdates', 'appUpdateBusy', 'readAppUpdateAttempt',
+    'writeAppUpdateAttempt', 'showAppUpdate', 'applyAppUpdate', 'dismissAppUpdate'].map(extract)].join('\n'), context);
   context.initializeAppUpdates();
+  // SPEC-059: while the user is working in the visible app, a new version only prompts.
+  pageListeners.keydown();
   handlers.message({ data: { type: 'SHELL_VERSION', version: 'test-old' } });
   assert.equal(nodes['app-update-notice'].hidden, true, 'the same shell is not an update');
   handlers.message({ data: { type: 'SHELL_VERSION', version: 'test-new' } });
   assert.equal(nodes['app-update-notice'].hidden, false);
   assert.equal(nodes['app-update-title'].textContent, '有新版本 vtest-new');
-  assert.equal(reloads, 0, 'detecting an update never reloads by itself');
+  assert.equal(reloads, 0, 'an app in use is never reloaded under the user');
   context.dismissAppUpdate();
   assert.equal(nodes['app-update-notice'].hidden, true);
   handlers.message({ data: { type: 'SHELL_VERSION', version: 'test-newer' } });
@@ -165,7 +169,8 @@ test('SPEC-049 an open app looks for new deployments on focus, visibility, recon
   const context = vm.createContext({ document: page, navigator: network, console,
     window: { addEventListener: (name, fn) => { windowListeners[name] = fn; } },
     setInterval: (fn, ms) => intervals.push({ fn, ms }), Date: { now: () => now } });
-  vm.runInContext(extract('initializeAppUpdates'), context);
+  vm.runInContext([source.match(/const APP_UPDATE_ATTEMPT_KEY = [^\n]+/)[0],
+    ...['initializeAppUpdates', 'readAppUpdateAttempt', 'writeAppUpdateAttempt'].map(extract)].join('\n'), context);
   context.initializeAppUpdates();
   await new Promise(setImmediate);
   assert.deepEqual(intervals.map(item => item.ms), [30 * 60 * 1000]);
