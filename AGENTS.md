@@ -70,7 +70,7 @@
 - `frontend/app-lifecycle.js`: compatibility bridge and reset registration.
 - `frontend/app-dates.js`: calendar parsing, cross-day limits and draft-safe foreground refresh.
 - `frontend/app-dialogs.js`: modal semantics and keyboard/focus lifecycle.
-- `frontend/app-updates.js`: shell version diagnostics, open-app deployment checks (focus, visibility, reconnect, 30 min) and an update prompt that reloads only on confirmation (SPEC-049).
+- `frontend/app-updates.js`: shell version diagnostics, open-app deployment checks (focus, visibility, reconnect, 30 min), automatic reload at safe moments (background, untouched after returning, 5 idle minutes; postponed by `appUpdateBusy()`) and the update prompt (SPEC-049, SPEC-059).
 - `frontend/app-boot.js`: startup loading, stylesheet readiness, timeout, and retry state.
 - `frontend/app-state.js`: shared browser state and presentation constants.
 - `frontend/app-api.js`: authenticated JSON and upload transport helpers.
@@ -94,7 +94,7 @@
 - `frontend/app-actions.js`: delegated `data-click`/`data-change`/… UI actions; markup and generated rows never contain inline JavaScript handlers (the page CSP blocks them).
 - `frontend/offline.html`: script-free offline fallback with its own strict CSP.
 - `frontend/app.js`: bootstrap and global dialog event wiring.
-- `frontend/app-agent.js`: AI conversation and streaming presentation.
+- `frontend/app-agent.js`: AI conversation and streaming presentation; completed turns persist in this tab's `sessionStorage` (never localStorage) and are cleared on logout or account switch (SPEC-059).
 - `frontend/app-models.js`: shared provider/model menus.
 - `frontend/app-markdown.js`: safe rendering of untrusted Markdown.
 - `frontend/app-reports.js`: monthly report loading, generation, and streaming UI.

@@ -2,7 +2,7 @@
 
 - 狀態：Implemented
 - Owner：Running Shoes maintainers
-- 關聯 issue／ADR：[SPEC-017](017-consistent-statistics-and-feature-lifecycles.md)、[SPEC-048](048-push-to-main-deploy-and-release.md)
+- 關聯 issue／ADR：[SPEC-017](017-consistent-statistics-and-feature-lifecycles.md)、[SPEC-048](048-push-to-main-deploy-and-release.md)；[SPEC-059](059-automatic-updates-at-safe-moments.md) 起，App 閒置或在背景時會自動套用，本規格的提示保留給使用中的畫面
 
 ## Problem
 

@@ -22,12 +22,25 @@ async function updateWorker(page) {
   return withDeadline(() => page.evaluate(observeWorkerUpdate, {}), 20000, 'service worker update');
 }
 
-// SPEC-049: an activated newer shell only prompts; the page reloads after the user confirms.
+// SPEC-049/059: a newer shell activated while the user is working only prompts; the page
+// reloads after the user confirms.
 async function confirmAppUpdate(page, release) {
   await page.locator('#app-update-notice').waitFor({ state: 'visible', timeout: 15000 });
   assert.equal(await page.locator('#app-update-title').textContent(), '有新版本 v' + release);
   assert.notEqual(await page.evaluate(() => window.__pwaRelease), release, 'detecting an update never reloads by itself');
   await page.locator('#app-update-apply').click();
+  await page.waitForFunction(value => window.__pwaRelease === value, release, { timeout: 15000 });
+}
+
+// SPEC-059: a prompted update applies by itself once the app goes to the background. The
+// visibility change is dispatched after evaluate() returns so the reload cannot race it.
+async function backgroundAppUpdate(page, release) {
+  await page.locator('#app-update-notice').waitFor({ state: 'visible', timeout: 15000 });
+  assert.notEqual(await page.evaluate(() => window.__pwaRelease), release, 'an app in use is not reloaded under the user');
+  await page.evaluate(() => setTimeout(() => {
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
+    document.dispatchEvent(new Event('visibilitychange'));
+  }, 50));
   await page.waitForFunction(value => window.__pwaRelease === value, release, { timeout: 15000 });
 }
 
@@ -250,6 +263,7 @@ async function run() {
           await assertShell(page, 'fixture-a');
           // Migrate the frozen real v3.2.2 worker online before testing failure-safe future upgrades.
           legacy = false; release = 'fixture-a-safe';
+          await page.keyboard.press('Shift'); // the user is working in the app (SPEC-059)
           assert.equal(await updateWorker(page), 'activated');
           await confirmAppUpdate(page, 'fixture-a-safe');
           await assertShell(page, 'fixture-a-safe');
@@ -312,9 +326,10 @@ async function run() {
           await page.evaluate(() => { window.__workerUpdateTimeline = null; });
           const observing = page.evaluate(observeWorkerUpdate, { trigger: false });
           await page.waitForFunction(() => window.__workerUpdateTimeline?.length > 0);
+          await page.keyboard.press('Shift'); // in use: prompt first, then apply in the background
           releaseCandidate(); candidateGate = null;
           assert.equal(await withDeadline(() => observing, 20000, 'already installing candidate'), 'activated');
-          await confirmAppUpdate(page, 'fixture-d');
+          await backgroundAppUpdate(page, 'fixture-d');
           await assertShell(page, 'fixture-d');
           const state = await page.evaluate(async () => {
             const names = await caches.keys();

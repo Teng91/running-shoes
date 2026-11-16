@@ -20,3 +20,4 @@ require('./frontend/highlights.test.cjs');
 require('./frontend/visual-theme.test.cjs');
 require('./frontend/security-policy.test.cjs');
 require('./frontend/corrections.test.cjs');
+require('./frontend/updates.test.cjs');

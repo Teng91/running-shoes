@@ -289,6 +289,10 @@ SPEC-032：合成資料驗證歷史筆數上限（v4.7.3 起 10,000／10,001）�
 
 [規格與具名案例](specs/049-pwa-update-prompt.md) 以 Node 驗證不同版本只顯示提示、不自動重新載入、稍後與再次提示、確認後只重新載入一次；以假時間與事件驗證前景、焦點、連線恢復與 30 分鐘檢查、60 秒合併、隱藏與離線不檢查及失敗不拋錯。`frontend-pwa` 在 Chromium／WebKit 的舊版 worker 遷移與完整升級中，確認提示出現時仍是舊版，按下更新後才載入新 shell。
 
+## SPEC-059 在安全時自動套用新版
+
+[規格與具名案例](specs/059-automatic-updates-at-safe-moments.md) 以 Node 假時間、假可見度與假 service worker 訊息驗證：剛回到前景未操作、在背景、閒置 5 分鐘時自動重新載入一次；AI 回答、月報、請求、行內編輯、彈窗、AI 輸入框與登入表單的文字都會延後，直到下一次檢查；自動重新載入後仍是舊版時改為只顯示提示。AI 對話以假 sessionStorage 驗證只為同一帳號還原、資料格式錯誤或換帳號時捨棄。`frontend-pwa` 在 Chromium／WebKit 的真實 service worker 升級中，確認使用中的頁面只顯示提示，切到背景後自動換成新版 shell。
+
 ## SPEC-055 資料正確性修正與 Strava 刪除記憶
 
 [規格與具名案例](specs/055-correctness-fixes-and-strava-deletions.md)：
