@@ -242,3 +242,66 @@ def duration_backfills(
         if stored_duration is None and is_plausible_duration(duration, km):
             backfills.append({"strava_id": strava_id, "duration_seconds": duration})
     return backfills
+
+
+# SPEC-062: a Strava activity on the same local day as a hand-entered run is the same
+# run when their distances are within max(0.3 km, 5%). Hand-entered distances are often
+# rounded, and a same-day run outside the tolerance is skipped rather than imported.
+MANUAL_MATCH_MIN_KM = 0.3
+MANUAL_MATCH_RATIO = 0.05
+
+
+def _close_km(first: float, second: float) -> bool:
+    return abs(first - second) <= max(MANUAL_MATCH_MIN_KM, MANUAL_MATCH_RATIO * max(first, second))
+
+
+def manual_matches(
+    rows: list[dict[str, object]],
+    manual_runs: Sequence[tuple[int, str, float, int | None]],
+    known_ids: set[str],
+) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
+    """Pair new Strava activities with hand-entered runs so a re-import never doubles them.
+
+    `manual_runs` holds the user's runs without a Strava ID as (id, date, km, duration_seconds);
+    `known_ids` are Strava IDs already stored or deleted, which are handled elsewhere. An
+    activity links to a manual run only when each is the other's single close-distance
+    candidate that day. Any other activity on a day with a manual run is a conflict: it is
+    neither imported nor linked. A link carries the moving time only when the manual run has
+    none and the time gives a plausible pace for the manual distance.
+    """
+    manual_by_date: dict[str, list[tuple[int, str, float, int | None]]] = {}
+    for manual in manual_runs:
+        manual_by_date.setdefault(manual[1], []).append(manual)
+    new_by_date: dict[str, list[dict[str, object]]] = {}
+    seen: set[str] = set()
+    for row in rows:
+        strava_id = str(row["strava_id"])
+        if strava_id in known_ids or strava_id in seen:
+            continue
+        seen.add(strava_id)
+        if str(row["date"]) in manual_by_date:
+            new_by_date.setdefault(str(row["date"]), []).append(row)
+    links: list[dict[str, object]] = []
+    conflicts: list[dict[str, object]] = []
+    for day, activities in new_by_date.items():
+        for row in activities:
+            km = float(str(row["km"]))
+            close = [manual for manual in manual_by_date[day] if _close_km(km, manual[2])]
+            partner = close[0] if len(close) == 1 else None
+            if partner is not None and sum(
+                _close_km(float(str(other["km"])), partner[2]) for other in activities
+            ) == 1:
+                duration = row.get("duration_seconds")
+                fill = (
+                    duration
+                    if partner[3] is None and isinstance(duration, int)
+                    and is_plausible_duration(duration, partner[2])
+                    else None
+                )
+                links.append({"strava_id": str(row["strava_id"]), "run_id": partner[0],
+                              "date": day, "duration_seconds": fill})
+                continue
+            conflicts.append({"strava_id": str(row["strava_id"]), "date": day, "km": km})
+    links.sort(key=lambda link: (str(link["date"]), str(link["strava_id"])))
+    conflicts.sort(key=lambda conflict: (str(conflict["date"]), str(conflict["strava_id"])))
+    return links, conflicts
