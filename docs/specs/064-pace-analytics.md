@@ -2,7 +2,7 @@
 
 - 狀態：Implemented
 - Owner：Running Shoes maintainers
-- 關聯 issue／ADR：[SPEC-060](060-run-duration-and-pace.md)、[SPEC-056](056-weekly-goal-long-run-and-weekday-analysis.md)
+- 關聯 issue／ADR：[SPEC-060](060-run-duration-and-pace.md)、[SPEC-056](056-weekly-goal-long-run-and-weekday-analysis.md)；v4.18.0 起「月跑量與配速」「累積跑量與配速」「距離與配速」「配速分布」由 [SPEC-065](065-race-readiness.md) 取代
 
 ## Problem
 
@@ -47,20 +47,18 @@
 
 ## Acceptance criteria
 
-- [x] AC-1：Given 有時間與沒有時間的跑步，When 讀取配速分析，Then 平均配速以時間加權計算、跑量包含沒有時間的跑步，趨勢、月份、距離與分布的數字正確，另一個帳號與未來日期的跑步不列入。
-- [x] AC-2：Given 至少 8 週可比較的資料，When 計算累積跑量與配速，Then 回傳前 4 週平均週跑量、相關係數、趨勢線、各組中位數與最低一組和最快一組的差距；資料不足時不回傳相關係數。
-- [x] AC-3：Given 沒有任何跑步時間，When 讀取或顯示配速分析，Then API 回傳空結構，畫面顯示提示而不畫圖。
-- [x] AC-4：Given 配速分析資料，When 顯示月跑量分頁，Then 畫出 5 張圖，配速軸反向，說明文字只使用後端的數字。
-- [x] AC-5：Given 有時間的跑步，When 讀取訓練趨勢，Then 每個星期幾回傳時間加權的平均配速（另一個帳號不列入），星期幾跑量圖加上反向的配速折線與最快／最慢說明；沒有時間時不畫折線。
-- [x] AC-6：Given 所有傳統 script，When 掃描頂層宣告，Then 沒有重複的 `const`／`let`／`class` 名稱。
+v4.18.0 移除了沒有訓練意義的月份、累積跑量、距離區間與配速分布（見 SPEC-065），以下是仍然有效的條件。
+
+- [x] AC-1：Given 有時間與沒有時間的跑步，When 讀取配速趨勢，Then 每筆配速與近 30 天平均以時間加權計算，另一個帳號與未來日期的跑步不列入。
+- [x] AC-2：Given 沒有任何跑步時間，When 讀取或顯示配速趨勢，Then API 回傳空結構，畫面顯示提示而不畫圖。
+- [x] AC-3：Given 有時間的跑步，When 讀取訓練趨勢，Then 每個星期幾回傳時間加權的平均配速（另一個帳號不列入），星期幾跑量圖加上反向的配速折線與最快／最慢說明；沒有時間時不畫折線。
+- [x] AC-4：Given 所有傳統 script，When 掃描頂層宣告，Then 沒有重複的 `const`／`let`／`class` 名稱。
 
 ## Test traceability
 
 | Acceptance criterion | Named test / command |
 | --- | --- |
 | AC-1 | `unit_tests/test_pace_analysis.py::test_pace_analysis_is_time_weighted_user_scoped_and_ignores_the_future` |
-| AC-2 | `unit_tests/test_pace_analysis.py::test_training_load_relates_prior_weeks_to_pace` |
-| AC-3 | `unit_tests/test_pace_analysis.py::test_pace_analysis_without_times_is_empty`、`unit_tests/frontend/pace-analysis.test.cjs::SPEC-064 an account without times shows a hint instead of charts` |
-| AC-4 | `unit_tests/frontend/pace-analysis.test.cjs::SPEC-064 pace charts render backend values with reversed pace axes` |
-| AC-5 | `unit_tests/test_pace_analysis.py::test_weekday_mix_reports_a_time_weighted_pace_per_weekday`、`unit_tests/frontend/trends.test.cjs::SPEC-064 the weekday chart adds the backend weekday pace on a reversed axis` |
-| AC-6 | `unit_tests/frontend/pace-analysis.test.cjs::SPEC-064 classic scripts never redeclare a top-level name from another script` |
+| AC-2 | `unit_tests/test_pace_analysis.py::test_pace_analysis_without_times_is_empty`、`unit_tests/frontend/pace-analysis.test.cjs::SPEC-065 an account without times shows a hint instead of a pace trend` |
+| AC-3 | `unit_tests/test_pace_analysis.py::test_weekday_mix_reports_a_time_weighted_pace_per_weekday`、`unit_tests/frontend/trends.test.cjs::SPEC-064 the weekday chart adds the backend weekday pace on a reversed axis` |
+| AC-4 | `unit_tests/frontend/pace-analysis.test.cjs::SPEC-064 classic scripts never redeclare a top-level name from another script` |

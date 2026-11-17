@@ -46,6 +46,8 @@ const UI_ACTIONS = Object.freeze({
     'export-shoes': () => doExport(),
     'load-spending': () => loadSpendingData(),
     'goal-settings': element => toggleGoalSettings(element.dataset.open === 'true'),
+    'race-settings': element => toggleRaceSettings(element.dataset.open === 'true'),
+    'delete-race-goal': () => deleteRaceGoal(),
     'render-goal-progress': () => renderGoalProgress(),
     'refresh-models': () => refreshAgentModels(),
     'send-agent-message': () => sendAgentMessage(),
@@ -78,6 +80,7 @@ const UI_ACTIONS = Object.freeze({
     'add-run': () => addRun(),
     'save-run': () => saveRun(),
     'save-goal': () => saveRunningGoal(),
+    'save-race-goal': () => saveRaceGoal(),
   }),
   keydown: Object.freeze({
     'agent-compose': (_element, event) => {

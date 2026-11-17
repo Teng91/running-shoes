@@ -54,10 +54,10 @@ Python 3.11 · FastAPI · SQLAlchemy · SQLite · 原生 JavaScript（不需要�
 | 項目 | 數量 |
 | --- | --- |
 | 正式版本 | 93 個 tag，2026-06 開始，目前 v4.17 |
-| 自動化測試 | Python 689 項、前端 Node 回歸 207 項、40 組版面設定（WebKit／Chromium × 亮暗 × 10 種尺寸）、真實 CRUD E2E 與 PWA 升級／離線測試 |
+| 自動化測試 | Python 694 項、前端 Node 回歸 210 項、40 組版面設定（WebKit／Chromium × 亮暗 × 10 種尺寸）、真實 CRUD E2E 與 PWA 升級／離線測試 |
 | 功能規格 | 63 份 SPEC，每份含 Goals、帳號隔離、migration／rollback 與 AC 追蹤 |
-| API | 49 個端點，與 `unit_tests/api_contract.json` 及下方 API 表自動比對 |
-| 資料庫 | SQLite schema 9，每一版都有守衛的回滾腳本 |
+| API | 53 個端點，與 `unit_tests/api_contract.json` 及下方 API 表自動比對 |
+| 資料庫 | SQLite schema 10，每一版都有守衛的回滾腳本 |
 | 部署 | Fly.io 1 台 256MB 機器＋加密 volume，閒置自動休眠 |
 
 ---
@@ -68,7 +68,7 @@ Python 3.11 · FastAPI · SQLAlchemy · SQLite · 原生 JavaScript（不需要�
 | --- | --- | --- |
 | **跑步日誌** | 記錄與快速查看當月 | 新增距離、跑步時間（自動算配速）與鞋款；當月月曆、總里程、平均配速、上月同期比較、月底預測；「今天穿哪雙」選鞋建議；Strava 歷史匯入 |
 | **跑鞋** | 裝備管理 | 現役／退役鞋款、里程與壽命進度、每 km 成本、依近 90 天實際使用預估退役日、用途類別覆蓋（Daily／Speed／Tempo／Race）、支出明細、輪替時間軸、距離分布、單鞋分析 |
-| **訓練分析** | 長期資料 | 年度目標與每月達標、年度回顧（與前一年同期比較）、熱力圖與連續天數、每週跑量與暴增提醒、每週最長一次、星期幾跑量與配速、**配速分析**（配速趨勢、月跑量與配速、累積跑量與配速、距離與配速、配速分布）、年度月跑量對比 |
+| **訓練分析** | 長期資料 | 年度目標與每月達標、年度回顧（與前一年同期比較）、熱力圖與連續天數、每週跑量與暴增提醒、每週最長一次、星期幾跑量與配速、年度月跑量對比；**比賽準備**：設定目標賽事後顯示倒數、目標配速、依參考成績預估完賽、長距離是否足夠、近 8 週強度分布，以及依強度上色的配速趨勢 |
 | **AI 教練** | 對話與月報 | 依你的實際資料回答問題與推薦跑鞋（12 個工具、可上網搜尋並附來源）；一鍵產生並保存月度跑步報告 |
 
 另外，側欄的「資料與同步」管理離線佇列、草稿、JSON 帳號備份與合併還原、異動歷史與復原；亮色／暗色主題會套用到整個介面和所有圖表。
@@ -101,7 +101,7 @@ flowchart LR
   subgraph Fly["Fly.io · 1 台機器"]
     R["routers<br/>只做 HTTP 轉換"] --> S["services<br/>交易、版本、冪等"]
     R --> RM["read_models<br/>里程・目標・趨勢・配速"]
-    S --> DB[("SQLite /data<br/>schema 9＋稽核 trigger")]
+    S --> DB[("SQLite /data<br/>schema 10＋稽核 trigger")]
     RM --> DB
     A["agent<br/>規劃・工具・SSE"] --> RM
   end
@@ -135,11 +135,13 @@ flowchart LR
 3. 同一天只有一筆距離接近的手動紀錄時，視為同一次跑步，只連結並補上時間，不重複計算里程；無法確定時不匯入並列出例子。
 4. 匯入在一個交易內完成新增、補時間、日期修正與里程同步。
 
-### 3. 配速分析：資料到圖表
+### 3. 比賽準備：從目標到建議
 
 1. 跑步時間存成秒數，配速不存、一律由 `run_metrics.py` 推導；平均配速以總時間 ÷ 有時間的距離計算。
-2. `read_models/pace.py` 算出近 30 天平均線、月份、前 4 週跑量與當週配速的相關係數與趨勢線、距離區間與分布；資料不足 8 點不給相關係數。
-3. 前端只畫後端給的數字，配速軸反向（越上面越快）。用作者自己的資料：前 3 個月平均跑量與當月配速的相關係數是 -0.84，週跑量從 10–20 km 提高到 30–40 km 時，配速中位數快了約 31 秒/km。
+2. 使用者設定目標賽事（日期、距離、目標時間）與一筆參考成績。`read_models/race_readiness.py` 用 Riegel 公式預估完賽時間，並以目標配速為基準把每次跑步分成輕鬆、穩定、比賽配速、更快四個強度。
+3. 長距離以比賽距離的 75% 為門檻，統計近 8 週的次數、最長一次與每週最長一次；不足時提示在賽前 14 天前補一次，進入賽前兩週改為減量。
+4. 前端只畫後端給的數字。以作者 12/6 半馬破二為例：10.3 km 54:21（29°C）預估 1:56:13，比目標快約 3 分 47 秒；但近 8 週達 15.8 km 的長距離只有 1 次、輕鬆跑只佔 9% 的時間，畫面直接點出「長距離偏少」與「輕鬆跑太少」。
+5. 早期版本的月份、累積跑量、距離區間與配速分布圖只是描述資料、無法指導訓練，v4.18.0 移除，改成以目標為基準的分析。
 
 ### 4. AI 教練：工具呼叫與防止捏造
 
@@ -186,8 +188,8 @@ flowchart LR
 
 ## 品質：測試與規格
 
-- **Python 689 項**：API、交易與並行、migration 與回滾、備份往返、帳號隔離、Agent 規劃與工具（外部 LLM 與搜尋一律 mock），一律使用暫存或記憶體資料庫，不碰正式 `shoes.db`。
-- **前端 Node 回歸 207 項**：以 `vm` 載入實際前端程式，驗證狀態、競態、草稿、串流與圖表資料。
+- **Python 694 項**：API、交易與並行、migration 與回滾、備份往返、帳號隔離、Agent 規劃與工具（外部 LLM 與搜尋一律 mock），一律使用暫存或記憶體資料庫，不碰正式 `shoes.db`。
+- **前端 Node 回歸 210 項**：以 `vm` 載入實際前端程式，驗證狀態、競態、草稿、串流與圖表資料。
 - **瀏覽器**：Playwright 在 WebKit 與 Chromium 跑 40 組版面設定（含幾何對齊與無溢出）、真實 FastAPI＋暫存 SQLite 的 CRUD E2E、Service Worker 升級與離線；失敗時保存截圖與 trace。
 - **修 bug 先寫重現測試**：例如 v4.17.0 的 CI 抓到新圖表檔案重複宣告全域常數，修正時同時加上掃描所有 script 的測試。
 - **文件也被測**：`docs-check` 比對 README 的測試數、工具數、API 表、目錄樹與規格的 AC 追蹤，數字對不上 CI 就失敗。
@@ -223,6 +225,7 @@ merge 到 main ─▶ 喚醒機器 → volume 上快照資料庫 → 部署 → 
 | 2026-10 | v2.5–v3.x | 離線佇列與帳號備份還原；側欄工作區改版、運動科技風主題；session 隔離與 SQLite 還原強化 |
 | 2026-10～11 | v4.0–4.14 | 安全標頭與 CSP、自動更新、訓練趨勢與年度回顧、AI 讀取統計工具 |
 | 2026-11-17 | v4.15–4.17 | repo 公開、每次 push 跑 CI、`main` 保護；跑步時間與配速；Strava 與手動紀錄配對；配速分析 |
+| 2026-11-17 | v4.18 | 比賽準備：目標賽事、預估完賽、強度分布與長距離檢查，取代只描述資料的配速圖 |
 
 ---
 
@@ -282,6 +285,7 @@ running-shoes/
 │   ├── routers/
 │   │   ├── auth.py       # 註冊、登入與密碼管理 routes
 │   │   ├── goals.py      # 跑量目標 routes
+│   │   ├── race_goal.py  # 目標賽事 routes
 │   │   ├── monthly.py    # 月跑量 routes
 │   │   ├── agent.py      # AI provider 與對話 routes
 │   │   ├── reports.py    # AI 月報 routes
@@ -306,6 +310,7 @@ running-shoes/
 │   │   ├── identifiers.py # 單調遞增 run／month 主鍵配置
 │   │   ├── accounts.py    # 註冊容量、密碼 CAS 與 token revocation 交易
 │   │   ├── goals.py       # 個人目標 upsert、版本與 rollback
+│   │   ├── race_goals.py  # 目標賽事 upsert、刪除與版本
 │   │   ├── reports.py     # 月報生成身分、事件及成功保存流程
 │   │   ├── report_storage.py # 月報最新生成回執與條件寫入交易
 │   │   ├── fingerprints.py # 回執、備份與匯入計畫共用的 payload 指紋
@@ -347,7 +352,8 @@ running-shoes/
 │   │   ├── mileage.py    # 月跑量歷史統計（月報與 AI 工具共用）
 │   │   ├── spending.py   # 依日曆計算的支出統計
 │   │   ├── trends.py     # 熱力圖、連續天數、每週跑量、目標線與輪替時間軸
-│   │   ├── pace.py       # 配速趨勢、月份、累積跑量相關、距離與分布
+│   │   ├── pace.py       # 配速趨勢與依目標配速的強度標記
+│   │   ├── race_readiness.py # 目標配速、預估完賽、強度分布與長距離準備
 │   │   ├── highlights.py # 今天穿哪雙、年度回顧與距離分布
 │   │   ├── saved_reports.py # 已保存月報的摘要與內容
 │   │   ├── strava_preview.py # Strava CSV 配對預覽
@@ -399,7 +405,7 @@ running-shoes/
 │   ├── app-charts.js     # 共用圖表 registry 與 label utilities
 │   ├── app-shoe-charts.js # 跑鞋生命週期、成本、時間軸與分配
 │   ├── app-monthly-charts.js # 月份／年度選擇與跑量圖表
-│   ├── app-pace-charts.js # 配速趨勢、月跑量與配速、累積跑量、距離與配速分布圖
+│   ├── app-pace-charts.js # 比賽準備：目標表單、摘要卡、長距離、強度分布與配速趨勢
 │   ├── app-spending.js   # 支出摘要、圖表與表格
 │   ├── app-agent.js      # AI 助手對話與串流呈現
 │   ├── app-models.js     # AI／月報共用模型選單
@@ -443,6 +449,7 @@ running-shoes/
 │   ├── diagnostics_drill.cjs # 產生合成瀏覽器失敗，演練診斷落檔
 │   ├── verify_diagnostics.py # 只用標準函式庫驗證下載的合成診斷
 │   ├── render_icons.cjs  # 本機由 icons/app-icon.svg 產生 PNG 圖示（不在 CI 執行）
+│   ├── rollback_schema_ten.sql # Schema 10 → 9 的文件化回滾
 │   ├── rollback_schema_nine.sql # Schema 9 → 8 的文件化回滾
 │   ├── rollback_schema_eight.sql # Schema 8 → 7 的文件化回滾
 │   ├── rollback_schema_seven.sql # Schema 7 → 6 的文件化回滾
@@ -599,7 +606,7 @@ LLM_MAX_OUTPUT_TOKENS=4096
 - **安全的里程統計**：跑鞋與月跑量都明確區分「逐筆跑步日誌」與「歷史／手動調整」（月跑量的手動調整自 v4.1.2 起不再提供網頁編輯，資料保留），手動總數不能低於日誌合計；所有新輸入的里程與金額統一保存至小數點後兩位
 - **跑步日誌**：預設首頁，可記錄日期、公里數與鞋款並同步里程；完成日期不得晚於今天
 - **今天穿哪雙**：跑步表單下方依休息天數建議現役鞋（快到退役里程的鞋排最後），可一鍵選入
-- **配速分析**：訓練分析分頁的「配速分析」涵蓋全部紀錄（不隨年份切換）：每次跑步的配速與近 30 天平均線、每月跑量對照平均配速、前 4 週平均週跑量對當週配速的散點與趨勢線（各跑量區間的配速中位數與差距）、各距離區間的平均與最快配速，以及每 15 秒一格的配速分布。配速軸越上面越快；平均一律以總時間 ÷ 有時間的距離計算，跑量包含沒填時間的跑步；相關係數至少 8 個點才顯示（SPEC-064）
+- **比賽準備**：訓練分析分頁可設定一個目標賽事（日期、距離、目標時間，選填參考成績與當天氣溫）。依參考成績以 Riegel 公式預估完賽時間（參考成績在 25°C 以上會標示偏保守）；以目標配速為基準把每次跑步分成輕鬆（慢 45 秒以上）、穩定、比賽配速（快 10 秒到慢 15 秒）與更快，顯示近 8 週的時間占比；以比賽距離 75% 為長距離門檻，檢查近 8 週次數（建議至少 2 次）、最長一次與近 12 週每週最長一次，並提示最後一次長距離的期限（賽前 14 天）。配速趨勢依強度上色並畫出目標配速，配速軸越上面越快（SPEC-065）
 - **年度回顧與對比**：訓練分析分頁頂端唯一的年份選單切換年度回顧、訓練趨勢與所有年度圖表；年度月跑量對比把每年畫成一條線。進行中的年份與前一年**同期**（1/1 到同一天）比較，已結束的年份才比全年（SPEC-055）
 - **一致的鞋款顏色**：同一雙鞋在所有圖表與表格使用相同顏色；跑鞋分頁另有每雙現役鞋的距離分布（<5 紅、5–10 黃、10–15 綠、15–20 藍、≥20 km 紫）
 - **跑步洞察首頁**：當月會以相同天數比較上月同期，並顯示近 7 天趨勢、月目標、月底里程預測及鞋款壽命提醒
@@ -653,7 +660,8 @@ LLM_MAX_OUTPUT_TOKENS=4096
 | `POST /api/runs/import/strava` | 依鞋款配對批次匯入 Strava 跑步活動 |
 | `GET /api/analytics/dashboard` | 取得指定月份的趨勢、目標、月底預測與壽命洞察 |
 | `GET /api/shoes/{shoe_id}/analytics` | 取得單雙鞋的使用、成本與退役預測 |
-| `GET /api/analytics/pace` | 取得全部紀錄的配速趨勢、月跑量與配速、累積跑量相關、距離與配速分布 |
+| `GET /api/analytics/pace` | 取得全部紀錄的配速趨勢；有目標賽事時每筆帶強度 |
+| `GET /api/analytics/race` | 取得目標賽事的倒數、目標配速、預估完賽、強度分布與長距離準備 |
 | `GET /api/analytics/trends?year=` | 取得年度每日跑量、連續天數、近 16 週跑量與年度累計目標線 |
 | `GET /api/analytics/shoe-timeline` | 取得每雙鞋首次／最後跑步期間與閒置提醒 |
 | `GET /api/analytics/home` | 取得「今天穿哪雙」選鞋建議 |
@@ -863,7 +871,7 @@ Playwright／Chromium／WebKit 齊全時，也會執行版面測試。
 避免每次停止都重跑。Hook 不會呼叫其他模型、外部 API，或傳送提示、diff、原始碼與測試輸出。
 GitHub Actions 仍會在 push／pull request 執行 `verify`，並以三個可獨立重跑的 browser jobs 執行完整版面矩陣、真實 CRUD E2E 與 PWA 升級／離線測試；push 到 main 時再依序快照、部署、檢查並發版（見「日常開發流程、自動部署與發版」）；Dependabot 每月以單一 PR 合併 GitHub Actions 更新；Python 只接收安全性更新 PR，例行升級依下方 `uv pip compile --universal` 步驟手動重編鎖定檔（Dependabot 產生的鎖定檔會遺失 Windows 條件）。
 
-本次驗證基線為 Python **689 passed**、前端回歸測試 **207 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
+本次驗證基線為 Python **694 passed**、前端回歸測試 **210 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
 版面檢查涵蓋 WebKit／Chromium、亮／暗模式與 10 組直橫向尺寸，共 40 組設定，檢查四個功能分頁與月報、三個認證表單、圖表、全部彈窗、行內編輯、停用／錯誤及空資料狀態。
 
 主要表單、工具列與彈窗操作統一為 44px 控制項；桌面表格內的緊湊操作為 36px，手機至少 44px。
@@ -1221,8 +1229,12 @@ venv/bin/python -m backend.run
 | 目標 | `PUT /api/running-goal` | 修改目標（年度目標＝每月 × 12） |
 | 目標 | `GET /api/running-goal/progress` | 指定月份的目標進度 |
 | 目標 | `GET /api/running-goal/year` | 年度目標總覽 |
+| 目標 | `GET /api/race-goal` | 目標賽事（沒有時為 `null`） |
+| 目標 | `PUT /api/race-goal` | 新增或修改目標賽事（可帶 `expected_version`） |
+| 目標 | `DELETE /api/race-goal` | 刪除目標賽事（可帶 `expected_version`） |
 | 分析 | `GET /api/analytics/dashboard` | 跑步日誌頁的趨勢、目標、月底預測與換鞋提醒 |
-| 分析 | `GET /api/analytics/pace` | 配速趨勢、月跑量與配速、累積跑量與配速、距離與配速、配速分布 |
+| 分析 | `GET /api/analytics/pace` | 配速趨勢；有目標賽事時每筆帶強度 |
+| 分析 | `GET /api/analytics/race` | 比賽準備：預估完賽、強度分布與長距離 |
 | 分析 | `GET /api/analytics/trends` | 熱力圖、連續天數、每週跑量與最長一次、週目標、星期幾分布、年度累計 |
 | 分析 | `GET /api/analytics/shoe-timeline` | 現役鞋的輪替時間軸 |
 | 分析 | `GET /api/analytics/home` | 「今天穿哪雙」建議 |

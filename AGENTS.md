@@ -8,6 +8,7 @@
 - `backend/clock.py`: the single application timezone, `local_now()` and `local_today()`; never hard-code UTC offsets or use the server zone elsewhere.
 - `backend/forecasting.py`: shared retirement policy and batched user-scoped forecasts.
 - `backend/run_metrics.py`: canonical run duration bounds and pace (seconds per km, time-weighted averages); pace is derived, never stored (SPEC-060), and the bounds are mirrored in `frontend/app-state.js`.
+- `backend/read_models/race_readiness.py`: target race, Riegel prediction, intensity zones relative to goal race pace and long-run readiness (SPEC-065); `routers/race_goal.py` and `services/race_goals.py` own the race goal reads and writes.
 - `backend/shoe_metrics.py`: canonical shoe cost, discount and lifecycle arithmetic, plus the single 80%/90% lifespan alert thresholds (mirrored in `frontend/app-state.js`).
 - `backend/read_models/`: user-scoped native statistics shared by HTTP, reports and AI adapters; never import tools or HTTP frameworks.
 - `backend/seeding.py`: optional default data using an injected session factory.
@@ -47,7 +48,7 @@
 - `backend/services/history.py`: user-scoped audit and conflict-aware deletion recovery.
 - `backend/services/run_identity.py`: user-scoped deletion tombstones (`run_tombstones`, never inferred from audit rows; schema 8 keeps the Strava activity so a CSV re-import never recreates a deleted run) and recovered source aliases; caller-owned transactions.
 - `backend/services/identifiers.py`: monotonic run/month primary-key allocation metadata.
-- `backend/migrations.py`: ordered SQLite schema upgrades and the current schema version (9); `scripts/rollback_schema_nine.sql`, `scripts/rollback_schema_eight.sql` and `scripts/rollback_schema_seven.sql` are the documented 9 → 8, 8 → 7 and 7 → 6 rollbacks.
+- `backend/migrations.py`: ordered SQLite schema upgrades and the current schema version (10); `scripts/rollback_schema_ten.sql`, `scripts/rollback_schema_nine.sql`, `scripts/rollback_schema_eight.sql` and `scripts/rollback_schema_seven.sql` are the documented 10 → 9, 9 → 8, 8 → 7 and 7 → 6 rollbacks.
 - `backend/rate_limits.py`: SQLite fixed-window throttling for authentication, AI and backup previews, consumed all-or-nothing on its own transaction with limits from app settings; never commits the request session.
 - `docs/architecture.md`: current SDD, module boundaries, diagrams, and evolution sequence.
 - `docs/release-notes.md`: per-version behavior, compatibility and rollback notes (newest first); README describes only current behavior.
