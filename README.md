@@ -121,6 +121,7 @@ running-shoes/
 │   │   ├── mileage.py    # 月跑量歷史統計（月報與 AI 工具共用）
 │   │   ├── spending.py   # 依日曆計算的支出統計
 │   │   ├── trends.py     # 熱力圖、連續天數、每週跑量、目標線與輪替時間軸
+│   │   ├── pace.py       # 配速趨勢、月份、累積跑量相關、距離與分布
 │   │   ├── highlights.py # 今天穿哪雙、年度回顧與距離分布
 │   │   ├── saved_reports.py # 已保存月報的摘要與內容
 │   │   ├── strava_preview.py # Strava CSV 配對預覽
@@ -172,6 +173,7 @@ running-shoes/
 │   ├── app-charts.js     # 共用圖表 registry 與 label utilities
 │   ├── app-shoe-charts.js # 跑鞋生命週期、成本、時間軸與分配
 │   ├── app-monthly-charts.js # 月份／年度選擇與跑量圖表
+│   ├── app-pace-charts.js # 配速趨勢、月跑量與配速、累積跑量、距離與配速分布圖
 │   ├── app-spending.js   # 支出摘要、圖表與表格
 │   ├── app-agent.js      # AI 助手對話與串流呈現
 │   ├── app-models.js     # AI／月報共用模型選單
@@ -371,6 +373,7 @@ LLM_MAX_OUTPUT_TOKENS=4096
 - **安全的里程統計**：跑鞋與月跑量都明確區分「逐筆跑步日誌」與「歷史／手動調整」（月跑量的手動調整自 v4.1.2 起不再提供網頁編輯，資料保留），手動總數不能低於日誌合計；所有新輸入的里程與金額統一保存至小數點後兩位
 - **跑步日誌**：預設首頁，可記錄日期、公里數與鞋款並同步里程；完成日期不得晚於今天
 - **今天穿哪雙**：跑步表單下方依休息天數建議現役鞋（快到退役里程的鞋排最後），可一鍵選入
+- **配速分析**：月跑量分頁的「配速分析」涵蓋全部紀錄（不隨年份切換）：每次跑步的配速與近 30 天平均線、每月跑量對照平均配速、前 4 週平均週跑量對當週配速的散點與趨勢線（各跑量區間的配速中位數與差距）、各距離區間的平均與最快配速，以及每 15 秒一格的配速分布。配速軸越上面越快；平均一律以總時間 ÷ 有時間的距離計算，跑量包含沒填時間的跑步；相關係數至少 8 個點才顯示（SPEC-064）
 - **年度回顧與對比**：月跑量分頁頂端唯一的年份選單切換年度回顧、訓練趨勢與所有年度圖表；年度月跑量對比把每年畫成一條線。進行中的年份與前一年**同期**（1/1 到同一天）比較，已結束的年份才比全年（SPEC-055）
 - **一致的鞋款顏色**：同一雙鞋在所有圖表與表格使用相同顏色；跑鞋分頁另有每雙現役鞋的距離分布（<5 紅、5–10 黃、10–15 綠、15–20 藍、≥20 km 紫）
 - **跑步洞察首頁**：當月會以相同天數比較上月同期，並顯示近 7 天趨勢、月目標、月底里程預測及鞋款壽命提醒
@@ -424,6 +427,7 @@ LLM_MAX_OUTPUT_TOKENS=4096
 | `POST /api/runs/import/strava` | 依鞋款配對批次匯入 Strava 跑步活動 |
 | `GET /api/analytics/dashboard` | 取得指定月份的趨勢、目標、月底預測與壽命洞察 |
 | `GET /api/shoes/{shoe_id}/analytics` | 取得單雙鞋的使用、成本與退役預測 |
+| `GET /api/analytics/pace` | 取得全部紀錄的配速趨勢、月跑量與配速、累積跑量相關、距離與配速分布 |
 | `GET /api/analytics/trends?year=` | 取得年度每日跑量、連續天數、近 16 週跑量與年度累計目標線 |
 | `GET /api/analytics/shoe-timeline` | 取得每雙鞋首次／最後跑步期間與閒置提醒 |
 | `GET /api/analytics/home` | 取得「今天穿哪雙」選鞋建議 |
@@ -617,7 +621,7 @@ CI 失敗／取消時嘗試上傳已有產物；引擎完全卡死時可能只�
 CI 的 `frontend-pwa` job 上傳獨立 `browser-diagnostics-roundtrip` artifact，另一個 job 下載並驗證 PNG、trace ZIP 與合成錯誤標記，缺檔／損毀會讓 pipeline 失敗。
 
 `frontend-e2e` 會對真實 FastAPI 與暫存 SQLite 執行同一個 `release-check`：檢查 readiness／schema、
-完整 API contract、manifest 對應的 51 個 shell／worker 資產雜湊與 MIME、四個統計 API 的匿名拒絕存取，
+完整 API contract、manifest 對應的 52 個 shell／worker 資產雜湊與 MIME、四個統計 API 的匿名拒絕存取，
 再驗證 Chromium／WebKit 匿名手機啟動與 native runtime cache，以及 Chromium 離線重開。
 WebKit 離線 shell 由 `frontend-pwa` 的 fixture transport 中斷驗證；API probe 在 HTTP headers 後截斷 response body，完整讀取 JSON 並檢查 server 請求計數，避免 headers 前 TCP 中斷讓裸 fetch 一直 pending。這些不取代引擎之外的實機驗證。
 這個 task 不登入、不送出資料、不發布或回滾；正式 origin 必須是 HTTPS，HTTP 只允許 loopback。
@@ -633,7 +637,7 @@ Playwright／Chromium／WebKit 齊全時，也會執行版面測試。
 避免每次停止都重跑。Hook 不會呼叫其他模型、外部 API，或傳送提示、diff、原始碼與測試輸出。
 GitHub Actions 仍會在 push／pull request 執行 `verify`，並以三個可獨立重跑的 browser jobs 執行完整版面矩陣、真實 CRUD E2E 與 PWA 升級／離線測試；push 到 main 時再依序快照、部署、檢查並發版（見「日常開發流程、自動部署與發版」）；Dependabot 每月以單一 PR 合併 GitHub Actions 更新；Python 只接收安全性更新 PR，例行升級依下方 `uv pip compile --universal` 步驟手動重編鎖定檔（Dependabot 產生的鎖定檔會遺失 Windows 條件）。
 
-本次驗證基線為 Python **685 passed**、前端回歸測試 **203 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
+本次驗證基線為 Python **688 passed**、前端回歸測試 **205 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
 版面檢查涵蓋 WebKit／Chromium、亮／暗模式與 10 組直橫向尺寸，共 40 組設定，檢查四個功能分頁與月報、三個認證表單、圖表、全部彈窗、行內編輯、停用／錯誤及空資料狀態。
 
 主要表單、工具列與彈窗操作統一為 44px 控制項；桌面表格內的緊湊操作為 36px，手機至少 44px。
@@ -992,6 +996,7 @@ venv/bin/python -m backend.run
 | 目標 | `GET /api/running-goal/progress` | 指定月份的目標進度 |
 | 目標 | `GET /api/running-goal/year` | 年度目標總覽 |
 | 分析 | `GET /api/analytics/dashboard` | 跑步日誌頁的趨勢、目標、月底預測與換鞋提醒 |
+| 分析 | `GET /api/analytics/pace` | 配速趨勢、月跑量與配速、累積跑量與配速、距離與配速、配速分布 |
 | 分析 | `GET /api/analytics/trends` | 熱力圖、連續天數、每週跑量與最長一次、週目標、星期幾分布、年度累計 |
 | 分析 | `GET /api/analytics/shoe-timeline` | 現役鞋的輪替時間軸 |
 | 分析 | `GET /api/analytics/home` | 「今天穿哪雙」建議 |

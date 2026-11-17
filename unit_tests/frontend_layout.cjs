@@ -318,6 +318,28 @@ async function run(engine, name) {
             days_since_last_run: index === 2 ? 87 : 7, idle: index === 2,
           })),
         } });
+        if (url.pathname === '/api/analytics/pace') {
+          // SPEC-064: a populated fixture with every chart, long labels and a missing month.
+          const days = Array.from({ length: 120 }, (_, index) => new Date(Date.UTC(2025, 6, 1 + index * 4)).toISOString().slice(0, 10));
+          const months = Array.from({ length: 16 }, (_, index) => `${2025 + Math.floor((index + 6) / 12)}-${String((index + 6) % 12 + 1).padStart(2, '0')}`);
+          return route.fulfill({ json: {
+            as_of: '2026-10-27', timed_run_count: 120, untimed_run_count: 3,
+            summary: { first_date: '2025-07-01', first_90_days_pace: 388, recent_90_days_pace: 352, recent_30_days_pace: 347 },
+            runs: days.map((date, index) => ({ date, km: 5 + (index % 9), pace: 330 + (index * 37) % 80 })),
+            rolling: days.map((date, index) => ({ date, pace: 390 - index * 0.3 })),
+            monthly: months.map((month, index) => ({ month, km: index === 3 ? 0 : 60 + (index * 23) % 150, timed_km: 60, runs: index === 3 ? 0 : 15, pace: index === 3 ? null : 392 - index * 3 })),
+            monthly_lag: { months: 3, same_month_correlation: -0.26, prior_months_correlation: -0.84, points: 13 },
+            load: { weeks: 4, correlation: -0.39,
+              points: Array.from({ length: 60 }, (_, index) => ({ week_start: days[index], prior_week_km: 12 + (index * 7) % 36, km: 25, pace: 330 + (index * 13) % 60 })),
+              trend: { slope_seconds_per_10km: -16.3, intercept: 410.5, min_km: 12, max_km: 47.85 },
+              buckets: [{ min_km: 10, max_km: 20, weeks: 19, median_pace: 381 }, { min_km: 30, max_km: 40, weeks: 24, median_pace: 350 }],
+              comparison: { low: { min_km: 10, max_km: 20, weeks: 19, median_pace: 381 }, fast: { min_km: 30, max_km: 40, weeks: 24, median_pace: 350 }, seconds_faster: 31 } },
+            distance: [[0, 5], [5, 8], [8, 12], [12, 16], [16, 22], [22, null]].map(([min_km, max_km], index) => ({
+              min_km, max_km, runs: 10 + index, km: 100, pace: 360 - index * 4, fastest_pace: 300 - index * 2 })),
+            distribution: { bin_seconds: 15, median_pace: 364, bins: Array.from({ length: 8 }, (_, index) => ({
+              min_pace: 300 + index * 15, max_pace: 315 + index * 15, runs: 10 + (index * 17) % 50, open_min: index === 0, open_max: index === 7 })) },
+          } });
+        }
         const contentTypes = { '.html': 'text/html', '.js': 'application/javascript', '.mjs': 'application/javascript', '.css': 'text/css',
           '.json': 'application/json', '.webmanifest': 'application/manifest+json',
           '.svg': 'image/svg+xml', '.png': 'image/png' };
@@ -390,7 +412,7 @@ async function run(engine, name) {
             await selectTab(page, tab);
             await page.waitForTimeout(100);
             await assertLayout(page, `${name} ${theme} ${width} ${tab}`);
-            const expected = { runs: 1, shoes: 8, monthly: 8, agent: 0, report: 0 }[tab];
+            const expected = { runs: 1, shoes: 8, monthly: 13, agent: 0, report: 0 }[tab];
             if (tab === 'monthly') {
               assert.equal(await page.locator('#run-heatmap .heatmap-grid .heat-cell:not(.blank)').count(), 365, 'heatmap renders every day');
               assert.equal(await page.locator('#goal-overview .goal-month').count(), 12, 'goal shows every month');
