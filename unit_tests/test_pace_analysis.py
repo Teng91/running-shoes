@@ -96,3 +96,18 @@ def test_pace_analysis_without_times_is_empty(db):
     assert result["runs"] == result["monthly"] == result["distance"] == []
     assert result["load"]["points"] == [] and result["load"]["comparison"] is None
     assert result["distribution"]["bins"] == []
+
+
+def test_weekday_mix_reports_a_time_weighted_pace_per_weekday(db):
+    from backend.read_models.trends import training_trends
+
+    user, shoe = _owner(db, "pace-weekday")
+    # Monday: 10 km at 5:00 and 5 km at 6:00 -> 4800 s / 15 km = 5:20; an untimed Monday run
+    # adds distance but not pace. Saturday is untimed only; another account never counts.
+    _runs(db, user, shoe, ("2026-10-05", 10, 3000), ("2026-10-12", 5, 1800), ("2026-10-12", 3, None),
+          ("2026-10-10", 21.1, None))
+    other, other_shoe = _owner(db, "pace-weekday-other")
+    _runs(db, other, other_shoe, ("2026-10-05", 10, 6000))
+    weekday = training_trends(db, user.id, 2026, date(2026, 10, 14))["weekday"]
+    assert weekday[0] == {"weekday": 0, "km": 18, "run_days": 2, "runs": 3, "pace": 320}
+    assert weekday[5]["pace"] is None and weekday[5]["km"] == 21.1

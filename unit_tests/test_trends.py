@@ -171,12 +171,12 @@ def test_weekly_goal_longest_run_and_weekday_mix(db, user_with_token):
     assert [row["weekday"] for row in weekday] == list(range(7))
     # The 2025-12-29 Monday belongs to the previous year and is not counted.
     # Two runs on Monday 10-05 count as two runs on one running day (v4.14.1).
-    assert weekday[0] == {"weekday": 0, "km": 30, "run_days": 2, "runs": 3}
-    assert weekday[5] == {"weekday": 5, "km": 21.1, "run_days": 1, "runs": 1}
+    assert weekday[0] == {"weekday": 0, "km": 30, "run_days": 2, "runs": 3, "pace": None}
+    assert weekday[5] == {"weekday": 5, "km": 21.1, "run_days": 1, "runs": 1, "pace": None}
     assert sum(row["run_days"] for row in weekday) == 3
 
     before_goal = training_trends(db, user.id, 2025, date(2026, 10, 14))
     assert before_goal["weekly_goal"]["active"] is False
     assert not any(week["goal_met"] for week in before_goal["weekly"])
     future = training_trends(db, user.id, 2027, date(2026, 10, 14))
-    assert future["weekday"] == [{"weekday": day, "km": 0, "run_days": 0, "runs": 0} for day in range(7)]
+    assert future["weekday"] == [{"weekday": day, "km": 0, "run_days": 0, "runs": 0, "pace": None} for day in range(7)]

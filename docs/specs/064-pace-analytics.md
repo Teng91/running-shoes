@@ -12,6 +12,7 @@
 ## Goals
 
 - 月跑量分頁新增「配速分析」，涵蓋全部紀錄、不隨年份切換：配速趨勢、月跑量與配速、累積跑量與配速、距離與配速、配速分布。
+- 訓練趨勢的「星期幾跑量」同時顯示每個星期幾的平均配速。
 - 所有配速、平均、分組、相關係數與趨勢線係數都由後端計算，前端只排版。
 
 ## Non-goals
@@ -29,6 +30,8 @@
   - `distance`：<5、5–8、8–12、12–16、16–22、22 km 以上的平均配速與最快一次。
   - `distribution`：每 15 秒一格的次數，最快和最慢各 5% 併入兩端，以及中位數。
   - 平均配速一律是時間加權（總秒數 ÷ 有時間的距離）；相關係數至少 8 個點才回傳。
+- **`read_models/trends.py`** 的每日彙總加上有時間的秒數與距離，`weekday` 每列新增時間加權的 `pace`（沒有時間為 `null`）；AI 工具描述同步說明。前端在星期幾跑量圖加上反向的配速折線，說明列出最快與最慢的星期幾。
+- 傳統 script 共用同一個全域範圍，新增的檔案不能重複宣告其他檔案的頂層 `const`／`let`／`class`；以 Node 測試掃描所有 script。
 - **`frontend/app-pace-charts.js`** 以 Chart.js 畫 5 張圖，配速軸反向（越上面越快），每張圖下方說明後端給的數字；資源快取 `pace-analysis` 在跑步資料變動時失效。
 
 ## Security and data isolation
@@ -48,6 +51,8 @@
 - [x] AC-2：Given 至少 8 週可比較的資料，When 計算累積跑量與配速，Then 回傳前 4 週平均週跑量、相關係數、趨勢線、各組中位數與最低一組和最快一組的差距；資料不足時不回傳相關係數。
 - [x] AC-3：Given 沒有任何跑步時間，When 讀取或顯示配速分析，Then API 回傳空結構，畫面顯示提示而不畫圖。
 - [x] AC-4：Given 配速分析資料，When 顯示月跑量分頁，Then 畫出 5 張圖，配速軸反向，說明文字只使用後端的數字。
+- [x] AC-5：Given 有時間的跑步，When 讀取訓練趨勢，Then 每個星期幾回傳時間加權的平均配速（另一個帳號不列入），星期幾跑量圖加上反向的配速折線與最快／最慢說明；沒有時間時不畫折線。
+- [x] AC-6：Given 所有傳統 script，When 掃描頂層宣告，Then 沒有重複的 `const`／`let`／`class` 名稱。
 
 ## Test traceability
 
@@ -57,3 +62,5 @@
 | AC-2 | `unit_tests/test_pace_analysis.py::test_training_load_relates_prior_weeks_to_pace` |
 | AC-3 | `unit_tests/test_pace_analysis.py::test_pace_analysis_without_times_is_empty`、`unit_tests/frontend/pace-analysis.test.cjs::SPEC-064 an account without times shows a hint instead of charts` |
 | AC-4 | `unit_tests/frontend/pace-analysis.test.cjs::SPEC-064 pace charts render backend values with reversed pace axes` |
+| AC-5 | `unit_tests/test_pace_analysis.py::test_weekday_mix_reports_a_time_weighted_pace_per_weekday`、`unit_tests/frontend/trends.test.cjs::SPEC-064 the weekday chart adds the backend weekday pace on a reversed axis` |
+| AC-6 | `unit_tests/frontend/pace-analysis.test.cjs::SPEC-064 classic scripts never redeclare a top-level name from another script` |

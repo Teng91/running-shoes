@@ -4,7 +4,7 @@
 // Pace axes are reversed so that faster is higher.
 let paceAnalysisRequestId = 0;
 const PACE_CHART_KEYS = ['paceTrend', 'paceMonthly', 'paceLoad', 'paceDistance', 'paceDistribution'];
-const DAY_MS = 86400000;
+const PACE_DAY_MS = 86400000;
 
 function paceClock(seconds) {
   if (!Number.isFinite(seconds) || seconds <= 0) return '—';
@@ -14,11 +14,11 @@ function paceClock(seconds) {
 
 function paceDayNumber(iso) {
   const [year, month, day] = String(iso).split('-').map(Number);
-  return Date.UTC(year, month - 1, day) / DAY_MS;
+  return Date.UTC(year, month - 1, day) / PACE_DAY_MS;
 }
 
 function paceDayLabel(dayNumber) {
-  const value = new Date(dayNumber * DAY_MS);
+  const value = new Date(dayNumber * PACE_DAY_MS);
   return `${value.getUTCFullYear()}/${value.getUTCMonth() + 1}`;
 }
 
