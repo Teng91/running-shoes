@@ -148,6 +148,9 @@ async function run() {
       await page.locator('.tab[data-tab="runs"]').click();
       await page.locator('#run-date').fill(today);
       await page.locator('#run-km').fill('5.5');
+      // SPEC-060: the moving time gives a live hint, then the saved row shows the backend pace.
+      await page.locator('#run-duration').fill('27:30');
+      assert.equal(await page.locator('#run-pace-preview').textContent(), '配速 5:00 /km');
       const shoeOption = page.locator('#run-shoe option').filter({ hasText: 'Morning pair' });
       assert.equal(await shoeOption.textContent(), `Morning pair · E2E Brand Browser Runner v2 · ${today}`);
       await page.locator('#run-shoe').selectOption(await shoeOption.getAttribute('value'));
@@ -155,7 +158,10 @@ async function run() {
       await page.locator('#run-table').getByText('5.50 km', { exact: true }).waitFor();
 
       const runRow = page.locator('#run-table tr').filter({ hasText: '5.50 km' });
+      assert.match(await runRow.textContent(), /27:30\s*5:00 \/km/);
+      assert.equal(await page.locator('#run-duration').inputValue(), '', 'a saved time is cleared from the form');
       await runRow.getByRole('button', { name: '編輯' }).click();
+      assert.equal(await page.locator('#edit-run-duration').inputValue(), '27:30');
       await page.locator('#edit-run-km').fill('7.25');
       await page.evaluate(async () => {
         const run = runController.state.rows.find(item => item.id === runController.editor.id);
