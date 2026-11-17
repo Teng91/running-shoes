@@ -3,7 +3,8 @@
 from sqlalchemy.orm import Session
 
 from backend import models, schemas
-from backend.services.errors import Conflict, NotFound
+from backend.run_metrics import is_plausible_duration
+from backend.services.errors import Conflict, Invalid, NotFound
 from backend.services.identifiers import allocate_id
 from backend.services.mileage import apply_run_mileage_deltas
 from backend.services.run_identity import record_tombstone
@@ -58,6 +59,10 @@ def update_run(db: Session, user_id: int, run_id: int, payload: schemas.RunUpdat
         expected_version = update_data.pop("expected_version", getattr(run, "version", 0))
         if "shoe_id" in update_data:
             _user_shoe_or_404(db, user_id, update_data["shoe_id"])
+        duration = update_data.get("duration_seconds")
+        if duration is not None and "km" not in update_data and not is_plausible_duration(duration, run.km):
+            # The schema checks duration against a submitted distance; this covers the stored one.
+            raise Invalid("跑步時間與距離換算的配速不合理（每公里 1:00–60:00）")
         old_values = (run.shoe_id, run.date, run.km)
         new_values = (
             int(update_data.get("shoe_id", run.shoe_id)),

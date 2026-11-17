@@ -645,6 +645,8 @@ h1 { font-size: 28px; font-weight: 800; letter-spacing: .01em; margin-bottom: 4p
 .run-entry-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
 .run-entry-grid .form-group { margin-bottom: 0; }
 .run-entry-grid .shoe-field { grid-column: 1 / -1; }
+.run-entry-grid .duration-field { grid-column: 1 / -1; }
+.run-pace-preview { display: block; margin-top: 6px; min-height: 1.2em; font-size: 12px; color: var(--text-dim); }
 .run-entry .btn { width: 100%; margin-top: 14px; }
 .run-stats { grid-template-columns: repeat(3, 1fr); }
 .run-stats .card-value { font-size: 26px; }

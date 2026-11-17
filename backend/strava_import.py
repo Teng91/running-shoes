@@ -9,6 +9,7 @@ from datetime import UTC, date, datetime
 
 from backend import schemas
 from backend.clock import APP_TIMEZONE
+from backend.run_metrics import is_plausible_duration
 
 
 class InvalidCSVError(ValueError):
@@ -25,6 +26,10 @@ STRAVA_HEADERS = {
     "type": ("活動類型", "Activity Type"),
     "gear": ("活動裝備", "Activity Gear", "Gear"),
     "distance": ("距離", "Distance"),
+    # Optional (SPEC-060). Moving time matches the pace Strava shows for runs;
+    # elapsed time is the fallback for exports without it. Both are in seconds.
+    "moving_time": ("移動時間", "Moving Time"),
+    "elapsed_time": ("經過時間", "Elapsed Time"),
 }
 STRAVA_REQUIRED_FIELDS = {"id", "date", "type", "gear", "distance"}
 STRAVA_RUN_TYPES = {"跑步", "Run", "TrailRun", "Trail Run", "VirtualRun", "Virtual Run"}
@@ -90,6 +95,22 @@ def parse_activity_dates(value: str) -> tuple[str, str]:
     return day, day
 
 
+def parse_duration_seconds(value: str | None, km: float) -> int | None:
+    """Whole seconds from a Strava time column, or None when absent or implausible.
+
+    A missing or unusable time never rejects the activity: the run is still
+    imported with its distance, only without a pace.
+    """
+    try:
+        seconds = float((value or "").replace(",", "").strip())
+    except ValueError:
+        return None
+    if not math.isfinite(seconds):
+        return None
+    duration = round(seconds)
+    return duration if is_plausible_duration(duration, km) else None
+
+
 def _normalize_gear(value: str) -> str:
     return "".join(character for character in value.casefold() if character.isalnum())
 
@@ -135,8 +156,12 @@ def parse_csv(
             except (TypeError, ValueError):
                 invalid += 1
                 continue
+            duration = parse_duration_seconds(row.get(fields["moving_time"] or ""), km)
+            if duration is None:
+                duration = parse_duration_seconds(row.get(fields["elapsed_time"] or ""), km)
             rows.append({
                 "strava_id": activity_id[:100],
+                "duration_seconds": duration,
                 "date": date_value,
                 "utc_date": utc_date,
                 "km": km,
@@ -194,3 +219,26 @@ def date_corrections(
         if local != utc and existing_dates[strava_id] == utc:
             corrections.append({"strava_id": strava_id, "from_date": utc, "to_date": local, "km": row["km"]})
     return corrections
+
+
+def duration_backfills(
+    rows: list[dict[str, object]], existing: dict[str, tuple[int | None, float]]
+) -> list[dict[str, object]]:
+    """Existing Strava runs that have no moving time yet and get one from this CSV (SPEC-060).
+
+    `existing` maps a stored run's Strava ID to its (duration_seconds, km). A stored
+    time is never overwritten, and a time that gives an implausible pace for the
+    stored distance (edited by hand after an earlier import) is skipped.
+    """
+    backfills: list[dict[str, object]] = []
+    seen: set[str] = set()
+    for row in rows:
+        strava_id = str(row["strava_id"])
+        duration = row.get("duration_seconds")
+        if strava_id in seen or strava_id not in existing or not isinstance(duration, int):
+            continue
+        seen.add(strava_id)
+        stored_duration, km = existing[strava_id]
+        if stored_duration is None and is_plausible_duration(duration, km):
+            backfills.append({"strava_id": strava_id, "duration_seconds": duration})
+    return backfills

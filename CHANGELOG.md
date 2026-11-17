@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [4.15.0] - 2026-11-17
+
+### Added
+- 跑步紀錄可以填跑步時間，自動算配速（SPEC-060）：新增與編輯表單多一欄「跑步時間（選填）」，接受 `32:15`、`1:05:30` 或整數分鐘，邊輸入邊顯示配速。跑步列表新增時間與配速欄，月份卡片與單雙鞋分析顯示平均配速（總時間 ÷ 有時間的距離）。
+- Strava 匯入讀取移動時間；重新匯入同一份 CSV 會替既有紀錄補上還沒有的時間，不覆寫已有的時間。
+- 帳號備份升為 v4，包含跑步時間；舊版無法讀取 v4。Asset 4.15.0／shell v66，schema 9，回滾見 `scripts/rollback_schema_nine.sql`。
+
 ### Changed
 - CI 只在 push 到 `main` 與 pull request 時執行；其他分支透過 PR 測試，同一個 commit 不再被 push 和 pull request 各跑一次。只改 Markdown 或 `docs/` 時不跑。部署、發版流程不變。
 

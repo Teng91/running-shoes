@@ -12,7 +12,7 @@ from backend.services.identifiers import allocate_id
 from backend.services.mileage import apply_run_mileage_deltas
 from backend.services.run_identity import deleted_strava_ids
 from backend.services.transactions import write_transaction
-from backend.strava_import import date_corrections
+from backend.strava_import import date_corrections, duration_backfills
 
 
 class InvalidShoeMappingError(Exception):
@@ -38,9 +38,11 @@ class ImportResult:
     total_run_rows: int
     corrected_dates: int = 0
     skipped_deleted: int = 0
+    backfilled_durations: int = 0
 
     def as_dict(self) -> dict[str, int | float]:
         return {
+            "backfilled_durations": self.backfilled_durations,
             "corrected_dates": self.corrected_dates,
             "imported": self.imported,
             "skipped_duplicate": self.skipped_duplicate,
@@ -79,16 +81,21 @@ def import_runs(
     """Validate, persist, and mileage-sync a user-scoped Strava import."""
     with write_transaction(db, user_id, reason="strava.import"):
         normalized_mapping = _normalize_mapping(db, user_id, mapping)
-        existing_dates = {
-            strava_id: run_date
-            for strava_id, run_date in db.query(models.Run.strava_id, models.Run.date)
+        stored = [
+            row for row in db.query(
+                models.Run.strava_id, models.Run.date, models.Run.duration_seconds, models.Run.km
+            )
             .filter(
                 models.Run.user_id == user_id,
                 models.Run.strava_id.isnot(None),
             )
             .all()
-            if strava_id is not None
-        }
+            if row.strava_id is not None
+        ]
+        existing_dates = {row.strava_id: row.date for row in stored}
+        backfilled = _backfill_durations(db, user_id, duration_backfills(
+            rows, {row.strava_id: (row.duration_seconds, float(row.km)) for row in stored}
+        ))
         corrected = _correct_utc_dates(db, user_id, date_corrections(rows, existing_dates))
         runs, duplicate_count, unmapped_count, deleted_count = _prepare_runs(
             rows, user_id, normalized_mapping, set(existing_dates), deleted_strava_ids(db, user_id)
@@ -133,7 +140,26 @@ def import_runs(
             total_run_rows=len(rows),
             corrected_dates=corrected,
             skipped_deleted=deleted_count,
+            backfilled_durations=backfilled,
         )
+
+
+def _backfill_durations(db: Session, user_id: int, backfills: list[dict[str, object]]) -> int:
+    """Fill the moving time of earlier imports; a stored time is never overwritten (SPEC-060)."""
+    filled = 0
+    for backfill in backfills:
+        filled += db.query(models.Run).filter(
+            models.Run.user_id == user_id,
+            models.Run.strava_id == str(backfill["strava_id"]),
+            models.Run.duration_seconds.is_(None),
+        ).update(
+            {
+                models.Run.duration_seconds: int(cast(int, backfill["duration_seconds"])),
+                models.Run.version: models.Run.version + 1,
+            },
+            synchronize_session=False,
+        )
+    return filled
 
 
 def _correct_utc_dates(db: Session, user_id: int, corrections: list[dict[str, object]]) -> int:
@@ -215,6 +241,7 @@ def _prepare_runs(
                 date=str(row["date"]),
                 km=float(cast(float | str, row["km"])),
                 strava_id=strava_id,
+                duration_seconds=cast(int | None, row.get("duration_seconds")),
             )
         )
     return runs, duplicate_count, unmapped_count, deleted_count

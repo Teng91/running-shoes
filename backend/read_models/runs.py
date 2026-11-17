@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from backend import models
 from backend.read_models.run_statistics import month_bounds
+from backend.run_metrics import pace_seconds_per_km
 
 
 def month_run_summary(db: Session, user_id: int, year: int, month: int) -> dict:
@@ -34,6 +35,14 @@ def month_run_summary(db: Session, user_id: int, year: int, month: int) -> dict:
         shoe = shoes.setdefault(shoe_id, {"shoe_id": shoe_id, "km": 0.0, "count": 0})
         shoe["km"] = round(shoe["km"] + km, 2)
         shoe["count"] += count
+    timed_seconds, timed_km, timed_count = db.query(
+        func.sum(models.Run.duration_seconds), func.sum(models.Run.km), func.count(models.Run.id)
+    ).filter(
+        models.Run.user_id == user_id,
+        models.Run.date >= start,
+        models.Run.date <= end,
+        models.Run.duration_seconds.isnot(None),
+    ).one()
     return {
         "year": year,
         "month": month,
@@ -42,6 +51,9 @@ def month_run_summary(db: Session, user_id: int, year: int, month: int) -> dict:
         "run_days": len(calendar),
         "calendar": list(calendar.values()),
         "shoe_usage": sorted(shoes.values(), key=lambda row: (-row["km"], row["shoe_id"])),
+        # SPEC-060: time-weighted over the runs that have a moving time.
+        "timed_run_count": int(timed_count or 0),
+        "average_pace_seconds_per_km": pace_seconds_per_km(timed_seconds, timed_km),
     }
 
 
