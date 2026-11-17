@@ -320,25 +320,38 @@ async function run(engine, name) {
           })),
         } });
         if (url.pathname === '/api/analytics/pace') {
-          // SPEC-064: a populated fixture with every chart, long labels and a missing month.
+          // SPEC-065: a populated trend whose points carry intensity zones and a goal pace.
           const days = Array.from({ length: 120 }, (_, index) => new Date(Date.UTC(2025, 6, 1 + index * 4)).toISOString().slice(0, 10));
-          const months = Array.from({ length: 16 }, (_, index) => `${2025 + Math.floor((index + 6) / 12)}-${String((index + 6) % 12 + 1).padStart(2, '0')}`);
+          const zoneKeys = ['easy', 'steady', 'race', 'fast'];
           return route.fulfill({ json: {
-            as_of: '2026-10-27', timed_run_count: 120, untimed_run_count: 3,
+            as_of: '2026-10-27', timed_run_count: 120, untimed_run_count: 3, goal_pace: 341,
+            zones: [{ key: 'easy', label: '輕鬆', min_pace: 386, max_pace: null }, { key: 'steady', label: '穩定', min_pace: 356, max_pace: 386 },
+              { key: 'race', label: '比賽配速', min_pace: 331, max_pace: 356 }, { key: 'fast', label: '更快', min_pace: null, max_pace: 331 }],
             summary: { first_date: '2025-07-01', first_90_days_pace: 388, recent_90_days_pace: 352, recent_30_days_pace: 347 },
-            runs: days.map((date, index) => ({ date, km: 5 + (index % 9), pace: 330 + (index * 37) % 80 })),
+            runs: days.map((date, index) => ({ date, km: 5 + (index % 9), pace: 320 + (index * 37) % 90, zone: zoneKeys[index % 4] })),
             rolling: days.map((date, index) => ({ date, pace: 390 - index * 0.3 })),
-            monthly: months.map((month, index) => ({ month, km: index === 3 ? 0 : 60 + (index * 23) % 150, timed_km: 60, runs: index === 3 ? 0 : 15, pace: index === 3 ? null : 392 - index * 3 })),
-            monthly_lag: { months: 3, same_month_correlation: -0.26, prior_months_correlation: -0.84, points: 13 },
-            load: { weeks: 4, correlation: -0.39,
-              points: Array.from({ length: 60 }, (_, index) => ({ week_start: days[index], prior_week_km: 12 + (index * 7) % 36, km: 25, pace: 330 + (index * 13) % 60 })),
-              trend: { slope_seconds_per_10km: -16.3, intercept: 410.5, min_km: 12, max_km: 47.85 },
-              buckets: [{ min_km: 10, max_km: 20, weeks: 19, median_pace: 381 }, { min_km: 30, max_km: 40, weeks: 24, median_pace: 350 }],
-              comparison: { low: { min_km: 10, max_km: 20, weeks: 19, median_pace: 381 }, fast: { min_km: 30, max_km: 40, weeks: 24, median_pace: 350 }, seconds_faster: 31 } },
-            distance: [[0, 5], [5, 8], [8, 12], [12, 16], [16, 22], [22, null]].map(([min_km, max_km], index) => ({
-              min_km, max_km, runs: 10 + index, km: 100, pace: 360 - index * 4, fastest_pace: 300 - index * 2 })),
-            distribution: { bin_seconds: 15, median_pace: 364, bins: Array.from({ length: 8 }, (_, index) => ({
-              min_pace: 300 + index * 15, max_pace: 315 + index * 15, runs: 10 + (index * 17) % 50, open_min: index === 0, open_max: index === 7 })) },
+          } });
+        }
+        if (url.pathname === '/api/analytics/race') {
+          const weekly = Array.from({ length: 12 }, (_, index) => ({
+            week_start: new Date(Date.UTC(2026, 7, 10 + index * 7)).toISOString().slice(0, 10),
+            km: 25 + (index % 4) * 5, longest_km: [10, 12.5, 16.05, 9.8][index % 4], partial: index === 11 }));
+          return route.fulfill({ json: {
+            as_of: '2026-10-27', days_left: 40, goal_pace: 341,
+            goal: { version: 1, race_name: '台北國際半程馬拉松', race_date: '2026-12-06', distance_km: 21.0975, target_seconds: 7200,
+              reference_distance_km: 10.3, reference_seconds: 3261, reference_temperature_c: 29 },
+            zones: [{ key: 'easy', label: '輕鬆', min_pace: 386, max_pace: null }, { key: 'steady', label: '穩定', min_pace: 356, max_pace: 386 },
+              { key: 'race', label: '比賽配速', min_pace: 331, max_pace: 356 }, { key: 'fast', label: '更快', min_pace: null, max_pace: 331 }],
+            prediction: { reference_distance_km: 10.3, reference_seconds: 3261, reference_pace: 317, reference_temperature_c: 29,
+              hot_reference: true, predicted_seconds: 6973, predicted_pace: 331, margin_seconds: 227 },
+            intensity: { weeks: 8, total_seconds: 100000, untimed_runs: 1, zones: [
+              { key: 'easy', label: '輕鬆', runs: 4, km: 19.9, seconds: 9100, share: 9.1 },
+              { key: 'steady', label: '穩定', runs: 7, km: 60, seconds: 24800, share: 24.8 },
+              { key: 'race', label: '比賽配速', runs: 15, km: 139.6, seconds: 54100, share: 54.1 },
+              { key: 'fast', label: '更快', runs: 5, km: 33.9, seconds: 12000, share: 12 }] },
+            long_runs: { weeks: 8, threshold_km: 15.8, target_count: 2, count: 1, runs: [{ date: '2026-10-25', km: 16.05, pace: 338 }],
+              longest_recent: { date: '2026-10-25', km: 16.05, pace: 338 }, longest_ever: { date: '2025-12-27', km: 21.34, pace: 393 },
+              longest_recent_percent: 76, enough: false, last_long_run_by: '2026-11-22', weekly, average_weekly_km: 31.68 },
           } });
         }
         const contentTypes = { '.html': 'text/html', '.js': 'application/javascript', '.mjs': 'application/javascript', '.css': 'text/css',
@@ -413,7 +426,7 @@ async function run(engine, name) {
             await selectTab(page, tab);
             await page.waitForTimeout(100);
             await assertLayout(page, `${name} ${theme} ${width} ${tab}`);
-            const expected = { runs: 1, shoes: 8, monthly: 13, agent: 0, report: 0 }[tab];
+            const expected = { runs: 1, shoes: 8, monthly: 11, agent: 0, report: 0 }[tab];
             if (tab === 'monthly') {
               assert.equal(await page.locator('#run-heatmap .heatmap-grid .heat-cell:not(.blank)').count(), 365, 'heatmap renders every day');
               assert.equal(await page.locator('#goal-overview .goal-month').count(), 12, 'goal shows every month');
@@ -426,6 +439,14 @@ async function run(engine, name) {
               if (screenshots && [390, 1440].includes(width)) await page.locator('.goal-section').screenshot({ path: path.join(screenshots, `${name}-${theme}-goal-${width}.png`) });
               await page.locator('#cancel-goal-btn').click();
               assert.equal(await page.locator('#goal-settings').isHidden(), true, 'cancel closes the goal editor');
+              // SPEC-065: the race settings form shows the saved goal and lays out at every width.
+              await page.waitForFunction(() => document.getElementById('race-cards').textContent.includes('1:56:13'));
+              await page.locator('#race-edit-toggle').click();
+              assert.equal(await page.locator('#race-target').inputValue(), '2:00:00');
+              await assertLayout(page, `${name} ${theme} ${width} race editor`);
+              await page.locator('#cancel-race-btn').click();
+              assert.equal(await page.locator('#race-settings').isHidden(), true, 'cancel closes the race editor');
+              assert.match(await page.locator('#race-cards').innerText(), /1:56:13/);
             }
             assert.equal(await page.locator('.tab-panel.active canvas').count(), expected);
             assert.equal(await page.evaluate(() => Object.values(chartInstances).filter(c => c.canvas.getClientRects().length).length), expected, 'all charts initialized with data');
