@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Security
+- 開發用依賴升級：`filelock` 4.1.1 → 4.2.7、`pip` 25.3 → 26.2.2，關閉 22 個 Dependabot 警告（只影響 `requirements-dev.txt`，正式環境依賴不變）。已不再使用 pip-tools，移除舊的 pip 版本限制說明。Repo 開啟 Dependabot security updates。
+- 發版 workflow 的 commit 清單改以 UTF-8 解碼，Windows 本機跑測試時不再因中文 commit 訊息失敗。
+
 ## [4.17.1] - 2026-11-17
 
 ### Changed
