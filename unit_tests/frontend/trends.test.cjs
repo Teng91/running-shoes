@@ -233,7 +233,8 @@ test('SPEC-056 long-run and weekday charts lay out the backend values', async ()
   assert.deepEqual([...weekday.data.labels], ['週一', '週二', '週三', '週四', '週五', '週六', '週日']);
   assert.deepEqual([...weekday.data.datasets[0].data], [21, 0, 0, 3, 12, 0, 0]);
   assert.equal(weekday.options.plugins.tooltip.callbacks.label({ dataIndex: 4 }), '12.0 km · 1 天 2 次 · 平均每次 6.0 km');
-  assert.equal(nodes['weekday-title'].textContent, '2026 年星期幾跑量');
+  assert.equal(nodes['weekday-title'].textContent, '2026 年星期幾跑量與配速');
+  assert.equal(weekday.data.datasets.length, 1, 'no pace line without any timed run');
   assert.equal(nodes['weekday-note'].textContent, '跑最多的是週一：21.0 km、1 次，平均每次跑 21.0 km；週二、週三、週六、週日這一年沒跑過。');
   const everyDay = analysis.weekday.map(row => ({ ...row, km: row.km || 5, run_days: row.run_days || 1, runs: row.runs || 1 }));
   assert.equal(context.weekdayText(everyDay), '跑最多的是週一：21.0 km、1 次，平均每次跑 21.0 km。', 'no filler when every weekday has runs');
@@ -260,4 +261,19 @@ test('SPEC-056 future years draw no long-run or weekday chart', async () => {
   assert.equal(context.chartInstances.weekday, undefined);
   assert.match(nodes['long-run-note'].textContent, /還沒開始/);
   assert.match(nodes['weekday-note'].textContent, /還沒開始/);
+});
+
+test('SPEC-064 the weekday chart adds the backend weekday pace on a reversed axis', async () => {
+  const nodes = elements(); nodes['year-select'].value = '2026';
+  const timed = { ...analysis, weekday: analysis.weekday.map(row => ({ ...row, pace: { 0: 369, 3: 354, 4: 370 }[row.weekday] ?? null })) };
+  const context = trendsContext(nodes, { apiGet: async () => timed });
+  vm.runInContext(`let trendsRequestId = 0;\n${weekdayLabels}\n${trendRenderers.map(extract).join('\n')}`, context);
+  await context.renderTrends();
+  const weekday = context.chartInstances.weekday.config;
+  assert.deepEqual(JSON.parse(JSON.stringify(weekday.data.datasets[1].data)), [369, null, null, 354, 370, null, null]);
+  assert.equal(weekday.options.scales.pace.reverse, true);
+  assert.equal(weekday.options.scales.pace.ticks.callback(354), '5:54');
+  assert.equal(weekday.options.plugins.tooltip.callbacks.label({ dataIndex: 3, dataset: weekday.data.datasets[1] }), '平均配速 5:54 /km');
+  assert.equal(nodes['weekday-note'].textContent,
+    '跑最多的是週一：21.0 km、1 次，平均每次跑 21.0 km；平均配速最快是週四（5:54 /km），最慢是週五（6:10 /km）；週二、週三、週六、週日這一年沒跑過。');
 });

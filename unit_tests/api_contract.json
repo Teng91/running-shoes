@@ -6,6 +6,7 @@
   "GET /api/agent/providers",
   "GET /api/analytics/dashboard",
   "GET /api/analytics/home",
+  "GET /api/analytics/pace",
   "GET /api/analytics/shoe-distance-mix",
   "GET /api/analytics/shoe-timeline",
   "GET /api/analytics/trends",

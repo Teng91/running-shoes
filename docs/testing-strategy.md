@@ -297,6 +297,10 @@ SPEC-032：合成資料驗證歷史筆數上限（v4.7.3 起 10,000／10,001）�
 
 [規格與具名案例](specs/061-ci-on-every-push-and-protected-main.md) 以文字解析 workflow：觸發條件是不限分支的 push、pull request、每週排程與手動執行，沒有 `paths-ignore`；部署條件仍只有 main 的 push／手動執行；main 以外的 ref 由較新的執行取消舊的，main 不取消。ruleset 由 `.github/rulesets/main.json` 描述，Python 測試確認它要求 PR、必要檢查與 workflow 的 5 個測試 job 完全一致、禁止刪除與 force push，且沒有繞過名單。
 
+## SPEC-064 配速分析
+
+[規格與具名案例](specs/064-pace-analytics.md) 以兩個帳號與未來日期的資料驗證時間加權平均、跑量包含沒有時間的跑步、近 30 天平均線、月份、距離區間與分布；以 12 週合成資料驗證前 4 週平均週跑量、相關係數、趨勢線、各組中位數與比較，以及沒有時間時的空結構。星期幾的平均配速以時間加權並排除另一個帳號。Node 以 vm 驗證 5 張圖與星期幾配速折線使用後端數字、配速軸反向與沒有時間時的提示，並掃描所有傳統 script，確保沒有重複的頂層宣告（共用全域範圍時會讓後載入的 script 整個失效）。
+
 ## SPEC-063 Strava 繁中匯出的時段用語
 
 [規格與具名案例](specs/063-strava-chinese-part-of-day.md) 以參數化案例涵蓋實際匯出出現的每個時段用語（含跨日的「晚上」、中午 12 點與 1 點）與 24 小時制時間，確認台灣日期與 UTC 日期。
