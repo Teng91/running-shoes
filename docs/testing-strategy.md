@@ -293,6 +293,10 @@ SPEC-032：合成資料驗證歷史筆數上限（v4.7.3 起 10,000／10,001）�
 
 [規格與具名案例](specs/059-automatic-updates-at-safe-moments.md) 以 Node 假時間、假可見度與假 service worker 訊息驗證：剛回到前景未操作、在背景、閒置 5 分鐘時自動重新載入一次；AI 回答、月報、請求、行內編輯、彈窗、AI 輸入框與登入表單的文字都會延後，直到下一次檢查；自動重新載入後仍是舊版時改為只顯示提示。AI 對話以假 sessionStorage 驗證只為同一帳號還原、資料格式錯誤或換帳號時捨棄。`frontend-pwa` 在 Chromium／WebKit 的真實 service worker 升級中，確認使用中的頁面只顯示提示，切到背景後自動換成新版 shell。
 
+## SPEC-061 每次推送都跑 CI 與 main 保護
+
+[規格與具名案例](specs/061-ci-on-every-push-and-protected-main.md) 以文字解析 workflow：觸發條件是不限分支的 push、pull request、每週排程與手動執行，沒有 `paths-ignore`；部署條件仍只有 main 的 push／手動執行；main 以外的 ref 由較新的執行取消舊的，main 不取消。ruleset 由 `.github/rulesets/main.json` 描述，Python 測試確認它要求 PR、必要檢查與 workflow 的 5 個測試 job 完全一致、禁止刪除與 force push，且沒有繞過名單。
+
 ## SPEC-060 跑步時間與配速
 
 [規格與具名案例](specs/060-run-duration-and-pace.md) 以 API 測試新增、只更新、清除與拒絕不合理的跑步時間，確認回應的配速；以兩個帳號的資料驗證月份摘要與單雙鞋分析的時間加權平均配速。Strava 測試使用真實繁中匯出的欄位排列（重複的「經過時間」「距離」），驗證移動時間、經過時間備援與時間不可用時照常匯入；重新匯入只補缺少且合理的時間、不覆寫既有時間，也不動另一個帳號的同一活動。備份測試涵蓋 v4 往返、v3 帶時間被拒、合併不清除時間與刪除復原；暫存 SQLite 驗證 9 → 8 回滾腳本的守衛、保留資料與再升級。Node 以 vm 驗證時間輸入格式、即時配速提示、新增／編輯送出的 `duration_seconds`、列表與卡片的配速，以及只補時間的 Strava 匯入仍可執行；Python 測試確保前後端的配速上下限一致。

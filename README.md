@@ -631,7 +631,7 @@ Playwright／Chromium／WebKit 齊全時，也會執行版面測試。
 避免每次停止都重跑。Hook 不會呼叫其他模型、外部 API，或傳送提示、diff、原始碼與測試輸出。
 GitHub Actions 仍會在 push／pull request 執行 `verify`，並以三個可獨立重跑的 browser jobs 執行完整版面矩陣、真實 CRUD E2E 與 PWA 升級／離線測試；push 到 main 時再依序快照、部署、檢查並發版（見「日常開發流程、自動部署與發版」）；Dependabot 每月以單一 PR 合併 GitHub Actions 更新；Python 只接收安全性更新 PR，例行升級依下方 `uv pip compile --universal` 步驟手動重編鎖定檔（Dependabot 產生的鎖定檔會遺失 Windows 條件）。
 
-本次驗證基線為 Python **671 passed**、前端回歸測試 **202 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
+本次驗證基線為 Python **672 passed**、前端回歸測試 **202 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
 版面檢查涵蓋 WebKit／Chromium、亮／暗模式與 10 組直橫向尺寸，共 40 組設定，檢查四個功能分頁與月報、三個認證表單、圖表、全部彈窗、行內編輯、停用／錯誤及空資料狀態。
 
 主要表單、工具列與彈窗操作統一為 44px 控制項；桌面表格內的緊湊操作為 36px，手機至少 44px。
@@ -753,7 +753,7 @@ unset MIGRATION_PASSWORD_VALUE
 
 ### 日常開發流程、自動部署與發版（SPEC-048）
 
-之後不必在本機執行 `fly deploy`：**push 到 `main` 就會自動部署**。`.github/workflows/verify.yml` 依序執行，前一步沒過，後面就不跑：
+之後不必在本機執行 `fly deploy`：**PR 合併進 `main` 就會自動部署**。`main` 受 GitHub ruleset 保護（SPEC-061）：只能透過 PR 合併，PR 的 5 個測試 job 全部通過、分支也跟上最新 `main` 才能按 merge，不能直接 push 或 force push，管理員也一樣。`.github/workflows/verify.yml` 依序執行，前一步沒過，後面就不跑：
 
 1. **測試**：`verify`（後端、前端、文件與安全檢查）、版面矩陣、CRUD E2E、PWA 與 diagnostics。三個 browser job 與部署後檢查遇到失敗會自動重跑一次，因為 CI 的 WebKit 偶爾回報內部錯誤；重跑通過仍會留下黃色警告，真正的錯誤兩次都會失敗。
 2. **部署前快照**：在 Fly 主機上用 `scripts/database_backup.py create` 建立並驗證一份資料庫快照（`/data/backups/predeploy`，保留最新 10 份）。快照失敗就不部署。快照留在 Fly 的 volume 上，不會下載到 GitHub。
@@ -765,9 +765,10 @@ unset MIGRATION_PASSWORD_VALUE
 
 其他行為：
 
-- Pull request 只跑測試，不會部署。其他分支與 tag 的 push 不跑：要測試就開 PR（同一個 commit 不會被 push 和 pull request 各跑一次，省 GitHub Actions 的分鐘數）。
-- 只改 Markdown 或 `docs/` 的 push 與 PR 不跑（正式環境的 image 只有 `backend/`、`frontend/` 與備份程式）；文件檢查請在本機執行 `python3 scripts/task.py docs-check`。
-- commit 訊息含 `[skip ci]` 時整個 workflow 都不跑。
+- 任何分支的 push 都跑完整測試，推上去就看得到結果；pull request 另外測試「分支合併進目前 `main`」後的結果。兩者都不部署。同一個分支或 PR 有更新的 push 時，舊的那次會被取消。
+- 只改 Markdown 或 `docs/` 也照跑，`docs-check` 會檢查 README、規格與連結。repo 是公開的，GitHub 標準 runner 不計分鐘數。
+- 每週一 09:00（台灣時間）在 `main` 排程跑一次，讓依賴弱點掃描抓到新公布的 CVE；排程不部署。
+- commit 訊息含 `[skip ci]` 時整個 workflow 都不跑；PR 會因為缺少必要檢查而無法合併。
 - main 的執行一次跑一個，正在部署的不會被取消；排隊時 GitHub 只保留最新的一個，中間那次會被跳過，最後部署的一定是最新的 main。
 - 想手動重新部署：GitHub → Actions → Verify and deploy → Run workflow（選 `main`）。偶發失敗時用 **Re-run failed jobs**，後面被跳過的部署與發版會跟著重跑。
 - 權限分開：只有部署 job 拿得到 `FLY_API_TOKEN`，而且不安裝、不執行專案套件；只有發版 job 能寫入 repo；測試與部署後檢查都沒有任何 secret。
