@@ -89,3 +89,17 @@ test('SPEC-064 an account without times shows a hint instead of charts', async (
   assert.match(nodes['pace-summary'].innerHTML, /填上跑步時間.*4 筆沒有時間/);
   assert.equal(nodes['pace-load-note'].textContent, '還沒有填跑步時間的紀錄。');
 });
+
+test('SPEC-064 classic scripts never redeclare a top-level name from another script', () => {
+  // Classic scripts share one global scope: a repeated const/let/class aborts the later script.
+  const { scriptPaths } = require('./helpers.cjs');
+  const owners = new Map();
+  const duplicates = [];
+  for (const file of scriptPaths) {
+    for (const match of readText(file).matchAll(/^(?:const|let|class)\s+([A-Za-z_$][\w$]*)/gm)) {
+      if (owners.has(match[1])) duplicates.push(`${match[1]}: ${owners.get(match[1])} and ${file}`);
+      else owners.set(match[1], file);
+    }
+  }
+  assert.deepEqual(duplicates, []);
+});

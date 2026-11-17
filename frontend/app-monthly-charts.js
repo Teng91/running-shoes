@@ -475,7 +475,7 @@ const WEEKDAY_LABELS = ['週一', '週二', '週三', '週四', '週五', '週�
 function renderWeekdayChart(trends) {
   if (chartInstances.weekday) { chartInstances.weekday.destroy(); delete chartInstances.weekday; }
   const note = document.getElementById('weekday-note');
-  document.getElementById('weekday-title').textContent = `${trends.year} 年星期幾跑量`;
+  document.getElementById('weekday-title').textContent = `${trends.year} 年星期幾跑量與配速`;
   const rows = Array.isArray(trends.weekday) ? trends.weekday : [];
   if (!trends.end_date || rows.length !== 7) {
     note.textContent = '這一年還沒開始。';
@@ -483,29 +483,40 @@ function renderWeekdayChart(trends) {
   }
   const textColor = getThemeColor('--text-dim', '#8b8d9a');
   const gridColor = getThemeColor('--chart-grid', '#f1f5f9');
+  // SPEC-064: the backend's time-weighted pace per weekday, on a reversed axis (faster is higher).
+  const hasPace = rows.some(row => row.pace);
+  const datasets = [{ type: 'bar', label: '里程', data: rows.map(row => row.km), backgroundColor: getThemeColor('--chart-1', '#c8ff3c'), borderRadius: 4, yAxisID: 'y', order: 2 }];
+  if (hasPace) {
+    const paceColor = getThemeColor('--chart-2', '#2fd8f0');
+    datasets.push({ type: 'line', label: '平均配速', data: rows.map(row => row.pace ?? null), borderColor: paceColor, backgroundColor: paceColor,
+      borderWidth: 2, pointRadius: 4, tension: .25, spanGaps: true, yAxisID: 'pace', order: 1 });
+  }
+  const scales = {
+    x: { grid: { display: false }, ticks: { color: textColor, font: { size: 11 } } },
+    y: { grid: { color: gridColor }, ticks: { color: textColor, callback: v => v + ' km' }, beginAtZero: true },
+  };
+  if (hasPace) {
+    scales.pace = { position: 'right', reverse: true, grid: { display: false },
+      ticks: { color: textColor, callback: value => formatPace(value).replace(' /km', '') } };
+  }
   chartInstances.weekday = new Chart(document.getElementById('chart-weekday'), {
-    type: 'bar',
-    data: {
-      labels: WEEKDAY_LABELS,
-      datasets: [{ label: '里程', data: rows.map(row => row.km), backgroundColor: getThemeColor('--chart-1', '#c8ff3c'), borderRadius: 4 }],
-    },
+    data: { labels: WEEKDAY_LABELS, datasets },
     options: {
       maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
       plugins: {
-        legend: { display: false },
+        legend: { display: hasPace, labels: { color: textColor, boxWidth: 12 } },
         tooltip: { callbacks: {
           label: ctx => {
             const row = rows[ctx.dataIndex];
+            if (ctx.dataset?.yAxisID === 'pace') return row.pace ? `平均配速 ${formatPace(row.pace)}` : '沒有時間紀錄';
             const runs = weekdayRuns(row);
             const average = runs ? ` · 平均每次 ${(row.km / runs).toFixed(1)} km` : '';
             return `${row.km.toFixed(1)} km · ${row.run_days} 天 ${runs} 次${average}`;
           },
         } },
       },
-      scales: {
-        x: { grid: { display: false }, ticks: { color: textColor, font: { size: 11 } } },
-        y: { grid: { color: gridColor }, ticks: { color: textColor, callback: v => v + ' km' }, beginAtZero: true },
-      },
+      scales,
     },
   });
   note.textContent = weekdayText(rows);
@@ -522,7 +533,12 @@ function weekdayText(rows) {
   const most = rows.reduce((top, row) => (row.km > top.km ? row : top), rows[0]);
   const runs = weekdayRuns(most);
   const rest = rows.filter(row => row.run_days === 0).map(row => WEEKDAY_LABELS[row.weekday]);
-  return `跑最多的是${WEEKDAY_LABELS[most.weekday]}：${most.km.toFixed(1)} km、${runs} 次，平均每次跑 ${(most.km / runs).toFixed(1)} km`
+  const timed = rows.filter(row => row.pace);
+  const fastest = timed.length ? timed.reduce((best, row) => (row.pace < best.pace ? row : best), timed[0]) : null;
+  const slowest = timed.length > 1 ? timed.reduce((worst, row) => (row.pace > worst.pace ? row : worst), timed[0]) : null;
+  const pace = fastest && slowest && fastest !== slowest
+    ? `；平均配速最快是${WEEKDAY_LABELS[fastest.weekday]}（${formatPace(fastest.pace)}），最慢是${WEEKDAY_LABELS[slowest.weekday]}（${formatPace(slowest.pace)}）` : '';
+  return `跑最多的是${WEEKDAY_LABELS[most.weekday]}：${most.km.toFixed(1)} km、${runs} 次，平均每次跑 ${(most.km / runs).toFixed(1)} km${pace}`
     + (rest.length ? `；${rest.join('、')}這一年沒跑過。` : '。');
 }
 
