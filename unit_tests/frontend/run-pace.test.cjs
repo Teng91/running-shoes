@@ -130,3 +130,17 @@ test('SPEC-060 a Strava re-import that only fills moving times can still be impo
   assert.equal(context.stravaDurationBackfillText({ duration_backfill_count: 12 }), '另有 12 筆既有紀錄會補上跑步時間，用來計算配速。');
   assert.equal(context.stravaDurationBackfillText({}), '');
 });
+
+test('SPEC-062 the Strava preview explains linked and skipped hand-entered runs', () => {
+  const context = paceContext(nodes());
+  vm.runInContext(['stravaHasChanges', 'stravaManualMatchText'].map(extract).join('\n'), context);
+  const preview = { importable_count: 0, date_correction_count: 0, duration_backfill_count: 0,
+    manual_link_count: 3, manual_link_duration_count: 2, manual_conflict_count: 1,
+    manual_conflict_samples: [{ strava_id: 's3', date: '2026-11-13', km: 5 }] };
+  assert.equal(context.stravaManualMatchText(preview),
+    '另有 3 筆和手動輸入的紀錄相符，不會重複新增，會改為連結 Strava，並補上 2 筆跑步時間。'
+    + '另有 1 筆活動當天已有手動紀錄但無法確定是同一次，為避免重複不會匯入（例如 2026/11/13 5.00 km）。');
+  assert.equal(context.stravaHasChanges(preview), true, 'linking alone can be imported');
+  assert.equal(context.stravaHasChanges({ ...preview, manual_link_count: 0 }), false, 'conflicts alone change nothing');
+  assert.equal(context.stravaManualMatchText({}), '');
+});

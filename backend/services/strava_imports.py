@@ -7,10 +7,9 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from backend import models
-from backend.read_models.strava_preview import build_preview
+from backend.read_models.strava_preview import build_preview, stored_runs
 from backend.services.identifiers import allocate_id
 from backend.services.mileage import apply_run_mileage_deltas
-from backend.services.run_identity import deleted_strava_ids
 from backend.services.transactions import write_transaction
 from backend.strava_import import date_corrections, duration_backfills
 
@@ -39,12 +38,16 @@ class ImportResult:
     corrected_dates: int = 0
     skipped_deleted: int = 0
     backfilled_durations: int = 0
+    linked_manual: int = 0
+    skipped_manual_conflict: int = 0
 
     def as_dict(self) -> dict[str, int | float]:
         return {
             "backfilled_durations": self.backfilled_durations,
             "corrected_dates": self.corrected_dates,
             "imported": self.imported,
+            "linked_manual": self.linked_manual,
+            "skipped_manual_conflict": self.skipped_manual_conflict,
             "skipped_duplicate": self.skipped_duplicate,
             "skipped_deleted": self.skipped_deleted,
             "skipped_unmapped": self.skipped_unmapped,
@@ -81,25 +84,18 @@ def import_runs(
     """Validate, persist, and mileage-sync a user-scoped Strava import."""
     with write_transaction(db, user_id, reason="strava.import"):
         normalized_mapping = _normalize_mapping(db, user_id, mapping)
-        stored = [
-            row for row in db.query(
-                models.Run.strava_id, models.Run.date, models.Run.duration_seconds, models.Run.km
-            )
-            .filter(
-                models.Run.user_id == user_id,
-                models.Run.strava_id.isnot(None),
-            )
-            .all()
-            if row.strava_id is not None
-        ]
-        existing_dates = {row.strava_id: row.date for row in stored}
-        backfilled = _backfill_durations(db, user_id, duration_backfills(
-            rows, {row.strava_id: (row.duration_seconds, float(row.km)) for row in stored}
-        ))
-        corrected = _correct_utc_dates(db, user_id, date_corrections(rows, existing_dates))
+        stored = stored_runs(db, user_id)
+        backfilled = _backfill_durations(db, user_id, duration_backfills(rows, stored.durations))
+        corrected = _correct_utc_dates(db, user_id, date_corrections(rows, stored.existing_dates))
+        links, conflicts = stored.manual_matches(rows)
+        linked = _link_manual_runs(db, user_id, links)
+        manual_ids = {str(item["strava_id"]) for item in links + conflicts}
         runs, duplicate_count, unmapped_count, deleted_count = _prepare_runs(
-            rows, user_id, normalized_mapping, set(existing_dates), deleted_strava_ids(db, user_id)
+            rows, user_id, normalized_mapping, set(stored.strava) | manual_ids, stored.deleted_ids
         )
+        # Linked and conflicting activities were already recorded by hand; history counts
+        # them with the Strava-ID duplicates.
+        duplicate_count -= len(manual_ids)
         for run in runs:
             run.id = allocate_id(db, "runs")
         current_count = db.query(models.Run).filter(models.Run.user_id == user_id).count()
@@ -120,7 +116,7 @@ def import_runs(
                 end_date=end_date,
                 imported_count=len(runs),
                 imported_km=synced_mileage,
-                duplicate_count=duplicate_count,
+                duplicate_count=duplicate_count + len(manual_ids),
                 unmapped_count=unmapped_count,
                 invalid_count=invalid,
             )
@@ -141,6 +137,8 @@ def import_runs(
             corrected_dates=corrected,
             skipped_deleted=deleted_count,
             backfilled_durations=backfilled,
+            linked_manual=linked,
+            skipped_manual_conflict=len(conflicts),
         )
 
 
@@ -160,6 +158,29 @@ def _backfill_durations(db: Session, user_id: int, backfills: list[dict[str, obj
             synchronize_session=False,
         )
     return filled
+
+
+def _link_manual_runs(db: Session, user_id: int, links: list[dict[str, object]]) -> int:
+    """Attach the Strava activity to the hand-entered run it matches (SPEC-062).
+
+    Distance, date and shoe stay as entered, so mileage does not change; a missing moving
+    time is filled. The stored Strava ID makes later re-imports recognise the run, and a
+    deletion tombstone keeps it from coming back.
+    """
+    linked = 0
+    for link in links:
+        values: dict[Any, Any] = {
+            models.Run.strava_id: str(link["strava_id"]),
+            models.Run.version: models.Run.version + 1,
+        }
+        if link["duration_seconds"] is not None:
+            values[models.Run.duration_seconds] = int(cast(int, link["duration_seconds"]))
+        linked += db.query(models.Run).filter(
+            models.Run.id == int(cast(int, link["run_id"])),
+            models.Run.user_id == user_id,
+            models.Run.strava_id.is_(None),
+        ).update(values, synchronize_session=False)
+    return linked
 
 
 def _correct_utc_dates(db: Session, user_id: int, corrections: list[dict[str, object]]) -> int:
