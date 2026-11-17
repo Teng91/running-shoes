@@ -17,7 +17,7 @@ function registerResourceCaches() {
   });
   resourceStore.registerCache('annual', () => {
     runController.state.annualRequest++;
-    resourceStore.invalidate(['annual-summary', 'training-trends', 'shoe-timeline']);
+    resourceStore.invalidate(['annual-summary', 'training-trends', 'shoe-timeline', 'pace-analysis']);
   });
   resourceStore.registerCache('dashboard', () => {
     dashboardAnalyticsRequest++;

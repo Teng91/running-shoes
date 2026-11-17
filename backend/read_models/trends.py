@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
-from sqlalchemy import func
+from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from backend import goals, models
 from backend.read_models.rounding import round_metric
+from backend.run_metrics import pace_seconds_per_km
 
 WEEKS = 16
 ROLLING_WEEKS = 4
@@ -26,13 +27,17 @@ def trends_end(year: int, as_of: date) -> date | None:
     return as_of if year == as_of.year else date(year, 12, 31)
 
 
-DailyRuns = tuple[float, float, int]
+DailyRuns = tuple[float, float, int, float, float]
+NO_RUNS: DailyRuns = (0.0, 0.0, 0, 0.0, 0.0)
 
 
 def _daily_km(db: Session, user_id: int, start: date, end: date) -> dict[date, DailyRuns]:
-    """Per day: (total distance, longest single run, number of runs)."""
+    """Per day: (total distance, longest single run, number of runs, timed seconds, timed distance)."""
+    timed = models.Run.duration_seconds.isnot(None)
     rows = (
-        db.query(models.Run.date, func.sum(models.Run.km), func.max(models.Run.km), func.count(models.Run.id))
+        db.query(models.Run.date, func.sum(models.Run.km), func.max(models.Run.km), func.count(models.Run.id),
+                 func.sum(case((timed, models.Run.duration_seconds), else_=0)),
+                 func.sum(case((timed, models.Run.km), else_=0)))
         .filter(
             models.Run.user_id == user_id,
             models.Run.date >= start.isoformat(),
@@ -42,8 +47,9 @@ def _daily_km(db: Session, user_id: int, start: date, end: date) -> dict[date, D
         .all()
     )
     return {
-        date.fromisoformat(day): (float(km or 0), float(longest or 0), int(count or 0))
-        for day, km, longest, count in rows
+        date.fromisoformat(day): (float(km or 0), float(longest or 0), int(count or 0),
+                                  float(seconds or 0), float(timed_km or 0))
+        for day, km, longest, count, seconds, timed_km in rows
     }
 
 
@@ -69,7 +75,7 @@ def _weekly(daily: dict[date, DailyRuns], end: date, weekly_goal: float | None) 
     totals = []
     for index in range(WEEKS + ROLLING_WEEKS):
         monday = first_monday + timedelta(weeks=index)
-        days = [daily.get(monday + timedelta(days=d), (0.0, 0.0, 0)) for d in range(7)]
+        days = [daily.get(monday + timedelta(days=d), NO_RUNS) for d in range(7)]
         totals.append((monday, sum(day[0] for day in days), max(day[1] for day in days)))
     weeks = []
     for index in range(ROLLING_WEEKS, len(totals)):
@@ -92,15 +98,20 @@ def _weekly(daily: dict[date, DailyRuns], end: date, weekly_goal: float | None) 
 
 
 def _weekday_mix(daily: dict[date, DailyRuns], start: date, end: date) -> list[dict]:
-    """Monday-first distance, running days and runs per weekday between start and end."""
+    """Monday-first distance, running days, runs and time-weighted pace per weekday (SPEC-064)."""
     rows = [{"weekday": weekday, "km": 0.0, "run_days": 0, "runs": 0} for weekday in range(7)]
-    for day, (km, _, runs) in daily.items():
+    timed = [[0.0, 0.0] for _ in range(7)]
+    for day, (km, _, runs, seconds, timed_km) in daily.items():
         if start <= day <= end and km > 0:
             row = rows[day.weekday()]
             row["km"] = float(row["km"]) + km
             row["run_days"] = int(row["run_days"]) + 1
             row["runs"] = int(row["runs"]) + runs
-    return [{**row, "km": round_metric(float(row["km"]))} for row in rows]
+            timed[day.weekday()][0] += seconds
+            timed[day.weekday()][1] += timed_km
+    return [{**row, "km": round_metric(float(row["km"])),
+             "pace": pace_seconds_per_km(timed[index][0], timed[index][1])}
+            for index, row in enumerate(rows)]
 
 
 def training_trends(db: Session, user_id: int, year: int, as_of: date) -> dict:
@@ -132,12 +143,12 @@ def training_trends(db: Session, user_id: int, year: int, as_of: date) -> dict:
     year_start = date(year, 1, 1)
     weekly_start = end - timedelta(days=end.weekday()) - timedelta(weeks=WEEKS + ROLLING_WEEKS - 1)
     daily = _daily_km(db, user_id, min(year_start, weekly_start), end)
-    year_days = sorted(day for day, (km, _, _) in daily.items() if day >= year_start and km > 0)
+    year_days = sorted(day for day, (km, *_) in daily.items() if day >= year_start and km > 0)
 
     elapsed = (end - year_start).days + 1
     actual, running = [], 0.0
     for offset in range(elapsed):
-        running += daily.get(year_start + timedelta(days=offset), (0.0, 0.0, 0))[0]
+        running += daily.get(year_start + timedelta(days=offset), NO_RUNS)[0]
         actual.append(round_metric(running))
     ytd = actual[-1] if actual else 0.0
     expected = goal_line[elapsed - 1]

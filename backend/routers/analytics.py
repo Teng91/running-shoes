@@ -7,7 +7,7 @@ from backend import analytics, models
 from backend.auth import get_current_user
 from backend.clock import local_today
 from backend.dependencies import get_db
-from backend.read_models import highlights, trends
+from backend.read_models import highlights, pace, trends
 
 router = APIRouter(tags=["analytics"])
 
@@ -73,3 +73,11 @@ def get_shoe_analytics(
     if result is None:
         raise HTTPException(status_code=404, detail="Shoe not found")
     return result
+
+
+@router.get("/api/analytics/pace")
+def pace_analysis(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return pace.pace_analysis(db, current_user.id, local_today())
