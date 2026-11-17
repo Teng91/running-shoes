@@ -2,7 +2,7 @@ const { test, assert, vm, extract, runContext } = require('./helpers.cjs');
 
 function draftContext() {
   const nodes = {
-    'run-error': {}, 'run-date': { value: '2026-01-05' }, 'run-km': { value: '5' },
+    'run-error': {}, 'run-date': { value: '2026-01-05' }, 'run-km': { value: '5' }, 'run-duration': { value: '' },
     'run-shoe': { value: '1' }, 'run-month': { value: '2026-01' }, 'add-run-btn': {},
   };
   let finish;
@@ -16,7 +16,7 @@ function draftContext() {
 }
 
 test('SPEC-020 successful run creation preserves newly typed distance, date and shoe drafts', async () => {
-  for (const [field, value] of [['km', '8'], ['date', '2026-01-06'], ['shoe', '2']]) {
+  for (const [field, value] of [['km', '8'], ['date', '2026-01-06'], ['duration', '32:00'], ['shoe', '2']]) {
     const fixture = draftContext();
     const saving = fixture.context.addRun();
     fixture.nodes['run-' + field].value = value;

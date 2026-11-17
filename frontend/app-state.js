@@ -30,6 +30,11 @@ const BRAND_COLORS = {
 const LIFECYCLE_MONITOR_PERCENT = 80;
 const LIFECYCLE_REPLACE_SOON_PERCENT = 90;
 
+// Plausible pace bounds in seconds per km, mirrored from backend/run_metrics.py (SPEC-060).
+// A Python test keeps both sides equal; the backend still validates every write.
+const RUN_PACE_MIN_SECONDS = 60;
+const RUN_PACE_MAX_SECONDS = 3600;
+
 const byDate = (a, b) => new Date(a.date) - new Date(b.date);
 let shoes = [];
 let retiredShoes = [];

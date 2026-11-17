@@ -1,4 +1,4 @@
-"""Bounded, credential-free account archive contract (v1, v2 and v3)."""
+"""Bounded, credential-free account archive contract (v1, v2, v3 and v4)."""
 
 import json
 import math
@@ -38,6 +38,12 @@ class BackupRun(schemas.RunCreate):
     id: int = Field(gt=0)
     strava_id: str | None = Field(default=None, max_length=128)
     aliases: list[Annotated[int, Field(gt=0, strict=True)]] = Field(default_factory=list, max_length=MAX_RUN_ALIASES)
+
+    @model_validator(mode="after")
+    def validate_pace(self):
+        # Archived rows are stored data: a moving time kept across a distance
+        # edit is restored as-is, so only the duration range is checked.
+        return self
 
 
 class BackupMonth(schemas.MonthlyMileageCreate):
@@ -93,7 +99,7 @@ class BackupHistory(BaseModel):
 class AccountBackup(BaseModel):
     model_config = ConfigDict(extra="forbid")
     format: Literal["running-shoes-account-backup"]
-    version: Literal[1, 2, 3]
+    version: Literal[1, 2, 3, 4]
     source_id: str | None = Field(default=None, min_length=16, max_length=80, pattern=r"^[A-Za-z0-9._:-]+$")
     exported_at: datetime
     username: str = Field(max_length=50)
@@ -108,7 +114,7 @@ class AccountBackup(BaseModel):
     @model_validator(mode="after")
     def validate_graph(self):
         if self.version >= 2 and not self.source_id:
-            raise ValueError("備份 v2/v3 缺少 source_id")
+            raise ValueError("備份 v2/v3/v4 缺少 source_id")
         collections: list[tuple[list[Any], Any]] = [(self.shoes, lambda row: row.id), (self.runs, lambda row: row.id),
                             (self.monthly_mileages, lambda row: (row.year, row.month)),
                             (self.monthly_reports, lambda row: (row.year, row.month)),
@@ -121,6 +127,8 @@ class AccountBackup(BaseModel):
         alias_count = sum(len(row.aliases) for row in self.runs)
         if alias_count > MAX_RUN_ALIASES or (self.version < 3 and alias_count):
             raise ValueError("跑步來源別名版本或容量不正確")
+        if self.version < 4 and any(row.duration_seconds is not None for row in self.runs):
+            raise ValueError("跑步時間只能出現在 v4 備份")
         for row in self.runs:
             for alias in row.aliases:
                 if alias in identities:
@@ -182,9 +190,12 @@ def _check_json(value, depth=0):
 
 def backup_fingerprint(backup: AccountBackup) -> str:
     payload = backup.model_dump(mode="json")
-    if backup.version < 3:
-        for run in payload["runs"]:
+    for run in payload["runs"]:
+        if backup.version < 3:
             run.pop("aliases", None)
+        if backup.version < 4:
+            # Keep pre-SPEC-060 fingerprints stable for previews and receipts.
+            run.pop("duration_seconds", None)
     return payload_hash(payload)
 
 

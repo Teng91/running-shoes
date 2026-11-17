@@ -110,6 +110,7 @@ def _shoe_analytics(shoe: models.Shoe, statistics: dict, as_of: date) -> dict:
             "actual_monthly_km_90_days": forecast["actual_monthly_km_90_days"],
             "cost_per_km": costs["cost_per_km"],
             "cost_per_wear": round_metric(shoe.price / metrics["count"]) if metrics["count"] else None,
+            "average_pace_seconds_per_km": statistics["average_pace"],
         },
         "monthly_history": monthly_history,
         "recent_runs": statistics["recent"],

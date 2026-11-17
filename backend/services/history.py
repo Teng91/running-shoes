@@ -59,7 +59,8 @@ def restore_deleted(db: Session, user_id: int, event_id: int, config: Settings) 
             ).first():
                 raise Conflict("此 Strava 活動已存在")
             row = models.Run(id=allocate_id(db, "runs"), user_id=user_id, shoe_id=shoe.id, date=data["date"], km=data["km"],
-                             strava_id=data.get("strava_id"), version=data["version"] + 1)
+                             strava_id=data.get("strava_id"), duration_seconds=data.get("duration_seconds"),
+                             version=data["version"] + 1)
             db.add(row)
             relink_recovered_run(db, user_id, event.entity_id, row.id)
             apply_run_mileage_deltas(db, user_id, [(shoe.id, row.date, row.km)], 1)

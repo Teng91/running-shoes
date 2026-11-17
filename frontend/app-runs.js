@@ -16,6 +16,8 @@ registerFeatureReset('run-editor', () => {
   runController.reset();
   document.getElementById('add-run-btn').disabled = false;
   document.getElementById('run-km').value = '';
+  document.getElementById('run-duration').value = '';
+  updateRunPacePreview('run');
   document.getElementById('run-error').textContent = '';
   document.getElementById('run-load-error').hidden = true;
   document.getElementById('run-month').value = localDateISO().slice(0, 7);
@@ -27,6 +29,64 @@ registerFeatureReset('run-editor', () => {
 
 function localDateISO(date = new Date()) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+// SPEC-060: a run's moving time is typed as "32:15", "1:05:30" or whole minutes ("45").
+// Returns seconds, null for an empty field, or NaN for text that is not a duration.
+function parseRunDuration(text) {
+  const value = String(text ?? '').trim();
+  if (!value) return null;
+  if (/^\d{1,4}$/.test(value)) return Number(value) > 0 ? Number(value) * 60 : NaN;
+  const match = value.match(/^(?:(\d{1,3}):)?(\d{1,4}):(\d{2})$/);
+  if (!match) return NaN;
+  const [, hours, minutes, seconds] = match;
+  if (Number(seconds) > 59 || (hours !== undefined && Number(minutes) > 59)) return NaN;
+  const total = Number(hours || 0) * 3600 + Number(minutes) * 60 + Number(seconds);
+  return total > 0 ? total : NaN;
+}
+
+function formatRunDuration(seconds) {
+  if (!Number.isFinite(seconds) || seconds <= 0) return '';
+  const total = Math.round(seconds);
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const rest = String(total % 60).padStart(2, '0');
+  return hours ? `${hours}:${String(minutes).padStart(2, '0')}:${rest}` : `${minutes}:${rest}`;
+}
+
+// Pace comes from the backend (pace_seconds_per_km); this only formats it.
+function formatPace(secondsPerKm) {
+  if (!Number.isFinite(secondsPerKm) || secondsPerKm <= 0) return '—';
+  const total = Math.round(secondsPerKm);
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')} /km`;
+}
+
+function plausibleRunPace(seconds, km) {
+  if (!Number.isFinite(seconds) || !Number.isFinite(km) || km <= 0) return false;
+  const pace = seconds / km;
+  return pace >= RUN_PACE_MIN_SECONDS && pace <= RUN_PACE_MAX_SECONDS;
+}
+
+// Live hint under the duration field; the saved pace is always the backend's.
+function updateRunPacePreview(prefix) {
+  const target = document.getElementById(`${prefix}-pace-preview`);
+  if (!target) return;
+  const seconds = parseRunDuration(document.getElementById(`${prefix}-duration`)?.value);
+  const km = parseFloat(document.getElementById(`${prefix}-km`).value);
+  if (seconds === null) target.textContent = '填寫後會自動計算配速';
+  else if (Number.isNaN(seconds)) target.textContent = '格式例如 32:15、1:05:30 或 45（分鐘）';
+  else if (!Number.isFinite(km) || km <= 0) target.textContent = '填寫距離後會顯示配速';
+  else if (!plausibleRunPace(seconds, km)) target.textContent = '配速不合理（每公里 1:00–60:00），請確認時間與距離';
+  else target.textContent = `配速 ${formatPace(seconds / km)}`;
+}
+
+// Validates the duration field for a submit: { seconds } or { error }.
+function readRunDuration(prefix, km) {
+  const seconds = parseRunDuration(document.getElementById(`${prefix}-duration`)?.value);
+  if (seconds === null) return { seconds: null };
+  if (Number.isNaN(seconds)) return { error: '跑步時間格式例如 32:15、1:05:30 或 45（分鐘）。' };
+  if (!plausibleRunPace(seconds, km)) return { error: '跑步時間換算的配速不合理（每公里 1:00–60:00），請確認時間與距離。' };
+  return { seconds };
 }
 
 function allRunShoes() { return [...shoes, ...retiredShoes]; }
@@ -155,10 +215,17 @@ async function addRun() {
     error.textContent = '跑步日期不可晚於今天。';
     return;
   }
+  const duration = readRunDuration('run', km);
+  if (duration.error) {
+    error.textContent = duration.error;
+    return;
+  }
   const payload = { date, km, shoe_id: shoeId };
+  if (duration.seconds !== null) payload.duration_seconds = duration.seconds;
   const form = {
     date: document.getElementById('run-date').value,
     km: document.getElementById('run-km').value,
+    duration: document.getElementById('run-duration').value,
     shoe: document.getElementById('run-shoe').value,
     month: document.getElementById('run-month').value,
   };
@@ -168,8 +235,12 @@ async function addRun() {
     document.getElementById('add-run-btn').disabled = true;
     if (!await runController.submitCreate(operation, payload)) return;
     const unchanged = matchesForm(Object.fromEntries(
-      ['date', 'km', 'shoe'].map(key => ['run-' + key, form[key]])));
-    if (unchanged) document.getElementById('run-km').value = '';
+      ['date', 'km', 'duration', 'shoe'].map(key => ['run-' + key, form[key]])));
+    if (unchanged) {
+      document.getElementById('run-km').value = '';
+      document.getElementById('run-duration').value = '';
+      updateRunPacePreview('run');
+    }
     if (unchanged && document.getElementById('run-month').value === form.month) {
       document.getElementById('run-month').value = date.slice(0, 7);
     }
@@ -192,6 +263,8 @@ function openRunModal(runId) {
   runController.openEditor(run);
   document.getElementById('edit-run-date').value = run.date;
   document.getElementById('edit-run-km').value = run.km;
+  document.getElementById('edit-run-duration').value = formatRunDuration(run.duration_seconds);
+  updateRunPacePreview('edit-run');
   populateRunShoeSelects(run.shoe_id);
   document.getElementById('edit-run-error').style.display = 'none';
   document.getElementById('run-modal').classList.add('active');
@@ -207,7 +280,7 @@ async function saveRun() {
   const snapshot = runController.editor;
   const error = document.getElementById('edit-run-error');
   if (!isCurrentAuthSession(snapshot.session)) return;
-  const draft = readForm(['edit-run-date', 'edit-run-km', 'edit-run-shoe']);
+  const draft = readForm(['edit-run-date', 'edit-run-km', 'edit-run-duration', 'edit-run-shoe']);
   const payload = {
     date: document.getElementById('edit-run-date').value,
     km: parseFloat(document.getElementById('edit-run-km').value),
@@ -220,6 +293,12 @@ async function saveRun() {
   if (payload.date > localDateISO()) {
     error.textContent = '跑步日期不可晚於今天。'; error.style.display = 'block'; return;
   }
+  const duration = readRunDuration('edit-run', payload.km);
+  if (duration.error) {
+    error.textContent = duration.error; error.style.display = 'block'; return;
+  }
+  // An empty field clears a stored time (SPEC-060); the backend accepts null only here.
+  payload.duration_seconds = duration.seconds;
   try {
     snapshot.saving = true;
     if (!await runController.saveEditor(snapshot, payload)) return;

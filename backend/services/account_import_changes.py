@@ -40,7 +40,11 @@ def build_changes(plan: 'ImportPlan', backup: AccountBackup) -> ImportChanges:
             final_runs[('source', run_item.id)] = (shoe_key, run_item.date, run_item.km)
         elif target in plan.runs:
             run_row = plan.runs[target]
-            patch = changed_fields(run_row, run_item.model_dump(exclude={'id', 'shoe_id', 'aliases'}))
+            values = run_item.model_dump(exclude={'id', 'shoe_id', 'aliases'})
+            if values.get('duration_seconds') is None:
+                # A merge never clears a stored moving time (older archives have none).
+                values.pop('duration_seconds', None)
+            patch = changed_fields(run_row, values)
             if run_row.shoe_id != shoe_target:
                 # This field contains a source ID; execution resolves it after shoe creation.
                 patch['shoe_id'] = run_item.shoe_id

@@ -336,7 +336,8 @@ window.__appBootLegacyPoll = window.setInterval(function () {
         <h3>記下一次跑步</h3>
         <div class="run-entry-grid">
           <div class="form-group"><label for="run-date">日期</label><input id="run-date" type="date" required data-change="run-date-warning" data-form="run"></div>
-          <div class="form-group"><label for="run-km">距離 (km)</label><input id="run-km" type="number" min="0.01" max="1000" step="0.01" placeholder="5.00" required></div>
+          <div class="form-group"><label for="run-km">距離 (km)</label><input id="run-km" type="number" min="0.01" max="1000" step="0.01" placeholder="5.00" required data-input="run-pace-preview" data-form="run"></div>
+          <div class="form-group duration-field"><label for="run-duration">跑步時間（選填）</label><input id="run-duration" type="text" inputmode="numeric" placeholder="例如 32:15 或 1:05:30" aria-describedby="run-pace-preview" data-input="run-pace-preview" data-form="run"><small class="run-pace-preview" id="run-pace-preview" role="status"></small></div>
           <div class="form-group shoe-field"><label for="run-shoe">穿哪雙鞋</label><select id="run-shoe" required data-change="run-date-warning" data-form="run"></select></div>
         </div>
         <p class="run-date-warning" id="run-date-warning" role="status" hidden></p>
@@ -359,7 +360,7 @@ window.__appBootLegacyPoll = window.setInterval(function () {
       <p class="table-scroll-hint">欄位較多時，可左右滑動表格查看。</p>
       <div class="table-wrap" tabindex="0" role="region" aria-label="可左右滑動的資料表">
         <table>
-          <thead><tr><th>日期</th><th class="numeric">距離</th><th>鞋款</th><th>來源</th><th></th></tr></thead>
+          <thead><tr><th>日期</th><th class="numeric">距離</th><th class="numeric">時間</th><th class="numeric">配速</th><th>鞋款</th><th>來源</th><th></th></tr></thead>
           <tbody id="run-table"></tbody>
         </table>
       </div>

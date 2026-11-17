@@ -27,8 +27,11 @@ function renderRunLog() {
   const favoriteEntry = [...shoeStats.entries()].sort((a, b) => b[1].km - a[1].km)[0];
   const favorite = favoriteEntry ? runShoe(favoriteEntry[0]) : null;
   const monthLabel = `${parseInt(month.slice(5), 10)} 月`;
+  // SPEC-060: time-weighted average over runs that have a moving time, from the backend.
+  const averagePace = summary?.average_pace_seconds_per_km;
+  const paceText = averagePace ? ` · 平均配速 ${formatPace(averagePace)}` : '';
   document.getElementById('run-stats').innerHTML = [
-    { label: `${monthLabel}總里程`, value: `${total.toFixed(2)} km`, sub: `${summary ? summary.run_count : filtered.length} 次跑步` },
+    { label: `${monthLabel}總里程`, value: `${total.toFixed(2)} km`, sub: `${summary ? summary.run_count : filtered.length} 次跑步${paceText}` },
     { label: '跑步天數', value: `${days} 天`, sub: days ? `平均每天 ${(total / days).toFixed(2)} km` : '還沒有紀錄' },
     { label: `${monthLabel}主力鞋`, value: favorite ? esc(favorite.model) : '—', sub: favoriteEntry ? `${favoriteEntry[1].km.toFixed(2)} km` : '還沒有紀錄' },
   ].map(card => `<div class="card"><div class="card-label">${card.label}</div><div class="card-value">${card.value}</div><div class="card-sub">${card.sub}</div></div>`).join('');
@@ -47,8 +50,9 @@ function renderRunLog() {
     const color = shoe ? shoeColor(shoe.id) : '#64748b';
     const shoeName = shoe ? `${esc(shoe.brand)} ${esc(shoe.model)}` : '鞋款已刪除';
     const source = run.strava_id ? '<span class="run-source strava">Strava</span>' : '<span class="run-source">手動</span>';
-    return `<tr><td>${esc(run.date.replace(/-/g, '/'))}</td><td class="numeric"><strong>${run.km.toFixed(2)} km</strong></td><td><span class="run-shoe-label"><span class="brand-dot" style="background:${color}"></span>${shoeName}</span></td><td>${source}</td><td><button class="btn btn-sm btn-edit" data-click="open-run" data-run-id="${run.id}">編輯</button></td></tr>`;
-  }).join('') : '<tr><td colspan="5" class="empty-state">這個月還沒有跑步紀錄。點月曆日期或從右上角記下第一跑吧！</td></tr>';
+    const time = run.duration_seconds ? formatRunDuration(run.duration_seconds) : '—';
+    return `<tr><td>${esc(run.date.replace(/-/g, '/'))}</td><td class="numeric"><strong>${run.km.toFixed(2)} km</strong></td><td class="numeric">${time}</td><td class="numeric">${formatPace(run.pace_seconds_per_km)}</td><td><span class="run-shoe-label"><span class="brand-dot" style="background:${color}"></span>${shoeName}</span></td><td>${source}</td><td><button class="btn btn-sm btn-edit" data-click="open-run" data-run-id="${run.id}">編輯</button></td></tr>`;
+  }).join('') : '<tr><td colspan="7" class="empty-state">這個月還沒有跑步紀錄。點月曆日期或從右上角記下第一跑吧！</td></tr>';
   renderRunCalendar(summary ? summary.calendar : filtered, month);
   renderRunShoeChart(shoeStats);
   loadDashboardAnalytics(month);
@@ -226,15 +230,15 @@ function renderShoeAnalytics(data) {
   const source = life.forecast_source === 'recent_90_days' ? '依近 90 天實際使用' : '依計畫月跑量';
   const forecastSub = retired ? '退役後不再預估' : `${source} · ${Number(life.forecast_monthly_km).toFixed(1)} km／月`;
   const cards = [
-    { label: '總里程', value: `${Number(life.total_mileage_km).toFixed(2)} km`, sub: '' },
+    { label: '總里程', value: `${Number(life.total_mileage_km).toFixed(2)} km`, sub: usage.average_pace_seconds_per_km ? `平均配速 ${formatPace(usage.average_pace_seconds_per_km)}` : '' },
     { label: '穿著次數', value: `${usage.count} 次`, sub: usage.count ? '已納入逐筆日誌' : '尚無日誌紀錄' },
     { label: '近 30／90 天', value: `${Number(usage.km_30_days).toFixed(1)} / ${Number(usage.km_90_days).toFixed(1)} km`, sub: `實際月均 ${Number(usage.actual_monthly_km_90_days).toFixed(1)} km` },
     { label: '最後使用', value: usage.last_run_date ? usage.last_run_date.replace(/-/g, '/') : '—', sub: usage.first_run_date ? `首次紀錄 ${usage.first_run_date.replace(/-/g, '/')}` : '尚無日誌紀錄' },
     { label: '壽命進度', value: life.usage_percent === null ? '—' : `${Number(life.usage_percent).toFixed(1)}%`, sub: `剩餘 ${Number(life.remaining_mileage_km).toFixed(2)} km` },
     { label: '預估退役', value: forecast, sub: forecastSub },
   ];
-  const recentRows = data.recent_runs.length ? data.recent_runs.map(run => `<tr><td>${run.date.replace(/-/g, '/')}</td><td class="numeric">${Number(run.km).toFixed(2)} km</td></tr>`).join('') : '<tr><td colspan="2" class="empty-state">尚無逐筆跑步紀錄。</td></tr>';
-  document.getElementById('shoe-analysis-content').innerHTML = `<div class="shoe-analysis-grid">${cards.map(card => `<div class="insight-card"><div class="insight-card-label">${card.label}</div><div class="insight-card-value">${card.value}</div>${card.sub ? `<div class="insight-card-sub">${card.sub}</div>` : ''}</div>`).join('')}</div><div class="shoe-analysis-section"><h3>近 12 個月使用趨勢</h3><div class="shoe-analysis-chart"><canvas id="chart-shoe-analytics"></canvas></div></div><div class="shoe-analysis-section"><h3>最近跑步</h3><div class="table-wrap" tabindex="0" role="region" aria-label="跑鞋最近跑步"><table><thead><tr><th>日期</th><th class="numeric">距離</th></tr></thead><tbody>${recentRows}</tbody></table></div></div>`;
+  const recentRows = data.recent_runs.length ? data.recent_runs.map(run => `<tr><td>${run.date.replace(/-/g, '/')}</td><td class="numeric">${Number(run.km).toFixed(2)} km</td><td class="numeric">${formatPace(run.pace_seconds_per_km)}</td></tr>`).join('') : '<tr><td colspan="3" class="empty-state">尚無逐筆跑步紀錄。</td></tr>';
+  document.getElementById('shoe-analysis-content').innerHTML = `<div class="shoe-analysis-grid">${cards.map(card => `<div class="insight-card"><div class="insight-card-label">${card.label}</div><div class="insight-card-value">${card.value}</div>${card.sub ? `<div class="insight-card-sub">${card.sub}</div>` : ''}</div>`).join('')}</div><div class="shoe-analysis-section"><h3>近 12 個月使用趨勢</h3><div class="shoe-analysis-chart"><canvas id="chart-shoe-analytics"></canvas></div></div><div class="shoe-analysis-section"><h3>最近跑步</h3><div class="table-wrap" tabindex="0" role="region" aria-label="跑鞋最近跑步"><table><thead><tr><th>日期</th><th class="numeric">距離</th><th class="numeric">配速</th></tr></thead><tbody>${recentRows}</tbody></table></div></div>`;
   if (typeof Chart === 'undefined') return;
   if (chartInstances.shoeAnalytics) chartInstances.shoeAnalytics.destroy();
   const textColor = getThemeColor('--text-dim', '#8b8d9a');
