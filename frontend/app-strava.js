@@ -105,6 +105,7 @@ async function previewStravaFile() {
       stravaDeletedText(stravaController.state.preview) +
       stravaDateCorrectionText(stravaController.state.preview) +
       stravaDurationBackfillText(stravaController.state.preview) +
+      stravaManualMatchText(stravaController.state.preview) +
       (unknown ? `有 ${unknown} 個鞋款需要手動配對或略過。` : '待匯入鞋款已全部自動配對。');
     const shoeOptions = allRunShoes().map(shoe => `<option value="${shoe.id}">${esc(shoeLabel(shoe))}</option>`).join('');
     mapping.innerHTML = stravaController.state.preview.gear_groups.map((group, index) => `
@@ -148,9 +149,24 @@ function stravaDurationBackfillText(preview) {
   return count ? `另有 ${count} 筆既有紀錄會補上跑步時間，用來計算配速。` : '';
 }
 
+// SPEC-062: activities already entered by hand are linked to that run, never imported again.
+function stravaManualMatchText(preview) {
+  const linked = Number(preview?.manual_link_count || 0);
+  const timed = Number(preview?.manual_link_duration_count || 0);
+  const conflicts = Number(preview?.manual_conflict_count || 0);
+  let text = '';
+  if (linked) text += `另有 ${linked} 筆和手動輸入的紀錄相符，不會重複新增，會改為連結 Strava${timed ? `，並補上 ${timed} 筆跑步時間` : ''}。`;
+  if (conflicts) {
+    const samples = (preview.manual_conflict_samples || [])
+      .map(item => `${String(item.date).replace(/-/g, '/')} ${Number(item.km).toFixed(2)} km`).join('、');
+    text += `另有 ${conflicts} 筆活動當天已有手動紀錄但無法確定是同一次，為避免重複不會匯入${samples ? `（例如 ${samples}）` : ''}。`;
+  }
+  return text;
+}
+
 function stravaHasChanges(preview) {
   return Number(preview?.importable_count || 0) > 0 || Number(preview?.date_correction_count || 0) > 0
-    || Number(preview?.duration_backfill_count || 0) > 0;
+    || Number(preview?.duration_backfill_count || 0) > 0 || Number(preview?.manual_link_count || 0) > 0;
 }
 
 // SPEC-046: flag a mapping whose earliest activity predates the chosen shoe's purchase.
@@ -194,7 +210,7 @@ async function importStrava() {
     resourceStore.invalidate(['strava-history']);
     if (stravaController.ownsImport(operation)) {
       closeStravaModal();
-      alert(`已匯入 ${result.imported} 筆跑步紀錄${result.skipped_unmapped ? `，略過 ${result.skipped_unmapped} 筆未配對鞋款` : ''}${result.skipped_deleted ? `，略過 ${result.skipped_deleted} 筆先前刪除的活動` : ''}${result.synced_mileage ? `，並同步 ${result.synced_mileage.toFixed(2)} km 至跑鞋與月跑量` : ''}${result.corrected_dates ? `，修正 ${result.corrected_dates} 筆跑步日期為台灣時間` : ''}${result.backfilled_durations ? `，補上 ${result.backfilled_durations} 筆跑步時間` : ''}。`);
+      alert(`已匯入 ${result.imported} 筆跑步紀錄${result.skipped_unmapped ? `，略過 ${result.skipped_unmapped} 筆未配對鞋款` : ''}${result.skipped_deleted ? `，略過 ${result.skipped_deleted} 筆先前刪除的活動` : ''}${result.synced_mileage ? `，並同步 ${result.synced_mileage.toFixed(2)} km 至跑鞋與月跑量` : ''}${result.corrected_dates ? `，修正 ${result.corrected_dates} 筆跑步日期為台灣時間` : ''}${result.backfilled_durations ? `，補上 ${result.backfilled_durations} 筆跑步時間` : ''}${result.linked_manual ? `，連結 ${result.linked_manual} 筆手動紀錄` : ''}${result.skipped_manual_conflict ? `，略過 ${result.skipped_manual_conflict} 筆可能和手動紀錄重複的活動` : ''}。`);
     }
     await loadData({ mutation: 'strava' });
   } catch (e) {
