@@ -341,6 +341,68 @@ class RunningGoalOut(RunningGoalUpdate):
     yearly_km: float
 
 
+# ── Race Goal Schemas (SPEC-065) ─────────────────────────
+
+RaceDistanceKm = Annotated[float, Field(ge=1, le=250, allow_inf_nan=False)]
+RaceSeconds = Annotated[int, Field(ge=60, le=MAX_RUN_DURATION_SECONDS, strict=True)]
+
+
+class RaceGoalUpdate(BaseModel):
+    expected_version: int | None = Field(default=None, ge=0)
+    race_name: Annotated[str, Field(max_length=80)] = ""
+    race_date: str
+    distance_km: RaceDistanceKm
+    target_seconds: RaceSeconds
+    reference_distance_km: RaceDistanceKm | None = None
+    reference_seconds: RaceSeconds | None = None
+    reference_temperature_c: Annotated[float, Field(ge=-30, le=50, allow_inf_nan=False)] | None = None
+
+    @field_validator("race_name")
+    @classmethod
+    def strip_race_name(cls, value: str) -> str:
+        return value.strip()
+
+    @field_validator("race_date")
+    @classmethod
+    def validate_race_date(cls, value: str) -> str:
+        try:
+            parsed = calendar_date.fromisoformat(value)
+        except ValueError as exc:
+            raise ValueError("race_date must be YYYY-MM-DD") from exc
+        if not 1900 <= parsed.year <= 2100 or parsed.isoformat() != value:
+            raise ValueError("race_date must be YYYY-MM-DD")
+        return value
+
+    @field_validator("distance_km", "reference_distance_km")
+    @classmethod
+    def round_distance(cls, value: float | None) -> float | None:
+        return None if value is None else round(value, 4)
+
+    @model_validator(mode="after")
+    def validate_paces(self) -> "RaceGoalUpdate":
+        if not is_plausible_duration(self.target_seconds, self.distance_km):
+            raise ValueError("target_seconds must give a pace between 1:00 and 60:00 per km")
+        if (self.reference_distance_km is None) != (self.reference_seconds is None):
+            raise ValueError("reference_distance_km and reference_seconds go together")
+        if self.reference_seconds is None and self.reference_temperature_c is not None:
+            raise ValueError("reference_temperature_c needs a reference result")
+        if (self.reference_seconds is not None and self.reference_distance_km is not None
+                and not is_plausible_duration(self.reference_seconds, self.reference_distance_km)):
+            raise ValueError("reference_seconds must give a pace between 1:00 and 60:00 per km")
+        return self
+
+
+class RaceGoalOut(BaseModel):
+    version: int
+    race_name: str
+    race_date: str
+    distance_km: float
+    target_seconds: int
+    reference_distance_km: float | None
+    reference_seconds: int | None
+    reference_temperature_c: float | None
+
+
 # ── Run Log Schemas ────────────────────────────────────
 
 def _validate_run_pace(duration_seconds: int | None, km: float | None) -> None:

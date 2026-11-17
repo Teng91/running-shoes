@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [4.18.0] - 2026-11-17
+
+### Added
+- 訓練分析新增「比賽準備」（SPEC-065）：設定目標賽事（日期、距離、目標時間，選填參考成績與氣溫）後，顯示倒數、目標配速、依 Riegel 公式預估的完賽時間、近 8 週強度分布（輕鬆／穩定／比賽配速／更快），以及長距離是否足夠（比賽距離 75% 為門檻、建議至少 2 次、最後一次在賽前 14 天前）。配速趨勢依強度上色並畫出目標配速。新增 `GET/PUT/DELETE /api/race-goal` 與 `GET /api/analytics/race`。
+
+### Removed
+- 移除只描述資料、無法指導訓練的「月跑量與配速」「累積跑量與配速」「距離與配速」「配速分布」；星期幾跑量與配速保留。Asset 4.18.0／shell v71，schema 10，回滾見 `scripts/rollback_schema_ten.sql`。
+
 ### Security
 - 開發用依賴升級：`filelock` 4.1.1 → 4.2.7、`pip` 25.3 → 26.2.2，關閉 22 個 Dependabot 警告（只影響 `requirements-dev.txt`，正式環境依賴不變）。已不再使用 pip-tools，移除舊的 pip 版本限制說明。Repo 開啟 Dependabot security updates。
 - 發版 workflow 的 commit 清單改以 UTF-8 解碼，Windows 本機跑測試時不再因中文 commit 訊息失敗。

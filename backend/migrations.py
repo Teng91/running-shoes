@@ -13,7 +13,7 @@ from backend.audit_schema import install_audit_triggers
 from backend.credentials import get_password_hash
 from backend.database import Base
 
-CURRENT_SCHEMA_VERSION = 9
+CURRENT_SCHEMA_VERSION = 10
 
 
 def _migrate_preview_tokens(engine: Engine) -> None:
@@ -105,6 +105,12 @@ def _migrate_schema_nine(engine: Engine) -> None:
         columns = {column["name"] for column in inspect(connection).get_columns("runs")}
         if "duration_seconds" not in columns:
             connection.exec_driver_sql("ALTER TABLE runs ADD COLUMN duration_seconds INTEGER")
+
+
+
+def _migrate_schema_ten(engine: Engine) -> None:
+    """One target race per user (SPEC-065); existing rows are untouched."""
+    cast(Table, models.RaceGoal.__table__).create(bind=engine, checkfirst=True)
 
 
 READY_TABLES = {"users", "shoes", "runs", "monthly_mileages"}
@@ -344,6 +350,7 @@ def run_startup_migrations(
     _migrate_schema_seven(engine, applied_version)
     _migrate_schema_eight(engine, applied_version)
     _migrate_schema_nine(engine)
+    _migrate_schema_ten(engine)
     with engine.begin() as connection:
         for table in ("runs", "monthly_mileages"):
             connection.execute(text(

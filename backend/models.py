@@ -147,6 +147,23 @@ class RunningGoal(Base):
     owner: Mapped["User"] = relationship(back_populates="running_goal")
 
 
+class RaceGoal(Base):
+    """One target race per user with an optional reference result (SPEC-065)."""
+
+    __tablename__ = "race_goals"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), unique=True, nullable=False)
+    version: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    race_name: Mapped[str] = mapped_column(String(80), default="", nullable=False)
+    race_date: Mapped[str] = mapped_column(String(10), nullable=False)
+    distance_km: Mapped[float] = mapped_column(Float, nullable=False)
+    target_seconds: Mapped[int] = mapped_column(Integer, nullable=False)
+    reference_distance_km: Mapped[float | None] = mapped_column(Float, nullable=True)
+    reference_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    reference_temperature_c: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+
 class Run(Base):
     __tablename__ = "runs"
     __table_args__ = (

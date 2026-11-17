@@ -7,7 +7,7 @@ from backend import analytics, models
 from backend.auth import get_current_user
 from backend.clock import local_today
 from backend.dependencies import get_db
-from backend.read_models import highlights, pace, trends
+from backend.read_models import highlights, pace, race_readiness, trends
 
 router = APIRouter(tags=["analytics"])
 
@@ -20,6 +20,14 @@ def dashboard_analytics(
     db: Session = Depends(get_db),
 ):
     return analytics.dashboard_analytics(db, current_user.id, year, month)
+
+
+@router.get("/api/analytics/race")
+def race_readiness_analytics(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return race_readiness.race_readiness(db, current_user.id, local_today())
 
 
 @router.get("/api/analytics/trends")
