@@ -49,7 +49,7 @@ test('double submit writes one run and unlocks after completion or failure', asy
   let calls = 0;
   const elements = {
     'run-error': {}, 'run-date': { value: '2026-09-06' },
-    'run-km': { value: '10' }, 'run-shoe': { value: '1' },
+    'run-km': { value: '10' }, 'run-duration': { value: '' }, 'run-shoe': { value: '1' },
     'run-month': {}, 'add-run-btn': {},
   };
   const context = runContext({

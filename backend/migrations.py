@@ -13,7 +13,7 @@ from backend.audit_schema import install_audit_triggers
 from backend.credentials import get_password_hash
 from backend.database import Base
 
-CURRENT_SCHEMA_VERSION = 8
+CURRENT_SCHEMA_VERSION = 9
 
 
 def _migrate_preview_tokens(engine: Engine) -> None:
@@ -97,6 +97,14 @@ def _migrate_schema_eight(engine: Engine, applied_version: int) -> None:
                 "ORDER BY audit_events.id DESC LIMIT 1"
                 ") WHERE strava_id IS NULL"
             )
+
+
+def _migrate_schema_nine(engine: Engine) -> None:
+    """Optional run moving time; pace is derived, never stored (SPEC-060)."""
+    with engine.begin() as connection:
+        columns = {column["name"] for column in inspect(connection).get_columns("runs")}
+        if "duration_seconds" not in columns:
+            connection.exec_driver_sql("ALTER TABLE runs ADD COLUMN duration_seconds INTEGER")
 
 
 READY_TABLES = {"users", "shoes", "runs", "monthly_mileages"}
@@ -335,6 +343,7 @@ def run_startup_migrations(
         _migrate_preview_tokens(engine)
     _migrate_schema_seven(engine, applied_version)
     _migrate_schema_eight(engine, applied_version)
+    _migrate_schema_nine(engine)
     with engine.begin() as connection:
         for table in ("runs", "monthly_mileages"):
             connection.execute(text(

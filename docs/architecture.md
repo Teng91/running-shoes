@@ -373,6 +373,7 @@ ARIA 與 `agent-mode` 狀態，不以 inline style 決定 shell 幾何，因此�
 | `backend/services/` | 配額、版本、里程與 application transaction owner；`accounts.py` 註冊／改密碼、`fingerprints.py` 回執與備份的 payload 指紋、`retention.py` 每帳號保留上限 | models、schemas、read models、persistence | FastAPI、routers、`backend.main` |
 | `backend/read_models/` | user-scoped native statistics：`shoes.py`、`shoe_statistics.py`、`shoe_matching.py`（名稱消歧義）、`runs.py`、`run_statistics.py`、`mileage.py`、`spending.py`、`trends.py`、`highlights.py`、`saved_reports.py`、`strava_preview.py`，共用 `rounding.py` | models、純 domain、SQLAlchemy | HTTP frameworks、routers、tools |
 | `backend/shoe_metrics.py` | 折數、成本、壽命共同算術 | models | HTTP、AI、UI |
+| `backend/run_metrics.py` | 跑步時間合理範圍與配速推導（時間加權平均） | Python stdlib | HTTP、AI、UI、database |
 | `backend/migrations.py` | ordered/idempotent schema upgrade 與版本 | models、database | routers、frontend |
 | `backend/analytics.py`、`goals.py`、`reports.py` | 可重用的唯讀統計與月報提示詞 | models、read models | FastAPI app、frontend |
 | `backend/exporting.py`、`strava_import.py` | 輸入／輸出轉換 | models 或純資料 | FastAPI／HTTP exception |
@@ -652,6 +653,7 @@ flowchart LR
 - **限流**：`rate_limits.consume()` 把同一請求的所有視窗放在一個交易，滿了就整筆回滾；限額來自 `app.state.settings`，不再保留記憶體桶。
 - **稽核 trigger**：每次啟動依目前欄位重建，避免舊欄位清單使快照不完整或使寫入失敗。
 - **Strava**：`strava_import.parse_activity_dates()` 把 UTC 時間戳轉為 `clock.APP_TIMEZONE` 日期。`date_corrections()` 只修正仍停在舊 UTC 日期的既有活動，`services/strava_imports.py` 在匯入交易中移動日期與月跑量。
+- **v4.15.0**：跑步時間與配速（SPEC-060）。Schema 9 在 `runs` 加上可為 NULL 的 `duration_seconds`，回滾腳本是 `scripts/rollback_schema_nine.sql`。配速不存，由 `run_metrics.py` 推導，`schemas.RunOut`、`read_models/runs.py`、`shoe_statistics.py` 共用；前端 `app-state.js` 鏡像合理配速上下限。`strava_import.duration_backfills()` 找出缺少時間的既有活動，`services/strava_imports.py` 在匯入交易中補上。備份升為 v4（`backup_contract`），`account_import_changes` 不以空值清除時間，`history.restore_deleted` 從快照帶回時間。依賴方向不變。
 - **v4.14.0**：自動套用新版（SPEC-059）。`app-updates.js` 在新 shell 啟用後，於背景、回到前景未操作或閒置 5 分鐘時重新載入，`appUpdateBusy()` 讀取 AI、月報、請求、彈窗、行內編輯與輸入框狀態來延後；`sessionStorage` 記錄已嘗試的版本避免重整迴圈。`app-agent.js` 以 `saveAgentChat()`／`restoreAgentChat()` 把完成的對話存在分頁的 `sessionStorage`，`app.js` 啟動時還原。模組邊界不變。
 - **v4.13.0**：資料正確性、訓練分析與 AI 統計工具（SPEC-055～058）。
   - Schema 8 在 `run_tombstones` 加上 `strava_id`；`services/strava_imports.py` 與 `read_models/strava_preview.py` 透過 `run_identity` 略過刪除過的活動。回滾腳本是 `scripts/rollback_schema_eight.sql`。

@@ -31,7 +31,10 @@ function featureContext(globals = {}) {
     }));
     return owners.get(name);
   };
-  vm.runInContext(['beginInlineEdit', 'finishInlineEdit', 'preserveInlineTable', 'readForm', 'matchesForm', 'shoeLabel', 'invalidateDataResources', 'refreshCoreData', 'registerResourceCaches', 'goalFormValues', 'goalStartYearOptions', 'setGoalField', 'setGoalSettingsOpen', 'updateGoalYearlyHint', 'prepareGoalForm'].map(extract).join('\n'), context);
+  vm.runInContext(['beginInlineEdit', 'finishInlineEdit', 'preserveInlineTable', 'readForm', 'matchesForm', 'shoeLabel', 'invalidateDataResources', 'refreshCoreData', 'registerResourceCaches', 'goalFormValues', 'goalStartYearOptions', 'setGoalField', 'setGoalSettingsOpen', 'updateGoalYearlyHint', 'prepareGoalForm', 'formatRunDuration', 'formatPace'].map(extract).join('\n'), context);
+  // SPEC-060 pace helpers are shared by run creation, editing and rendering.
+  vm.runInContext(source.match(/const RUN_PACE_MIN_SECONDS = \d+;\s*const RUN_PACE_MAX_SECONDS = \d+;/)[0] + '\n'
+    + ['parseRunDuration', 'plausibleRunPace', 'updateRunPacePreview', 'readRunDuration'].map(extract).join('\n'), context);
   context.registerResourceCaches();
   return context;
 }

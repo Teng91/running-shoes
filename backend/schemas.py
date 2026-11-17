@@ -9,12 +9,14 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    computed_field,
     field_serializer,
     field_validator,
     model_validator,
 )
 
 from backend.clock import local_today
+from backend.run_metrics import MAX_RUN_DURATION_SECONDS, is_plausible_duration, pace_seconds_per_km
 
 # All valid shoe purpose/function categories.
 SHOE_CATEGORIES = ["Daily", "Speed", "Tempo", "Race"]
@@ -27,6 +29,7 @@ ReasonableYear = Annotated[int, Field(ge=1900, le=2100)]
 CalendarMonth = Annotated[int, Field(ge=1, le=12)]
 NonNegativeFiniteKm = Annotated[float, Field(ge=0, allow_inf_nan=False)]
 PositiveFiniteKm = Annotated[float, Field(gt=0, le=1000, allow_inf_nan=False)]
+RunDurationSeconds = Annotated[int, Field(ge=1, le=MAX_RUN_DURATION_SECONDS, strict=True)]
 MAX_PASSWORD_BYTES = 72
 MAX_AGENT_CONTEXT_CHARS = 60_000
 Username = Annotated[str, Field(min_length=1, max_length=50)]
@@ -340,10 +343,17 @@ class RunningGoalOut(RunningGoalUpdate):
 
 # ── Run Log Schemas ────────────────────────────────────
 
+def _validate_run_pace(duration_seconds: int | None, km: float | None) -> None:
+    if duration_seconds is not None and km is not None and not is_plausible_duration(duration_seconds, km):
+        raise ValueError("duration_seconds must give a pace between 1:00 and 60:00 per km")
+
+
 class RunBase(BaseModel):
     date: str
     km: PositiveFiniteKm
     shoe_id: int = Field(gt=0)
+    # Optional moving time (SPEC-060); pace is derived, never accepted from clients.
+    duration_seconds: RunDurationSeconds | None = None
 
     @field_validator("date")
     @classmethod
@@ -358,6 +368,11 @@ class RunBase(BaseModel):
             raise ValueError("km must be at least 0.01")
         return value
 
+    @model_validator(mode="after")
+    def validate_pace(self):
+        _validate_run_pace(self.duration_seconds, self.km)
+        return self
+
 
 class RunCreate(RunBase):
     @field_validator("date")
@@ -371,6 +386,8 @@ class RunUpdate(BaseModel):
     date: str | None = None
     km: PositiveFiniteKm | None = None
     shoe_id: int | None = Field(default=None, gt=0)
+    # Unlike the other fields, an explicit null clears the stored moving time.
+    duration_seconds: RunDurationSeconds | None = None
 
     @field_validator("date")
     @classmethod
@@ -401,7 +418,16 @@ class RunUpdate(BaseModel):
     def reject_explicit_nulls(cls, value):
         # A null version used to reach SQL as `version IS NULL` and always
         # failed as a misleading 409; reject it like shoe and month updates.
+        # duration_seconds is the exception: null clears the moving time.
+        if isinstance(value, dict) and "duration_seconds" in value:
+            _reject_explicit_nulls({k: v for k, v in value.items() if k != "duration_seconds"}, "run")
+            return value
         return _reject_explicit_nulls(value, "run")
+
+    @model_validator(mode="after")
+    def validate_pace(self):
+        _validate_run_pace(self.duration_seconds, self.km)
+        return self
 
 
 class RunOut(RunBase):
@@ -410,6 +436,17 @@ class RunOut(RunBase):
     user_id: int
     version: int = 0
     strava_id: str | None = None
+    # Stored rows are trusted: a moving time kept across a distance edit still serializes.
+    duration_seconds: int | None = None
+
+    @model_validator(mode="after")
+    def validate_pace(self):
+        return self
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def pace_seconds_per_km(self) -> int | None:
+        return pace_seconds_per_km(self.duration_seconds, self.km)
 
 
 class StravaImportOut(BaseModel):

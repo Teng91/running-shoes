@@ -2,7 +2,7 @@
 const localWorkspace = { controller: null, session: null, account: null, activating: null,
   runDraftId: null, consumedRunDraftId: null, fresh: new Set(), edited: new Set(), editors: {}, restoring: false, error: '', ready: false, syncing: null, syncRefreshRequested: false, channel: null };
 const workspaceForms = {
-  run: ['run-date', 'run-km', 'run-shoe'],
+  run: ['run-date', 'run-km', 'run-duration', 'run-shoe'],
   goal: ['goal-start-year', 'goal-monthly-km'],
 };
 
@@ -123,9 +123,9 @@ function captureWorkspaceEditor() {
       values: readForm(Object.values(shoeModal.formIds)), categories: getSelectedCategories() };
   }
   if (active('run-modal') && runController.editor) {
-    const { id, version, date, km, shoe_id } = runController.editor;
-    return { kind: 'run', base: { id, version, date, km, shoe_id },
-      values: readForm(['edit-run-date', 'edit-run-km', 'edit-run-shoe']) };
+    const { id, version, date, km, shoe_id, duration_seconds = null } = runController.editor;
+    return { kind: 'run', base: { id, version, date, km, shoe_id, duration_seconds },
+      values: readForm(['edit-run-date', 'edit-run-km', 'edit-run-duration', 'edit-run-shoe']) };
   }
   for (const editor of inlineEditors.values()) {
     if (editor.draft) return { kind: editor.draft.kind, base: editor.draft.base,
@@ -167,6 +167,7 @@ function resumeWorkspaceEditor(key) {
     runController.openEditor(draft.base);
     document.getElementById('edit-run-date').value = draft.base.date;
     document.getElementById('edit-run-km').value = draft.base.km;
+    document.getElementById('edit-run-duration').value = formatRunDuration(draft.base.duration_seconds);
     populateRunShoeSelects(draft.base.shoe_id);
     document.getElementById('run-modal').classList.add('active');
   } else return;
@@ -345,7 +346,10 @@ async function clearLocalWorkspace() {
     for (const [name, ids] of Object.entries(workspaceForms)) {
       if (!formSnapshotMatches(operation.form.forms[name], readForm(ids))) { newerInput = true; continue; }
       if (name === 'goal') { getFormDraft('goal').reset(); prepareGoalForm(); }
-      else document.getElementById('run-km').value = '';
+      else {
+        document.getElementById('run-km').value = '';
+        document.getElementById('run-duration').value = '';
+      }
     }
     for (const [key, draft] of Object.entries(operation.form.editors)) {
       if (JSON.stringify(localWorkspace.editors[key]) === JSON.stringify(draft)) delete localWorkspace.editors[key];

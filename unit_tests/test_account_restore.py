@@ -486,7 +486,7 @@ def test_schema_six_preserves_existing_preview_and_is_idempotent(workspace):
         connection.execute(text("UPDATE schema_metadata SET value='5' WHERE key='schema_version'"))
     run_startup_migrations(workspace.engine, workspace.sessions)
     run_startup_migrations(workspace.engine, workspace.sessions)
-    assert schema_version(workspace.engine) == 8
+    assert schema_version(workspace.engine) == 9
     assert inspect(workspace.engine).get_pk_constraint('restore_previews')['constrained_columns'] == ['user_id', 'token']
     with workspace.sessions() as db:
         after = exports.build_account_export(db, db.get(models.User, 1))[0]
@@ -529,6 +529,7 @@ def test_preview_schema_rollback_preserves_business_rows(workspace):
         before = db.query(models.AuditEvent).count()
     connection = workspace.engine.raw_connection()
     try:
+        connection.executescript(Path('scripts/rollback_schema_nine.sql').read_text(encoding="utf-8"))
         connection.executescript(Path('scripts/rollback_schema_eight.sql').read_text(encoding="utf-8"))
         connection.executescript(Path('scripts/rollback_schema_seven.sql').read_text(encoding="utf-8"))
         connection.executescript(Path('scripts/rollback_preview_schema.sql').read_text(encoding="utf-8"))
@@ -541,7 +542,7 @@ def test_preview_schema_rollback_preserves_business_rows(workspace):
         assert db.query(models.AuditEvent).count() == before
         assert db.query(models.RestorePreview).count() == 0
     run_startup_migrations(workspace.engine, workspace.sessions)
-    assert schema_version(workspace.engine) == 8
+    assert schema_version(workspace.engine) == 9
 
 
 def test_export_contract_limits_and_explicit_history_omission(workspace):
@@ -801,7 +802,7 @@ def test_portable_source_recovery_aliases_roundtrip(workspace):
             history.restore_deleted(db, uid, event.id, workspace.config)
             return old_id
         original = export(1)
-        assert original['version'] == 3
+        assert original['version'] == 4
         apply(original, 'portable-first-import')
         source_old = recover(1)
         restored = export(1)
@@ -933,10 +934,12 @@ def test_legacy_archive_fingerprint_excludes_v3_defaults(workspace, version):
         payload.pop('source_id')
     for row in payload['runs']:
         row.pop('aliases', None)
+        row.pop('duration_seconds', None)
     parsed = parse_backup(json.dumps(payload).encode())
     original = parsed.model_dump(mode='json')
     for row in original['runs']:
         row.pop('aliases')
+        row.pop('duration_seconds')
     assert backup_fingerprint(parsed) == payload_hash(original)
 
 
