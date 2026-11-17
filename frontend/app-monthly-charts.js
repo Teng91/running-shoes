@@ -41,6 +41,7 @@ function renderMonthlyCharts() {
   renderYearOverYearChart();
   renderYearReview();
   renderTrends();
+  renderPaceAnalysis();
 }
 
 async function renderShoeStackedChart() {

@@ -182,6 +182,8 @@
 .heatmap-legend { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 4px; margin-top: 10px; font-size: 11px; color: var(--text-dim); }
 .heatmap-legend .heat-cell { --heat-size: 11px; }
 .heatmap-legend-note { margin-left: 6px; }
+.pace-summary { margin: -4px 0 14px; }
+.charts.pace-charts-single { grid-template-columns: 1fr; }
 .chart-note { margin-top: 10px; font-size: 12px; line-height: 1.5; color: var(--text-dim); }
 .timeline-box { margin-bottom: 28px; }
 .timeline-canvas { height: auto; min-height: 140px; }
