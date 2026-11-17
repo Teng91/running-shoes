@@ -6,6 +6,7 @@ from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from backend.models import Run
+from backend.run_metrics import pace_seconds_per_km
 
 
 def shoe_run_statistics(
@@ -41,6 +42,8 @@ def shoe_run_statistics(
                     else_=0,
                 )
             ),
+            func.sum(Run.duration_seconds),
+            func.sum(case((Run.duration_seconds.isnot(None), Run.km), else_=0)),
         )
         .filter(*scope)
         .group_by(Run.shoe_id)
@@ -55,14 +58,16 @@ def shoe_run_statistics(
             "last": None,
             "km_30": 0.0,
             "km_90": 0.0,
+            "average_pace": None,
             "monthly": {},
             "recent": [],
         }
         for shoe_id in shoe_ids
     }
-    for shoe_id, km, count, days, first, last, km_30, km_90 in rows:
+    for shoe_id, km, count, days, first, last, km_30, km_90, timed_seconds, timed_km in rows:
         result[shoe_id].update(
-            km=km, count=count, days=days, first=first, last=last, km_30=km_30, km_90=km_90
+            km=km, count=count, days=days, first=first, last=last, km_30=km_30, km_90=km_90,
+            average_pace=pace_seconds_per_km(timed_seconds, timed_km),
         )
 
     if not include_details:
@@ -90,6 +95,7 @@ def shoe_run_statistics(
             Run.id,
             Run.date,
             Run.km,
+            Run.duration_seconds,
             func.row_number()
             .over(partition_by=Run.shoe_id, order_by=(Run.date.desc(), Run.id.desc()))
             .label("position"),
@@ -98,7 +104,7 @@ def shoe_run_statistics(
         .subquery()
     )
     for row in (
-        db.query(ranked.c.shoe_id, ranked.c.id, ranked.c.date, ranked.c.km)
+        db.query(ranked.c.shoe_id, ranked.c.id, ranked.c.date, ranked.c.km, ranked.c.duration_seconds)
         .filter(
             ranked.c.position <= 12,
         )
@@ -106,6 +112,7 @@ def shoe_run_statistics(
         .all()
     ):
         result[row.shoe_id]["recent"].append(
-            {"id": row.id, "date": row.date, "km": round(float(row.km), 2)}
+            {"id": row.id, "date": row.date, "km": round(float(row.km), 2),
+             "pace_seconds_per_km": pace_seconds_per_km(row.duration_seconds, float(row.km))}
         )
     return result

@@ -61,7 +61,8 @@ def execute_import(db: Session, uid: int, backup: AccountBackup, config: Setting
             shoe_id = shoes[run_item.shoe_id]
             if shoe_id not in available_shoes:
                 raise Conflict("來源鞋款已有後續刪除，無法合併跑步紀錄")
-            run_row = models.Run(id=allocate_id(db, "runs"), user_id=uid, shoe_id=shoe_id, date=run_item.date, km=run_item.km, strava_id=run_item.strava_id)
+            run_row = models.Run(id=allocate_id(db, "runs"), user_id=uid, shoe_id=shoe_id, date=run_item.date, km=run_item.km, strava_id=run_item.strava_id,
+                                 duration_seconds=run_item.duration_seconds)
             db.add(run_row)
             db.flush()
             target = run_row.id

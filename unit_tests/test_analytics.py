@@ -56,7 +56,8 @@ def test_shoe_analytics_combines_history_runs_training_and_cost(db, user_with_to
     assert result["lifecycle"]["historical_adjustment_km"] == 100
     assert result["usage"]["count"] == 2
     assert "average_run_km" not in result["usage"]
-    assert "average_pace_seconds_per_km" not in result["usage"]
+    # SPEC-060: no run has a moving time, so there is no pace to average.
+    assert result["usage"]["average_pace_seconds_per_km"] is None
     assert "average_rpe" not in result["usage"]
     assert result["usage"]["cost_per_wear"] == 300
 
@@ -295,7 +296,9 @@ def test_shoe_analytics_sql_is_bounded_and_user_scoped(db, user_with_token):
         for days in [30, 90]:
             start = (as_of - timedelta(days=days - 1)).isoformat()
             assert usage[f"km_{days}_days"] == sum(run["km"] for run in rows if start <= run["date"] <= as_of.isoformat())
-        assert result["recent_runs"] == [{key: run[key] for key in ["id", "date", "km"]} for run in ordered[:12]]
+        assert result["recent_runs"] == [
+            {**{key: run[key] for key in ["id", "date", "km"]}, "pace_seconds_per_km": None} for run in ordered[:12]
+        ]
         assert len(result["monthly_history"]) == 12
         assert result["monthly_history"][-1]["km"] == sum(run["km"] for run in rows if run["date"].startswith("2026-10"))
         assert analytics.shoe_analytics(db, user_id, shoe.id, today=as_of) == result

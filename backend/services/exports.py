@@ -73,7 +73,7 @@ def _account_export_snapshot(db: Session, user: models.User, *, now: datetime | 
     aliases = export_run_aliases(db, user.id, user.backup_id, MAX_RUN_ALIASES)
     payload = {
         "format": "running-shoes-account-backup",
-        "version": 3,
+        "version": 4,
         "source_id": user.backup_id,
         "exported_at": exported_at.isoformat(),
         "username": user.username,
@@ -187,6 +187,7 @@ def _serialize_run(run: models.Run) -> dict[str, Any]:
     return {
         "id": run.id, "shoe_id": run.shoe_id, "date": run.date,
         "km": run.km, "strava_id": run.strava_id,
+        "duration_seconds": run.duration_seconds,
     }
 
 

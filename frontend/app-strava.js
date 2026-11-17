@@ -104,6 +104,7 @@ async function previewStravaFile() {
       `已有 ${stravaController.state.preview.duplicate_count} 筆重複。` +
       stravaDeletedText(stravaController.state.preview) +
       stravaDateCorrectionText(stravaController.state.preview) +
+      stravaDurationBackfillText(stravaController.state.preview) +
       (unknown ? `有 ${unknown} 個鞋款需要手動配對或略過。` : '待匯入鞋款已全部自動配對。');
     const shoeOptions = allRunShoes().map(shoe => `<option value="${shoe.id}">${esc(shoeLabel(shoe))}</option>`).join('');
     mapping.innerHTML = stravaController.state.preview.gear_groups.map((group, index) => `
@@ -141,8 +142,15 @@ function stravaDateCorrectionText(preview) {
   return `另有 ${count} 筆既有紀錄的日期會依台灣時間修正${example}。`;
 }
 
+// SPEC-060: re-importing an earlier CSV fills the moving time of runs that have none yet.
+function stravaDurationBackfillText(preview) {
+  const count = Number(preview?.duration_backfill_count || 0);
+  return count ? `另有 ${count} 筆既有紀錄會補上跑步時間，用來計算配速。` : '';
+}
+
 function stravaHasChanges(preview) {
-  return Number(preview?.importable_count || 0) > 0 || Number(preview?.date_correction_count || 0) > 0;
+  return Number(preview?.importable_count || 0) > 0 || Number(preview?.date_correction_count || 0) > 0
+    || Number(preview?.duration_backfill_count || 0) > 0;
 }
 
 // SPEC-046: flag a mapping whose earliest activity predates the chosen shoe's purchase.
@@ -186,7 +194,7 @@ async function importStrava() {
     resourceStore.invalidate(['strava-history']);
     if (stravaController.ownsImport(operation)) {
       closeStravaModal();
-      alert(`已匯入 ${result.imported} 筆跑步紀錄${result.skipped_unmapped ? `，略過 ${result.skipped_unmapped} 筆未配對鞋款` : ''}${result.skipped_deleted ? `，略過 ${result.skipped_deleted} 筆先前刪除的活動` : ''}${result.synced_mileage ? `，並同步 ${result.synced_mileage.toFixed(2)} km 至跑鞋與月跑量` : ''}${result.corrected_dates ? `，修正 ${result.corrected_dates} 筆跑步日期為台灣時間` : ''}。`);
+      alert(`已匯入 ${result.imported} 筆跑步紀錄${result.skipped_unmapped ? `，略過 ${result.skipped_unmapped} 筆未配對鞋款` : ''}${result.skipped_deleted ? `，略過 ${result.skipped_deleted} 筆先前刪除的活動` : ''}${result.synced_mileage ? `，並同步 ${result.synced_mileage.toFixed(2)} km 至跑鞋與月跑量` : ''}${result.corrected_dates ? `，修正 ${result.corrected_dates} 筆跑步日期為台灣時間` : ''}${result.backfilled_durations ? `，補上 ${result.backfilled_durations} 筆跑步時間` : ''}。`);
     }
     await loadData({ mutation: 'strava' });
   } catch (e) {

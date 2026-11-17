@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from backend import models
 from backend.services.run_identity import deleted_strava_ids
-from backend.strava_import import _normalize_gear, date_corrections
+from backend.strava_import import _normalize_gear, date_corrections, duration_backfills
 
 
 def build_preview(
@@ -16,13 +16,18 @@ def build_preview(
     invalid: int,
     warnings: list[str],
 ) -> dict[str, object]:
-    existing_dates = {
-        strava_id: run_date
-        for strava_id, run_date in db.query(models.Run.strava_id, models.Run.date)
+    stored = [
+        row for row in db.query(
+            models.Run.strava_id, models.Run.date, models.Run.duration_seconds, models.Run.km
+        )
         .filter(models.Run.user_id == user_id, models.Run.strava_id.isnot(None))
         .all()
-        if strava_id is not None
-    }
+        if row.strava_id is not None
+    ]
+    existing_dates = {row.strava_id: row.date for row in stored}
+    backfills = duration_backfills(
+        rows, {row.strava_id: (row.duration_seconds, float(row.km)) for row in stored}
+    )
     existing_ids = set(existing_dates)
     deleted_ids = deleted_strava_ids(db, user_id)
     shoes = (
@@ -78,6 +83,7 @@ def build_preview(
         "deleted_count": deleted_count,
         "date_correction_count": len(corrections),
         "date_correction_samples": corrections[:5],
+        "duration_backfill_count": len(backfills),
         "invalid_count": invalid,
         "gear_groups": sorted(groups.values(), key=lambda group: str(group["gear"])),
         "warnings": warnings,

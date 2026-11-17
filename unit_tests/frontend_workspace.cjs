@@ -237,7 +237,7 @@ module.exports = async function checkWorkspace(browser, baseUrl) {
     const cloudDeleted = (await api(a.token, '/history')).rows.find(row => row.entity === 'runs' && row.entity_id === cloudRun.id && row.action === 'delete');
     await api(a.token, '/operations', { operation_id: 'portable-recovery-' + suffix, kind: 'history.restore', entity_id: cloudDeleted.id });
     const recoveredArchive = await api(a.token, '/export/account?include_history=false');
-    assert.equal(recoveredArchive.version, 3);
+    assert.equal(recoveredArchive.version, 4);
     assert.ok(recoveredArchive.runs[0].aliases.includes(cloudRun.id));
     await page.locator('#restore-file').setInputFiles({ ...file, buffer: Buffer.from(JSON.stringify(recoveredArchive)) });
     await page.waitForFunction(() => !document.getElementById('restore-apply').disabled);

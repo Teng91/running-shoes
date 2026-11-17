@@ -117,7 +117,7 @@ def test_schema_five_upgrade_preserves_existing_business_data(workspace):
         connection.execute(text("ALTER TABLE users DROP COLUMN data_revision"))
     for _ in range(2):
         run_startup_migrations(workspace.engine, workspace.sessions)
-    assert schema_version(workspace.engine) == 8
+    assert schema_version(workspace.engine) == 9
     assert "audit_events" in inspect(workspace.engine).get_table_names()
     with workspace.sessions() as db:
         assert db.get(models.Shoe, identifier).mileage == 123

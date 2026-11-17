@@ -7,6 +7,7 @@
 - `backend/settings.py`: immutable typed runtime configuration.
 - `backend/clock.py`: the single application timezone, `local_now()` and `local_today()`; never hard-code UTC offsets or use the server zone elsewhere.
 - `backend/forecasting.py`: shared retirement policy and batched user-scoped forecasts.
+- `backend/run_metrics.py`: canonical run duration bounds and pace (seconds per km, time-weighted averages); pace is derived, never stored (SPEC-060), and the bounds are mirrored in `frontend/app-state.js`.
 - `backend/shoe_metrics.py`: canonical shoe cost, discount and lifecycle arithmetic, plus the single 80%/90% lifespan alert thresholds (mirrored in `frontend/app-state.js`).
 - `backend/read_models/`: user-scoped native statistics shared by HTTP, reports and AI adapters; never import tools or HTTP frameworks.
 - `backend/seeding.py`: optional default data using an injected session factory.
@@ -37,7 +38,7 @@
 - `backend/services/fingerprints.py`: canonical payload fingerprints for receipts, backups and import plans; `mutation_receipts` is the only keyed receipt and operation keys never replace authentication.
 - `backend/services/retention.py`: per-account caps for audit events, receipts and run tombstones, applied inside `write_transaction`.
 - `backend/audit_schema.py`: same-transaction domain audit and revision triggers; never audit credentials.
-- `backend/backup_contract.py`: bounded, credential-free v1/v2/v3 account archives.
+- `backend/backup_contract.py`: bounded, credential-free v1–v4 account archives (v4 adds run `duration_seconds`).
 - `backend/services/operations.py`: operation identities, expected versions, transactional receipts.
 - `backend/services/account_restore.py`: user-bound preview, source mappings and atomic non-destructive merges.
 - `backend/services/account_import_plan.py`: user-scoped source matching and shared import previews/plans.
@@ -46,7 +47,7 @@
 - `backend/services/history.py`: user-scoped audit and conflict-aware deletion recovery.
 - `backend/services/run_identity.py`: user-scoped deletion tombstones (`run_tombstones`, never inferred from audit rows; schema 8 keeps the Strava activity so a CSV re-import never recreates a deleted run) and recovered source aliases; caller-owned transactions.
 - `backend/services/identifiers.py`: monotonic run/month primary-key allocation metadata.
-- `backend/migrations.py`: ordered SQLite schema upgrades and the current schema version (8); `scripts/rollback_schema_eight.sql` and `scripts/rollback_schema_seven.sql` are the documented 8 → 7 and 7 → 6 rollbacks.
+- `backend/migrations.py`: ordered SQLite schema upgrades and the current schema version (9); `scripts/rollback_schema_nine.sql`, `scripts/rollback_schema_eight.sql` and `scripts/rollback_schema_seven.sql` are the documented 9 → 8, 8 → 7 and 7 → 6 rollbacks.
 - `backend/rate_limits.py`: SQLite fixed-window throttling for authentication, AI and backup previews, consumed all-or-nothing on its own transaction with limits from app settings; never commits the request session.
 - `docs/architecture.md`: current SDD, module boundaries, diagrams, and evolution sequence.
 - `docs/release-notes.md`: per-version behavior, compatibility and rollback notes (newest first); README describes only current behavior.
@@ -123,7 +124,7 @@
 - Keep the page CSP strict: no inline event handlers, `eval`, external scripts or `javascript:` URLs. A new inline `<script>` in `frontend/templates/` is allowed only through the hash that `build_frontend.py --write` regenerates (SPEC-054).
 - Start user-visible, data-model, deployment, or architecture work from `docs/specs/template.md`.
 - Before a production migration, create and verify a database backup and document rollback.
-- Pushing to `main` deploys to production once CI passes, and a new `package.json` version is tagged and released. Push to `main` only when the user asks for a release or deploy; otherwise use a branch or `[skip ci]`.
+- `main` is protected by a GitHub ruleset (SPEC-061): changes land only through a pull request whose five test jobs pass on a branch that is up to date with `main`; direct and force pushes are rejected, with no bypass. Merging deploys to production, and a new `package.json` version is tagged and released. Work on a branch, push it (every push runs CI), and merge only when the user asks for a release or deploy.
 
 ## Verification
 

@@ -32,7 +32,7 @@ def needs(block: str) -> set[str]:
 def test_deploy_runs_only_for_main_after_every_test_job():
     workflow_jobs = jobs()
     assert set(workflow_jobs) == TEST_JOBS | {"deploy", "release-check", "release"}
-    for trigger in ("push:", "pull_request:", "workflow_dispatch:"):
+    for trigger in ("push:", "pull_request:", "schedule:", "workflow_dispatch:"):
         assert re.search(rf"^  {trigger}$", WORKFLOW, re.M)
     deploy = workflow_jobs["deploy"]
     assert ("    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' "
@@ -42,16 +42,15 @@ def test_deploy_runs_only_for_main_after_every_test_job():
     assert needs(workflow_jobs["release"]) == {"release-check"}
 
 
-def test_ci_runs_once_per_commit_and_skips_documentation_only_changes():
-    """Branches are tested through their pull request (not push + pull_request twice), and
-    Markdown/docs-only changes skip the paid harness; the image ships no documentation."""
+def test_ci_tests_every_push_pull_request_and_weekly_schedule_including_docs():
+    """SPEC-061: every branch push, PR merge result and a weekly run get the full harness;
+    documentation-only changes are no longer skipped, so docs-check always guards them."""
     triggers = WORKFLOW.split("\non:\n", 1)[1].split("\n\n", 1)[0]
-    docs_only = '    paths-ignore:\n      - "**.md"\n      - "docs/**"'
-    assert triggers == ("  push:\n    branches: [main]\n" + docs_only + "\n  pull_request:\n" + docs_only
-                        + "\n  workflow_dispatch:")
-    dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
-    copied = re.findall(r"^COPY (\S+)", dockerfile, re.M)
-    assert not [path for path in copied if path.endswith(".md") or path.startswith("docs")], copied
+    assert triggers == ('  push:\n  pull_request:\n  schedule:\n    - cron: "0 1 * * 1"\n'
+                        "  workflow_dispatch:")
+    assert "paths-ignore" not in WORKFLOW and "branches:" not in triggers
+    # A scheduled or branch run never deploys: only push/dispatch on main does.
+    assert "github.event_name == 'schedule'" not in jobs()["deploy"]
 
 
 def test_only_the_deploy_job_receives_the_fly_token():
@@ -108,9 +107,11 @@ def test_release_tags_only_new_versions_after_the_release_check():
 
 
 def test_production_runs_are_serialized_without_cancelling():
-    assert ("  group: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' "
-            "&& 'production' || format('ci-{0}', github.run_id) }}") in WORKFLOW
-    assert re.search(r"^concurrency:\n  group: .*\n  cancel-in-progress: false$", WORKFLOW, re.M)
+    production = "github.event_name != 'pull_request' && github.ref == 'refs/heads/main'"
+    assert (f"  group: ${{{{ {production} && 'production' "
+            "|| format('ci-{0}-{1}', github.event_name, github.ref) }}") in WORKFLOW
+    # Main never cancels a running deploy; a newer push on another ref supersedes the older run.
+    assert f"  cancel-in-progress: ${{{{ !({production}) }}}}" in WORKFLOW
 
 
 def test_browser_jobs_retry_once_with_a_visible_warning():
@@ -122,3 +123,16 @@ def test_browser_jobs_retry_once_with_a_visible_warning():
         assert (f'python scripts/task.py {command} || {{ echo "::warning::{task} failed once; retrying"; '
                 f"python scripts/task.py {command}; }}") in workflow_jobs[job], job
     assert "||" not in workflow_jobs["verify"], "unit, lint and docs checks are deterministic and never retried"
+
+
+def test_main_ruleset_requires_a_green_pull_request_without_bypass():
+    """SPEC-061: the versioned ruleset applied to main matches the workflow's test jobs."""
+    ruleset = json.loads((ROOT / ".github" / "rulesets" / "main.json").read_text(encoding="utf-8"))
+    assert ruleset["enforcement"] == "active" and ruleset["bypass_actors"] == []
+    assert ruleset["conditions"]["ref_name"]["include"] == ["~DEFAULT_BRANCH"]
+    rules = {rule["type"]: rule.get("parameters", {}) for rule in ruleset["rules"]}
+    assert {"deletion", "non_fast_forward", "pull_request", "required_status_checks"} <= set(rules)
+    checks = rules["required_status_checks"]
+    assert checks["strict_required_status_checks_policy"] is True
+    assert {check["context"] for check in checks["required_status_checks"]} == TEST_JOBS
+    assert {check["integration_id"] for check in checks["required_status_checks"]} == {15368}

@@ -37,7 +37,7 @@ test('shoe retirement presentation uses only the backend date, including no fore
 });
 
 test('table numeric headers and shared component geometry have explicit presentation contracts', () => {
-  for (const [id, expected] of Object.entries({ 'shoe-table': [3,4,5,6,7], 'retired-table': [3,4,5,6,7], 'run-table': [1], 'spending-table': [4,5,6] })) {
+  for (const [id, expected] of Object.entries({ 'shoe-table': [3,4,5,6,7], 'retired-table': [3,4,5,6,7], 'run-table': [1,2,3], 'spending-table': [4,5,6] })) {
     const before = htmlSource.slice(0, htmlSource.indexOf(`<tbody id="${id}"`));
     const heads = [...before.slice(before.lastIndexOf('<thead>')).matchAll(/<th\b([^>]*)>/g)];
     assert.deepEqual(heads.flatMap((head, index) => head[1].includes('numeric') ? [index] : []), expected);
