@@ -40,10 +40,24 @@ def _field(headers: Sequence[str], key: str) -> str | None:
 
 
 _CHINESE_DATE = re.compile(r"(\d{4})年\s*(\d{1,2})月\s*(\d{1,2})日")
-_CHINESE_TIME = re.compile(r"(上午|下午)\s*(\d{1,2}):(\d{2}):(\d{2})")
+# zh-TW exports name the part of the day instead of AM/PM: 凌晨, 清晨, 上午, 中午, 下午,
+# 晚上 and so on (SPEC-063). Without a marker the hour is on a 24-hour clock.
+_MORNING_MARKERS = ("午夜", "半夜", "凌晨", "清晨", "早上", "上午")
+_AFTERNOON_MARKERS = ("下午", "傍晚", "晚上")
+_CHINESE_TIME = re.compile(
+    "(" + "|".join(_MORNING_MARKERS + _AFTERNOON_MARKERS + ("中午",)) + r")?\s*(\d{1,2}):(\d{2}):(\d{2})"
+)
 _TIMESTAMP_FORMATS = ("%b %d, %Y, %I:%M:%S %p", "%B %d, %Y, %I:%M:%S %p")
 _DATE_FORMATS = ("%b %d, %Y", "%B %d, %Y")
 _SHORT_DATE_FORMATS = ("%Y-%m-%d", "%Y/%m/%d", "%m/%d/%Y")
+
+
+def _chinese_hour(marker: str | None, hour: int) -> int:
+    if marker is None:
+        return hour
+    if marker == "中午":  # 中午12:40 is 12:40, 中午1:10 is 13:10
+        return hour if hour >= 11 else hour + 12
+    return hour % 12 + (12 if marker in _AFTERNOON_MARKERS else 0)
 
 
 def _utc_timestamp(text_value: str) -> datetime | None:
@@ -51,7 +65,7 @@ def _utc_timestamp(text_value: str) -> datetime | None:
     day = _CHINESE_DATE.search(text_value)
     clock = _CHINESE_TIME.search(text_value)
     if day and clock:
-        hour = int(clock.group(2)) % 12 + (12 if clock.group(1) == "下午" else 0)
+        hour = _chinese_hour(clock.group(1), int(clock.group(2)))
         return datetime(int(day.group(1)), int(day.group(2)), int(day.group(3)), hour,
                         int(clock.group(3)), int(clock.group(4)), tzinfo=UTC)
     for fmt in _TIMESTAMP_FORMATS:
