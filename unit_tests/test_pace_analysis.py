@@ -1,9 +1,8 @@
-"""SPEC-064: pace analytics read model and API."""
+"""SPEC-064 / SPEC-065: pace trend read model and weekday pace."""
 
-import statistics
-from datetime import date, timedelta
+from datetime import date
 
-from backend.models import Run, Shoe, User
+from backend.models import RaceGoal, Run, Shoe, User
 from backend.read_models.pace import pace_analysis
 from unit_tests.test_run_pace import client, headers
 
@@ -39,23 +38,10 @@ def test_pace_analysis_is_time_weighted_user_scoped_and_ignores_the_future(db, c
     assert result["summary"] == {"first_date": "2026-01-05", "first_90_days_pace": 343,
                                  "recent_90_days_pace": 360, "recent_30_days_pace": None}
     assert [run["pace"] for run in result["runs"]] == [300, 360, 360]
+    assert all(run["zone"] is None for run in result["runs"]), "zones need a race goal"
+    assert (result["goal_pace"], result["zones"]) == (None, [])
     assert result["rolling"] == [{"date": "2026-01-05", "pace": 300}, {"date": "2026-01-06", "pace": 320},
                                  {"date": "2026-03-10", "pace": 360}]
-    assert result["monthly"] == [
-        {"month": "2026-01", "km": 20.0, "timed_km": 15.0, "runs": 3, "pace": 320},
-        {"month": "2026-02", "km": 0.0, "timed_km": 0.0, "runs": 0, "pace": None},
-        {"month": "2026-03", "km": 20.0, "timed_km": 20.0, "runs": 1, "pace": 360},
-    ]
-    assert result["monthly_lag"]["prior_months_correlation"] is None
-    bands = {band["min_km"]: band for band in result["distance"]}
-    assert (bands[5]["runs"], bands[5]["pace"]) == (1, 360)
-    assert (bands[8]["pace"], bands[8]["fastest_pace"]) == (300, 300)
-    assert (bands[16]["pace"], bands[0]["runs"], bands[22]["max_km"]) == (360, 0, None)
-    distribution = result["distribution"]
-    assert distribution["median_pace"] == 360
-    assert [(item["min_pace"], item["runs"]) for item in distribution["bins"]] == [
-        (300, 1), (315, 0), (330, 0), (345, 0), (360, 2)]
-    assert distribution["bins"][0]["open_min"] and distribution["bins"][-1]["open_max"]
 
     response = client.get("/api/analytics/pace", headers=headers(user))
     assert response.status_code == 200
@@ -63,29 +49,16 @@ def test_pace_analysis_is_time_weighted_user_scoped_and_ignores_the_future(db, c
     assert client.get("/api/analytics/pace").status_code == 401
 
 
-def test_training_load_relates_prior_weeks_to_pace(db):
-    user, shoe = _owner(db, "pace-load")
-    start = date(2026, 1, 5)  # a Monday
-    rows = []
-    for week in range(16):
-        km = 12 if week < 8 else 32
-        pace = 380 if week < 10 else 350
-        rows.append(((start + timedelta(weeks=week)).isoformat(), km, km * pace))
-    _runs(db, user, shoe, *rows)
-
-    load = pace_analysis(db, user.id, start + timedelta(weeks=15, days=1))["load"]
-    xs = [12, 12, 12, 12, 12, 17, 22, 27, 32, 32, 32, 32]
-    ys = [380] * 6 + [350] * 6
-    assert [point["prior_week_km"] for point in load["points"]] == xs
-    assert [point["pace"] for point in load["points"]] == ys
-    assert load["correlation"] == round(statistics.correlation(xs, ys), 2) < 0
-    slope, intercept = statistics.linear_regression(xs, ys)
-    assert load["trend"] == {"slope_seconds_per_10km": round(slope * 10, 1), "intercept": round(intercept, 1),
-                             "min_km": 12, "max_km": 32}
-    # 20–30 km has only two weeks, fewer than the three a bucket needs.
-    assert [(bucket["min_km"], bucket["weeks"], bucket["median_pace"]) for bucket in load["buckets"]] == [
-        (10, 6, 380), (30, 4, 350)]
-    assert load["comparison"]["seconds_faster"] == 30
+def test_pace_trend_points_carry_their_zone_once_a_race_goal_exists(db):
+    user, shoe = _owner(db, "pace-zones")
+    # Goal 2:00:00 for 20 km is 6:00/km: 6:50 is easy, 6:20 steady, 6:00 race pace, 5:40 fast.
+    db.add(RaceGoal(user_id=user.id, version=1, race_date="2026-12-06", distance_km=20, target_seconds=7200))
+    _runs(db, user, shoe, ("2026-11-01", 10, 4100), ("2026-11-02", 10, 3800), ("2026-11-03", 10, 3600),
+          ("2026-11-04", 10, 3400))
+    result = pace_analysis(db, user.id, date(2026, 11, 17))
+    assert result["goal_pace"] == 360
+    assert [run["zone"] for run in result["runs"]] == ["easy", "steady", "race", "fast"]
+    assert [zone["key"] for zone in result["zones"]] == ["easy", "steady", "race", "fast"]
 
 
 def test_pace_analysis_without_times_is_empty(db):
@@ -93,9 +66,7 @@ def test_pace_analysis_without_times_is_empty(db):
     _runs(db, user, shoe, ("2026-01-05", 10, None))
     result = pace_analysis(db, user.id, date(2026, 6, 1))
     assert (result["timed_run_count"], result["untimed_run_count"], result["summary"]) == (0, 1, None)
-    assert result["runs"] == result["monthly"] == result["distance"] == []
-    assert result["load"]["points"] == [] and result["load"]["comparison"] is None
-    assert result["distribution"]["bins"] == []
+    assert result["runs"] == result["rolling"] == []
 
 
 def test_weekday_mix_reports_a_time_weighted_pace_per_weekday(db):

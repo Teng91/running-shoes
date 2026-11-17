@@ -561,7 +561,17 @@ h1 { font-size: 28px; font-weight: 800; letter-spacing: .01em; margin-bottom: 4p
 .heatmap-legend { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 4px; margin-top: 10px; font-size: 11px; color: var(--text-dim); }
 .heatmap-legend .heat-cell { --heat-size: 11px; }
 .heatmap-legend-note { margin-left: 6px; }
-.pace-summary { margin: -4px 0 14px; }
+/* SPEC-065: race goal form fills four columns: the race, then the reference result and the actions. */
+.race-settings { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.race-settings .goal-settings-actions { justify-content: flex-end; }
+.race-cards { margin-bottom: 16px; }
+.race-cards .review-sub.warn { color: var(--orange); }
+.race-cards .review-sub.good { color: var(--accent-light); }
+@media (max-width: 1100px) { .race-settings { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 760px) {
+  .race-settings { grid-template-columns: minmax(0, 1fr); }
+  .race-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 .charts.pace-charts-single { grid-template-columns: 1fr; }
 .chart-note { margin-top: 10px; font-size: 12px; line-height: 1.5; color: var(--text-dim); }
 .timeline-box { margin-bottom: 28px; }
