@@ -72,6 +72,7 @@ const UI_ACTIONS = Object.freeze({
   input: Object.freeze({
     'goal-yearly-hint': () => updateGoalYearlyHint(),
     'run-pace-preview': element => updateRunPacePreview(element.dataset.form),
+    'duration-digits': element => formatDurationInput(element),
   }),
   submit: Object.freeze({
     login: () => handleLogin(),
