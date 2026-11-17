@@ -45,6 +45,27 @@ function parseRunDuration(text) {
   return total > 0 ? total : NaN;
 }
 
+// Phone number pads have no colon key: typed digits are grouped from the right,
+// so 5421 reads 54:21 and 15959 reads 1:59:59. One or two digits stay whole minutes.
+function groupDurationDigits(text) {
+  const value = String(text ?? '');
+  if (!/^[\d:]*$/.test(value)) return value;
+  const digits = value.replace(/:/g, '');
+  if (digits.length <= 2 || digits.length > 6) return digits.length > 6 ? value : digits;
+  const seconds = digits.slice(-2);
+  const rest = digits.slice(0, -2);
+  if (rest.length <= 2) return `${rest}:${seconds}`;
+  return `${rest.slice(0, -2)}:${rest.slice(-2)}:${seconds}`;
+}
+
+function formatDurationInput(element) {
+  if (!element) return;
+  const grouped = groupDurationDigits(element.value);
+  if (grouped === element.value) return;
+  element.value = grouped;
+  element.setSelectionRange?.(grouped.length, grouped.length);
+}
+
 function formatRunDuration(seconds) {
   if (!Number.isFinite(seconds) || seconds <= 0) return '';
   const total = Math.round(seconds);
@@ -69,6 +90,7 @@ function plausibleRunPace(seconds, km) {
 
 // Live hint under the duration field; the saved pace is always the backend's.
 function updateRunPacePreview(prefix) {
+  formatDurationInput(document.getElementById(`${prefix}-duration`));
   const target = document.getElementById(`${prefix}-pace-preview`);
   if (!target) return;
   const seconds = parseRunDuration(document.getElementById(`${prefix}-duration`)?.value);

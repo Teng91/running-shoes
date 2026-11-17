@@ -337,7 +337,7 @@ window.__appBootLegacyPoll = window.setInterval(function () {
         <div class="run-entry-grid">
           <div class="form-group"><label for="run-date">日期</label><input id="run-date" type="date" required data-change="run-date-warning" data-form="run"></div>
           <div class="form-group"><label for="run-km">距離 (km)</label><input id="run-km" type="number" min="0.01" max="1000" step="0.01" placeholder="5.00" required data-input="run-pace-preview" data-form="run"></div>
-          <div class="form-group duration-field"><label for="run-duration">跑步時間（選填）</label><input id="run-duration" type="text" inputmode="numeric" placeholder="例如 32:15 或 1:05:30" aria-describedby="run-pace-preview" data-input="run-pace-preview" data-form="run"><small class="run-pace-preview" id="run-pace-preview" role="status"></small></div>
+          <div class="form-group duration-field"><label for="run-duration">跑步時間（選填）</label><input id="run-duration" type="text" inputmode="numeric" placeholder="直接打數字，例如 3215 → 32:15" aria-describedby="run-pace-preview" data-input="run-pace-preview" data-form="run"><small class="run-pace-preview" id="run-pace-preview" role="status"></small></div>
           <div class="form-group shoe-field"><label for="run-shoe">穿哪雙鞋</label><select id="run-shoe" required data-change="run-date-warning" data-form="run"></select></div>
         </div>
         <p class="run-date-warning" id="run-date-warning" role="status" hidden></p>
@@ -482,7 +482,7 @@ window.__appBootLegacyPoll = window.setInterval(function () {
         </div>
         <div class="form-group">
           <label for="race-target">目標時間</label>
-          <input id="race-target" type="text" inputmode="numeric" placeholder="1:59:59" aria-describedby="race-target-hint">
+          <input id="race-target" type="text" inputmode="numeric" placeholder="15959 → 1:59:59" data-input="duration-digits" aria-describedby="race-target-hint">
           <span class="goal-field-hint" id="race-target-hint"></span>
         </div>
         <div class="form-group">
@@ -491,7 +491,7 @@ window.__appBootLegacyPoll = window.setInterval(function () {
         </div>
         <div class="form-group">
           <label for="race-ref-time">參考成績時間</label>
-          <input id="race-ref-time" type="text" inputmode="numeric" placeholder="54:21">
+          <input id="race-ref-time" type="text" inputmode="numeric" placeholder="5421 → 54:21" data-input="duration-digits">
         </div>
         <div class="form-group">
           <label for="race-ref-temp">當天氣溫 (°C，選填)</label>

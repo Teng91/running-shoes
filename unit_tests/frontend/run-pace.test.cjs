@@ -35,6 +35,28 @@ test('SPEC-060 run duration accepts m:ss, h:mm:ss and whole minutes and rejects 
   assert.equal(context.formatPace(null), '—');
 });
 
+test('SPEC-066 digits typed on a phone number pad are grouped into a duration', () => {
+  const elements = nodes({ 'run-km': '10', 'run-duration': '5530' });
+  const context = paceContext(elements);
+  const group = value => context.groupDurationDigits(value);
+  const typed = [...'15959'].reduce((steps, digit) => [...steps, group((steps.at(-1) || '') + digit)], []);
+  assert.deepEqual(typed, ['1', '15', '1:59', '15:95', '1:59:59'], 'each keystroke regroups from the right');
+  assert.equal(group('5421'), '54:21');
+  assert.equal(group('45'), '45', 'one or two digits stay whole minutes');
+  assert.equal(group('1:59:5'), '15:95', 'deleting a digit regroups too');
+  assert.equal(group('10530'), '1:05:30');
+  assert.equal(group('1:05:30'), '1:05:30', 'pasted times are unchanged');
+  assert.equal(group('1234567'), '1234567', 'too many digits are left for validation');
+  assert.equal(group('5.5'), '5.5');
+  assert.equal(context.parseRunDuration(group('15959')), 7199);
+  context.updateRunPacePreview('run');
+  assert.equal(elements['run-duration'].value, '55:30');
+  assert.equal(elements['run-pace-preview'].textContent, '配速 5:33 /km');
+  for (const id of ['run-duration', 'race-target', 'race-ref-time']) {
+    assert.match(htmlSource, new RegExp(`id="${id}" type="text" inputmode="numeric"[^>]*data-input="(run-pace-preview|duration-digits)"`), id);
+  }
+});
+
 test('SPEC-060 the pace hint follows the form and flags an implausible pace', () => {
   const elements = nodes({ 'run-km': '10', 'run-duration': '55:30' });
   const context = paceContext(elements);
