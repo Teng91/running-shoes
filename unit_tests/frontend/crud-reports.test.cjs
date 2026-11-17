@@ -58,7 +58,7 @@ test('the report tab wires its panel and only loads data after login', () => {
   assert.match(source, /data-panel="report"/);
   assert.match(source, /class="ai-switch-btn active" aria-pressed="true" data-click="open-ai-panel" data-ai-panel="report">月報/);
   assert.match(source, /class="ai-switch-btn active" aria-pressed="true" data-click="open-ai-panel" data-ai-panel="agent">對話/);
-  assert.match(source, /<span>AI<\/span><\/button>/);
+  assert.match(source, /<span>AI 教練<\/span><\/button>/);
   assert.match(extract('switchTab'), /const destination = name === 'report' \? 'agent' : name;/);
   assert.match(source, /data-change="load-saved-report"/);
   const switchTab = extract('switchTab');
