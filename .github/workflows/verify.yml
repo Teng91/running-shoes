@@ -1,23 +1,19 @@
 name: Verify and deploy
 
-# Pushes to main and pull requests run the full harness. A push to main (or a manual
-# run on main) then continues: database snapshot → fly deploy → anonymous release
-# check → tag and GitHub Release when package.json carries a new version.
-# Other branches are tested through their pull request, so a PR commit runs once
-# instead of twice (push + pull_request). Changes that only touch Markdown or docs/
-# skip the workflow: the production image ships only backend/, frontend/ and the
-# backup script, and docs-check runs locally (Claude Code Stop hook, task.py).
-# A commit message containing [skip ci] skips the whole workflow.
+# Every push to any branch, every pull request and a weekly schedule run the full
+# harness, including documentation-only changes (docs-check guards README, specs and
+# links). The repository is public, so standard runners cost no minutes (SPEC-061).
+# - push: each pushed commit gets a result before any pull request exists.
+# - pull_request: tests the merge of the branch into the current main, and fork PRs.
+# - schedule: the weekly run's dependency audit catches newly published CVEs.
+# Only a push to main (or a manual run on main) continues: database snapshot →
+# fly deploy → anonymous release check → tag and GitHub Release when package.json
+# carries a new version. A commit message containing [skip ci] skips the workflow.
 on:
   push:
-    branches: [main]
-    paths-ignore:
-      - "**.md"
-      - "docs/**"
   pull_request:
-    paths-ignore:
-      - "**.md"
-      - "docs/**"
+  schedule:
+    - cron: "0 1 * * 1"
   workflow_dispatch:
 
 permissions:
@@ -25,10 +21,10 @@ permissions:
 
 # Production runs go one at a time, so a deploy, its release check and its tag never
 # interleave with the next push; a running deploy is never cancelled (GitHub keeps
-# only the newest waiting run). Other refs get their own group and never wait.
+# only the newest waiting run). On any other ref a newer push cancels the older run.
 concurrency:
-  group: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && 'production' || format('ci-{0}', github.run_id) }}
-  cancel-in-progress: false
+  group: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && 'production' || format('ci-{0}-{1}', github.event_name, github.ref) }}
+  cancel-in-progress: ${{ !(github.event_name != 'pull_request' && github.ref == 'refs/heads/main') }}
 
 jobs:
   verify:

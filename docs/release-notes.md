@@ -11,6 +11,8 @@
 - Strava 匯入讀取 `移動時間`（沒有時用 `經過時間`）。重新匯入同一份 CSV 時，預覽顯示「另有 N 筆既有紀錄會補上跑步時間」，匯入只補還沒有時間的紀錄，不覆寫已有的時間；距離被手動改到配速不合理的紀錄會略過。
 - 帳號備份升為 v4，包含跑步時間；v4 無法由 v4.14.x 以前的版本匯入。合併匯入時，備份裡沒有時間的跑步不會清除既有時間。
 
+CI 同時改為每次 push、每個 PR 與每週排程都跑完整測試（包括只改文件），`main` 只能透過 CI 全綠的 PR 合併（SPEC-061）。
+
 Asset 4.15.0／shell v66、schema 9（`runs.duration_seconds`，既有資料為 NULL）。回滾到 v4.14.1：停止寫入並確認 schema 9 備份可讀後，以 Python
 `sqlite3.Connection.executescript` 執行 [`scripts/rollback_schema_nine.sql`](../scripts/rollback_schema_nine.sql)（守衛確認目前是 9，只把 marker 改回 8），
 再部署 v4.14.1 image。`duration_seconds` 欄位保留，schema 8 程式不讀寫它；再次升級後沿用已存的時間。

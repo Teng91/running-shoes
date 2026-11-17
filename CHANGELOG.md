@@ -10,7 +10,7 @@
 - 帳號備份升為 v4，包含跑步時間；舊版無法讀取 v4。Asset 4.15.0／shell v66，schema 9，回滾見 `scripts/rollback_schema_nine.sql`。
 
 ### Changed
-- CI 只在 push 到 `main` 與 pull request 時執行；其他分支透過 PR 測試，同一個 commit 不再被 push 和 pull request 各跑一次。只改 Markdown 或 `docs/` 時不跑。部署、發版流程不變。
+- CI 更嚴謹（SPEC-061）：任何分支的 push、pull request（測試合併後的結果）與每週排程都跑完整測試，只改文件也跑。`main` 改由 ruleset 保護：只能透過 PR 合併，5 個測試 job 全部通過且分支跟上 `main` 才能合併，不能直接 push 或 force push。部署、發版流程不變。
 
 ## [4.14.1] - 2026-11-16
 

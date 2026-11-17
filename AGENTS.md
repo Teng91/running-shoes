@@ -124,7 +124,7 @@
 - Keep the page CSP strict: no inline event handlers, `eval`, external scripts or `javascript:` URLs. A new inline `<script>` in `frontend/templates/` is allowed only through the hash that `build_frontend.py --write` regenerates (SPEC-054).
 - Start user-visible, data-model, deployment, or architecture work from `docs/specs/template.md`.
 - Before a production migration, create and verify a database backup and document rollback.
-- Pushing to `main` deploys to production once CI passes, and a new `package.json` version is tagged and released. Push to `main` only when the user asks for a release or deploy; otherwise use a branch or `[skip ci]`.
+- `main` is protected by a GitHub ruleset (SPEC-061): changes land only through a pull request whose five test jobs pass on a branch that is up to date with `main`; direct and force pushes are rejected, with no bypass. Merging deploys to production, and a new `package.json` version is tagged and released. Work on a branch, push it (every push runs CI), and merge only when the user asks for a release or deploy.
 
 ## Verification
 
