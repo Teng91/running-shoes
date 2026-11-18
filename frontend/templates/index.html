@@ -120,8 +120,6 @@ window.__appBootLegacyPoll = window.setInterval(function () {
     <div class="auth-error" id="auth-error"></div>
     <button type="submit" class="btn btn-primary" style="width:100%;margin-top:8px;">登入</button>
     <div style="text-align:center;margin-top:12px;">
-      <a href="#" data-click="show-change-form" style="color:var(--text-dim);font-size:13px;">更改密碼</a>
-      <span style="color:var(--border);margin:0 8px;">|</span>
       <a href="#" data-click="show-register-form" style="color:var(--accent-light);font-size:13px;">註冊</a>
     </div>
     <div class="auth-forgot"><a href="#" id="forgot-link" data-click="show-reset-form">忘記密碼？</a></div>
@@ -196,33 +194,6 @@ window.__appBootLegacyPoll = window.setInterval(function () {
     </div>
     <div class="auth-error" id="reset-error"></div>
     <button type="submit" class="btn btn-primary" style="width:100%;margin-top:8px;">重設密碼</button>
-    <div style="text-align:center;margin-top:12px;">
-      <a href="#" data-click="show-login-form" style="color:var(--accent-light);font-size:13px;">回登入頁</a>
-    </div>
-  </form>
-
-  <!-- Change Password Form -->
-  <form class="auth-box" id="change-form" style="display:none;" data-submit="change-password">
-    <div class="auth-mark" aria-hidden="true"><svg viewBox="0 0 32 32" fill="currentColor" aria-hidden="true"><path d="M6 9.5h7l-1.6 3h-7z"/><path d="M4 14.5h9l-1.6 3h-9z" opacity=".7"/><path d="M6 19.5h7l-1.6 3h-7z" opacity=".45"/><path d="M14 6h7l8 10-8 10h-7l8-10z"/></svg></div>
-    <h1 data-eyebrow="ACCOUNT SECURITY">更改密碼</h1>
-    <div class="form-group">
-      <label for="change-username">帳號</label>
-      <input id="change-username" autocomplete="username" autocapitalize="none" placeholder="Username">
-    </div>
-    <div class="form-group">
-      <label for="change-old-password">舊密碼</label>
-      <input id="change-old-password" type="password" autocomplete="current-password" placeholder="Old Password">
-    </div>
-    <div class="form-group">
-      <label for="change-new-password">新密碼</label>
-      <input id="change-new-password" type="password" autocomplete="new-password" placeholder="New Password">
-    </div>
-    <div class="form-group">
-      <label for="change-new-password2">確認新密碼</label>
-      <input id="change-new-password2" type="password" autocomplete="new-password" placeholder="Confirm New Password">
-    </div>
-    <div class="auth-error" id="change-error"></div>
-    <button type="submit" class="btn btn-primary" style="width:100%;margin-top:8px;">更改密碼</button>
     <div style="text-align:center;margin-top:12px;">
       <a href="#" data-click="show-login-form" style="color:var(--accent-light);font-size:13px;">回登入頁</a>
     </div>

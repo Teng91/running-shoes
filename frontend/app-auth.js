@@ -50,7 +50,7 @@ const AUTH_INPUT_IDS = [
   'login-username', 'login-password',
   'reg-username', 'reg-password', 'reg-password2', 'reg-invite',
   'reset-identifier', 'reset-code', 'reset-new-password', 'reset-new-password2',
-  'change-username', 'change-old-password', 'change-new-password', 'change-new-password2',
+  'account-old-password', 'account-new-password', 'account-new-password2',
 ];
 
 function resetAuthInputs() {
@@ -128,7 +128,6 @@ function showLoginForm() {
   hideAppBoot();
   document.getElementById('login-form').style.display = '';
   document.getElementById('register-form').style.display = 'none';
-  document.getElementById('change-form').style.display = 'none';
   const resetForm = document.getElementById('reset-form');
   if (resetForm) resetForm.style.display = 'none';
   hideAuthError();
@@ -138,29 +137,16 @@ function showRegisterForm() {
   hideAppBoot();
   document.getElementById('login-form').style.display = 'none';
   document.getElementById('register-form').style.display = '';
-  document.getElementById('change-form').style.display = 'none';
   const resetForm = document.getElementById('reset-form');
   if (resetForm) resetForm.style.display = 'none';
   hideRegError();
   if (typeof loadRegistrationMode === 'function') void loadRegistrationMode();
-}
-function showChangeForm() {
-  cancelAuthOperation();
-  hideAppBoot();
-  document.getElementById('login-form').style.display = 'none';
-  document.getElementById('register-form').style.display = 'none';
-  document.getElementById('change-form').style.display = '';
-  const resetForm = document.getElementById('reset-form');
-  if (resetForm) resetForm.style.display = 'none';
-  hideChangeError();
 }
 
 function showAuthError(msg) { const el = document.getElementById('auth-error'); el.textContent = msg; el.style.display = 'block'; }
 function hideAuthError() { document.getElementById('auth-error').style.display = 'none'; }
 function showRegError(msg) { const el = document.getElementById('reg-error'); el.textContent = msg; el.style.display = 'block'; }
 function hideRegError() { document.getElementById('reg-error').style.display = 'none'; }
-function showChangeError(msg) { const el = document.getElementById('change-error'); el.textContent = msg; el.style.display = 'block'; }
-function hideChangeError() { document.getElementById('change-error').style.display = 'none'; }
 
 const ERROR_ZH = {
   'User not found': '帳號不存在', 'Incorrect password': '密碼不正確',
@@ -278,37 +264,3 @@ async function handleRegister() {
 
 function handleLogout() { clearAuth(); showLoginView(); }
 
-async function handleChangePassword() {
-  if (authOperation) return;
-  hideChangeError();
-  const username = document.getElementById('change-username').value.trim();
-  const oldPassword = document.getElementById('change-old-password').value;
-  const password = document.getElementById('change-new-password').value;
-  const password2 = document.getElementById('change-new-password2').value;
-  if (!username) { showChangeError('請輸入帳號'); return; }
-  if (!oldPassword) { showChangeError('請輸入舊密碼'); return; }
-  if (!password) { showChangeError('請輸入新密碼'); return; }
-  if (password.length < 8) { showChangeError('密碼至少 8 個字元'); return; }
-  if (password !== password2) { showChangeError('兩次密碼不一致'); return; }
-  const operation = beginAuthOperation();
-  try {
-    const res = await authRequest(API_BASE + '/auth/change-password', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, old_password: oldPassword, new_password: password }),
-      signal: operation.controller.signal,
-    });
-    if (!isCurrentAuthOperation(operation)) return;
-    if (!res.ok) {
-      let msg = '重設失敗';
-      try { const err = await res.json(); msg = translateError(err.detail) || msg; } catch {}
-      if (!isCurrentAuthOperation(operation)) return;
-      throw new Error(msg);
-    }
-    clearAuth();
-    showLoginView();
-    showAuthError('密碼已重設，請重新登入');
-  } catch (e) {
-    if (e.name === 'AbortError' || !isCurrentAuthOperation(operation)) return;
-    showChangeError(e.message);
-  } finally { finishAuthOperation(operation); }
-}

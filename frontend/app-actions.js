@@ -9,7 +9,6 @@ const UI_ACTIONS = Object.freeze({
     'toggle-mobile-menu': element => setMobileMenu(element.getAttribute('aria-expanded') !== 'true'),
     'show-login-form': () => showLoginForm(),
     'show-register-form': () => showRegisterForm(),
-    'show-change-form': () => showChangeForm(),
     'open-workspace': () => openWorkspaceModal(),
     'close-workspace': () => closeWorkspaceModal(),
     'sync-workspace': () => syncWorkspace({ manual: true }),
@@ -39,6 +38,7 @@ const UI_ACTIONS = Object.freeze({
     'send-email-code': () => sendEmailCode(),
     'confirm-email-code': () => confirmEmailCode(),
     'remove-email': () => removeEmail(),
+    'change-password': () => changePassword(),
     'open-run': element => openRunModal(Number(element.dataset.runId)),
     'close-run-modal': () => closeRunModal(),
     'delete-editing-run': () => deleteEditingRun(),
@@ -89,7 +89,6 @@ const UI_ACTIONS = Object.freeze({
   submit: Object.freeze({
     login: () => handleLogin(),
     register: () => handleRegister(),
-    'change-password': () => handleChangePassword(),
     'reset-password': () => handleResetPassword(),
     'add-run': () => addRun(),
     'save-run': () => saveRun(),

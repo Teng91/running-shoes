@@ -113,7 +113,7 @@ async function adminResetPassword() {
   if (!confirm(`替「${username}」產生臨時密碼？他目前的登入都會被登出。`)) return;
   try {
     const reset = await apiPost('/admin/reset-password', { username });
-    result.textContent = `「${reset.username}」的臨時密碼：${reset.temporary_password}（只顯示這一次，請對方登入後馬上到「更改密碼」換掉）`;
+    result.textContent = `「${reset.username}」的臨時密碼：${reset.temporary_password}（只顯示這一次，請對方登入後馬上到「資料與同步」→「更改密碼」換掉）`;
     input.value = '';
   } catch (error) {
     result.textContent = '重設失敗：' + translateError(error.message);
@@ -160,7 +160,7 @@ async function publicPost(path, body) {
 // The login page makes no request at startup (PWA/offline); the mail check runs when the form opens.
 async function showResetForm() {
   cancelAuthOperation();
-  for (const id of ['login-form', 'register-form', 'change-form']) document.getElementById(id).style.display = 'none';
+  for (const id of ['login-form', 'register-form']) document.getElementById(id).style.display = 'none';
   document.getElementById('reset-form').style.display = '';
   document.getElementById('reset-error').style.display = 'none';
   const sent = document.getElementById('reset-sent');
@@ -275,4 +275,27 @@ async function removeEmail() {
   } catch (error) {
     status.textContent = '移除失敗：' + translateError(error.message);
   }
+}
+
+// SPEC-080: changing a known password lives in the signed-in app, not on the login page.
+async function changePassword() {
+  const status = document.getElementById('password-status');
+  const ids = ['account-old-password', 'account-new-password', 'account-new-password2'];
+  const [oldPassword, password, password2] = ids.map(id => document.getElementById(id).value);
+  if (!oldPassword) { status.textContent = '請輸入目前密碼。'; return; }
+  if (password.length < 8) { status.textContent = '新密碼至少 8 個字元。'; return; }
+  if (password !== password2) { status.textContent = '兩次新密碼不一致。'; return; }
+  // Public request: a mistyped current password (401) must not look like an expired session.
+  try {
+    await publicPost('/auth/change-password', { username: currentUser, old_password: oldPassword, new_password: password });
+  } catch (error) {
+    status.textContent = '更改失敗：' + (error.message === 'Incorrect username or old password' ? '目前密碼不正確' : error.message);
+    return;
+  }
+  for (const id of ids) document.getElementById(id).value = '';
+  status.textContent = '';
+  closeWorkspaceModal();
+  clearAuth();
+  showLoginView();
+  showAuthError('密碼已更改，請用新密碼重新登入');
 }

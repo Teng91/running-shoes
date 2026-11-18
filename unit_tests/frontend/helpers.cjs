@@ -71,16 +71,16 @@ function authOperationContext() {
   const context = vm.createContext({ AbortController,
     document: { getElementById: id => elements[id], querySelectorAll: () => controls },
     API_BASE: '/api', translateError: value => value,
-    hideAuthError() {}, hideRegError() {}, hideChangeError() {},
+    hideAuthError() {}, hideRegError() {},
     showAuthError: text => state.writes.push(text), showRegError: text => state.writes.push(text),
-    showChangeError: text => state.writes.push(text), showAppBoot() {}, hideAppBoot: () => state.hides++,
+    showAppBoot() {}, hideAppBoot: () => state.hides++,
     resetAuthInputs() {}, resetAgentChat() {}, resetAppLayout() {}, showAppView() {}, showLoginView() {},
     loadAgentModels() {}, loadData: async () => {},
     authRequest: (...args) => context.fetch(...args),
   });
   vm.runInContext('let authGeneration = 0, authOperation = null, registrationMode = null;\n' + [
     'setAuthControlsDisabled', 'cancelAuthOperation', 'beginAuthOperation', 'isCurrentAuthOperation',
-    'finishAuthOperation', 'handleLogin', 'handleRegister', 'handleChangePassword',
+    'finishAuthOperation', 'handleLogin', 'handleRegister',
   ].map(extract).join('\n'), context);
   context.captureAuthSession = () => ({ generation: vm.runInContext('authGeneration', context) });
   context.isCurrentAuthSession = session => session.generation === vm.runInContext('authGeneration', context);

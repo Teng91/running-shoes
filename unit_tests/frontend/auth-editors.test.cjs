@@ -29,11 +29,11 @@ test('login locks duplicates and ignores a late body or failure after a new acco
   assert.equal(controls[0].disabled, false); assert.deepEqual(state.writes, ['current failure']);
 });
 
-test('register and password-change callbacks cannot mutate a replacement session', async () => {
-  for (const action of ['handleRegister', 'handleChangePassword']) {
+test('register callbacks cannot mutate a replacement session', async () => {
+  for (const action of ['handleRegister']) {
     const { context, elements, state } = authOperationContext();
-    for (const id of ['reg-username', 'change-username']) elements[id].value = 'A';
-    for (const id of ['reg-password', 'reg-password2', 'change-old-password', 'change-new-password', 'change-new-password2']) elements[id].value = 'password';
+    elements['reg-username'].value = 'A';
+    for (const id of ['reg-password', 'reg-password2']) elements[id].value = 'password';
     let finish, calls = 0;
     context.fetch = () => { calls++; return new Promise(resolve => { finish = resolve; }); };
     const request = context[action](); await context[action]();
