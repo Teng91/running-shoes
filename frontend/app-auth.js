@@ -106,6 +106,7 @@ function showAppView({ keepBoot = false } = {}) {
   document.getElementById('user-label').textContent = currentUser || '';
   render();
   if (typeof activateLocalWorkspace === 'function') void activateLocalWorkspace();
+  if (typeof refreshAdminEntry === 'function') void refreshAdminEntry();
   if (!keepBoot) hideAppBoot();
 }
 

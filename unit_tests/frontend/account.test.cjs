@@ -2,7 +2,8 @@
 const { runContext, test, assert, vm, extract, htmlSource, authOperationContext } = require('./helpers.cjs');
 
 function nodes() {
-  return new Proxy({}, { get: (target, id) => target[id] ||= { id, value: '', textContent: '', innerHTML: '', hidden: false, style: {} } });
+  return new Proxy({}, { get: (target, id) => target[id] ||= { id, value: '', textContent: '', innerHTML: '', hidden: false, style: {},
+    classList: { names: new Set(), add(name) { this.names.add(name); }, remove(name) { this.names.delete(name); } } } });
 }
 
 function accountContext(elements, globals = {}) {
@@ -12,7 +13,7 @@ function accountContext(elements, globals = {}) {
     API_BASE: '/api', translateError: value => value, esc: text => String(text).replace(/[&<>"]/g, c => `&#${c.charCodeAt(0)};`),
     confirm: () => true, currentUser: 'Joy', ...globals,
   });
-  vm.runInContext(`let registrationMode = null;\nlet adminRequestId = 0;\n${['loadRegistrationMode', 'renderAdminSection', 'inviteStatus',
+  vm.runInContext(`let registrationMode = null;\nlet adminRequestId = 0;\n${['loadRegistrationMode', 'refreshAdminEntry', 'openAdminModal', 'closeAdminModal', 'inviteStatus',
     'loadInvites', 'createInvite', 'revokeInvite', 'adminResetPassword', 'deleteAccount'].map(extract).join('\n')}`, context);
   return { context, submit };
 }
@@ -53,8 +54,9 @@ test('SPEC-075 registration sends the invite code and requires it in invite mode
 test('SPEC-075 only admins see the invite panel; codes are escaped and spent ones cannot be revoked', async () => {
   const member = nodes();
   const asMember = accountContext(member, { apiGet: async () => ({ is_admin: false }) }).context;
-  await asMember.renderAdminSection();
-  assert.equal(member['admin-section'].hidden, true);
+  member['admin-entry'].hidden = false;
+  await asMember.refreshAdminEntry();
+  assert.equal(member['admin-entry'].hidden, true, 'SPEC-077 members never see the admin entry');
 
   const admin = nodes();
   const invites = [
@@ -68,8 +70,12 @@ test('SPEC-075 only admins see the invite panel; codes are escaped and spent one
       ? { code: 'K7QM-3XPA', max_uses: 2, expires_at: '2026-12-02T00:00:00Z' }
       : { username: 'Xuan', temporary_password: 'temp-pass-123' }; },
   });
-  await context.renderAdminSection();
-  assert.equal(admin['admin-section'].hidden, false);
+  admin['admin-entry'].hidden = true;
+  await context.refreshAdminEntry();
+  assert.equal(admin['admin-entry'].hidden, false, 'SPEC-077 the sidebar shows the admin entry');
+  context.openAdminModal();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.ok(admin['admin-modal'].classList.names.has('active'));
   const html = admin['invite-list'].innerHTML;
   assert.doesNotMatch(html, /<b>/, 'notes are escaped');
   assert.equal((html.match(/data-click="revoke-invite"/g) || []).length, 1, 'only active invites can be revoked');
@@ -89,6 +95,10 @@ test('SPEC-075 only admins see the invite panel; codes are escaped and spent one
   await context.adminResetPassword();
   assert.equal(JSON.stringify(posts[1]), JSON.stringify(['/admin/reset-password', { username: 'Xuan' }]));
   assert.match(admin['reset-result'].textContent, /temp-pass-123/);
+  context.closeAdminModal();
+  assert.ok(!admin['admin-modal'].classList.names.has('active'));
+  assert.equal(admin['reset-result'].textContent + admin['invite-result'].textContent, '', 'one-time secrets are cleared on close');
+  assert.match(htmlSource, /id="admin-entry" data-click="open-admin" hidden>邀請碼管理</);
 });
 
 test('SPEC-075 deleting the account needs the password and signs out only after the server confirms', async () => {
