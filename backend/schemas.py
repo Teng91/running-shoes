@@ -125,6 +125,8 @@ class AccountDelete(BaseModel):
 
 class InviteCreate(BaseModel):
     note: str = Field("", max_length=60)
+    # Optional memorable code (SPEC-076); empty means a random 8-character code.
+    code: str = Field("", max_length=24)
     max_uses: int = Field(1, ge=1, le=20)
     days: int = Field(14, ge=1, le=90)
 

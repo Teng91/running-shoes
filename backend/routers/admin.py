@@ -31,7 +31,8 @@ def list_invites(_admin: models.User = Depends(require_admin), db: Session = Dep
 def create_invite(payload: schemas.InviteCreate, _admin: models.User = Depends(require_admin),
                   db: Session = Depends(get_db)):
     with service_errors():
-        return invites.create_invite(db, note=payload.note, max_uses=payload.max_uses, days=payload.days)
+        return invites.create_invite(db, note=payload.note, max_uses=payload.max_uses, days=payload.days,
+                                     code=payload.code)
 
 
 @router.delete("/invites/{invite_id}")
