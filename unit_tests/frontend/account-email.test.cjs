@@ -17,14 +17,17 @@ function emailContext(elements, globals = {}) {
   return context;
 }
 
-test('SPEC-079 the login page offers「忘記密碼」only when the server can email codes', async () => {
+test('SPEC-079 the forgot-password form checks for email only when opened and explains when it is off', async () => {
   for (const enabled of [true, false]) {
     const elements = nodes();
-    const context = emailContext(elements, { fetch: async () => ({ ok: true, json: async () => ({ mode: 'invite', mail_enabled: enabled }) }) });
-    await context.loadRegistrationMode();
-    assert.equal(elements['forgot-link'].hidden, !enabled);
+    const context = emailContext(elements, { cancelAuthOperation() {},
+      fetch: async () => ({ ok: true, json: async () => ({ mode: 'invite', mail_enabled: enabled }) }) });
+    await context.showResetForm();
+    assert.equal(elements['reset-form'].style.display, '');
+    assert.equal(/請找管理員/.test(elements['reset-sent'].textContent), !enabled);
   }
-  assert.match(htmlSource, /id="forgot-link" data-click="show-reset-form" hidden/);
+  // No request at startup: the login page stays network-free for the PWA shell.
+  assert.match(htmlSource, /id="forgot-link" data-click="show-reset-form">忘記密碼？</);
   assert.match(htmlSource, /id="reset-code" inputmode="numeric" autocomplete="one-time-code"/);
 });
 
@@ -33,6 +36,7 @@ test('SPEC-079 password reset sends the code request, answers neutrally and need
   const calls = [];
   const context = emailContext(elements, {
     fetch: async (url, options) => {
+      if (!options) return { ok: true, json: async () => ({ mode: 'invite', mail_enabled: true }) };
       const body = JSON.parse(options.body);
       calls.push([url, body]);
       return url.endsWith('/confirm') && body.code === '000000'
@@ -43,7 +47,7 @@ test('SPEC-079 password reset sends the code request, answers neutrally and need
     cancelAuthOperation() {}, showLoginForm: () => calls.push('login'), showAuthError: text => calls.push(text),
   });
   elements['login-username'].value = 'Xuan';
-  context.showResetForm();
+  await context.showResetForm();
   assert.equal(elements['reset-form'].style.display, '');
   assert.equal(elements['reset-identifier'].value, 'Xuan', 'the typed username carries over');
   await context.sendResetCode();

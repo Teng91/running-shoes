@@ -18,8 +18,6 @@ async function loadRegistrationMode() {
     registrationMode = null;
     mailEnabled = false;
   }
-  const forgot = document.getElementById('forgot-link');
-  if (forgot) forgot.hidden = !mailEnabled;
   const closed = registrationMode === 'closed';
   group.hidden = registrationMode === 'open' || closed;
   note.hidden = !closed;
@@ -159,14 +157,18 @@ async function publicPost(path, body) {
   return data;
 }
 
-function showResetForm() {
+// The login page makes no request at startup (PWA/offline); the mail check runs when the form opens.
+async function showResetForm() {
   cancelAuthOperation();
   for (const id of ['login-form', 'register-form', 'change-form']) document.getElementById(id).style.display = 'none';
   document.getElementById('reset-form').style.display = '';
   document.getElementById('reset-error').style.display = 'none';
-  document.getElementById('reset-sent').textContent = '';
+  const sent = document.getElementById('reset-sent');
+  sent.textContent = '';
   const login = document.getElementById('login-username').value.trim();
   if (login && !document.getElementById('reset-identifier').value) document.getElementById('reset-identifier').value = login;
+  await loadRegistrationMode();
+  if (!mailEnabled) sent.textContent = '目前沒有開啟 email 找回密碼，請找管理員產生臨時密碼。';
 }
 
 function showResetError(message) {
