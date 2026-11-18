@@ -17,7 +17,7 @@ from fastapi import HTTPException, Request
 from sqlalchemy import text
 from sqlalchemy.engine import Connection, Engine
 
-from backend.settings import RATE_LIMIT_BUCKET_RETENTION_SECONDS, Settings
+from backend.settings import DAILY_WINDOW_SECONDS, RATE_LIMIT_BUCKET_RETENTION_SECONDS, Settings
 
 # Failed password checks. A per-address lock alone still allows distributed
 # guessing, and a per-account lock alone lets anyone lock a known username out.
@@ -33,6 +33,8 @@ _AUTH_GLOBAL_DETAIL = "驗證服務目前忙碌，請稍後再試。"
 _AGENT_IP_DETAIL = "此網路的 AI 請求過於頻繁，請稍後再試。"
 _AGENT_USER_DETAIL = "AI 請求過於頻繁，請稍後再試。"
 _AGENT_GLOBAL_DETAIL = "AI 服務目前忙碌，請稍後再試。"
+_AGENT_USER_DAILY_DETAIL = "今天的 AI 使用次數已達上限，請明天再試。"
+_AGENT_GLOBAL_DAILY_DETAIL = "今天全站的 AI 使用額度已用完，請明天再試。"
 _REFRESH_USER_DETAIL = "模型列表剛更新過，請稍後再試。"
 _REFRESH_GLOBAL_DETAIL = "模型列表更新目前忙碌，請稍後再試。"
 _LOGIN_FAILURE_DETAIL = "此帳號登入失敗次數過多，請 15 分鐘後再試。"
@@ -145,6 +147,11 @@ def enforce_agent_request_limits(request: Request, user_id: int) -> None:
                _AGENT_IP_DETAIL),
         Window("agent-user", str(user_id), settings.agent_rate_limit_per_minute, _AGENT_USER_DETAIL),
         Window("agent-global", "global", settings.agent_global_rate_limit_per_minute, _AGENT_GLOBAL_DETAIL),
+        # SPEC-071: daily budgets, so an open registration cannot drain the provider credit.
+        Window("agent-user-daily", str(user_id), settings.agent_daily_limit_per_user,
+               _AGENT_USER_DAILY_DETAIL, seconds=DAILY_WINDOW_SECONDS),
+        Window("agent-global-daily", "global", settings.agent_global_daily_limit,
+               _AGENT_GLOBAL_DAILY_DETAIL, seconds=DAILY_WINDOW_SECONDS),
     ))
 
 

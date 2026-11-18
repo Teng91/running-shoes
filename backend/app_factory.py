@@ -77,7 +77,7 @@ async def http_exception_handler(request: Request, exc: Exception) -> Response:
                 "message": exc.detail}}, status_code=exc.status_code, headers=exc.headers
         )
     path = request.url.path
-    if path.startswith(("/api/", "/docs", "/openapi.json")):
+    if path.startswith(("/api/", "/docs", "/redoc", "/openapi.json")):
         return JSONResponse({"detail": exc.detail, "error": {"code": "not_found", "message": exc.detail}}, status_code=404, headers=exc.headers)
     frontend_dir: Path = request.app.state.frontend_dir
     try:
@@ -128,7 +128,14 @@ def create_app(
     selected_frontend = (frontend_dir or selected_settings.frontend_dir).resolve()
     selected_frontend.mkdir(parents=True, exist_ok=True)
 
-    app = FastAPI(title="Running Shoes API", lifespan=lifespan)
+    # SPEC-071: no interactive API console in production. /openapi.json stays,
+    # because release-check verifies the deployed route contract against it.
+    interactive_docs = not selected_settings.is_production
+    app = FastAPI(
+        title="Running Shoes API", lifespan=lifespan,
+        docs_url="/docs" if interactive_docs else None,
+        redoc_url="/redoc" if interactive_docs else None,
+    )
     app.state.settings = selected_settings
     app.state.db_engine = db_engine
     app.state.session_factory = selected_session_factory
