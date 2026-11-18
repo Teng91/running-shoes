@@ -13,7 +13,11 @@ load_dotenv()
 # HS256 keys shorter than the hash output are brute-forceable (RFC 7518 §3.2).
 MIN_SECRET_KEY_BYTES = 32
 # Rate-limit buckets older than this are deleted, so no window may be longer.
-RATE_LIMIT_BUCKET_RETENTION_SECONDS = 3600
+# The daily AI budget (SPEC-071) is the longest window.
+RATE_LIMIT_BUCKET_RETENTION_SECONDS = 24 * 3600
+DAILY_WINDOW_SECONDS = 24 * 3600
+# Cooldowns stay short even though buckets now live for a day.
+MAX_MODEL_REFRESH_COOLDOWN_SECONDS = 3600
 # Development-only signing key; production refuses to start without SECRET_KEY.
 DEV_FALLBACK_SECRET_KEY = "development-only-insecure-secret-key-change-me"
 
@@ -50,6 +54,9 @@ class Settings:
     # Each file or mode change in the restore panel previews again; allow normal use.
     restore_preview_rate_limit_per_minute: int = 20
     restore_preview_global_rate_limit_per_minute: int = 60
+    # Daily LLM budget (SPEC-071): bounds what open registration can spend.
+    agent_daily_limit_per_user: int = 50
+    agent_global_daily_limit: int = 200
 
     @property
     def is_production(self) -> bool:
@@ -87,7 +94,7 @@ class Settings:
             auth_rate_limit_per_minute=_positive_int(env, "AUTH_RATE_LIMIT_PER_MINUTE", 120),
             auth_global_rate_limit_per_minute=_positive_int(env, "AUTH_GLOBAL_RATE_LIMIT_PER_MINUTE", 300),
             model_refresh_cooldown_seconds=min(
-                RATE_LIMIT_BUCKET_RETENTION_SECONDS,
+                MAX_MODEL_REFRESH_COOLDOWN_SECONDS,
                 _positive_int(env, "MODEL_REFRESH_COOLDOWN_SECONDS", 60),
             ),
             model_refresh_global_per_minute=_positive_int(env, "MODEL_REFRESH_GLOBAL_PER_MINUTE", 10),
@@ -97,6 +104,8 @@ class Settings:
             restore_preview_global_rate_limit_per_minute=_positive_int(
                 env, "RESTORE_PREVIEW_GLOBAL_RATE_LIMIT_PER_MINUTE", 60
             ),
+            agent_daily_limit_per_user=_positive_int(env, "AGENT_DAILY_LIMIT_PER_USER", 50),
+            agent_global_daily_limit=_positive_int(env, "AGENT_GLOBAL_DAILY_LIMIT", 200),
         )
 
 

@@ -17,6 +17,8 @@ SECURITY_HEADERS: tuple[tuple[bytes, bytes], ...] = (
     (b"referrer-policy", b"same-origin"),
     (b"cross-origin-opener-policy", b"same-origin"),
     (b"permissions-policy", b"camera=(), microphone=(), geolocation=(), payment=(), usb=()"),
+    # SPEC-071: browsers only honour this over HTTPS; Fly already redirects HTTP.
+    (b"strict-transport-security", b"max-age=31536000; includeSubDomains"),
 )
 
 

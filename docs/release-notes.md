@@ -4,6 +4,15 @@
 每版的摘要見 [CHANGELOG.md](../CHANGELOG.md)；目前的功能與操作方式以 [README](../README.md) 為準。
 這裡保留當時的文字，後續版本可能已調整其中的行為。
 
+### 公開站台的 AI 每日額度與防護補強（SPEC-071，v4.19.1）
+
+- 註冊開放（上限 100 個帳號），AI 先前只有每分鐘限額，任何帳號都能整天呼叫並消耗 OpenRouter 額度。現在 `rate_limits.enforce_agent_request_limits` 在同一交易再消耗每帳號（預設 50）與全站（預設 200）兩個 24 小時視窗，滿了回 429 並附 `Retry-After`。限流桶的保留時間從 1 小時改為 24 小時，模型刷新冷卻上限維持 3600 秒。
+- 正式環境的 `create_app` 不再掛載 `/docs`、`/redoc`（回 JSON 404）；`/openapi.json` 保留，因為 `release-check` 用它比對部署後的路由契約。
+- `SECURITY_HEADERS` 新增 `Strict-Transport-Security: max-age=31536000; includeSubDomains`。
+- 密碼至少 8 碼與登入失敗鎖定（同一 IP 對同一帳號 15 分鐘 10 次）原本就有，這版不變。
+
+Asset 4.19.1／shell v77、schema 10 不變，可直接回滾至 v4.19.0 image。
+
 ### 跑步里程與跑鞋里程分開顯示（SPEC-070，v4.19.0）
 
 - 跑鞋分頁的「總里程」是所有跑鞋里程的合計，包含記在鞋上的步行與健行（例如 2,827.4 km），和 Strava 個人頁的跑步總計（2,280.6 km）不是同一個數字，容易誤會。

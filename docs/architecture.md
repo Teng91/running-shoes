@@ -654,7 +654,7 @@ flowchart LR
 
 - **組合根**：`create_app()` 唯一驗證密鑰並建立預設 engine。匯入任何 backend 模組都不建立目錄、engine，也不結束程序。測試與 app 透過 `app.state.session_factory` 取得 session，清除 dependency override 後也不會落到預設資料庫。
 - **寫入交易**：`write_transaction` commit 前呼叫 `retention`，只清理該帳號超出上限的稽核、回執與墓碑。`run_tombstones` 由 `delete_run` 寫入（schema 8 起連同 Strava 活動 ID），備份匯入計畫與 Strava 預覽／匯入（`run_identity.deleted_strava_ids`）讀取；稽核紀錄只負責歷史與復原。
-- **限流**：`rate_limits.consume()` 把同一請求的所有視窗放在一個交易，滿了就整筆回滾；限額來自 `app.state.settings`，不再保留記憶體桶。
+- **限流**：`rate_limits.consume()` 把同一請求的所有視窗放在一個交易，滿了就整筆回滾；限額來自 `app.state.settings`，不再保留記憶體桶。SPEC-071 再加上 AI 的每帳號與全站 24 小時視窗，限流桶保留 24 小時。
 - **稽核 trigger**：每次啟動依目前欄位重建，避免舊欄位清單使快照不完整或使寫入失敗。
 - **Strava**：`strava_import.parse_activity_dates()` 把 UTC 時間戳轉為 `clock.APP_TIMEZONE` 日期。`date_corrections()` 只修正仍停在舊 UTC 日期的既有活動，`services/strava_imports.py` 在匯入交易中移動日期與月跑量。
 - **v4.18.0**：比賽準備（SPEC-065）。Schema 10 新增 `race_goals`（每帳號一筆，回滾腳本 `scripts/rollback_schema_ten.sql`）。`routers/race_goal.py` 只轉交，寫入在 `services/race_goals.py`，`read_models/race_readiness.py` 計算 Riegel 預估、相對目標配速的強度分區與長距離準備；`read_models/pace.py` 只保留配速趨勢並借用同一套分區。前端 `app-pace-charts.js` 改為比賽準備。依賴方向不變。
