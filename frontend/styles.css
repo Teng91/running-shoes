@@ -393,6 +393,13 @@ h1 { font-size: 28px; font-weight: 800; letter-spacing: .01em; margin-bottom: 4p
 .auth-box h1 { text-align: center; margin-bottom: 24px; letter-spacing: .06em; }
 .auth-box h1[data-eyebrow]::before { margin-bottom: 10px; }
 .auth-error { color: var(--red); font-size: 13px; margin: 8px 0; display: none; }
+/* SPEC-075: sign-up mode note and the privacy notice under the auth forms. */
+.auth-note { color: var(--text-dim); font-size: 13px; margin: 8px 0; }
+.auth-note[hidden] { display: none; }
+.auth-privacy { margin-top: 16px; color: var(--text-dim); font-size: 12px; line-height: 1.6; }
+.auth-privacy summary { cursor: pointer; text-align: center; }
+.auth-privacy p { margin: 8px 0 0; overflow-wrap: anywhere; }
+.invite-actions { white-space: nowrap; }
 
 /* Summary Cards */
 .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 28px; }

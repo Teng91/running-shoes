@@ -83,6 +83,8 @@ async function run() {
       DB_DIR: tempRoot,
       SEED_DATA: 'false',
       ENVIRONMENT: 'test',
+      // The CRUD flow signs up a fresh account; invites are covered by unit tests (SPEC-075).
+      REGISTRATION_MODE: 'open',
       SECRET_KEY: 'browser-e2e-only-secret-not-for-production',
     },
     stdio: ['ignore', 'pipe', 'pipe'],

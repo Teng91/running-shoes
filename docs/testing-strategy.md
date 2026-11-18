@@ -297,6 +297,10 @@ SPEC-032：合成資料驗證歷史筆數上限（v4.7.3 起 10,000／10,001）�
 
 [規格與具名案例](specs/061-ci-on-every-push-and-protected-main.md) 以文字解析 workflow：觸發條件是不限分支的 push、pull request、每週排程與手動執行，沒有 `paths-ignore`；部署條件仍只有 main 的 push／手動執行；main 以外的 ref 由較新的執行取消舊的，main 不取消。ruleset 由 `.github/rulesets/main.json` 描述，Python 測試確認它要求 PR、必要檢查與 workflow 的 5 個測試 job 完全一致、禁止刪除與 force push，且沒有繞過名單。
 
+## SPEC-075 邀請制註冊與帳號管理
+
+[規格與具名案例](specs/075-invites-and-account-controls.md) 以 API 測試確認邀請碼只顯示一次、資料庫只存雜湊、失敗的註冊不扣用、單次邀請碼不能重複使用、停用與過期的邀請碼被拒絕、closed／open 模式；非管理員打不到任何管理員路由；臨時密碼讓舊 token 失效；帳號名稱註冊、登入與鎖定都不分大小寫；刪除帳號後所有含 `user_id` 的資料表都沒有該帳號的資料，其他帳號不受影響。Migration 測試確認 schema 11、回滾腳本的守衛與重新升級，以及舊資料有大小寫重複時仍能啟動。Node 測試確認註冊表單依模式顯示邀請碼欄位、送出 `invite_code`、管理員面板只對管理員顯示且備註有跳脫、刪除帳號打錯密碼不登出。
+
 ## SPEC-074 登入耗用的 CPU 與 Strava 上傳記憶體
 
 [規格與具名案例](specs/074-auth-cpu-and-upload-memory.md) 以事件迴圈測試在第一個上傳解析中再呼叫一次路由，確認立即回 429 且不消耗帳號額度；API 測試確認帳號每分鐘上限；設定測試確認登入預設上限與全站額度的 bcrypt 時間低於一分鐘。
