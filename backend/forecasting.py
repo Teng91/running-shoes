@@ -4,7 +4,7 @@ from collections.abc import Sequence
 from datetime import date, timedelta
 from typing import Literal, TypedDict
 
-from sqlalchemy import func
+from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from backend import models
@@ -13,13 +13,19 @@ from backend.clock import local_today
 
 class ShoeForecast(TypedDict):
     forecast_retirement_date: str | None
-    forecast_source: Literal["recent_90_days", "planned_monthly_km", "retired"]
+    forecast_source: Literal["recent_90_days", "planned_monthly_km", "idle_90_days", "retired"]
     forecast_monthly_km: float
     actual_monthly_km_90_days: float
     remaining_mileage_km: float
 
 
-def retirement_forecast(shoe: models.Shoe, km_90: float, as_of: date) -> ShoeForecast:
+def retirement_forecast(shoe: models.Shoe, km_90: float, as_of: date, *, has_runs: bool = False) -> ShoeForecast:
+    """Recent 90-day use, else the planned monthly km for a pair never logged.
+
+    A pair that has logged runs but none in 90 days (a race or hiking shoe worn now and
+    then) has no usable rate: falling back to the planned monthly km would invent a
+    date, so it gets none (SPEC-069).
+    """
     actual_rate = round(km_90 / 90 * 30.4375, 2) if km_90 > 0 else 0.0
     remaining = round(max(0, shoe.expected_mileage - shoe.mileage), 2)
     if shoe.is_retired:
@@ -29,6 +35,14 @@ def retirement_forecast(shoe: models.Shoe, km_90: float, as_of: date) -> ShoeFor
             "forecast_source": "retired",
             "forecast_monthly_km": actual_rate,
             "actual_monthly_km_90_days": actual_rate,
+            "remaining_mileage_km": remaining,
+        }
+    if not actual_rate and has_runs:
+        return {
+            "forecast_retirement_date": None,
+            "forecast_source": "idle_90_days",
+            "forecast_monthly_km": 0.0,
+            "actual_monthly_km_90_days": 0.0,
             "remaining_mileage_km": remaining,
         }
     rate = actual_rate or round(shoe.monthly_km, 2)
@@ -72,13 +86,17 @@ def forecasts_for_shoes(
     if not rows:
         return {}
     as_of = today or local_today()
-    totals = {shoe_id: value for shoe_id, value in db.query(models.Run.shoe_id, func.sum(models.Run.km)).filter(
+    start = (as_of - timedelta(days=89)).isoformat()
+    recent = func.sum(case((models.Run.date >= start, models.Run.km), else_=0))
+    totals = {shoe_id: (km, count) for shoe_id, km, count in db.query(
+        models.Run.shoe_id, recent, func.count(models.Run.id)
+    ).filter(
         models.Run.user_id == user_id,
         models.Run.shoe_id.in_([shoe.id for shoe in rows]),
-        models.Run.date >= (as_of - timedelta(days=89)).isoformat(),
         models.Run.date <= as_of.isoformat(),
     ).group_by(models.Run.shoe_id).all()}
-    return {
-        shoe.id: retirement_forecast(shoe, round(float(totals.get(shoe.id) or 0), 2), as_of)
-        for shoe in rows
-    }
+    forecasts = {}
+    for shoe in rows:
+        km_90, count = totals.get(shoe.id, (0, 0))
+        forecasts[shoe.id] = retirement_forecast(shoe, round(float(km_90 or 0), 2), as_of, has_runs=bool(count))
+    return forecasts

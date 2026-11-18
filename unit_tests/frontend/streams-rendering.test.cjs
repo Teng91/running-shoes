@@ -78,7 +78,7 @@ test('shoe purchase columns live only in spending details, with aligned table ro
     brandColor: () => '#123456', shoeColor: () => '#123456', progressColor: () => '#123456',
     getThemeColor: (_, fallback) => fallback, shoeCategories: s => s.categories,
   });
-  vm.runInContext(['esc', 'calc', 'fmtPct', 'fmtCostPerKm', 'fmtDate',
+  vm.runInContext(['esc', 'calc', 'fmtPct', 'fmtCostPerKm', 'fmtDate', 'forecastSourceText', 'floorShoeKm', 'formatShoeMileage',
     'renderTable', 'renderRetiredTable'].map(extract).join('\n'), context);
   context.renderTable();
   context.renderRetiredTable();
