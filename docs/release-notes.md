@@ -4,6 +4,14 @@
 每版的摘要見 [CHANGELOG.md](../CHANGELOG.md)；目前的功能與操作方式以 [README](../README.md) 為準。
 這裡保留當時的文字，後續版本可能已調整其中的行為。
 
+### 密碼變更通知信（SPEC-083，v4.22.1）
+
+- `services/email_codes.notify_password_changed` 依帳號或 email 找到使用者，有綁定 email 才寄通知；`routers/auth.change_password`、`confirm_password_reset` 與 `routers/admin.reset_password` 在服務成功後呼叫。`mailer.deliver_later` 把寄信排在回應之後並吞掉寄信錯誤（已記 log），忘記密碼的驗證碼也改用它。
+- 登入／註冊頁新增同一組「淺色／深色／跟隨系統」按鈕（SPEC-082），`applyTheme` 同步兩處的 `aria-pressed`。
+- 正式站以 `fly secrets unset` 移除 `MIGRATION_PASSWORD`：正式資料庫早已完成舊版升級，也沒有啟用 `SEED_DATA`。
+
+Asset 4.22.1／shell v91、schema 12 不變，可直接回滾至 v4.22.0 image（回滾不需要 `MIGRATION_PASSWORD`）。
+
 ### 淺色／深色／跟隨系統（SPEC-082，v4.22.0）
 
 - 原本只有一顆亮色／暗色切換按鈕、預設暗色。側邊欄改成三選一的分段按鈕（`aria-pressed` 標示目前選擇），偏好 `light`／`dark`／`system` 存在 `localStorage`，無效值視為 `system`。

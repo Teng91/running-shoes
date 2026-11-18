@@ -12,6 +12,7 @@ from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import sessionmaker
 
 from backend import models
+from backend.credentials import get_password_hash
 from backend.database import configure_sqlite_connection
 from backend.dependencies import get_db
 from backend.mailer import MailError, smtp_mailer
@@ -235,3 +236,49 @@ def test_schema_twelve_adds_email_and_codes_then_rolls_back(tmp_path):
 def test_settings_replace_keeps_mail_flag_consistent():
     config = replace(Settings.from_env({}), smtp_username="x@gmail.com", smtp_password="y")
     assert config.mail_enabled
+
+
+def _notices(outbox):
+    return [message for message in outbox.messages if message[1] == "跑鞋追蹤：你的密碼已變更"]
+
+
+def test_every_password_change_notifies_the_bound_email(client, db, outbox, monkeypatch):
+    """SPEC-083: changing, resetting by email or by the admin all send a notice to the bound address."""
+    headers = _account(client, "Noticed")
+    _bind(client, outbox, headers, "noticed@example.com")
+
+    assert client.post("/api/auth/change-password", json={
+        "username": "noticed", "old_password": PASSWORD, "new_password": "second-pass"}).status_code == 200
+    to, _subject, body = _notices(outbox)[-1]
+    assert to == "noticed@example.com" and "「Noticed」" in body and "輸入目前密碼後更改" in body
+    assert "忘記密碼？" in body and "台灣時間" in body
+
+    client.post("/api/auth/password-reset/request", json={"identifier": "Noticed"})
+    client.post("/api/auth/password-reset/confirm",
+                json={"identifier": "noticed@example.com", "code": outbox.code(), "new_password": "third-pass1"})
+    assert "email 驗證碼重設" in _notices(outbox)[-1][2]
+
+    db.add(models.User(username="Boss", hashed_password=get_password_hash(PASSWORD)))
+    db.commit()
+    monkeypatch.setattr(app.state, "settings", replace(app.state.settings, admin_usernames=frozenset({"boss"})))
+    boss = {"Authorization": "Bearer " + client.post("/api/auth/login", json={"username": "Boss", "password": PASSWORD}).json()["access_token"]}
+    assert client.post("/api/admin/reset-password", headers=boss, json={"username": "Noticed"}).status_code == 200
+    assert "管理員產生臨時密碼" in _notices(outbox)[-1][2]
+    assert len(_notices(outbox)) == 3
+
+
+def test_no_notice_without_an_email_and_mail_failures_do_not_block_the_change(client, outbox):
+    _account(client, "Quiet")
+    assert client.post("/api/auth/change-password", json={
+        "username": "Quiet", "old_password": PASSWORD, "new_password": "second-pass"}).status_code == 200
+    assert _notices(outbox) == []
+
+    headers = _account(client, "Loud")
+    _bind(client, outbox, headers, "loud@example.com")
+    outbox.fail = True
+    changed = client.post("/api/auth/change-password", json={
+        "username": "Loud", "old_password": PASSWORD, "new_password": "second-pass"})
+    assert changed.status_code == 200, "a failed notice never undoes or fails the change"
+    wrong = client.post("/api/auth/change-password", json={
+        "username": "Loud", "old_password": "wrong-pass", "new_password": "third-pass1"})
+    assert wrong.status_code == 401

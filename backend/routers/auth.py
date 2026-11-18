@@ -5,8 +5,9 @@ from sqlalchemy.orm import Session
 
 from backend import models, schemas
 from backend.auth import get_current_user
+from backend.clock import local_now
 from backend.dependencies import get_db
-from backend.mailer import Mailer, MailError
+from backend.mailer import Mailer, MailError, deliver_later
 from backend.rate_limits import (
     enforce_auth_rate_limit,
     enforce_mail_limits,
@@ -68,19 +69,30 @@ def delete_account(request: Request, payload: schemas.AccountDelete,
 
 
 @router.post("/change-password")
-def change_password(request: Request, payload: schemas.UserChangePassword,
+def change_password(request: Request, payload: schemas.UserChangePassword, background: BackgroundTasks,
                     db: Session = Depends(get_db)):
     enforce_auth_rate_limit(request)
     account = payload.username.strip().casefold()
     reject_locked_account(request, account)
     try:
         with service_errors():
-            return accounts.change_password(db, payload.username, payload.old_password,
-                                            payload.new_password)
+            result = accounts.change_password(db, payload.username, payload.old_password,
+                                              payload.new_password)
     except HTTPException as error:
         if error.status_code == 401:
             record_login_failure(request, account)
         raise
+    notify_password_changed(request, background, db, payload.username, email_codes.CHANGED_BY_USER)
+    return result
+
+
+def notify_password_changed(request: Request, background: BackgroundTasks, db: Session, identifier: str,
+                            how: str) -> None:
+    """SPEC-083: email the bound address after the response; mail problems never fail the change."""
+    mailer = request.app.state.mailer
+    if mailer is not None:
+        email_codes.notify_password_changed(db, identifier, how, send=deliver_later(mailer, background.add_task),
+                                            when=local_now())
 
 
 MAIL_OFF = "Email is not configured"
@@ -130,22 +142,18 @@ def request_password_reset(request: Request, payload: schemas.PasswordResetReque
     enforce_auth_rate_limit(request)
     enforce_mail_limits(request, "reset:" + payload.identifier.strip().casefold())
 
-    def send_later(to: str, subject: str, body: str) -> None:
-        def deliver() -> None:
-            try:
-                mailer(to, subject, body)
-            except MailError:
-                pass  # Already logged without the address; the answer stays the same.
-        background.add_task(deliver)
-
     with service_errors():
-        return email_codes.request_password_reset(db, payload.identifier, send=send_later,
+        return email_codes.request_password_reset(db, payload.identifier,
+                                                  send=deliver_later(mailer, background.add_task),
                                                   secret_key=request.app.state.settings.secret_key)
 
 
 @router.post("/password-reset/confirm")
-def confirm_password_reset(request: Request, payload: schemas.PasswordResetConfirm, db: Session = Depends(get_db)):
+def confirm_password_reset(request: Request, payload: schemas.PasswordResetConfirm, background: BackgroundTasks,
+                           db: Session = Depends(get_db)):
     enforce_auth_rate_limit(request)
     with service_errors():
-        return email_codes.reset_password(db, payload.identifier, payload.code, payload.new_password,
-                                          secret_key=request.app.state.settings.secret_key)
+        result = email_codes.reset_password(db, payload.identifier, payload.code, payload.new_password,
+                                            secret_key=request.app.state.settings.secret_key)
+    notify_password_changed(request, background, db, payload.identifier, email_codes.CHANGED_BY_EMAIL_CODE)
+    return result
