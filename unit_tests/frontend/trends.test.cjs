@@ -1,4 +1,4 @@
-const { runContext, test, assert, vm, extract, htmlSource, source } = require('./helpers.cjs');
+const { runContext, test, assert, vm, extract, htmlSource, source, readText } = require('./helpers.cjs');
 
 function elements() {
   return new Proxy({}, { get: (target, id) => target[id] ||= {
@@ -100,16 +100,25 @@ test('SPEC-038 rotation timeline names active shoes and calls out idle ones with
   assert.doesNotMatch(nodes['timeline-note'].textContent, /灰色/);
 });
 
-test('SPEC-067 the rotation tooltip shows the shoe total with runs and walking at one decimal', () => {
+test('SPEC-067 the rotation tooltip shows the shoe total with runs and walking', () => {
   const context = vm.createContext({});
-  vm.runInContext(extract('timelineMileageLines'), context);
+  vm.runInContext(['floorShoeKm', 'formatShoeMileage', 'timelineMileageLines'].map(extract).join('\n'), context);
   const row = { km: 365.19, shoe_km: 407.2, other_km: 42.01, run_count: 50 };
-  assert.deepEqual([...context.timelineMileageLines(row)], ['鞋子里程 407.2 km', '跑步 365.2 km · 50 次｜步行與暖身 42.0 km']);
+  assert.deepEqual([...context.timelineMileageLines(row)], ['鞋子里程 407.2 km', '跑步 365.1 km · 50 次｜步行與暖身 42.0 km']);
   assert.deepEqual([...context.timelineMileageLines({ ...row, km: 49.11, shoe_km: 48.8, other_km: -0.31, run_count: 7 })],
     ['鞋子里程 48.8 km', '跑步 49.1 km · 7 次'], 'a negative gap is not shown as walking');
-  assert.deepEqual([...context.timelineMileageLines({ ...row, other_km: 0.04 })][1], '跑步 365.2 km · 50 次');
-  vm.runInContext(extract('formatShoeMileage'), context);
-  assert.deepEqual([167.31, 407.2, 0, '261.11', null].map(context.formatShoeMileage), ['167.3', '407.2', '0.0', '261.1', '0.0']);
+  assert.deepEqual([...context.timelineMileageLines({ ...row, other_km: 0.04 })][1], '跑步 365.1 km · 50 次');
+});
+
+test('SPEC-068 shoe mileage is truncated to one decimal exactly like Strava', () => {
+  const context = vm.createContext({});
+  vm.runInContext(['floorShoeKm', 'formatShoeMileage'].map(extract).join('\n'), context);
+  // Strava shows the meter sum 673.352 km as 673.3, not 673.4.
+  assert.deepEqual([673.352, 401.7, 48.84, 167.31, 0.29, 4.35, 1.1, 0, '261.89', null].map(context.formatShoeMileage),
+    ['673.3', '401.7', '48.8', '167.3', '0.2', '4.3', '1.1', '0.0', '261.8', '0.0'], 'binary floating point never drops a tenth');
+  for (const file of ['frontend/app-dashboard.js', 'frontend/app-run-insights.js', 'frontend/app-shoe-charts.js']) {
+    assert.doesNotMatch(readText(file), /total_mileage_km\)\.toFixed\(|\{s\.mileage\}<|已跑 \$\{shoe\.mileage\}|totalMileage\.toLocaleString\(\)/, file);
+  }
 });
 
 // The shoes panel draws two run-derived charts from their own reads. Real resource store,

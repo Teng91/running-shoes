@@ -46,4 +46,4 @@
 | Acceptance criterion | Named test / command |
 | --- | --- |
 | AC-1 | `unit_tests/test_trends.py::test_shoe_timeline_splits_shoe_mileage_into_runs_and_walking` |
-| AC-2 | `unit_tests/frontend/trends.test.cjs::SPEC-067 the rotation tooltip shows the shoe total with runs and walking at one decimal` |
+| AC-2 | `unit_tests/frontend/trends.test.cjs::SPEC-067 the rotation tooltip shows the shoe total with runs and walking` |
