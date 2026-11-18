@@ -297,6 +297,10 @@ SPEC-032：合成資料驗證歷史筆數上限（v4.7.3 起 10,000／10,001）�
 
 [規格與具名案例](specs/061-ci-on-every-push-and-protected-main.md) 以文字解析 workflow：觸發條件是不限分支的 push、pull request、每週排程與手動執行，沒有 `paths-ignore`；部署條件仍只有 main 的 push／手動執行；main 以外的 ref 由較新的執行取消舊的，main 不取消。ruleset 由 `.github/rulesets/main.json` 描述，Python 測試確認它要求 PR、必要檢查與 workflow 的 5 個測試 job 完全一致、禁止刪除與 force push，且沒有繞過名單。
 
+## SPEC-072 過去年份的圖表看得到全年
+
+[規格與具名案例](specs/072-year-over-year-zero-months.md) 以 Node vm 執行 `yearOverYearSeries`，確認過去年份沒有資料的月份為 0、今年未到的月份與未來年份留白；年份選單測試確認實際圖表資料套用同一規則，且換年份時重設每週視窗。read model 測試確認 `weeks_end` 視窗只計自己的跑步、限制在年份內、最早一頁從含 1/1 那週開始；API 測試確認參數格式錯誤回 422。Node 測試確認按「較早」以 `weeks_end` 重新讀取、按鈕啟用狀態、區間日期文字，以及過去年份不出現「本週」。
+
 ## SPEC-071 公開站台的 AI 每日額度與防護補強
 
 [規格與具名案例](specs/071-public-site-hardening.md) 以 API 測試確認每帳號每日額度用完後回 429 且不呼叫模型，全站每日額度用完時回超過一小時的 `Retry-After`；設定測試確認每日視窗不超過限流桶保留時間、模型刷新冷卻上限仍是 3600 秒；app factory 測試確認正式環境的 `/docs`、`/redoc` 回 JSON 404 而 `/openapi.json` 仍列出路由，開發環境照常開啟；安全標頭測試涵蓋新的 HSTS。

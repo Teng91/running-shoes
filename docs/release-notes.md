@@ -4,6 +4,14 @@
 每版的摘要見 [CHANGELOG.md](../CHANGELOG.md)；目前的功能與操作方式以 [README](../README.md) 為準。
 這裡保留當時的文字，後續版本可能已調整其中的行為。
 
+### 過去年份的圖表看得到全年（SPEC-072，v4.19.2）
+
+- 年度月跑量對比先前把沒有月跑量資料的月份當成空白（`spanGaps: false`），2024 年從 9 月才有資料時，線只從 9 月畫起。`yearOverYearSeries` 依 `localDateISO()` 判斷已開始的月份：過去的年份 12 個月都補 0，今年補到本月，之後的月份與未來年份仍為空白。
+- 每週跑量與每週最長一次先前固定是年份最後 16 週。`GET /api/analytics/trends` 新增選填的 `weeks_end`，`trends.weekly_window` 把視窗限制在這一年內並回傳 `weekly_window: {end, has_earlier, has_later}`；前端兩張圖共用「‹ 較早／較晚 ›」，換年份時回到最近 16 週。AI 工具仍取最近 16 週。
+- 只有今天所在的週叫「本週」；過去年份被 12/31 截斷的最後一週在提示框標示「只算到 12/31」，說明文字不再出現「本週 0.0 km」。
+
+Asset 4.19.2／shell v78、schema 10 不變，可直接回滾至 v4.19.1 image。
+
 ### 公開站台的 AI 每日額度與防護補強（SPEC-071，v4.19.1）
 
 - 註冊開放（上限 100 個帳號），AI 先前只有每分鐘限額，任何帳號都能整天呼叫並消耗 OpenRouter 額度。現在 `rate_limits.enforce_agent_request_limits` 在同一交易再消耗每帳號（預設 50）與全站（預設 200）兩個 24 小時視窗，滿了回 429 並附 `Retry-After`。限流桶的保留時間從 1 小時改為 24 小時，模型刷新冷卻上限維持 3600 秒。

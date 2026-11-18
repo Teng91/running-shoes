@@ -69,8 +69,27 @@ def run_streaks(days: list[date], end: date) -> dict:
     }
 
 
-def _weekly(daily: dict[date, DailyRuns], end: date, weekly_goal: float | None) -> list[dict]:
-    last_monday = end - timedelta(days=end.weekday())
+def weekly_window(year: int, end: date, weeks_end: date | None) -> tuple[date, dict]:
+    """The 16-week window ending at ``weeks_end`` inside the selected year (SPEC-072).
+
+    The latest window is the default; earlier windows stop at the week holding 1 January.
+    """
+    first_monday = date(year, 1, 1) - timedelta(days=date(year, 1, 1).weekday())
+    earliest_end = first_monday + timedelta(weeks=WEEKS - 1, days=6)
+    window_end = end if weeks_end is None else min(end, max(weeks_end, min(earliest_end, end)))
+    window_first = window_end - timedelta(days=window_end.weekday()) - timedelta(weeks=WEEKS - 1)
+    return window_end, {
+        "end": window_end.isoformat(),
+        "has_earlier": window_first > first_monday,
+        "has_later": window_end < end,
+    }
+
+
+def _weekly(daily: dict[date, DailyRuns], end: date, weekly_goal: float | None,
+            window_end: date | None = None) -> list[dict]:
+    """Weeks ending at ``window_end``; a week is partial when the data ``end`` cuts it short."""
+    last_day = end if window_end is None else window_end
+    last_monday = last_day - timedelta(days=last_day.weekday())
     first_monday = last_monday - timedelta(weeks=WEEKS + ROLLING_WEEKS - 1)
     totals = []
     for index in range(WEEKS + ROLLING_WEEKS):
@@ -114,7 +133,8 @@ def _weekday_mix(daily: dict[date, DailyRuns], start: date, end: date) -> list[d
             for index, row in enumerate(rows)]
 
 
-def training_trends(db: Session, user_id: int, year: int, as_of: date) -> dict:
+def training_trends(db: Session, user_id: int, year: int, as_of: date,
+                    weeks_end: date | None = None) -> dict:
     end = trends_end(year, as_of)
     goal = goals.goal_values(db, user_id)
     days_in_year = goals.days_in_year(year)
@@ -132,6 +152,7 @@ def training_trends(db: Session, user_id: int, year: int, as_of: date) -> dict:
     if end is None:
         return {
             **base, "daily": [], "streaks": run_streaks([], as_of), "weekly": [],
+            "weekly_window": {"end": None, "has_earlier": False, "has_later": False},
             "weekday": _weekday_mix({}, as_of, as_of),
             "cumulative": {
                 "goal_active": goal_active, "yearly_goal_km": yearly_goal,
@@ -141,7 +162,8 @@ def training_trends(db: Session, user_id: int, year: int, as_of: date) -> dict:
         }
 
     year_start = date(year, 1, 1)
-    weekly_start = end - timedelta(days=end.weekday()) - timedelta(weeks=WEEKS + ROLLING_WEEKS - 1)
+    window_end, window = weekly_window(year, end, weeks_end)
+    weekly_start = window_end - timedelta(days=window_end.weekday()) - timedelta(weeks=WEEKS + ROLLING_WEEKS - 1)
     daily = _daily_km(db, user_id, min(year_start, weekly_start), end)
     year_days = sorted(day for day, (km, *_) in daily.items() if day >= year_start and km > 0)
 
@@ -156,7 +178,8 @@ def training_trends(db: Session, user_id: int, year: int, as_of: date) -> dict:
         **base,
         "daily": [{"date": day.isoformat(), "km": round_metric(daily[day][0])} for day in year_days],
         "streaks": run_streaks(year_days, end),
-        "weekly": _weekly(daily, end, weekly_goal_km if goal_active else None),
+        "weekly": _weekly(daily, end, weekly_goal_km if goal_active else None, window_end),
+        "weekly_window": window,
         "weekday": _weekday_mix(daily, year_start, end),
         "cumulative": {
             "goal_active": goal_active,
