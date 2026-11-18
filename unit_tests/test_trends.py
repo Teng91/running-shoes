@@ -125,8 +125,19 @@ def test_shoe_timeline_orders_rotation_and_flags_idle_active_shoes(db, user_with
     assert rows[idle.id]["idle"] is True and rows[idle.id]["days_since_last_run"] == 61
     assert rows[daily.id] == {
         "shoe_id": daily.id, "first_run_date": "2026-02-01",
-        "last_run_date": "2026-04-28", "km": 16, "run_count": 2, "days_since_last_run": 3, "idle": False,
+        "last_run_date": "2026-04-28", "km": 16, "shoe_km": 0, "other_km": -16, "run_count": 2,
+        "days_since_last_run": 3, "idle": False,
     }
+
+
+def test_shoe_timeline_splits_shoe_mileage_into_runs_and_walking(db, user_with_token):
+    # SPEC-067: the shoes table shows total mileage; walks and warm-ups on the shoe are outside the run log.
+    user, _ = user_with_token
+    rider = _shoe(db, user.id, model="Wave Rider 29")
+    rider.mileage = 407.2
+    _runs(db, user.id, rider.id, ("2026-11-05", 6.04), ("2026-11-10", 359.15))
+    row = shoe_timeline(db, user.id, date(2026, 11, 18))["shoes"][0]
+    assert (row["km"], row["shoe_km"], row["other_km"], row["run_count"]) == (365.19, 407.2, 42.01, 2)
 
 
 def test_trend_endpoints_are_user_scoped(client, db, user_with_token):

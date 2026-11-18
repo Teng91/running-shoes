@@ -297,6 +297,10 @@ SPEC-032：合成資料驗證歷史筆數上限（v4.7.3 起 10,000／10,001）�
 
 [規格與具名案例](specs/061-ci-on-every-push-and-protected-main.md) 以文字解析 workflow：觸發條件是不限分支的 push、pull request、每週排程與手動執行，沒有 `paths-ignore`；部署條件仍只有 main 的 push／手動執行；main 以外的 ref 由較新的執行取消舊的，main 不取消。ruleset 由 `.github/rulesets/main.json` 描述，Python 測試確認它要求 PR、必要檢查與 workflow 的 5 個測試 job 完全一致、禁止刪除與 force push，且沒有繞過名單。
 
+## SPEC-067 輪替時間軸顯示鞋子里程
+
+[規格與具名案例](specs/067-timeline-shoe-mileage.md) 以 Python 測試確認時間軸回傳鞋子里程與跑步以外的里程（含沒有基準里程時為負數），Node vm 驗證提示框只在差距為正時顯示步行與暖身，以及跑鞋里程一律顯示到小數點第一位。
+
 ## SPEC-066 手機數字鍵盤輸入時間
 
 [規格與具名案例](specs/066-duration-digit-entry.md) 以 Node vm 逐字模擬輸入 `15959`，確認每次按鍵後的分組、刪除數字後重新分組、貼上的時間與過長數字不變、分組後的值能被解析，以及新增跑步、目標時間與參考成績三個欄位都接上同一個輸入處理。

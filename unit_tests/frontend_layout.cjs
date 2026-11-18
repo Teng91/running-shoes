@@ -316,6 +316,7 @@ async function run(engine, name) {
           as_of: '2026-10-27', idle_days: 30, shoes: Array.from({ length: 8 }, (_, index) => ({
             shoe_id: index + 1, first_run_date: `2025-${String(index + 2).padStart(2, '0')}-01`,
             last_run_date: index === 2 ? '2026-08-01' : '2026-10-20', km: 120 + index * 40, run_count: 10 + index,
+            shoe_km: 120 + index * 40 + (index % 2) * 12.4, other_km: (index % 2) * 12.4,
             days_since_last_run: index === 2 ? 87 : 7, idle: index === 2,
           })),
         } });
