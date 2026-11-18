@@ -27,6 +27,7 @@ const UI_ACTIONS = Object.freeze({
     'retry-runs': () => loadRunsForSelectedMonth(runController.state.retryOptions),
     'load-runs': () => loadRunsForSelectedMonth(),
     'run-page': element => changeRunPage(Number(element.dataset.step)),
+    'weekly-page': element => changeWeeklyWindow(Number(element.dataset.step)),
     'open-run': element => openRunModal(Number(element.dataset.runId)),
     'close-run-modal': () => closeRunModal(),
     'delete-editing-run': () => deleteEditingRun(),

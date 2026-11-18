@@ -1,5 +1,7 @@
 """Dashboard and per-shoe analytics HTTP routes."""
 
+from datetime import date
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
@@ -33,10 +35,11 @@ def race_readiness_analytics(
 @router.get("/api/analytics/trends")
 def training_trends(
     year: int = Query(..., ge=1900, le=2100),
+    weeks_end: date | None = Query(None, description="End of the 16-week window inside the year (SPEC-072)"),
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    return trends.training_trends(db, current_user.id, year, local_today())
+    return trends.training_trends(db, current_user.id, year, local_today(), weeks_end)
 
 
 @router.get("/api/analytics/shoe-timeline")

@@ -20,6 +20,7 @@ function populateYearSelect() {
 function onYearChange() {
   const sel = document.getElementById('year-select');
   selectedYear = parseInt(sel.value, 10) || null;
+  weeklyWindowEnd = null;
   renderGoalProgress();
   renderMonthlyYearChart();
   renderShoeStackedChart();
@@ -254,17 +255,53 @@ function renderMonthlyYearChart() {
 // these renderers only lay out the returned values.
 let trendsRequestId = 0;
 
+// SPEC-072: end of the 16-week window shown by the weekly charts; null is the latest.
+let weeklyWindowEnd = null;
+let weeklyWindow = null;
+
+function addDaysISO(iso, days) {
+  const [y, m, d] = iso.split('-').map(Number);
+  const day = new Date(Date.UTC(y, m - 1, d + days));
+  return day.toISOString().slice(0, 10);
+}
+
+function changeWeeklyWindow(step) {
+  if (!weeklyWindow?.end) return;
+  if (step < 0 && !weeklyWindow.has_earlier) return;
+  if (step > 0 && !weeklyWindow.has_later) return;
+  weeklyWindowEnd = addDaysISO(weeklyWindow.end, step * 16 * 7);
+  renderTrends();
+}
+
+function renderWeekPagers(window) {
+  weeklyWindow = window || null;
+  const pageable = Boolean(window?.has_earlier || window?.has_later);
+  document.querySelectorAll('.week-pager').forEach(pager => { pager.hidden = !pageable; });
+  document.querySelectorAll('[data-week-pager]').forEach(button => {
+    button.disabled = !(button.dataset.weekPager === 'earlier' ? window?.has_earlier : window?.has_later);
+  });
+}
+
+// "近 16 週" only for the window that ends today; older windows name their dates.
+function weeklyWindowLabel(weeks, latest) {
+  if (latest || !weeks.length) return '近 16 週';
+  const label = iso => { const [, m, d] = iso.split('-'); return `${Number(m)}/${Number(d)}`; };
+  return `${label(weeks[0].week_start)}～${label(addDaysISO(weeks[weeks.length - 1].week_start, 6))} 這 16 週`;
+}
+
 async function renderTrends() {
   if (document.querySelector('.tab-panel.active')?.dataset.panel !== 'monthly') return;
   const year = parseInt(document.getElementById('year-select')?.value, 10);
   if (!year) return;
   const requestId = ++trendsRequestId;
+  const windowEnd = weeklyWindowEnd;
   let trends;
   try {
     const result = await resourceStore.read('training-trends', {
-      key: String(year), refresh: false,
+      key: windowEnd ? `${year}|${windowEnd}` : String(year), refresh: false,
       loader: async () => {
-        const value = await apiGet(`/analytics/trends?year=${year}`);
+        const query = windowEnd ? `&weeks_end=${encodeURIComponent(windowEnd)}` : '';
+        const value = await apiGet(`/analytics/trends?year=${year}${query}`);
         if (!Array.isArray(value.daily) || !Array.isArray(value.weekly) || !value.cumulative) {
           throw new Error('訓練趨勢資料格式錯誤');
         }
@@ -281,6 +318,7 @@ async function renderTrends() {
   }
   if (document.querySelector('.tab-panel.active')?.dataset.panel !== 'monthly') return;
   renderRunHeatmap(trends);
+  renderWeekPagers(trends.weekly_window);
   renderWeeklyChart(trends);
   renderCumulativeChart(trends);
   renderLongRunChart(trends);
@@ -386,7 +424,7 @@ function renderWeeklyChart(trends) {
                 lines.push(`較前 4 週平均 ${week.change_percent > 0 ? '+' : ''}${week.change_percent.toFixed(1)}%`);
               }
               if (week.spike) lines.push(`⚠ 比前 4 週平均多 ${threshold}% 以上`);
-              if (week.partial) lines.push('本週進行中');
+              if (week.partial) lines.push(partialWeekText(trends));
               return lines;
             },
           },
@@ -399,17 +437,29 @@ function renderWeeklyChart(trends) {
     },
   });
   const spikes = weeks.filter(week => week.spike).length;
+  const span = weeklyWindowLabel(weeks, !trends.weekly_window?.has_later);
   const spikeText = spikes
     ? `橘色的 ${spikes} 週比前 4 週平均多 ${threshold}% 以上；跑量增加太快時注意恢復。`
-    : `近 16 週沒有比前 4 週平均多 ${threshold}% 以上的週次。`;
+    : `${span}沒有比前 4 週平均多 ${threshold}% 以上的週次。`;
   note.textContent = weeklyGoal ? `${weeklyGoalText(weeks, weeklyGoal, trends)}${spikeText}` : spikeText;
+}
+
+// A past year's last week is cut off by 31 December; only this year's last week is "本週".
+function weekInProgress(trends) {
+  return Boolean(trends?.end_date) && trends.end_date === localDateISO();
+}
+
+function partialWeekText(trends) {
+  if (weekInProgress(trends)) return '本週進行中';
+  const [, m, d] = String(trends?.end_date || '').split('-');
+  return m ? `只算到 ${Number(m)}/${Number(d)}` : '本週進行中';
 }
 
 function weeklyGoalText(weeks, weeklyGoal, trends) {
   const finished = weeks.filter(week => !week.partial);
   const met = finished.filter(week => week.goal_met).length;
   const current = weeks[weeks.length - 1];
-  const now = current?.partial ? `本週 ${current.km.toFixed(1)}／${weeklyGoal.toFixed(1)} km；` : '';
+  const now = current?.partial && weekInProgress(trends) ? `本週 ${current.km.toFixed(1)}／${weeklyGoal.toFixed(1)} km；` : '';
   // A month is about 4.35 weeks: the weekly target follows the annual goal, not month ÷ 4.
   const days = trends?.cumulative?.goal_km?.length || 365;
   const yearly = Number(trends?.cumulative?.yearly_goal_km || 0);
@@ -445,7 +495,7 @@ function renderLongRunChart(trends) {
         tooltip: { callbacks: {
           title: items => `${weeks[items[0].dataIndex].week_start} 起的一週`,
           label: ctx => (ctx.raw > 0 ? `最長一次 ${ctx.raw.toFixed(2)} km` : '這週沒有跑步'),
-          afterBody: items => (weeks[items[0].dataIndex].partial ? ['本週進行中'] : []),
+          afterBody: items => (weeks[items[0].dataIndex].partial ? [partialWeekText(trends)] : []),
         } },
       },
       scales: {
@@ -454,16 +504,16 @@ function renderLongRunChart(trends) {
       },
     },
   });
-  note.textContent = longRunText(weeks);
+  note.textContent = longRunText(weeks, weeklyWindowLabel(weeks, !trends.weekly_window?.has_later));
 }
 
-function longRunText(weeks) {
+function longRunText(weeks, span = '近 16 週') {
   const best = weeks.reduce((top, week) => (Number(week.longest_km || 0) > Number(top?.longest_km || 0) ? week : top), null);
-  if (!best) return '近 16 週沒有跑步紀錄。';
+  if (!best) return `${span}沒有跑步紀錄。`;
   // Average only finished weeks: the current week may not have had its long run yet.
   const recent = weeks.filter(week => !week.partial).slice(-4).map(week => Number(week.longest_km || 0));
   const [, m, d] = best.week_start.split('-');
-  const headline = `近 16 週最長 ${Number(best.longest_km).toFixed(1)} km（${Number(m)}/${Number(d)} 那週）`;
+  const headline = `${span}最長 ${Number(best.longest_km).toFixed(1)} km（${Number(m)}/${Number(d)} 那週）`;
   if (!recent.length) return `${headline}。`;
   const average = recent.reduce((sum, km) => sum + km, 0) / recent.length;
   return `${headline}；過去 ${recent.length} 週（不含本週）平均最長一次 ${average.toFixed(1)} km。`;
@@ -610,6 +660,14 @@ function renderCumulativeChart(trends) {
 // The emphasised year takes the theme's distance color; the others stay distinct from it.
 const YEAR_LINE_COLORS = ['#2fb8d8', '#ff8a1f', '#9b7bff', '#ff4f8b', '#e0b400', '#8893a2'];
 
+// SPEC-072: a month without a row ran 0 km, so the line never breaks; only months
+// that have not started yet (later this year, or a future year) stay gaps.
+function yearOverYearSeries(months, year, todayISO) {
+  const [thisYear, thisMonth] = String(todayISO).split('-').map(Number);
+  const startedMonths = year < thisYear ? 12 : year === thisYear ? thisMonth : 0;
+  return Array.from({ length: 12 }, (_, i) => months[i] ?? (i < startedMonths ? 0 : null));
+}
+
 function renderYearOverYearChart() {
   if (chartInstances.yearOverYear) { chartInstances.yearOverYear.destroy(); delete chartInstances.yearOverYear; }
   const note = document.getElementById('yoy-note');
@@ -627,7 +685,7 @@ function renderYearOverYearChart() {
     const emphasis = year === chosen;
     const color = emphasis ? getThemeColor('--chart-1', '#c8ff3c') : YEAR_LINE_COLORS[index % YEAR_LINE_COLORS.length];
     return {
-      label: String(year), data: byYear.get(year), borderColor: color, backgroundColor: color,
+      label: String(year), data: yearOverYearSeries(byYear.get(year), year, localDateISO()), borderColor: color, backgroundColor: color,
       borderWidth: emphasis ? 3 : 1.5, pointRadius: emphasis ? 3 : 0, spanGaps: false, tension: .25,
       order: emphasis ? 0 : 1,
     };
