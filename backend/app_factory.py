@@ -17,7 +17,12 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from backend import migrations
 from backend.backup_contract import MAX_BACKUP_BYTES
 from backend.database import create_database_engine
-from backend.middleware import SecurityHeadersMiddleware, UploadLimitMiddleware
+from backend.middleware import (
+    ApiRateLimitMiddleware,
+    ApiRequestLimiter,
+    SecurityHeadersMiddleware,
+    UploadLimitMiddleware,
+)
 from backend.observability import RequestContextMiddleware
 from backend.routers import (
     agent,
@@ -150,6 +155,9 @@ def create_app(
     )
     # The SPA and API share one origin, so no CORS middleware is installed:
     # browsers refuse cross-origin API reads (SPEC-054).
+    # Outermost after the headers: a flood is turned away before uploads, sessions or routing.
+    app.state.api_rate_limiter = ApiRequestLimiter()
+    app.add_middleware(ApiRateLimitMiddleware)
     app.add_middleware(SecurityHeadersMiddleware)
     app.add_middleware(RequestContextMiddleware)
     for router in (

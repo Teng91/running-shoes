@@ -57,6 +57,8 @@ class Settings:
     # Daily LLM budget (SPEC-071): bounds what open registration can spend.
     agent_daily_limit_per_user: int = 50
     agent_global_daily_limit: int = 200
+    # Every /api/ request per client address and minute (SPEC-073); normal use stays far below.
+    api_rate_limit_per_minute: int = 600
 
     @property
     def is_production(self) -> bool:
@@ -106,6 +108,7 @@ class Settings:
             ),
             agent_daily_limit_per_user=_positive_int(env, "AGENT_DAILY_LIMIT_PER_USER", 50),
             agent_global_daily_limit=_positive_int(env, "AGENT_GLOBAL_DAILY_LIMIT", 200),
+            api_rate_limit_per_minute=_positive_int(env, "API_RATE_LIMIT_PER_MINUTE", 600),
         )
 
 

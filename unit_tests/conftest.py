@@ -65,6 +65,9 @@ def isolate_app_database(db, monkeypatch):
     monkeypatch.setattr(app.state, "session_factory", sessionmaker(
         autocommit=False, autoflush=False, bind=test_engine
     ))
+    # The shared app's in-memory API budget (SPEC-073) is per test, like its database.
+    from backend.middleware import ApiRequestLimiter
+    monkeypatch.setattr(app.state, "api_rate_limiter", ApiRequestLimiter())
 
 
 @pytest.fixture
