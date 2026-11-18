@@ -341,23 +341,23 @@ async function run(engine, name) {
         if (url.pathname === '/api/analytics/race') {
           const weekly = Array.from({ length: 12 }, (_, index) => ({
             week_start: new Date(Date.UTC(2026, 7, 10 + index * 7)).toISOString().slice(0, 10),
-            km: 25 + (index % 4) * 5, longest_km: [10, 12.5, 16.05, 9.8][index % 4], partial: index === 11 }));
+            km: 25 + (index % 4) * 5, longest_km: [10, 12.5, 16, 9.8][index % 4], partial: index === 11 }));
           return route.fulfill({ json: {
             as_of: '2026-10-27', days_left: 40, goal_pace: 341,
-            goal: { version: 1, race_name: '台北國際半程馬拉松', race_date: '2026-12-06', distance_km: 21.0975, target_seconds: 7200,
-              reference_distance_km: 10.3, reference_seconds: 3261, reference_temperature_c: 29 },
+            goal: { version: 1, race_name: '示範城市半馬', race_date: '2026-12-13', distance_km: 21.0975, target_seconds: 7200,
+              reference_distance_km: 10, reference_seconds: 3120, reference_temperature_c: 28 },
             zones: [{ key: 'easy', label: '輕鬆', min_pace: 386, max_pace: null }, { key: 'steady', label: '穩定', min_pace: 356, max_pace: 386 },
               { key: 'race', label: '比賽配速', min_pace: 331, max_pace: 356 }, { key: 'fast', label: '更快', min_pace: null, max_pace: 331 }],
-            prediction: { reference_distance_km: 10.3, reference_seconds: 3261, reference_pace: 317, reference_temperature_c: 29,
-              hot_reference: true, predicted_seconds: 6973, predicted_pace: 331, margin_seconds: 227 },
+            prediction: { reference_distance_km: 10, reference_seconds: 3120, reference_pace: 312, reference_temperature_c: 28,
+              hot_reference: true, predicted_seconds: 6884, predicted_pace: 326, margin_seconds: 316 },
             intensity: { weeks: 8, total_seconds: 100000, untimed_runs: 1, zones: [
               { key: 'easy', label: '輕鬆', runs: 4, km: 19.9, seconds: 9100, share: 9.1 },
               { key: 'steady', label: '穩定', runs: 7, km: 60, seconds: 24800, share: 24.8 },
               { key: 'race', label: '比賽配速', runs: 15, km: 139.6, seconds: 54100, share: 54.1 },
               { key: 'fast', label: '更快', runs: 5, km: 33.9, seconds: 12000, share: 12 }] },
-            long_runs: { weeks: 8, threshold_km: 15.8, target_count: 2, count: 1, runs: [{ date: '2026-10-25', km: 16.05, pace: 338 }],
-              longest_recent: { date: '2026-10-25', km: 16.05, pace: 338 }, longest_ever: { date: '2025-12-27', km: 21.34, pace: 393 },
-              longest_recent_percent: 76, enough: false, last_long_run_by: '2026-11-22', weekly, average_weekly_km: 31.68 },
+            long_runs: { weeks: 8, threshold_km: 15.8, target_count: 2, count: 1, runs: [{ date: '2026-10-25', km: 16, pace: 338 }],
+              longest_recent: { date: '2026-10-25', km: 16, pace: 338 }, longest_ever: { date: '2025-12-20', km: 21.1, pace: 395 },
+              longest_recent_percent: 76, enough: false, last_long_run_by: '2026-11-29', weekly, average_weekly_km: 31.68 },
           } });
         }
         const contentTypes = { '.html': 'text/html', '.js': 'application/javascript', '.mjs': 'application/javascript', '.css': 'text/css',
@@ -446,13 +446,13 @@ async function run(engine, name) {
               await page.locator('#cancel-goal-btn').click();
               assert.equal(await page.locator('#goal-settings').isHidden(), true, 'cancel closes the goal editor');
               // SPEC-065: the race settings form shows the saved goal and lays out at every width.
-              await page.waitForFunction(() => document.getElementById('race-cards').textContent.includes('1:56:13'));
+              await page.waitForFunction(() => document.getElementById('race-cards').textContent.includes('1:54:44'));
               await page.locator('#race-edit-toggle').click();
               assert.equal(await page.locator('#race-target').inputValue(), '2:00:00');
               await assertLayout(page, `${name} ${theme} ${width} race editor`);
               await page.locator('#cancel-race-btn').click();
               assert.equal(await page.locator('#race-settings').isHidden(), true, 'cancel closes the race editor');
-              assert.match(await page.locator('#race-cards').innerText(), /1:56:13/);
+              assert.match(await page.locator('#race-cards').innerText(), /1:54:44/);
             }
             assert.equal(await page.locator('.tab-panel.active canvas').count(), expected);
             assert.equal(await page.evaluate(() => Object.values(chartInstances).filter(c => c.canvas.getClientRects().length).length), expected, 'all charts initialized with data');

@@ -108,7 +108,7 @@ def test_drill_restores_all_rows_and_schema_only_in_temporary_directory(tmp_path
     assert result["schema_version"] == 0
     assert result["logical_sha256"] == logical_summary(source)["logical_sha256"]
     assert not (tmp_path / "restored.db").exists()
-    assert usernames(source) == ["Joy"]
+    assert usernames(source) == ["Demo"]
 
 
 @pytest.mark.parametrize("damage", ["rows", "index"])
@@ -133,4 +133,4 @@ def test_drill_rejects_a_restore_that_loses_rows_or_schema(tmp_path, monkeypatch
     monkeypatch.setattr(database_backup, "restore_backup", corrupt_restore)
     with pytest.raises(ValueError, match="does not match"):
         drill_backup(backup)
-    assert usernames(source) == ["Joy"]
+    assert usernames(source) == ["Demo"]

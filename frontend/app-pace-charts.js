@@ -172,9 +172,9 @@ function readRaceForm() {
   const referenceDistance = value('race-ref-distance') === '' ? null : Number(value('race-ref-distance'));
   const temperature = value('race-ref-temp') === '' ? null : Number(value('race-ref-temp'));
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value('race-date'))) return { error: '請選擇比賽日期。' };
-  if (!(target > 0)) return { error: '目標時間格式是 1:59:59 或 54:21。' };
+  if (!(target > 0)) return { error: '目標時間格式是 1:59:59 或 52:00。' };
   if ((referenceDistance === null) !== (referenceTime === null)) return { error: '參考成績要同時填距離與時間，或兩個都留白。' };
-  if (referenceTime !== null && !(referenceTime > 0)) return { error: '參考成績時間格式是 54:21 或 1:05:30。' };
+  if (referenceTime !== null && !(referenceTime > 0)) return { error: '參考成績時間格式是 52:00 或 1:05:30。' };
   if (referenceDistance !== null && !(referenceDistance >= 1)) return { error: '參考成績距離至少 1 km。' };
   if (temperature !== null && (!Number.isFinite(temperature) || referenceTime === null)) return { error: '氣溫要搭配參考成績填寫。' };
   return { payload: {

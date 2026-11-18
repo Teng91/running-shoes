@@ -9,7 +9,7 @@ from backend.database import Base
 from scripts.database_backup import create_backup, restore_backup, verify_backup
 
 
-def make_database(path, username="Joy"):
+def make_database(path, username="Demo"):
     engine = create_engine(f"sqlite:///{path}")
     Base.metadata.create_all(engine)
     with engine.begin() as connection:
@@ -38,7 +38,7 @@ def test_create_and_verify_backup_with_checksum(tmp_path):
 
     assert metadata["sha256"]
     assert backup.with_suffix(".db.sha256").is_file()
-    assert usernames(backup) == ["Joy"]
+    assert usernames(backup) == ["Demo"]
 
 
 def test_backup_retention_removes_only_old_managed_snapshots(tmp_path):

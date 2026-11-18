@@ -70,7 +70,7 @@ def test_factory_seed_is_scoped_to_injected_database(tmp_path):
         pass
 
     with sessions() as db:
-        assert db.query(models.User).filter_by(username="Joy").one()
+        assert db.query(models.User).filter_by(username="Demo").one()
         assert db.query(models.Shoe).count() == 8
 
 

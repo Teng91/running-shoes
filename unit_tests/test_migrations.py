@@ -56,8 +56,8 @@ def test_seed_disabled_when_env_not_set():
         verify.close()
 
 
-def test_seed_creates_joy_and_default_data():
-    """When SEED_DATA=true and DB is empty, seed creates Joy + 8 shoes + 42 mileages."""
+def test_seed_creates_demo_and_default_data():
+    """When SEED_DATA=true and DB is empty, seed creates Demo + 8 shoes + 42 mileages."""
     engine = _make_test_engine()
     TestSession = sessionmaker(bind=engine)
     seed_default_data(
@@ -67,48 +67,48 @@ def test_seed_creates_joy_and_default_data():
 
     verify = TestSession()
     try:
-        joy = verify.query(User).filter(User.username == "Joy").first()
-        assert joy is not None
-        assert verify_password("seedpass", joy.hashed_password)
+        demo = verify.query(User).filter(User.username == "Demo").first()
+        assert demo is not None
+        assert verify_password("seedpass", demo.hashed_password)
 
         # 8 shoes (6 active + 2 retired) per the seed fixture in main.py
-        shoes = verify.query(Shoe).filter(Shoe.user_id == joy.id).all()
+        shoes = verify.query(Shoe).filter(Shoe.user_id == demo.id).all()
         assert len(shoes) == 8
         assert sum(1 for s in shoes if not s.is_retired) == 6
         assert sum(1 for s in shoes if s.is_retired) == 2
 
         # 42 monthly mileages (2023/01 ~ 2026/06)
-        mileages = verify.query(MonthlyMileage).filter(MonthlyMileage.user_id == joy.id).all()
+        mileages = verify.query(MonthlyMileage).filter(MonthlyMileage.user_id == demo.id).all()
         assert len(mileages) == 25
     finally:
         verify.close()
 
 
 def test_seed_does_not_overwrite_existing_data():
-    """When Joy already exists with her data, seed must not modify any of it."""
+    """When Demo already exists with its data, seed must not modify any of it."""
     engine = _make_test_engine()
     TestSession = sessionmaker(bind=engine)
 
-    # Pre-populate Joy with one custom shoe and one custom mileage so the
+    # Pre-populate Demo with one custom shoe and one custom mileage so the
     # seed's "table empty" checks both fail.
     pre = TestSession()
     try:
-        joy = User(username="Joy", hashed_password=get_password_hash("existingpass"))
-        pre.add(joy)
+        demo = User(username="Demo", hashed_password=get_password_hash("existingpass"))
+        pre.add(demo)
         pre.commit()
-        pre.refresh(joy)
+        pre.refresh(demo)
 
-        custom_shoe = Shoe(user_id=joy.id, brand="CustomBrand", model="CustomModel",
+        custom_shoe = Shoe(user_id=demo.id, brand="CustomBrand", model="CustomModel",
                            date="2025-01-01", price=1000, orig_price=2000,
                            mileage=50, expected_mileage=500, monthly_km=30,
                            is_retired=False)
         pre.add(custom_shoe)
 
-        custom_mileage = MonthlyMileage(user_id=joy.id, year=2025, month=1, km=99.99)
+        custom_mileage = MonthlyMileage(user_id=demo.id, year=2025, month=1, km=99.99)
         pre.add(custom_mileage)
         pre.commit()
 
-        joy_id = joy.id
+        demo_id = demo.id
         shoe_id = custom_shoe.id
         mileage_id = custom_mileage.id
     finally:
@@ -121,18 +121,18 @@ def test_seed_does_not_overwrite_existing_data():
 
     verify = TestSession()
     try:
-        joy = verify.query(User).filter(User.username == "Joy").first()
-        assert joy.id == joy_id
-        assert verify_password("existingpass", joy.hashed_password)
-        assert not verify_password("newpass", joy.hashed_password)
+        demo = verify.query(User).filter(User.username == "Demo").first()
+        assert demo.id == demo_id
+        assert verify_password("existingpass", demo.hashed_password)
+        assert not verify_password("newpass", demo.hashed_password)
 
-        # Joy's custom shoe must still exist and be unchanged
+        # Demo's custom shoe must still exist and be unchanged
         shoe = verify.query(Shoe).filter(Shoe.id == shoe_id).first()
         assert shoe is not None
         assert shoe.brand == "CustomBrand"
         assert shoe.mileage == 50
 
-        # Joy's custom mileage must still exist and be unchanged
+        # Demo's custom mileage must still exist and be unchanged
         mileage = verify.query(MonthlyMileage).filter(MonthlyMileage.id == mileage_id).first()
         assert mileage is not None
         assert mileage.km == 99.99
@@ -141,7 +141,7 @@ def test_seed_does_not_overwrite_existing_data():
 
 
 def test_seed_raises_when_migration_password_missing():
-    """If Joy doesn't exist and MIGRATION_PASSWORD isn't set, seed must raise."""
+    """If Demo doesn't exist and MIGRATION_PASSWORD isn't set, seed must raise."""
     engine = _make_test_engine()
     TestSession = sessionmaker(bind=engine)
     with pytest.raises(RuntimeError, match="MIGRATION_PASSWORD"):
@@ -203,8 +203,8 @@ def test_lifespan_migrates_old_schema():
             user_id = conn.execute(text("SELECT user_id FROM shoes")).fetchone()[0]
             assert user_id is not None, "existing shoes should get user_id assigned"
 
-            joy_id = conn.execute(text("SELECT id FROM users WHERE username='Joy'")).fetchone()[0]
-            assert joy_id == user_id, "shoes' user_id should match Joy's id"
+            demo_id = conn.execute(text("SELECT id FROM users WHERE username='Demo'")).fetchone()[0]
+            assert demo_id == user_id, "shoes' user_id should match Demo's id"
     finally:
         asyncio.run(async_gen.__aexit__(None, None, None))
 
@@ -239,7 +239,7 @@ def test_lifespan_skips_migration_when_new_schema():
             ).fetchall()]
             assert "idx_runs_user_date" in run_indexes
 
-            # Migration didn't run, so no Joy user should exist
+            # Migration didn't run, so no Demo user should exist
             count = conn.execute(text("SELECT COUNT(*) FROM users")).fetchone()[0]
             assert count == 0
     finally:
