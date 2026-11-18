@@ -17,11 +17,11 @@ function registerResourceCaches() {
   });
   resourceStore.registerCache('annual', () => {
     runController.state.annualRequest++;
-    resourceStore.invalidate(['annual-summary', 'training-trends', 'shoe-timeline', 'pace-analysis', 'race-readiness']);
+    resourceStore.invalidate(['annual-summary', 'training-trends', 'shoe-timeline', 'pace-analysis', 'race-readiness', 'run-totals']);
   });
   resourceStore.registerCache('dashboard', () => {
     dashboardAnalyticsRequest++;
-    resourceStore.invalidate(['dashboard-analytics', 'shoe-timeline', 'home-summary', 'year-review', 'shoe-distance-mix']);
+    resourceStore.invalidate(['dashboard-analytics', 'shoe-timeline', 'home-summary', 'year-review', 'shoe-distance-mix', 'run-totals']);
   });
 }
 
