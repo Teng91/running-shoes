@@ -46,12 +46,12 @@ test('SPEC-079 password reset sends the code request, answers neutrally and need
     translateError: value => (value === 'Incorrect or expired code' ? '驗證碼錯誤或已過期' : value),
     cancelAuthOperation() {}, showLoginForm: () => calls.push('login'), showAuthError: text => calls.push(text),
   });
-  elements['login-username'].value = 'Xuan';
+  elements['login-username'].value = 'Friend';
   await context.showResetForm();
   assert.equal(elements['reset-form'].style.display, '');
-  assert.equal(elements['reset-identifier'].value, 'Xuan', 'the typed username carries over');
+  assert.equal(elements['reset-identifier'].value, 'Friend', 'the typed username carries over');
   await context.sendResetCode();
-  assert.equal(JSON.stringify(calls[0]), JSON.stringify(['/api/auth/password-reset/request', { identifier: 'Xuan' }]));
+  assert.equal(JSON.stringify(calls[0]), JSON.stringify(['/api/auth/password-reset/request', { identifier: 'Friend' }]));
   assert.match(elements['reset-sent'].textContent, /如果這個帳號有綁定 email/);
 
   elements['reset-code'].value = '000000';

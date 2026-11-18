@@ -41,7 +41,7 @@ PWA 不快取 API／驗證回應；測試保留其他 cache，避免刪除同 or
 
 ## Migration, rollout, and rollback
 
-- Schema／資料 migration：無。先完成 synthetic verification，再拉取至 `/home/joy-teng/.local/share/running-shoes/backups`，不覆蓋開發 DB。
+- Schema／資料 migration：無。先完成 synthetic verification，再拉取至 `~/.local/share/running-shoes/backups`，不覆蓋開發 DB。
 - v3.2.3 使用 asset revision 3.2.3／shell v20；依使用者授權完成 commit、push、tag、release 與 Fly deploy，部署前重新拉取並驗證備份。舊 worker migration 的首次更新需網路可用。
 - 回滾可重新部署 v3.2.2 tag，無 schema 相容性變更，不還原業務 DB；異地備份只增加副本，無自動覆蓋正式還原流程。PWA 用戶需連線以取得回滾 worker。
 

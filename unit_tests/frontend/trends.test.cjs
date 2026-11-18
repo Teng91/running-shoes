@@ -116,9 +116,9 @@ test('SPEC-067 the rotation tooltip shows the shoe total with runs and walking',
 test('SPEC-068 shoe mileage is truncated to one decimal exactly like Strava', () => {
   const context = vm.createContext({});
   vm.runInContext(['floorShoeKm', 'formatShoeMileage'].map(extract).join('\n'), context);
-  // Strava shows the meter sum 673.352 km as 673.3, not 673.4.
-  assert.deepEqual([673.352, 401.7, 48.84, 167.31, 0.29, 4.35, 1.1, 0, '261.89', null].map(context.formatShoeMileage),
-    ['673.3', '401.7', '48.8', '167.3', '0.2', '4.3', '1.1', '0.0', '261.8', '0.0'], 'binary floating point never drops a tenth');
+  // Strava shows a meter sum of 512.352 km as 512.3, not 512.4.
+  assert.deepEqual([512.352, 401.7, 48.84, 167.31, 0.29, 4.35, 1.1, 0, '261.89', null].map(context.formatShoeMileage),
+    ['512.3', '401.7', '48.8', '167.3', '0.2', '4.3', '1.1', '0.0', '261.8', '0.0'], 'binary floating point never drops a tenth');
   for (const file of ['frontend/app-dashboard.js', 'frontend/app-run-insights.js', 'frontend/app-shoe-charts.js']) {
     assert.doesNotMatch(readText(file), /total_mileage_km\)\.toFixed\(|\{s\.mileage\}<|已跑 \$\{shoe\.mileage\}|totalMileage\.toLocaleString\(\)/, file);
   }
