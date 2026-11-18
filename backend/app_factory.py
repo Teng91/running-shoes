@@ -147,6 +147,8 @@ def create_app(
     app.state.frontend_dir = selected_frontend
     # Memory is per process: one backup preview or restore at a time in this process.
     app.state.restore_slot = Lock()
+    # One Strava CSV parse per process as well (SPEC-074).
+    app.state.strava_upload_slot = Lock()
 
     app.add_middleware(
         UploadLimitMiddleware,

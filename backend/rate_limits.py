@@ -39,6 +39,7 @@ _REFRESH_USER_DETAIL = "模型列表剛更新過，請稍後再試。"
 _REFRESH_GLOBAL_DETAIL = "模型列表更新目前忙碌，請稍後再試。"
 _LOGIN_FAILURE_DETAIL = "此帳號登入失敗次數過多，請 15 分鐘後再試。"
 _RESTORE_USER_DETAIL = "備份預覽過於頻繁，請稍後再試。"
+_STRAVA_USER_DETAIL = "Strava 匯入過於頻繁，請稍後再試。"
 _RESTORE_GLOBAL_DETAIL = "備份還原服務目前忙碌，請稍後再試。"
 
 
@@ -168,6 +169,15 @@ def enforce_restore_preview_limits(request: Request, user_id: int) -> None:
                _RESTORE_USER_DETAIL),
         Window("restore-preview-global", "global", settings.restore_preview_global_rate_limit_per_minute,
                _RESTORE_GLOBAL_DETAIL),
+    ))
+
+
+def enforce_strava_upload_limits(request: Request, user_id: int) -> None:
+    """Each CSV preview/import parses up to 10 MB in memory; bound how often an account does it (SPEC-074)."""
+    settings, engine = _runtime(request)
+    consume(engine, (
+        Window("strava-upload-user", str(user_id), settings.strava_upload_rate_limit_per_minute,
+               _STRAVA_USER_DETAIL),
     ))
 
 

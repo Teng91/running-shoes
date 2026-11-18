@@ -297,6 +297,10 @@ SPEC-032：合成資料驗證歷史筆數上限（v4.7.3 起 10,000／10,001）�
 
 [規格與具名案例](specs/061-ci-on-every-push-and-protected-main.md) 以文字解析 workflow：觸發條件是不限分支的 push、pull request、每週排程與手動執行，沒有 `paths-ignore`；部署條件仍只有 main 的 push／手動執行；main 以外的 ref 由較新的執行取消舊的，main 不取消。ruleset 由 `.github/rulesets/main.json` 描述，Python 測試確認它要求 PR、必要檢查與 workflow 的 5 個測試 job 完全一致、禁止刪除與 force push，且沒有繞過名單。
 
+## SPEC-074 登入耗用的 CPU 與 Strava 上傳記憶體
+
+[規格與具名案例](specs/074-auth-cpu-and-upload-memory.md) 以事件迴圈測試在第一個上傳解析中再呼叫一次路由，確認立即回 429 且不消耗帳號額度；API 測試確認帳號每分鐘上限；設定測試確認登入預設上限與全站額度的 bcrypt 時間低於一分鐘。
+
 ## SPEC-073 被大量請求灌爆時的防護
 
 [規格與具名案例](specs/073-api-flood-guard.md) 以 API 測試確認同一位址超過上限後，即使帶有效 token 也回 429，回應仍有安全標頭，其他位址與健康檢查不受影響；單元測試確認記憶體限流器每 60 秒重新計算、`Retry-After` 倒數、追蹤位址有上限；設定測試確認 `fly.toml` 有以請求計算的同時上限。共用 app 的限流器在 `conftest` 每個測試重設。
