@@ -4,6 +4,13 @@
 每版的摘要見 [CHANGELOG.md](../CHANGELOG.md)；目前的功能與操作方式以 [README](../README.md) 為準。
 這裡保留當時的文字，後續版本可能已調整其中的行為。
 
+### 移除登入頁的更改密碼（SPEC-080，v4.21.1）
+
+- 登入頁的「更改密碼」表單與新的「忘記密碼？」並排、容易混淆，已移除（`change-form`、`showChangeForm`、`handleChangePassword`）。登入後的「資料與同步」新增「更改密碼」，`app-account.changePassword()` 以目前帳號呼叫既有的 `POST /api/auth/change-password`；不帶 token，打錯目前密碼的 401 不會被當成登入過期。管理員臨時密碼的提示改指向這裡。
+- 公開 README 的備份範例路徑不再含站長的本機帳號名稱。
+
+Asset 4.21.1／shell v87、schema 12 不變，可直接回滾至 v4.21.0 image。
+
 ### Email 驗證碼找回密碼（SPEC-079，v4.21.0）
 
 - 忘記密碼先前只能請管理員產生臨時密碼。現在使用者可以在「資料與同步」綁定 email，登入頁「忘記密碼？」用帳號或 email 收 6 位數驗證碼重設密碼，舊 token 全部失效。
