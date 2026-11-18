@@ -160,6 +160,8 @@ const ERROR_ZH = {
   'Password must be at least 8 characters': '密碼至少 8 個字元',
   'Invalid invite code': '邀請碼無效、已過期或已用完', 'Registration is closed': '目前不開放註冊',
   'Admin only': '只有管理員可以使用', 'Invite not found': '找不到這組邀請碼',
+  'Invite code must be 4-20 letters or digits': '自訂邀請碼需為 4～20 個英文字母或數字',
+  'Invite code already exists': '這組邀請碼已經存在',
   'Shoe not found': '跑鞋不存在',
 };
 function translateError(detail) { return ERROR_ZH[detail] || detail; }

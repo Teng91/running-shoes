@@ -10,15 +10,19 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy.orm import Session
 
 from backend import models
-from backend.services.errors import Invalid, NotFound
+from backend.services.errors import Conflict, Invalid, NotFound
 from backend.services.transactions import write_transaction
 
 # No 0/O or 1/I/L: codes are read aloud and typed on phones.
 CODE_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ"
 CODE_LENGTH = 8
+# SPEC-076: an admin may also choose a memorable code, 4-20 letters or digits.
+CUSTOM_CODE_LENGTH = (4, 20)
 MAX_USES = 20
 MAX_DAYS = 90
 INVALID_INVITE = "Invalid invite code"
+INVALID_CUSTOM_CODE = "Invite code must be 4-20 letters or digits"
+DUPLICATE_CODE = "Invite code already exists"
 
 
 def normalize_code(code: str) -> str:
@@ -46,20 +50,26 @@ def _out(invite: models.Invite, now: datetime) -> dict:
     }
 
 
-def create_invite(db: Session, *, note: str, max_uses: int, days: int) -> dict:
+def create_invite(db: Session, *, note: str, max_uses: int, days: int, code: str = "") -> dict:
+    custom = normalize_code(code)
+    if code.strip() and not (CUSTOM_CODE_LENGTH[0] <= len(custom) <= CUSTOM_CODE_LENGTH[1]
+                             and custom.isascii()):
+        raise Invalid(INVALID_CUSTOM_CODE)
     if not 1 <= max_uses <= MAX_USES:
         raise Invalid(f"max_uses must be between 1 and {MAX_USES}")
     if not 1 <= days <= MAX_DAYS:
         raise Invalid(f"days must be between 1 and {MAX_DAYS}")
-    code = "".join(secrets.choice(CODE_ALPHABET) for _ in range(CODE_LENGTH))
+    code = custom or "".join(secrets.choice(CODE_ALPHABET) for _ in range(CODE_LENGTH))
     now = _now()
     with write_transaction(db):
+        if db.query(models.Invite).filter(models.Invite.code_hash == code_hash(code)).first():
+            raise Conflict(DUPLICATE_CODE)
         invite = models.Invite(code_hash=code_hash(code), note=note.strip()[:60], max_uses=max_uses,
                                used_count=0, expires_at=now + timedelta(days=days), revoked=False, created_at=now)
         db.add(invite)
         db.flush()
         result = _out(invite, now)
-    return {**result, "code": f"{code[:4]}-{code[4:]}"}
+    return {**result, "code": code if custom else f"{code[:4]}-{code[4:]}"}
 
 
 def list_invites(db: Session) -> list[dict]:
@@ -81,7 +91,7 @@ def revoke_invite(db: Session, invite_id: int) -> dict:
 
 def redeem_invite(db: Session, code: str) -> None:
     """Spend one use inside the caller's registration transaction; every problem is the same error."""
-    if len(normalize_code(code)) != CODE_LENGTH:
+    if not CUSTOM_CODE_LENGTH[0] <= len(normalize_code(code)) <= CUSTOM_CODE_LENGTH[1]:
         raise Invalid(INVALID_INVITE)
     changed = db.query(models.Invite).filter(
         models.Invite.code_hash == code_hash(code),
