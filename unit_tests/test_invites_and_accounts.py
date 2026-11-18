@@ -217,3 +217,18 @@ def test_schema_eleven_skips_the_name_index_when_old_accounts_differ_only_by_cas
     assert schema_version(engine) == 11, "startup still succeeds"
     assert not _name_index(engine)
     engine.dispose()
+
+
+def test_admin_can_choose_a_memorable_invite_code(client, db, monkeypatch):
+    """SPEC-076: a custom code such as "Teng91" works case-insensitively and stays unique."""
+    headers = _admin(client, db, monkeypatch)
+    _settings(monkeypatch, registration_mode="invite")
+    created = client.post("/api/admin/invites", headers=headers, json={"code": "Teng91", "max_uses": 2})
+    assert created.status_code == 200 and created.json()["code"] == "TENG91"
+    assert client.post("/api/admin/invites", headers=headers, json={"code": "teng91"}).json()["detail"] \
+        == "Invite code already exists"
+    for bad in ("ab1", "x" * 21, "跑鞋跑鞋跑鞋"):
+        assert client.post("/api/admin/invites", headers=headers, json={"code": bad}).status_code == 400, bad
+    assert _register(client, "friend", "teng91").status_code == 200
+    assert _register(client, "friend2", " TENG91 ").status_code == 200
+    assert _register(client, "friend3", "Teng91").json()["detail"] == "Invalid invite code", "two uses only"
