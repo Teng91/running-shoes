@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [4.20.3] - 2026-11-18
+
+### Added
+- 每日加密異地備份（SPEC-078）：`offsite-backup.yml` 每天 03:30（台北）從 Fly 下載正式資料庫、驗證並做還原演練，以 `BACKUP_PASSPHRASE` 用 AES-256 加密後存成 GitHub artifact，保留 30 天；只上傳加密檔。Asset 4.20.3／shell v84，schema 11 不變。
+
 ## [4.20.2] - 2026-11-18
 
 ### Changed
