@@ -21,6 +21,8 @@
 .auth-privacy summary { cursor: pointer; text-align: center; }
 .auth-privacy p { margin: 8px 0 0; overflow-wrap: anywhere; }
 .invite-actions { white-space: nowrap; }
+#admin-entry[hidden] { display: none; }
+.admin-modal section + section { margin-top: 20px; }
 
 /* Summary Cards */
 .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 28px; }
