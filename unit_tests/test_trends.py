@@ -191,3 +191,38 @@ def test_weekly_goal_longest_run_and_weekday_mix(db, user_with_token):
     assert not any(week["goal_met"] for week in before_goal["weekly"])
     future = training_trends(db, user.id, 2027, date(2026, 10, 14))
     assert future["weekday"] == [{"weekday": day, "km": 0, "run_days": 0, "runs": 0, "pace": None} for day in range(7)]
+
+
+def test_weekly_window_pages_through_a_past_year_and_stays_inside_it(db):
+    """SPEC-072: a past year's weekly charts can go back to January instead of only Sep–Dec."""
+    user = User(username="pager", hashed_password="x")
+    other = User(username="pager-other", hashed_password="x")
+    db.add_all([user, other])
+    db.flush()
+    _runs(db, user.id, _shoe(db, user.id).id, ("2024-03-05", 21.0))
+    _runs(db, other.id, _shoe(db, other.id).id, ("2024-03-05", 99.0))
+    today = date(2026, 11, 18)
+
+    latest = training_trends(db, user.id, 2024, today)
+    assert latest["weekly_window"] == {"end": "2024-12-31", "has_earlier": True, "has_later": False}
+    assert latest["weekly"][0]["week_start"] == "2024-09-16"
+
+    spring = training_trends(db, user.id, 2024, today, date(2024, 4, 30))
+    assert spring["weekly_window"] == {"end": "2024-04-30", "has_earlier": True, "has_later": True}
+    march = next(week for week in spring["weekly"] if week["week_start"] == "2024-03-04")
+    assert march["km"] == 21.0 and march["longest_km"] == 21.0, "only this account's runs"
+    assert not any(week["partial"] for week in spring["weekly"])
+
+    first = training_trends(db, user.id, 2024, today, date(2023, 6, 1))
+    assert first["weekly_window"]["has_earlier"] is False
+    assert first["weekly"][0]["week_start"] == "2024-01-01" and len(first["weekly"]) == 16
+    beyond = training_trends(db, user.id, 2024, today, date(2025, 3, 1))
+    assert beyond["weekly_window"]["end"] == "2024-12-31"
+
+
+def test_trends_api_accepts_a_weekly_window_end(client, user_with_token):
+    _user, token = user_with_token
+    headers = {"Authorization": f"Bearer {token}"}
+    ok = client.get("/api/analytics/trends?year=2024&weeks_end=2024-05-01", headers=headers)
+    assert ok.status_code == 200 and ok.json()["weekly_window"]["end"] == "2024-05-01"
+    assert client.get("/api/analytics/trends?year=2024&weeks_end=not-a-date", headers=headers).status_code == 422

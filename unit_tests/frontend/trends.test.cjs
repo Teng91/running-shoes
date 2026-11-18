@@ -11,8 +11,9 @@ function elements() {
 
 function trendsContext(nodes, globals = {}) {
   return runContext({
-    document: { getElementById: id => nodes[id], querySelector: () => ({ dataset: { panel: globals.panel || 'monthly' } }) },
-    chartInstances: {}, renderedPanels: new Map(), runningGoal: { start_year: 2026 },
+    document: { getElementById: id => nodes[id], querySelector: () => ({ dataset: { panel: globals.panel || 'monthly' } }),
+      querySelectorAll: selector => (globals.pagerNodes?.[selector] || []) },
+    localDateISO: () => '2026-01-06', chartInstances: {}, renderedPanels: new Map(), runningGoal: { start_year: 2026 },
     // Returns the token name so assertions show which theme color each mark uses (SPEC-051).
     getThemeColor: token => token, brandColor: () => '#123456', shoeColor: () => '#123456', fitChartLabel: label => label,
     Chart: function(_, config) { this.config = config; this.destroy = () => {}; },
@@ -20,9 +21,11 @@ function trendsContext(nodes, globals = {}) {
   });
 }
 
-const trendRenderers = ['renderTrends', 'heatLevel', 'renderRunHeatmap', 'renderWeeklyChart', 'weeklyGoalText',
+const trendRenderers = ['addDaysISO', 'changeWeeklyWindow', 'renderWeekPagers', 'weeklyWindowLabel', 'weekInProgress',
+  'partialWeekText', 'renderTrends', 'heatLevel', 'renderRunHeatmap', 'renderWeeklyChart', 'weeklyGoalText',
   'renderCumulativeChart', 'renderLongRunChart', 'longRunText', 'renderWeekdayChart', 'weekdayRuns', 'weekdayText'];
-const weekdayLabels = source.match(/const WEEKDAY_LABELS = [^\n]+/)[0];
+// The weekly window state (SPEC-072) rides along with the shared declarations.
+const weekdayLabels = `${source.match(/const WEEKDAY_LABELS = [^\n]+/)[0]}\nlet weeklyWindowEnd = null;\nlet weeklyWindow = null;`;
 
 const sample = {
   year: 2026, end_date: '2026-01-06', thresholds: { spike_percent: 30, spike_min_base_km: 5 },
@@ -297,4 +300,36 @@ test('SPEC-064 the weekday chart adds the backend weekday pace on a reversed axi
   assert.equal(weekday.options.plugins.tooltip.callbacks.label({ dataIndex: 3, dataset: weekday.data.datasets[1] }), '平均配速 5:54 /km');
   assert.equal(nodes['weekday-note'].textContent,
     '跑最多的是週一：21.0 km、1 次，平均每次跑 21.0 km；平均配速最快是週四（5:54 /km），最慢是週五（6:10 /km）；週二、週三、週六、週日這一年沒跑過。');
+});
+
+test('SPEC-072 a past year pages back 16 weeks at a time and never calls its last week "本週"', async () => {
+  const nodes = elements(); nodes['year-select'].value = '2024';
+  const buttons = [{ dataset: { weekPager: 'earlier' } }, { dataset: { weekPager: 'later' } }];
+  const pagers = [{ hidden: true }, { hidden: true }];
+  const week = (start, km, extra = {}) => ({ week_start: start, km, average_km: km, baseline_km: km, change_percent: 0,
+    spike: false, partial: false, longest_km: km, goal_met: false, ...extra });
+  const latest = { ...sample, year: 2024, end_date: '2024-12-31', weekly_goal: { active: true, km: 28.7 },
+    weekly: [week('2024-12-23', 5), week('2024-12-30', 0, { partial: true })],
+    weekly_window: { end: '2024-12-31', has_earlier: true, has_later: false } };
+  const earlier = { ...latest, weekly: [week('2024-05-13', 20), week('2024-08-26', 12)],
+    weekly_window: { end: '2024-09-03', has_earlier: true, has_later: true } };
+  const urls = [];
+  const context = trendsContext(nodes, {
+    pagerNodes: { '.week-pager': pagers, '[data-week-pager]': buttons }, localDateISO: () => '2026-11-18',
+    resourceStore: { read: async (_, { loader }) => ({ status: 'fulfilled', value: await loader() }), current: () => true },
+    apiGet: async url => { urls.push(url); return url.includes('weeks_end') ? earlier : latest; },
+  });
+  vm.runInContext(`let trendsRequestId = 0;\n${weekdayLabels}\n${trendRenderers.map(extract).join('\n')}`, context);
+  await context.renderTrends();
+  assert.deepEqual(pagers.map(pager => pager.hidden), [false, false]);
+  assert.deepEqual(buttons.map(button => button.disabled), [false, true], 'the latest window cannot go later');
+  assert.doesNotMatch(nodes['weekly-note'].textContent, /本週/, 'a finished year has no current week');
+  const tooltip = context.chartInstances.weekly.config.options.plugins.tooltip.callbacks.afterBody([{ dataIndex: 1 }]);
+  assert.equal(Array.from(tooltip).at(-1), '只算到 12/31');
+
+  context.changeWeeklyWindow(-1);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(urls, ['/analytics/trends?year=2024', '/analytics/trends?year=2024&weeks_end=2024-09-10']);
+  assert.deepEqual(buttons.map(button => button.disabled), [false, false]);
+  assert.match(nodes['long-run-note'].textContent, /^5\/13～9\/1 這 16 週最長 20\.0 km/);
 });
