@@ -51,10 +51,14 @@ def test_strava_worker_keeps_event_loop_responsive(monkeypatch, action):
 
     monkeypatch.setattr(strava_routes, "_parse_strava_csv", parse)
     monkeypatch.setattr(strava_routes.strava_imports, "preview" if action == "preview" else "import_runs", service)
+    budget = []
+    monkeypatch.setattr(strava_routes, "enforce_strava_upload_limits", lambda request, user_id: budget.append(user_id))
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(strava_upload_slot=threading.Lock())))
 
     async def scenario():
         file = UploadFile(io.BytesIO(b"mock csv"), filename="test.csv")
-        kwargs = dict(config=app.state.settings, file=file, start_date="", end_date="", current_user=SimpleNamespace(id=7), db=session)
+        kwargs = dict(request=request, config=app.state.settings, file=file, start_date="", end_date="",
+                      current_user=SimpleNamespace(id=7), db=session)
         if action == "import":
             kwargs["mapping"] = "{}"
         route = strava_routes.preview_strava_import if action == "preview" else strava_routes.import_strava_runs
@@ -66,6 +70,11 @@ def test_strava_worker_keeps_event_loop_responsive(monkeypatch, action):
             await asyncio.wait_for(wait_started(), timeout=1)
             # The worker is still blocked, but this coroutine continues on the loop.
             assert not task.done()
+            # SPEC-074: a second upload while one is parsing is turned away, not queued.
+            with pytest.raises(HTTPException) as busy:
+                await route(**kwargs)
+            assert busy.value.status_code == 429 and "另一個 Strava 匯入" in busy.value.detail
+            assert budget == [7], "a busy rejection does not spend the account's budget"
             release.set()
             result = await asyncio.wait_for(task, timeout=3)
             assert result.get("run_count", result.get("imported")) == 0
