@@ -297,6 +297,10 @@ SPEC-032：合成資料驗證歷史筆數上限（v4.7.3 起 10,000／10,001）�
 
 [規格與具名案例](specs/061-ci-on-every-push-and-protected-main.md) 以文字解析 workflow：觸發條件是不限分支的 push、pull request、每週排程與手動執行，沒有 `paths-ignore`；部署條件仍只有 main 的 push／手動執行；main 以外的 ref 由較新的執行取消舊的，main 不取消。ruleset 由 `.github/rulesets/main.json` 描述，Python 測試確認它要求 PR、必要檢查與 workflow 的 5 個測試 job 完全一致、禁止刪除與 force push，且沒有繞過名單。
 
+## SPEC-078 每日加密異地備份
+
+[規格與具名案例](specs/078-daily-encrypted-offsite-backup.md) 以文字解析 `offsite-backup.yml`：每天排程且可手動觸發、只有讀取權限、第一步缺少密碼就失敗、快照放在 checkout 之外、加密後刪除明文並在上傳前解密驗證、只上傳 `.tar.gz.enc` 且保留 30 天，步驟中沒有會把資料印到 log 的指令。
+
 ## SPEC-077 側邊欄的邀請碼管理入口
 
 [規格與具名案例](specs/077-admin-entry.md) 以 Node 測試確認一般帳號的側邊欄入口保持隱藏、管理員顯示入口並可開啟視窗載入清單，關閉視窗時清除邀請碼與臨時密碼；版面測試的 mock 回應 `/api/auth/me`。
