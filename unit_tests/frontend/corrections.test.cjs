@@ -86,3 +86,29 @@ test('SPEC-055 sign-in fields let password managers fill and save credentials', 
   // The standard capability meta sits next to the legacy iOS one.
   assert.match(htmlSource, /<meta name="mobile-web-app-capable" content="yes">\s*<meta name="apple-mobile-web-app-capable" content="yes">/);
 });
+
+test('SPEC-070 the summary shows the Strava running total next to the shoe total with walks', async () => {
+  const card = () => ({ value: { textContent: '' }, sub: { textContent: '' } });
+  const run = card();
+  const elements = nodes();
+  const reads = [];
+  const shoe = (id, mileage, price) => ({ id, brand: 'B', model: `M${id}`, categories: ['Daily'], usage_percent: 10, mileage, price });
+  const context = runContext({
+    document: { getElementById: id => (id === 'run-total'
+      ? { querySelector: selector => (selector === '.card-value' ? run.value : run.sub) } : elements[id]) },
+    esc, shoes: [shoe(1, 401.77, 4000), shoe(2, 261.86, 3000)], retiredShoes: [shoe(3, 629.86, 2000)],
+    apiGet: async path => { reads.push(path); return { run_count: 358, total_km: 2280.62 }; },
+    resourceStore: { read: async (name, { loader }) => ({ resource: name, status: 'fulfilled', value: await loader() }), current: () => true },
+  });
+  vm.runInContext(`${lifecycleConstants}\n${['calc', 'floorShoeKm', 'formatKmTotal', 'renderCards'].map(extract).join('\n')}\n`
+    + `let runTotalsRequestId = 0;\n${extract('renderRunTotalCard')}`, context);
+  context.renderCards();
+  await new Promise(resolve => setImmediate(resolve));
+  const labels = [...elements['summary-cards'].innerHTML.matchAll(/card-label">([^<]+)/g)].map(match => match[1]);
+  assert.deepEqual(labels, ['現役跑鞋', '跑步里程', '跑鞋里程', '總花費', '平均每km成本', '換鞋提醒']);
+  assert.match(elements['summary-cards'].innerHTML, /跑鞋里程<\/div><div class="card-value">1,293\.4<\/div><div class="card-sub">km · 含步行、健行/);
+  assert.deepEqual(reads, ['/runs/totals']);
+  assert.equal(run.value.textContent, '2,280.6', 'truncated like Strava');
+  assert.equal(run.sub.textContent, 'km · 358 次跑步');
+  assert.doesNotMatch(extract('renderCards'), /需補鞋類別/);
+});

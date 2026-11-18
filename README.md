@@ -54,9 +54,9 @@ Python 3.11 · FastAPI · SQLAlchemy · SQLite · 原生 JavaScript（不需要�
 | 項目 | 數量 |
 | --- | --- |
 | 正式版本 | 93 個 tag，2026-06 開始，目前 v4.17 |
-| 自動化測試 | Python 696 項、前端 Node 回歸 213 項、40 組版面設定（WebKit／Chromium × 亮暗 × 10 種尺寸）、真實 CRUD E2E 與 PWA 升級／離線測試 |
+| 自動化測試 | Python 697 項、前端 Node 回歸 214 項、40 組版面設定（WebKit／Chromium × 亮暗 × 10 種尺寸）、真實 CRUD E2E 與 PWA 升級／離線測試 |
 | 功能規格 | 63 份 SPEC，每份含 Goals、帳號隔離、migration／rollback 與 AC 追蹤 |
-| API | 53 個端點，與 `unit_tests/api_contract.json` 及下方 API 表自動比對 |
+| API | 54 個端點，與 `unit_tests/api_contract.json` 及下方 API 表自動比對 |
 | 資料庫 | SQLite schema 10，每一版都有守衛的回滾腳本 |
 | 部署 | Fly.io 1 台 256MB 機器＋加密 volume，閒置自動休眠 |
 
@@ -67,7 +67,7 @@ Python 3.11 · FastAPI · SQLAlchemy · SQLite · 原生 JavaScript（不需要�
 | 分頁 | 用途 | 重點功能 |
 | --- | --- | --- |
 | **跑步日誌** | 記錄與快速查看當月 | 新增距離、跑步時間（自動算配速）與鞋款；當月月曆、總里程、平均配速、上月同期比較、月底預測；「今天穿哪雙」選鞋建議；Strava 歷史匯入 |
-| **跑鞋** | 裝備管理 | 現役／退役鞋款、里程與壽命進度、每 km 成本、依近 90 天實際使用預估退役日、用途類別覆蓋（Daily／Speed／Tempo／Race）、支出明細、輪替時間軸、距離分布、單鞋分析 |
+| **跑鞋** | 裝備管理 | 跑步里程（和 Strava 跑步總計一致）與跑鞋里程（含步行、健行）、現役／退役鞋款、里程與壽命進度、每 km 成本、依近 90 天實際使用預估退役日、用途類別覆蓋（Daily／Speed／Tempo／Race）、支出明細、輪替時間軸、距離分布、單鞋分析 |
 | **訓練分析** | 長期資料 | 年度目標與每月達標、年度回顧（與前一年同期比較）、熱力圖與連續天數、每週跑量與暴增提醒、每週最長一次、星期幾跑量與配速、年度月跑量對比；**比賽準備**：設定目標賽事後顯示倒數、目標配速、依參考成績預估完賽、長距離是否足夠、近 8 週強度分布，以及依強度上色的配速趨勢 |
 | **AI 教練** | 對話與月報 | 依你的實際資料回答問題與推薦跑鞋（12 個工具、可上網搜尋並附來源）；一鍵產生並保存月度跑步報告 |
 
@@ -189,8 +189,8 @@ flowchart LR
 
 ## 品質：測試與規格
 
-- **Python 696 項**：API、交易與並行、migration 與回滾、備份往返、帳號隔離、Agent 規劃與工具（外部 LLM 與搜尋一律 mock），一律使用暫存或記憶體資料庫，不碰正式 `shoes.db`。
-- **前端 Node 回歸 213 項**：以 `vm` 載入實際前端程式，驗證狀態、競態、草稿、串流與圖表資料。
+- **Python 697 項**：API、交易與並行、migration 與回滾、備份往返、帳號隔離、Agent 規劃與工具（外部 LLM 與搜尋一律 mock），一律使用暫存或記憶體資料庫，不碰正式 `shoes.db`。
+- **前端 Node 回歸 214 項**：以 `vm` 載入實際前端程式，驗證狀態、競態、草稿、串流與圖表資料。
 - **瀏覽器**：Playwright 在 WebKit 與 Chromium 跑 40 組版面設定（含幾何對齊與無溢出）、真實 FastAPI＋暫存 SQLite 的 CRUD E2E、Service Worker 升級與離線；失敗時保存截圖與 trace。
 - **修 bug 先寫重現測試**：例如 v4.17.0 的 CI 抓到新圖表檔案重複宣告全域常數，修正時同時加上掃描所有 script 的測試。
 - **文件也被測**：`docs-check` 比對 README 的測試數、工具數、API 表、目錄樹與規格的 AC 追蹤，數字對不上 CI 就失敗。
@@ -594,6 +594,7 @@ LLM_MAX_OUTPUT_TOKENS=4096
 ## 功能細節
 
 - **側欄工作區**：桌面版以固定左側導覽切換四個功能（跑步日誌、跑鞋含支出、訓練分析、AI 教練；AI 教練的對話與月報在同一分頁切換），右側完整呈現目前工作內容；手機版以固定底部分頁列切換，標題列「帳號」按鈕點開後可同步資料、切換主題或登出
+- **跑鞋分頁摘要卡**：現役跑鞋、跑步里程、跑鞋里程、總花費、平均每 km 成本、換鞋提醒六張卡。跑步里程是所有跑步紀錄的合計與筆數（含已刪除鞋款上的跑步），和 Strava 個人頁的跑步總計同一口徑；跑鞋里程是所有跑鞋的里程合計，包含記在鞋上的步行與健行，兩者都無條件捨去到小數點第一位（SPEC-070）
 - **跑鞋全生命週期追蹤**：記錄品牌、鞋款、用途類別 (Daily / Speed / Tempo / Race，可多選)、購買日期、尺寸、價格、里程、預期壽命、月跑量
 - **購鞋資訊集中管理**：現役／退役跑鞋清單聚焦使用狀態；尺寸、買價、原價、折數統一在「跑鞋 → 支出明細」查看。新增／編輯跑鞋仍保留原有尺寸與價格欄位，不刪除既有資料
 - **鞋櫃類別覆蓋分析**：判斷某雙鞋退役後其所有用途是否仍有其他現役鞋覆蓋，避免不必要地補鞋 (支援多用途鞋款)
@@ -649,6 +650,7 @@ LLM_MAX_OUTPUT_TOKENS=4096
 | --- | --- |
 | `GET /api/runs` | 取得目前帳號的跑步紀錄；可用 `year`、`month`、`limit`（最多 500）與 `offset` 篩選／分頁，不帶參數時維持完整列表相容性 |
 | `GET /api/runs/summary` | 指定 `year`、`month` 的完整月曆與鞋款／日誌彙總，以及平均配速，不受明細分頁影響 |
+| `GET /api/runs/totals` | 帳號所有跑步的筆數與總距離（和 Strava 的跑步總計相同口徑） |
 | `GET /api/runs/year-summary` | 指定 `year` 的完整年度每月／每鞋里程矩陣；一次聚合查詢，不下載逐筆日誌 |
 | `GET /api/running-goal/progress` | 指定 `year`、`month` 的日誌目標進度，與首頁／月報共用後端規則 |
 | `GET /api/running-goal/year?year=` | 年度目標總覽：12 個月日誌里程與達標狀態、年度進度、今天應達里程與每週需求 |
@@ -886,7 +888,7 @@ Playwright／Chromium／WebKit 齊全時，也會執行版面測試。
 避免每次停止都重跑。Hook 不會呼叫其他模型、外部 API，或傳送提示、diff、原始碼與測試輸出。
 GitHub Actions 仍會在 push／pull request 執行 `verify`，並以三個可獨立重跑的 browser jobs 執行完整版面矩陣、真實 CRUD E2E 與 PWA 升級／離線測試；push 到 main 時再依序快照、部署、檢查並發版（見「日常開發流程、自動部署與發版」）；Dependabot 每月以單一 PR 合併 GitHub Actions 更新；Python 只接收安全性更新 PR，例行升級依下方 `uv pip compile --universal` 步驟手動重編鎖定檔（Dependabot 產生的鎖定檔會遺失 Windows 條件）。
 
-本次驗證基線為 Python **696 passed**、前端回歸測試 **213 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
+本次驗證基線為 Python **697 passed**、前端回歸測試 **214 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
 版面檢查涵蓋 WebKit／Chromium、亮／暗模式與 10 組直橫向尺寸，共 40 組設定，檢查四個功能分頁與月報、三個認證表單、圖表、全部彈窗、行內編輯、停用／錯誤及空資料狀態。
 
 主要表單、工具列與彈窗操作統一為 44px 控制項；桌面表格內的緊湊操作為 36px，手機至少 44px。
@@ -1229,6 +1231,7 @@ venv/bin/python -m backend.run
 | 跑鞋 | `GET /api/shoes/{shoe_id}/analytics` | 單鞋的使用、成本與退役預估 |
 | 跑步日誌 | `GET /api/runs` | 跑步紀錄；可用 `year`、`month`、`day`、`limit`、`offset` 篩選 |
 | 跑步日誌 | `GET /api/runs/summary` | 指定月份的月曆、鞋款彙總與平均配速 |
+| 跑步日誌 | `GET /api/runs/totals` | 所有跑步的筆數與總距離 |
 | 跑步日誌 | `GET /api/runs/year-summary` | 指定年份的每月／每鞋里程矩陣 |
 | 跑步日誌 | `POST /api/runs` | 新增跑步，可帶跑步時間（可帶 `Idempotency-Key`） |
 | 跑步日誌 | `PUT /api/runs/{run_id}` | 編輯跑步或跑步時間 |

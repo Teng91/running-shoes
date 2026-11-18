@@ -85,15 +85,41 @@ function renderCards() {
 
   const cards = [
     { label: '現役跑鞋', value: shoes.length + '/' + allShoes.length, sub: '雙' },
-    { label: '總里程', value: floorShoeKm(totalMileage).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 }), sub: 'km' },
+    { label: '跑步里程', value: '—', sub: '載入中', id: 'run-total' },
+    { label: '跑鞋里程', value: formatKmTotal(totalMileage), sub: 'km · 含步行、健行' },
     { label: '總花費', value: '$' + totalPrice.toLocaleString(), sub: '花費合計' },
-    { label: '平均每km成本', value: '$' + avgCostPerKm.toFixed(2), sub: '總花費 / 總里程' },
+    { label: '平均每km成本', value: '$' + avgCostPerKm.toFixed(2), sub: '總花費 / 跑鞋里程' },
     { label: '換鞋提醒', value: alertCount, sub: '雙鞋需留意' },
-    { label: '需補鞋類別', value: categoryCounts(SUMMARY_CATEGORIES).filter(c => c.active === 0).length, sub: '類別目前無現役鞋' },
   ];
   document.getElementById('summary-cards').innerHTML = cards.map(c =>
-    `<div class="card"><div class="card-label">${c.label}</div><div class="card-value">${c.value}</div><div class="card-sub">${c.sub}</div></div>`
+    `<div class="card"${c.id ? ` id="${c.id}"` : ''}><div class="card-label">${c.label}</div><div class="card-value">${c.value}</div><div class="card-sub">${c.sub}</div></div>`
   ).join('');
+  renderRunTotalCard();
+}
+
+// Strava's running total: every logged run, apart from walks and hikes on the shoes (SPEC-070).
+function formatKmTotal(km) {
+  return floorShoeKm(km).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+}
+
+let runTotalsRequestId = 0;
+async function renderRunTotalCard() {
+  const requestId = ++runTotalsRequestId;
+  let result;
+  try {
+    result = await resourceStore.read('run-totals', { refresh: false, loader: () => apiGet('/runs/totals') });
+  } catch (error) {
+    result = { status: 'rejected', error };
+  }
+  if (!resourceStore.current(result) || requestId !== runTotalsRequestId) return;
+  const card = document.getElementById('run-total');
+  if (!card) return;
+  if (result.status === 'rejected') {
+    card.querySelector('.card-sub').textContent = '暫時無法載入';
+    return;
+  }
+  card.querySelector('.card-value').textContent = formatKmTotal(result.value.total_km);
+  card.querySelector('.card-sub').textContent = `km · ${result.value.run_count} 次跑步`;
 }
 
 const SHOE_CATEGORIES = ['Daily', 'Speed', 'Tempo', 'Race'];

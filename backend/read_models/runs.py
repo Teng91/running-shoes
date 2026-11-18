@@ -84,6 +84,19 @@ def year_run_summary(db: Session, user_id: int, year: int) -> dict:
     }
 
 
+def run_totals(db: Session, user_id: int) -> dict:
+    """Every logged run of the account, like Strava's running total (SPEC-070).
+
+    Runs on deleted shoes still count: deleting a shoe never removes its runs.
+    """
+    count, km = (
+        db.query(func.count(models.Run.id), func.coalesce(func.sum(models.Run.km), 0))
+        .filter(models.Run.user_id == user_id)
+        .one()
+    )
+    return {"run_count": int(count), "total_km": round(float(km), 2)}
+
+
 def list_runs(
     db: Session,
     user_id: int,
