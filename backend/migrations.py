@@ -215,7 +215,7 @@ def run_startup_migrations(
                 "refusing to start with an unusable schema."
             )
 
-        # Old schema: create users table, add user_id to shoes, assign to "Joy"
+        # Old schema: create users table, add user_id to shoes, assign to "Demo"
         user_table = cast(Table, models.User.__table__)
         Base.metadata.create_all(bind=engine, tables=[user_table])
         with engine.begin() as conn:
@@ -232,22 +232,22 @@ def run_startup_migrations(
                 # The legacy owner lookup below reads users through the current ORM model (SPEC-079).
                 if "email" not in columns:
                     connection.execute(text("ALTER TABLE users ADD COLUMN email VARCHAR(254)"))
-            joy_user = db.query(models.User).filter(models.User.username == "Joy").first()
-            if joy_user is None:
-                joy_user = models.User(
-                    username="Joy",
+            demo_user = db.query(models.User).filter(models.User.username == "Demo").first()
+            if demo_user is None:
+                demo_user = models.User(
+                    username="Demo",
                     hashed_password=get_password_hash(migration_password),
                 )
-                db.add(joy_user)
+                db.add(demo_user)
                 db.commit()
-                db.refresh(joy_user)
+                db.refresh(demo_user)
 
             # Add user_id column (SQLite allows ALTER TABLE ADD COLUMN without FK)
             with engine.connect() as conn:
                 conn.execute(text("ALTER TABLE shoes ADD COLUMN user_id INTEGER"))
                 conn.execute(
                     text("UPDATE shoes SET user_id = :uid"),
-                    {"uid": joy_user.id},
+                    {"uid": demo_user.id},
                 )
                 conn.commit()
         finally:

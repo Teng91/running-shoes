@@ -107,7 +107,7 @@ test('SPEC-080 the login page has no change-password form; signed-in users chang
   const elements = nodes();
   const calls = [];
   const context = emailContext(elements, {
-    currentUser: 'Joy',
+    currentUser: 'Demo',
     fetch: async (url, options) => {
       const body = JSON.parse(options.body);
       calls.push([url, body]);
@@ -126,7 +126,7 @@ test('SPEC-080 the login page has no change-password form; signed-in users chang
   assert.ok(!calls.includes('logout'), 'a wrong current password keeps the session');
   elements['account-old-password'].value = 'pass1234';
   await context.changePassword();
-  assert.equal(JSON.stringify(calls[1][1]), JSON.stringify({ username: 'Joy', old_password: 'pass1234', new_password: 'brand-new-pass' }));
+  assert.equal(JSON.stringify(calls[1][1]), JSON.stringify({ username: 'Demo', old_password: 'pass1234', new_password: 'brand-new-pass' }));
   assert.equal(JSON.stringify(calls.slice(-4)), JSON.stringify(['close', 'logout', 'login', '密碼已更改，請用新密碼重新登入']));
   assert.equal(elements['account-new-password'].value, '', 'password fields are cleared');
 });

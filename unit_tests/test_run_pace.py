@@ -60,7 +60,7 @@ def upload(client, user, path, csv_text, mapping=None):
 
 
 def test_pace_is_derived_and_plausibility_bounds_typos():
-    assert pace_seconds_per_km(4400, 13.22) == 333
+    assert pace_seconds_per_km(4350, 13) == 335
     assert pace_seconds_per_km(None, 5) is None
     assert pace_seconds_per_km(1800, 0) is None
     assert is_plausible_duration(1500, 5)
@@ -131,14 +131,14 @@ def test_month_summary_and_shoe_analytics_average_pace_is_time_weighted(client, 
 
 def test_strava_csv_uses_moving_time_and_never_rejects_a_run_for_its_time():
     csv_text = (STRAVA_HEADER
-                + strava_row("a1", "11月15日", 13220, 4400, elapsed=5168)
+                + strava_row("a1", "11月15日", 13000, 4350, elapsed=5168)
                 + strava_row("a2", "11月14日", 7060, "", elapsed=2915)
                 + strava_row("a3", "11月13日", 5000, 9, elapsed=9)
                 + strava_row("a4", "11月12日", 5000, "abc", elapsed="nan"))
     rows, invalid, _ = parse_csv(csv_text.encode("utf-8"), max_rows=100)
     assert invalid == 0
     by_id = {row["strava_id"]: row for row in rows}
-    assert by_id["a1"]["km"] == 13.22 and by_id["a1"]["duration_seconds"] == 4400
+    assert by_id["a1"]["km"] == 13 and by_id["a1"]["duration_seconds"] == 4350
     assert by_id["a2"]["duration_seconds"] == 2915, "elapsed time is the fallback"
     assert by_id["a3"]["duration_seconds"] is None and by_id["a3"]["km"] == 5
     assert by_id["a4"]["duration_seconds"] is None
@@ -158,13 +158,13 @@ def test_strava_reimport_backfills_missing_times_without_overwriting(client, db)
     user, shoe = owner(db)
     other, other_shoe = owner(db, "pace-isolated")
     db.add_all([
-        Run(user_id=user.id, shoe_id=shoe.id, date="2026-11-15", km=13.22, strava_id="s1"),
+        Run(user_id=user.id, shoe_id=shoe.id, date="2026-11-15", km=13, strava_id="s1"),
         Run(user_id=user.id, shoe_id=shoe.id, date="2026-11-14", km=7.06, strava_id="s2", duration_seconds=2000),
         Run(user_id=user.id, shoe_id=shoe.id, date="2026-11-13", km=50, strava_id="s3"),
-        Run(user_id=other.id, shoe_id=other_shoe.id, date="2026-11-15", km=13.22, strava_id="s1"),
+        Run(user_id=other.id, shoe_id=other_shoe.id, date="2026-11-15", km=13, strava_id="s1"),
     ])
     db.commit()
-    csv_text = (STRAVA_HEADER + strava_row("s1", "11月15日", 13220, 4400)
+    csv_text = (STRAVA_HEADER + strava_row("s1", "11月15日", 13000, 4350)
                 + strava_row("s2", "11月14日", 7060, 2881)
                 + strava_row("s3", "11月13日", 5000, 1500)
                 + strava_row("s4", "11月12日", 5000, 1500))
@@ -176,7 +176,7 @@ def test_strava_reimport_backfills_missing_times_without_overwriting(client, db)
     assert result.json()["backfilled_durations"] == 1 and result.json()["imported"] == 1
     db.expire_all()
     runs = {row.strava_id: row for row in db.query(Run).filter_by(user_id=user.id)}
-    assert (runs["s1"].duration_seconds, runs["s1"].version) == (4400, 1)
+    assert (runs["s1"].duration_seconds, runs["s1"].version) == (4350, 1)
     assert runs["s2"].duration_seconds == 2000, "a stored time is never overwritten"
     assert runs["s3"].duration_seconds is None
     assert runs["s4"].duration_seconds == 1500

@@ -15,8 +15,8 @@ from unit_tests.test_run_pace import client, headers, owner
 
 __all__ = ["client"]
 
-HALF = {"race_name": "台北半馬", "race_date": "2026-12-06", "distance_km": 21.0975, "target_seconds": 7200,
-        "reference_distance_km": 10.3, "reference_seconds": 3261, "reference_temperature_c": 29}
+HALF = {"race_name": "示範半馬", "race_date": "2026-12-13", "distance_km": 21.0975, "target_seconds": 7200,
+        "reference_distance_km": 10, "reference_seconds": 3120, "reference_temperature_c": 28}
 
 
 def test_race_goal_is_saved_versioned_validated_and_user_scoped(client, db):
@@ -24,7 +24,7 @@ def test_race_goal_is_saved_versioned_validated_and_user_scoped(client, db):
     other, _ = owner(db, "race-other")
     assert client.get("/api/race-goal", headers=headers(user)).json() is None
 
-    saved = client.put("/api/race-goal", headers=headers(user), json={**HALF, "race_name": "  台北半馬 "})
+    saved = client.put("/api/race-goal", headers=headers(user), json={**HALF, "race_name": "  示範半馬 "})
     assert saved.status_code == 200, saved.text
     assert saved.json() == {**HALF, "version": 1}
     stale = client.put("/api/race-goal", headers=headers(user), json={**HALF, "expected_version": 0})
@@ -50,8 +50,8 @@ def test_race_goal_is_saved_versioned_validated_and_user_scoped(client, db):
 
 
 def test_prediction_and_zones_follow_the_goal_race_pace():
-    # Riegel: 54:21 for 10.3 km predicts 1:56:13 for a half marathon.
-    assert predict_seconds(3261, 10.3, 21.0975) == 6973
+    # Riegel: 52:00 for 10 km predicts 1:54:44 for a half marathon.
+    assert predict_seconds(3120, 10, 21.0975) == 6884
     goal_pace = 7200 / 21.0975  # 5:41.3 per km
     assert [zone_for(goal_pace + offset, goal_pace) for offset in (60, 45, 44, 15, 14, -10, -11)] == [
         "easy", "easy", "steady", "steady", "race", "race", "fast"]
@@ -63,10 +63,10 @@ def test_readiness_reports_prediction_intensity_and_long_runs(client, db):
     as_of = date(2026, 11, 17)
     db.add(RaceGoal(user_id=user.id, version=1, **HALF))
     rows = [
-        ("2026-10-25", 16.05, 5427),  # long run at 5:38: race pace, 76% of the distance
+        ("2026-10-25", 16, 5410),  # long run at 5:38: race pace, 76% of the distance
         ("2026-11-08", 10, 3900),     # 6:30: easy
         ("2026-11-10", 10, 3600),     # 6:00: steady
-        ("2026-11-15", 13.22, 4400),  # 5:33: race pace
+        ("2026-11-15", 13, 4350),  # 5:35: race pace
         ("2026-11-16", 5, None),      # untimed: counted as distance, not intensity
         ("2026-09-01", 18, 6800),     # older than eight weeks: not a recent long run
         ("2026-11-30", 20, 7000),     # future: ignored
@@ -76,27 +76,27 @@ def test_readiness_reports_prediction_intensity_and_long_runs(client, db):
     db.commit()
 
     result = race_readiness(db, user.id, as_of)
-    assert (result["days_left"], result["goal_pace"]) == (19, 341)
+    assert (result["days_left"], result["goal_pace"]) == (26, 341)
     assert result["prediction"] == {
-        "reference_distance_km": 10.3, "reference_seconds": 3261, "reference_pace": 317, "reference_temperature_c": 29,
-        "hot_reference": True, "predicted_seconds": 6973, "predicted_pace": 331, "margin_seconds": 227}
+        "reference_distance_km": 10, "reference_seconds": 3120, "reference_pace": 312, "reference_temperature_c": 28,
+        "hot_reference": True, "predicted_seconds": 6884, "predicted_pace": 326, "margin_seconds": 316}
     zones = {zone["key"]: zone for zone in result["intensity"]["zones"]}
     assert {key: zone["runs"] for key, zone in zones.items()} == {"easy": 1, "steady": 1, "race": 2, "fast": 0}
     assert result["intensity"]["untimed_runs"] == 1
-    total = 5427 + 3900 + 3600 + 4400
+    total = 5410 + 3900 + 3600 + 4350
     assert result["intensity"]["total_seconds"] == total
-    assert zones["race"]["share"] == round((5427 + 4400) / total * 100, 1)
+    assert zones["race"]["share"] == round((5410 + 4350) / total * 100, 1)
     assert sum(zone["share"] for zone in zones.values()) == pytest.approx(100, abs=0.2)
 
     long = result["long_runs"]
     assert (long["threshold_km"], long["count"], long["target_count"], long["enough"]) == (15.8, 1, 2, False)
-    assert long["longest_recent"] == {"date": "2026-10-25", "km": 16.05, "pace": 338}
+    assert long["longest_recent"] == {"date": "2026-10-25", "km": 16, "pace": 338}
     assert long["longest_ever"]["km"] == 18, "the future 20 km run is ignored"
     assert long["longest_recent_percent"] == 76
-    assert long["last_long_run_by"] == "2026-11-22"
+    assert long["last_long_run_by"] == "2026-11-29"
     assert len(long["weekly"]) == 12 and long["weekly"][-1] == {
         "week_start": "2026-11-16", "km": 5, "longest_km": 5, "partial": True}
-    assert long["average_weekly_km"] == round((16.05 + 10 + 10 + 13.22 + 5) / 8, 2)
+    assert long["average_weekly_km"] == round((16 + 10 + 10 + 13 + 5) / 8, 2)
 
     response = client.get("/api/analytics/race", headers=headers(user)).json()
     assert response["goal"]["target_seconds"] == 7200
@@ -111,7 +111,7 @@ def test_a_second_long_run_makes_the_build_enough():
     goal = {**HALF, "version": 1}
     db = MagicMock()
     db.query.return_value.filter.return_value.all.return_value = [
-        ("2026-10-25", 16.05, 5427), ("2026-11-08", 17, 6500)]
+        ("2026-10-25", 16, 5410), ("2026-11-08", 17, 6500)]
     original = module.race_goal_values
     module.race_goal_values = lambda *_: goal
     try:
