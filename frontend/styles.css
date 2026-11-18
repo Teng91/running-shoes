@@ -403,7 +403,7 @@ h1 { font-size: 28px; font-weight: 800; letter-spacing: .01em; margin-bottom: 4p
 #admin-entry[hidden] { display: none; }
 .auth-forgot { text-align: center; margin-top: 8px; font-size: 13px; }
 .auth-forgot a { color: var(--text-dim); }
-#forgot-link[hidden], #email-remove[hidden] { display: none; }
+#email-remove[hidden] { display: none; }
 .admin-modal section + section { margin-top: 20px; }
 
 /* Summary Cards */

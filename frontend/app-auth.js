@@ -132,7 +132,6 @@ function showLoginForm() {
   const resetForm = document.getElementById('reset-form');
   if (resetForm) resetForm.style.display = 'none';
   hideAuthError();
-  if (typeof loadRegistrationMode === 'function') void loadRegistrationMode();
 }
 function showRegisterForm() {
   cancelAuthOperation();

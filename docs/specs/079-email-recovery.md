@@ -26,7 +26,7 @@
 - `services/email_codes.py`：6 位數驗證碼，10 分鐘內有效、最多試 5 次，只存以 `SECRET_KEY` 為金鑰的 HMAC；新的驗證碼取代舊的。綁定、確認、移除 email；忘記密碼的請求不論帳號或 email 是否存在都回同樣結果。
 - `routers/auth.py`：`POST /api/auth/email/request|confirm|remove`、`POST /api/auth/password-reset/request|confirm`；`/registration` 回傳 `mail_enabled`，`/me` 回傳 `email`。忘記密碼的信在回應之後才寄（BackgroundTasks），回應時間不洩漏帳號是否存在；寄信失敗只記 log。
 - `rate_limits.enforce_mail_limits`：每個 IP 10 分鐘 5 封、每個目標帳號 10 分鐘 3 封、全站每小時 100 封；確認驗證碼與重設受登入頻率限制。
-- 前端 `app-account.js`：登入頁「忘記密碼？」與重設表單；「資料與同步」的 Email 區塊。
+- 前端 `app-account.js`：登入頁「忘記密碼？」與重設表單（打開表單時才查詢 `mail_enabled`，登入頁啟動時不發請求）；「資料與同步」的 Email 區塊。
 
 ## Security and data isolation
 
@@ -49,7 +49,7 @@
 - [x] AC-4：Given 不存在的帳號或沒有 email 的帳號，When 申請重設，Then 回應相同且不寄信；寄信失敗時回應也相同。
 - [x] AC-5：Given 沒有 SMTP 設定或寄送過於頻繁，When 申請驗證碼，Then 回 503 或 429。
 - [x] AC-6：Given schema 11，When 升級，Then 建立欄位、索引與資料表；回滾腳本有守衛並可重新升級；刪除帳號一併刪除驗證碼。
-- [x] AC-7：Given 前端，When 有或沒有 email 功能，Then 登入頁「忘記密碼？」與 Email 區塊跟著顯示或隱藏；重設流程顯示中性訊息並檢查新密碼。
+- [x] AC-7：Given 前端，When 打開「忘記密碼」表單，Then 才檢查是否有 email 功能（登入頁啟動時不發請求，PWA／離線不受影響），沒有時提示找管理員；Email 區塊依設定顯示或隱藏；重設流程顯示中性訊息並檢查新密碼。
 
 ## Test traceability
 
@@ -61,4 +61,4 @@
 | AC-4 | `unit_tests/test_email_recovery.py::test_reset_requests_never_reveal_whether_an_account_or_email_exists`、`unit_tests/test_email_recovery.py::test_reset_mail_failure_keeps_the_same_answer` |
 | AC-5 | `unit_tests/test_email_recovery.py::test_mail_routes_are_off_without_smtp_and_rate_limited` |
 | AC-6 | `unit_tests/test_email_recovery.py::test_schema_twelve_adds_email_and_codes_then_rolls_back`、`unit_tests/test_email_recovery.py::test_deleting_an_account_removes_its_email_codes` |
-| AC-7 | `unit_tests/frontend/account-email.test.cjs::SPEC-079 the login page offers「忘記密碼」only when the server can email codes`、`unit_tests/frontend/account-email.test.cjs::SPEC-079 password reset sends the code request, answers neutrally and needs matching passwords`、`unit_tests/frontend/account-email.test.cjs::SPEC-079 the email section binds only after the code and can remove the address` |
+| AC-7 | `unit_tests/frontend/account-email.test.cjs::SPEC-079 the forgot-password form checks for email only when opened and explains when it is off`、`unit_tests/frontend/account-email.test.cjs::SPEC-079 password reset sends the code request, answers neutrally and needs matching passwords`、`unit_tests/frontend/account-email.test.cjs::SPEC-079 the email section binds only after the code and can remove the address` |
