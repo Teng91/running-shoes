@@ -89,7 +89,7 @@ function renderCharts() {
               const shoe = shoes[ctx.dataIndex];
               const c = calcs[ctx.dataIndex];
               if (ctx.datasetIndex === 0) {
-                return `已跑 ${shoe.mileage} km (${(c.lifeProgress * 100).toFixed(1)}%)`;
+                return `已跑 ${formatShoeMileage(shoe.mileage)} km (${(c.lifeProgress * 100).toFixed(1)}%)`;
               }
               return `剩餘 ${c.remainingMileage} km`;
             }
@@ -244,9 +244,10 @@ const DAY_MS = 86400000;
 // The shoe total matches the shoes table; the part outside the run log is the
 // walking and warm-ups recorded on the same shoe (Strava "步行"), SPEC-067.
 function timelineMileageLines(row) {
-  const runs = `跑步 ${row.km.toFixed(1)} km · ${row.run_count} 次`;
-  if (!(Math.round(row.other_km * 10) > 0)) return [`鞋子里程 ${row.shoe_km.toFixed(1)} km`, runs];
-  return [`鞋子里程 ${row.shoe_km.toFixed(1)} km`, `${runs}｜步行與暖身 ${row.other_km.toFixed(1)} km`];
+  const runs = `跑步 ${formatShoeMileage(row.km)} km · ${row.run_count} 次`;
+  const total = `鞋子里程 ${formatShoeMileage(row.shoe_km)} km`;
+  if (!(floorShoeKm(row.other_km) > 0)) return [total, runs];
+  return [total, `${runs}｜步行與暖身 ${formatShoeMileage(row.other_km)} km`];
 }
 
 async function renderShoeTimeline() {
