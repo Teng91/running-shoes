@@ -175,6 +175,8 @@ def shoe_timeline(db: Session, user_id: int, as_of: date) -> dict:
     """First/last logged run per owned active shoe, oldest rotation first.
 
     Retired and deleted shoes are no longer in rotation, so they are omitted.
+    ``shoe_km`` is the shoe's total mileage; ``other_km`` is the part outside the
+    run log (warm-ups and walks recorded on the shoe, SPEC-067).
     """
     rows = (
         db.query(
@@ -200,6 +202,8 @@ def shoe_timeline(db: Session, user_id: int, as_of: date) -> dict:
             "first_run_date": first,
             "last_run_date": last,
             "km": round_metric(km),
+            "shoe_km": round_metric(shoe.mileage),
+            "other_km": round_metric(shoe.mileage - (km or 0)),
             "run_count": int(count),
             "days_since_last_run": max(0, idle),
             "idle": idle > IDLE_DAYS,

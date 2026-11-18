@@ -13,6 +13,8 @@ function calc(shoe) {
 function fmtPct(v) { return (v * 100).toFixed(2) + '%'; }
 function fmtMoney(v) { return '$' + Math.round(v).toLocaleString(); }
 function fmtDate(d) { if (!d) return '-'; return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`; }
+// Shoe mileage reads like Strava's gear list: one decimal (SPEC-067). Edits keep the stored value.
+function formatShoeMileage(v) { return Number.isFinite(Number(v)) ? Number(v).toFixed(1) : '-'; }
 function fmtCostPerKm(v) { return v !== null ? '$' + v.toFixed(2) : '-'; }
 // Wear ramp from the theme tokens (--wear-1 fresh … --wear-5 worn out).
 function progressColor(pct) {
@@ -158,7 +160,7 @@ function renderTable() {
       <td><span class="brand-dot" style="background:${bc}"></span><span class="brand">${esc(s.brand)}</span></td>
       <td><span>${esc(s.model)}</span>${s.nickname ? `<br><small>${esc(s.nickname)}</small>` : ''}</td>
       <td>${esc(s.date.replace(/-/g,'/'))}</td>
-      <td class="editable numeric" data-dblclick="inline-edit" data-table="shoe-table" data-index="${i}" data-field="mileage">${s.mileage}</td>
+      <td class="editable numeric" data-dblclick="inline-edit" data-table="shoe-table" data-index="${i}" data-field="mileage">${formatShoeMileage(s.mileage)}</td>
       <td class="numeric">${fmtCostPerKm(c.costPerKm)}</td>
       <td class="editable numeric" data-dblclick="inline-edit" data-table="shoe-table" data-index="${i}" data-field="expected_mileage">${s.expected_mileage}</td>
       <td class="numeric">${fmtCostPerKm(c.expectedCost)}</td>
@@ -185,7 +187,7 @@ function renderRetiredTable() {
       <td><span class="brand-dot" style="background:${bc}"></span><span class="brand">${esc(s.brand)}</span></td>
       <td><span>${esc(s.model)}</span>${s.nickname ? `<br><small>${esc(s.nickname)}</small>` : ''}</td>
       <td>${esc(s.date.replace(/-/g,'/'))}</td>
-      <td class="editable numeric" data-dblclick="inline-edit" data-table="retired-table" data-index="${i}" data-field="mileage">${s.mileage}</td>
+      <td class="editable numeric" data-dblclick="inline-edit" data-table="retired-table" data-index="${i}" data-field="mileage">${formatShoeMileage(s.mileage)}</td>
       <td class="numeric">${fmtCostPerKm(c.costPerKm)}</td>
       <td class="editable numeric" data-dblclick="inline-edit" data-table="retired-table" data-index="${i}" data-field="expected_mileage">${s.expected_mileage}</td>
       <td class="numeric">${fmtCostPerKm(c.expectedCost)}</td>
