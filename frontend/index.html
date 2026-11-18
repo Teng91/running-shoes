@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-pxCDiRKsaLu63z/BVJufXiTMqcQgOlDgDJZCfMTks60=' 'sha256-03bcOQeHecByaBjKyWaE3zaVWPIlPVelCglM9pQh0BU=' 'sha256-IgIQHS5JQWyGqVRXIJS9m3tyA0JiZ2nFTbsaGJpbbDc='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'self'">
-<meta name="app-asset-version" content="4.21.0">
+<meta name="app-asset-version" content="4.21.1">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>跑鞋追蹤 Dashboard</title>
 <meta name="theme-color" content="#07090c">
@@ -39,7 +39,7 @@ body { margin: 0; opacity: 1 !important; }
 @keyframes app-boot-critical-run { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
 @media (prefers-reduced-motion: reduce) { .app-boot { transition: none; } .app-boot-spinner::after { animation: none; width: 100%; opacity: .45; } }
 </style>
-<link id="app-styles" rel="preload" href="/styles.css?v=4.21.0" as="style">
+<link id="app-styles" rel="preload" href="/styles.css?v=4.21.1" as="style">
 <script>
 // Non-blocking stylesheet: apply the preload once it arrives. A script rather
 // than an onload attribute, so the page CSP can allow it by hash (SPEC-054).
@@ -61,7 +61,7 @@ body { margin: 0; opacity: 1 !important; }
   } catch (error) {}
 })();
 </script>
-<noscript><link rel="stylesheet" href="/styles.css?v=4.21.0"></noscript>
+<noscript><link rel="stylesheet" href="/styles.css?v=4.21.1"></noscript>
 </head>
 <body>
 
@@ -120,8 +120,6 @@ window.__appBootLegacyPoll = window.setInterval(function () {
     <div class="auth-error" id="auth-error"></div>
     <button type="submit" class="btn btn-primary" style="width:100%;margin-top:8px;">登入</button>
     <div style="text-align:center;margin-top:12px;">
-      <a href="#" data-click="show-change-form" style="color:var(--text-dim);font-size:13px;">更改密碼</a>
-      <span style="color:var(--border);margin:0 8px;">|</span>
       <a href="#" data-click="show-register-form" style="color:var(--accent-light);font-size:13px;">註冊</a>
     </div>
     <div class="auth-forgot"><a href="#" id="forgot-link" data-click="show-reset-form">忘記密碼？</a></div>
@@ -196,33 +194,6 @@ window.__appBootLegacyPoll = window.setInterval(function () {
     </div>
     <div class="auth-error" id="reset-error"></div>
     <button type="submit" class="btn btn-primary" style="width:100%;margin-top:8px;">重設密碼</button>
-    <div style="text-align:center;margin-top:12px;">
-      <a href="#" data-click="show-login-form" style="color:var(--accent-light);font-size:13px;">回登入頁</a>
-    </div>
-  </form>
-
-  <!-- Change Password Form -->
-  <form class="auth-box" id="change-form" style="display:none;" data-submit="change-password">
-    <div class="auth-mark" aria-hidden="true"><svg viewBox="0 0 32 32" fill="currentColor" aria-hidden="true"><path d="M6 9.5h7l-1.6 3h-7z"/><path d="M4 14.5h9l-1.6 3h-9z" opacity=".7"/><path d="M6 19.5h7l-1.6 3h-7z" opacity=".45"/><path d="M14 6h7l8 10-8 10h-7l8-10z"/></svg></div>
-    <h1 data-eyebrow="ACCOUNT SECURITY">更改密碼</h1>
-    <div class="form-group">
-      <label for="change-username">帳號</label>
-      <input id="change-username" autocomplete="username" autocapitalize="none" placeholder="Username">
-    </div>
-    <div class="form-group">
-      <label for="change-old-password">舊密碼</label>
-      <input id="change-old-password" type="password" autocomplete="current-password" placeholder="Old Password">
-    </div>
-    <div class="form-group">
-      <label for="change-new-password">新密碼</label>
-      <input id="change-new-password" type="password" autocomplete="new-password" placeholder="New Password">
-    </div>
-    <div class="form-group">
-      <label for="change-new-password2">確認新密碼</label>
-      <input id="change-new-password2" type="password" autocomplete="new-password" placeholder="Confirm New Password">
-    </div>
-    <div class="auth-error" id="change-error"></div>
-    <button type="submit" class="btn btn-primary" style="width:100%;margin-top:8px;">更改密碼</button>
     <div style="text-align:center;margin-top:12px;">
       <a href="#" data-click="show-login-form" style="color:var(--accent-light);font-size:13px;">回登入頁</a>
     </div>
@@ -848,6 +819,15 @@ window.__appBootLegacyPoll = window.setInterval(function () {
       <p id="email-status" class="workspace-help" role="status" aria-live="polite"></p>
     </details>
     <details class="workspace-section">
+      <summary>更改密碼</summary>
+      <p class="workspace-help">知道目前密碼時在這裡更改；忘記密碼請登出後在登入頁按「忘記密碼？」。更改後所有裝置都要重新登入。</p>
+      <div class="form-group"><label for="account-old-password">目前密碼</label><input id="account-old-password" type="password" autocomplete="current-password"></div>
+      <div class="form-group"><label for="account-new-password">新密碼</label><input id="account-new-password" type="password" autocomplete="new-password"></div>
+      <div class="form-group"><label for="account-new-password2">確認新密碼</label><input id="account-new-password2" type="password" autocomplete="new-password"></div>
+      <button class="btn btn-primary" data-click="change-password">更改密碼</button>
+      <p id="password-status" class="workspace-help" role="status" aria-live="polite"></p>
+    </details>
+    <details class="workspace-section">
       <summary>刪除帳號</summary>
       <p class="workspace-help">永久刪除這個帳號，以及所有跑鞋、跑步紀錄、月跑量、目標、月報與異動紀錄，無法復原。刪除前建議先在上方下載帳號資料 JSON。</p>
       <div class="form-group"><label for="delete-account-password">輸入密碼確認</label><input id="delete-account-password" type="password" autocomplete="current-password"></div>
@@ -878,7 +858,7 @@ window.__appBootLegacyPoll = window.setInterval(function () {
     </section>
     <section aria-labelledby="reset-title">
       <h3 id="reset-title">幫忙重設密碼</h3>
-      <p class="workspace-help">對方忘記密碼時，產生一組臨時密碼給他；他登入後請到「更改密碼」換掉。他在其他裝置上的登入會被登出。</p>
+      <p class="workspace-help">對方忘記密碼時，產生一組臨時密碼給他；他登入後請到「資料與同步」→「更改密碼」換掉。他在其他裝置上的登入會被登出。</p>
       <div class="form-group"><label for="reset-username">對方的帳號</label><input id="reset-username" autocapitalize="none" maxlength="50"></div>
       <button class="btn btn-edit" data-click="admin-reset-password">產生臨時密碼</button>
       <p id="reset-result" class="workspace-help" role="status" aria-live="polite"></p>
@@ -896,40 +876,40 @@ window.__appBootLegacyPoll = window.setInterval(function () {
 
 <script src="/vendor/chart.umd.min.js"></script>
 <script src="/vendor/marked.min.js"></script>
-<script src="/app-boot.js?v=4.21.0"></script>
-<script src="/app-lifecycle.js?v=4.21.0"></script>
-<script src="/app-state.js?v=4.21.0"></script>
-<script src="/app-api.js?v=4.21.0"></script>
-<script src="/app-auth.js?v=4.21.0"></script>
-<script src="/app-streams.js?v=4.21.0"></script>
-<script src="/app-resources.js?v=4.21.0"></script>
-<script src="/app-inline-editors.js?v=4.21.0"></script>
-<script src="/app-local-store.js?v=4.21.0"></script>
-<script src="/app-workspace.js?v=4.21.0"></script>
-<script src="/app-account.js?v=4.21.0"></script>
-<script src="/app-account-restore.js?v=4.21.0"></script>
-<script src="/app-history.js?v=4.21.0"></script>
-<script src="/app-core.js?v=4.21.0"></script>
-<script src="/app-models.js?v=4.21.0"></script>
-<script src="/app-markdown.js?v=4.21.0"></script>
-<script src="/app-agent.js?v=4.21.0"></script>
-<script src="/app-reports.js?v=4.21.0"></script>
-<script src="/app-runs.js?v=4.21.0"></script>
-<script src="/app-dates.js?v=4.21.0"></script>
-<script src="/app-strava.js?v=4.21.0"></script>
-<script src="/app-run-insights.js?v=4.21.0"></script>
-<script src="/app-shoes.js?v=4.21.0"></script>
-<script src="/app-dashboard.js?v=4.21.0"></script>
-<script src="/app-exports.js?v=4.21.0"></script>
-<script src="/app-goals.js?v=4.21.0"></script>
-<script src="/app-charts.js?v=4.21.0"></script>
-<script src="/app-shoe-charts.js?v=4.21.0"></script>
-<script src="/app-monthly-charts.js?v=4.21.0"></script>
-<script src="/app-pace-charts.js?v=4.21.0"></script>
-<script src="/app-spending.js?v=4.21.0"></script>
-<script src="/app-dialogs.js?v=4.21.0"></script>
-<script src="/app-updates.js?v=4.21.0"></script>
-<script src="/app-actions.js?v=4.21.0"></script>
-<script src="/app.js?v=4.21.0"></script>
+<script src="/app-boot.js?v=4.21.1"></script>
+<script src="/app-lifecycle.js?v=4.21.1"></script>
+<script src="/app-state.js?v=4.21.1"></script>
+<script src="/app-api.js?v=4.21.1"></script>
+<script src="/app-auth.js?v=4.21.1"></script>
+<script src="/app-streams.js?v=4.21.1"></script>
+<script src="/app-resources.js?v=4.21.1"></script>
+<script src="/app-inline-editors.js?v=4.21.1"></script>
+<script src="/app-local-store.js?v=4.21.1"></script>
+<script src="/app-workspace.js?v=4.21.1"></script>
+<script src="/app-account.js?v=4.21.1"></script>
+<script src="/app-account-restore.js?v=4.21.1"></script>
+<script src="/app-history.js?v=4.21.1"></script>
+<script src="/app-core.js?v=4.21.1"></script>
+<script src="/app-models.js?v=4.21.1"></script>
+<script src="/app-markdown.js?v=4.21.1"></script>
+<script src="/app-agent.js?v=4.21.1"></script>
+<script src="/app-reports.js?v=4.21.1"></script>
+<script src="/app-runs.js?v=4.21.1"></script>
+<script src="/app-dates.js?v=4.21.1"></script>
+<script src="/app-strava.js?v=4.21.1"></script>
+<script src="/app-run-insights.js?v=4.21.1"></script>
+<script src="/app-shoes.js?v=4.21.1"></script>
+<script src="/app-dashboard.js?v=4.21.1"></script>
+<script src="/app-exports.js?v=4.21.1"></script>
+<script src="/app-goals.js?v=4.21.1"></script>
+<script src="/app-charts.js?v=4.21.1"></script>
+<script src="/app-shoe-charts.js?v=4.21.1"></script>
+<script src="/app-monthly-charts.js?v=4.21.1"></script>
+<script src="/app-pace-charts.js?v=4.21.1"></script>
+<script src="/app-spending.js?v=4.21.1"></script>
+<script src="/app-dialogs.js?v=4.21.1"></script>
+<script src="/app-updates.js?v=4.21.1"></script>
+<script src="/app-actions.js?v=4.21.1"></script>
+<script src="/app.js?v=4.21.1"></script>
 </body>
 </html>

@@ -535,7 +535,7 @@ async function run(engine, name) {
           await assertLayout(page, `${name} ${theme} ${width} shoes inline edit`);
           await page.locator('.inline-input').press('Escape');
           await page.evaluate(() => { document.getElementById('app-view').style.display = 'none'; document.getElementById('auth-view').style.display = ''; });
-          for (const action of ['showLoginForm', 'showRegisterForm', 'showChangeForm']) {
+          for (const action of ['showLoginForm', 'showRegisterForm', 'showResetForm']) {
             await page.evaluate(action => window[action](), action);
             await assertLayout(page, `${name} ${theme} ${width} ${action}`);
             if (screenshots && [390, 1440].includes(width)) await page.screenshot({ path: path.join(screenshots, `${name}-${theme}-${action}-${width}.png`), fullPage: true });
@@ -565,7 +565,7 @@ async function run(engine, name) {
       }
       await page.setViewportSize({ width: 320, height: 740 });
       await page.evaluate(() => { document.querySelector('#app-view').style.display = 'none'; document.querySelector('#auth-view').style.display = 'block'; });
-      for (const action of ['showLoginForm', 'showRegisterForm', 'showChangeForm']) {
+      for (const action of ['showLoginForm', 'showRegisterForm', 'showResetForm']) {
         await page.evaluate(action => window[action](), action);
         await assertLayout(page, `${name} ${action}`);
       }

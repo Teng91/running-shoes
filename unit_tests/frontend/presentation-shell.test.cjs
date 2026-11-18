@@ -26,7 +26,7 @@ test('successful login and logout clear every authentication field', () => {
   const ids = [
     'login-username', 'login-password',
     'reg-username', 'reg-password', 'reg-password2',
-    'change-username', 'change-old-password', 'change-new-password', 'change-new-password2',
+    'account-old-password', 'account-new-password', 'account-new-password2',
   ];
   const elements = Object.fromEntries(ids.map(id => [id, { value: 'previous-user-secret' }]));
   const context = vm.createContext({ document: { getElementById: id => elements[id] } });

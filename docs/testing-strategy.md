@@ -297,6 +297,10 @@ SPEC-032：合成資料驗證歷史筆數上限（v4.7.3 起 10,000／10,001）�
 
 [規格與具名案例](specs/061-ci-on-every-push-and-protected-main.md) 以文字解析 workflow：觸發條件是不限分支的 push、pull request、每週排程與手動執行，沒有 `paths-ignore`；部署條件仍只有 main 的 push／手動執行；main 以外的 ref 由較新的執行取消舊的，main 不取消。ruleset 由 `.github/rulesets/main.json` 描述，Python 測試確認它要求 PR、必要檢查與 workflow 的 5 個測試 job 完全一致、禁止刪除與 force push，且沒有繞過名單。
 
+## SPEC-080 移除登入頁的更改密碼
+
+[規格與具名案例](specs/080-account-cleanup.md) 以 Node 測試確認登入頁沒有更改密碼表單、「資料與同步」有更改密碼區塊，打錯目前密碼不登出、成功後清空欄位並登出；版面測試的認證表單改為登入、註冊與忘記密碼。
+
 ## SPEC-079 Email 驗證碼找回密碼
 
 [規格與具名案例](specs/079-email-recovery.md) 一律以假的寄信函式取代 `app.state.mailer`，不寄真信；SMTP adapter 以假的 `smtplib.SMTP` 確認 STARTTLS、登入與失敗訊息不含憑證。API 測試確認綁定只在輸入正確驗證碼後生效、驗證碼只存 HMAC、錯 5 次與過期失效、email 不能重複綁定；以帳號或 email 重設密碼後舊 token 失效、驗證碼只能用一次；不存在的帳號、沒有 email 的帳號與寄信失敗都回同樣結果；沒有 SMTP 時回 503、寄送過於頻繁回 429；刪除帳號一併刪除驗證碼。Migration 測試確認 schema 12 與回滾腳本。Node 測試確認登入頁與 Email 區塊依 `mail_enabled` 顯示、重設流程的中性訊息與密碼檢查。

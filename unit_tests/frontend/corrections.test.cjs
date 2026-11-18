@@ -74,13 +74,13 @@ test('SPEC-055 the Strava preview explains activities deleted earlier', () => {
 
 test('SPEC-055 sign-in fields let password managers fill and save credentials', () => {
   assert.doesNotMatch(htmlSource, /autocomplete="off"/);
-  for (const id of ['login-username', 'reg-username', 'change-username']) {
+  for (const id of ['login-username', 'reg-username']) {
     assert.match(htmlSource, new RegExp(`id="${id}" autocomplete="username"`));
   }
-  for (const id of ['login-password', 'change-old-password']) {
+  for (const id of ['login-password', 'account-old-password']) {
     assert.match(htmlSource, new RegExp(`id="${id}" type="password" autocomplete="current-password"`));
   }
-  for (const id of ['reg-password', 'reg-password2', 'change-new-password', 'change-new-password2']) {
+  for (const id of ['reg-password', 'reg-password2', 'account-new-password', 'account-new-password2']) {
     assert.match(htmlSource, new RegExp(`id="${id}" type="password" autocomplete="new-password"`));
   }
   // The standard capability meta sits next to the legacy iOS one.
