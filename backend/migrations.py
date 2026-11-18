@@ -13,7 +13,7 @@ from backend.audit_schema import install_audit_triggers
 from backend.credentials import get_password_hash
 from backend.database import Base
 
-CURRENT_SCHEMA_VERSION = 11
+CURRENT_SCHEMA_VERSION = 12
 
 
 def _migrate_preview_tokens(engine: Engine) -> None:
@@ -130,6 +130,18 @@ def _migrate_schema_eleven(engine: Engine) -> None:
             ))
 
 
+def _migrate_schema_twelve(engine: Engine) -> None:
+    """Verified recovery email and one-time email codes (SPEC-079)."""
+    with engine.begin() as connection:
+        columns = {column["name"] for column in inspect(connection).get_columns("users")}
+        if "email" not in columns:
+            connection.execute(text("ALTER TABLE users ADD COLUMN email VARCHAR(254)"))
+        connection.execute(text(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_users_email_lower ON users (lower(email)) WHERE email IS NOT NULL"
+        ))
+    cast(Table, models.EmailCode.__table__).create(bind=engine, checkfirst=True)
+
+
 READY_TABLES = {"users", "shoes", "runs", "monthly_mileages"}
 
 
@@ -217,6 +229,9 @@ def run_startup_migrations(
                     connection.execute(text("ALTER TABLE users ADD COLUMN backup_id VARCHAR(36) NOT NULL DEFAULT ''"))
                 if "data_revision" not in columns:
                     connection.execute(text("ALTER TABLE users ADD COLUMN data_revision INTEGER NOT NULL DEFAULT 0"))
+                # The legacy owner lookup below reads users through the current ORM model (SPEC-079).
+                if "email" not in columns:
+                    connection.execute(text("ALTER TABLE users ADD COLUMN email VARCHAR(254)"))
             joy_user = db.query(models.User).filter(models.User.username == "Joy").first()
             if joy_user is None:
                 joy_user = models.User(
@@ -369,6 +384,7 @@ def run_startup_migrations(
     _migrate_schema_nine(engine)
     _migrate_schema_ten(engine)
     _migrate_schema_eleven(engine)
+    _migrate_schema_twelve(engine)
     with engine.begin() as connection:
         for table in ("runs", "monthly_mileages"):
             connection.execute(text(

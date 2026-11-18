@@ -113,10 +113,31 @@ class UserOut(BaseModel):
     id: int
     username: str
     is_admin: bool = False
+    email: str | None = None
 
 
 class RegistrationOut(BaseModel):
     mode: Literal["invite", "open", "closed"]
+    # SPEC-079: whether「忘記密碼」and email binding are available.
+    mail_enabled: bool = False
+
+
+class EmailBindRequest(BaseModel):
+    email: str = Field(..., max_length=254)
+
+
+class EmailCodeConfirm(BaseModel):
+    code: str = Field(..., min_length=1, max_length=12)
+
+
+class PasswordResetRequest(BaseModel):
+    identifier: str = Field(..., min_length=1, max_length=254)
+
+
+class PasswordResetConfirm(BaseModel):
+    identifier: str = Field(..., min_length=1, max_length=254)
+    code: str = Field(..., min_length=1, max_length=12)
+    new_password: Password
 
 
 class AccountDelete(BaseModel):
