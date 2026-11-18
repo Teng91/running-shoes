@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [4.19.3] - 2026-11-18
+
+### Security
+- 所有 API 新增每個來源位址每分鐘 600 次的上限（`API_RATE_LIMIT_PER_MINUTE`），在驗證與資料庫之前以記憶體計數，超過回 429；`fly.toml` 設定同時請求上限（soft 25／hard 50），被大量請求灌入時由 Fly 先擋下（SPEC-073）。Asset 4.19.3／shell v79，schema 10 不變。
+
 ## [4.19.2] - 2026-11-18
 
 ### Added

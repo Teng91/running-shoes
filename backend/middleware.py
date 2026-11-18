@@ -1,11 +1,15 @@
 """Application middleware that is independent from the composition root."""
 
+import threading
+import time
+from collections import OrderedDict
+from ipaddress import ip_address
 from typing import ClassVar
 
 from fastapi.responses import JSONResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from backend.settings import megabytes_label
+from backend.settings import Settings, megabytes_label
 
 # Applied to every HTTP response (SPEC-054). The page's script/style policy is a
 # build-time <meta> CSP in index.html because it carries hashes of the shell's
@@ -42,6 +46,80 @@ class SecurityHeadersMiddleware:
             await send(message)
 
         await self.app(scope, receive, send_with_security_headers)
+
+
+def client_address(fly_client_ip: str | None, peer_host: str | None, settings: Settings) -> str:
+    """Trust Fly's client-IP header only when running behind Fly's proxy."""
+    fly_ip = (fly_client_ip or "").strip()
+    if settings.is_fly_runtime and fly_ip:
+        try:
+            return str(ip_address(fly_ip))
+        except ValueError:
+            pass
+    return (peer_host or "unknown")[:64]
+
+
+
+class ApiRequestLimiter:
+    """In-memory per-address budget for every API request (SPEC-073).
+
+    A flood must not cost a SQLite write per request, so unlike the windows above this
+    one lives in process memory: production runs one Uvicorn process, and a restart
+    simply starts a fresh minute. At most ``max_clients`` addresses are tracked; the
+    oldest windows are dropped first, so memory stays bounded under spoofed sources.
+    """
+
+    def __init__(self, max_clients: int = 10_000, seconds: int = 60):
+        self.max_clients = max_clients
+        self.seconds = seconds
+        self._windows: OrderedDict[str, tuple[float, int]] = OrderedDict()
+        self._lock = threading.Lock()
+
+    def take(self, key: str, limit: int, now: float | None = None) -> int | None:
+        """Count one request; return the seconds to wait when the window is full, else None."""
+        current = time.monotonic() if now is None else now
+        with self._lock:
+            started, count = self._windows.get(key, (current, 0))
+            if current - started >= self.seconds:
+                started, count = current, 0
+            if count >= limit:
+                return max(1, int(self.seconds - (current - started)) + 1)
+            self._windows[key] = (started, count + 1)
+            self._windows.move_to_end(key)
+            while len(self._windows) > self.max_clients:
+                self._windows.popitem(last=False)
+            return None
+
+    def __len__(self) -> int:
+        return len(self._windows)
+
+
+class ApiRateLimitMiddleware:
+    """Per-address request budget for every /api/ route, checked before any database work (SPEC-073)."""
+
+    def __init__(self, app: ASGIApp):
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http" or not scope["path"].startswith("/api/"):
+            await self.app(scope, receive, send)
+            return
+        state = scope["app"].state
+        settings = state.settings
+        headers = dict(scope.get("headers") or [])
+        fly_ip = headers.get(b"fly-client-ip", b"").decode("latin-1")
+        peer = scope.get("client")
+        key = client_address(fly_ip, peer[0] if peer else None, settings)
+        retry_after = state.api_rate_limiter.take(key, settings.api_rate_limit_per_minute)
+        if retry_after is None:
+            await self.app(scope, receive, send)
+            return
+        detail = "請求過於頻繁，請稍後再試。"
+        response = JSONResponse(
+            {"detail": detail, "error": {"code": "rate_limited", "message": detail}},
+            status_code=429, headers={"Retry-After": str(retry_after)},
+        )
+        await response(scope, receive, send)
 
 
 class UploadLimitMiddleware:
