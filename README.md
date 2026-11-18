@@ -54,7 +54,7 @@ Python 3.11 · FastAPI · SQLAlchemy · SQLite · 原生 JavaScript（不需要�
 | 項目 | 數量 |
 | --- | --- |
 | 正式版本 | 93 個 tag，2026-06 開始，目前 v4.17 |
-| 自動化測試 | Python 716 項、前端 Node 回歸 220 項、40 組版面設定（WebKit／Chromium × 亮暗 × 10 種尺寸）、真實 CRUD E2E 與 PWA 升級／離線測試 |
+| 自動化測試 | Python 717 項、前端 Node 回歸 220 項、40 組版面設定（WebKit／Chromium × 亮暗 × 10 種尺寸）、真實 CRUD E2E 與 PWA 升級／離線測試 |
 | 功能規格 | 63 份 SPEC，每份含 Goals、帳號隔離、migration／rollback 與 AC 追蹤 |
 | API | 54 個端點，與 `unit_tests/api_contract.json` 及下方 API 表自動比對 |
 | 資料庫 | SQLite schema 11，每一版都有守衛的回滾腳本 |
@@ -189,7 +189,7 @@ flowchart LR
 
 ## 品質：測試與規格
 
-- **Python 716 項**：API、交易與並行、migration 與回滾、備份往返、帳號隔離、Agent 規劃與工具（外部 LLM 與搜尋一律 mock），一律使用暫存或記憶體資料庫，不碰正式 `shoes.db`。
+- **Python 717 項**：API、交易與並行、migration 與回滾、備份往返、帳號隔離、Agent 規劃與工具（外部 LLM 與搜尋一律 mock），一律使用暫存或記憶體資料庫，不碰正式 `shoes.db`。
 - **前端 Node 回歸 220 項**：以 `vm` 載入實際前端程式，驗證狀態、競態、草稿、串流與圖表資料。
 - **瀏覽器**：Playwright 在 WebKit 與 Chromium 跑 40 組版面設定（含幾何對齊與無溢出）、真實 FastAPI＋暫存 SQLite 的 CRUD E2E、Service Worker 升級與離線；失敗時保存截圖與 trace。
 - **修 bug 先寫重現測試**：例如 v4.17.0 的 CI 抓到新圖表檔案重複宣告全域常數，修正時同時加上掃描所有 script 的測試。
@@ -631,7 +631,7 @@ LLM_MAX_OUTPUT_TOKENS=4096
 - **單鞋分析**：可檢視穿著次數、30／90 天里程、最後使用日期、壽命進度、預估退役、近 12 月趨勢與最近跑步
 - **跑步時間與配速**：新增或編輯跑步時可選填跑步時間（`32:15`、`1:05:30` 或整數分鐘；手機數字鍵盤沒有冒號，直接打 `3215`、`10530` 會自動補成 `32:15`、`1:05:30`），後端自動算配速；列表、月份卡片與單雙鞋分析顯示配速與時間加權的平均配速
 - **Strava 歷史匯入**：從 Strava 匯出的 `activities.csv` 預覽並批次匯入跑步活動與移動時間，依活動 ID 去重，支援匯入前逐鞋款配對；重新匯入可替既有紀錄補上跑步時間；CSV 與資料庫工作在 worker thread 順序執行，HTTP 仍等待交易完成，不是背景佇列
-- **帳號與註冊**：註冊預設需要邀請碼（`REGISTRATION_MODE=invite`，也可設為 open 或 closed）。管理員（`ADMIN_USERNAMES`）在「資料與同步」產生邀請碼：可設備註、使用次數（最多 20）與有效天數（最多 90），邀請碼只在產生時顯示一次，伺服器只存雜湊；也可以替忘記密碼的人產生一次性的臨時密碼，對方的登入會全部失效。帳號名稱不分大小寫。任何人都可以在「資料與同步」輸入密碼後永久刪除自己的帳號與所有資料；登入與註冊頁有隱私說明（SPEC-075）
+- **帳號與註冊**：註冊預設需要邀請碼（`REGISTRATION_MODE=invite`，也可設為 open 或 closed）。管理員（`ADMIN_USERNAMES`）在「資料與同步」產生邀請碼：可自訂好記的邀請碼（4～20 個英文字母或數字，不分大小寫；留空自動產生 8 碼），並設備註、使用次數（最多 20）與有效天數（最多 90），邀請碼只在產生時顯示一次，伺服器只存雜湊；也可以替忘記密碼的人產生一次性的臨時密碼，對方的登入會全部失效。帳號名稱不分大小寫。任何人都可以在「資料與同步」輸入密碼後永久刪除自己的帳號與所有資料；登入與註冊頁有隱私說明（SPEC-075）
 - **資料匯出與備份**：跑鞋可匯出 **XLSX / CSV**，並可下載不含密碼或 token 的完整 JSON 帳號備份（跑鞋、日誌、月跑量、目標、月報與 Strava 匯入摘要）
 - **AI 跑鞋推薦助手**：依你的實際資料給換鞋與選鞋建議（需設定 OpenRouter API Key），可從本日熱門、免費且支援工具呼叫的模型中選擇
 - **AI 月度跑步報告**：可自行選擇本日免費模型，一鍵產生指定月份的跑步報告（跑量趨勢、鞋款狀態、退役提醒與下月建議），報告自動保存、可隨時回看，不需重打 LLM；更新時間以帶 offset UTC 傳輸，生成與重新讀取皆顯示裝置本地時間
@@ -904,7 +904,7 @@ Playwright／Chromium／WebKit 齊全時，也會執行版面測試。
 避免每次停止都重跑。Hook 不會呼叫其他模型、外部 API，或傳送提示、diff、原始碼與測試輸出。
 GitHub Actions 仍會在 push／pull request 執行 `verify`，並以三個可獨立重跑的 browser jobs 執行完整版面矩陣、真實 CRUD E2E 與 PWA 升級／離線測試；push 到 main 時再依序快照、部署、檢查並發版（見「日常開發流程、自動部署與發版」）；Dependabot 每月以單一 PR 合併 GitHub Actions 更新；Python 只接收安全性更新 PR，例行升級依下方 `uv pip compile --universal` 步驟手動重編鎖定檔（Dependabot 產生的鎖定檔會遺失 Windows 條件）。
 
-本次驗證基線為 Python **716 passed**、前端回歸測試 **220 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
+本次驗證基線為 Python **717 passed**、前端回歸測試 **220 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
 版面檢查涵蓋 WebKit／Chromium、亮／暗模式與 10 組直橫向尺寸，共 40 組設定，檢查四個功能分頁與月報、三個認證表單、圖表、全部彈窗、行內編輯、停用／錯誤及空資料狀態。
 
 主要表單、工具列與彈窗操作統一為 44px 控制項；桌面表格內的緊湊操作為 36px，手機至少 44px。
@@ -1245,7 +1245,7 @@ venv/bin/python -m backend.run
 | 帳號 | `POST /api/auth/change-password` | 以舊密碼更換密碼；舊 token 立即失效 |
 | 帳號 | `POST /api/auth/delete-account` | 輸入密碼後永久刪除帳號與所有資料 |
 | 管理員 | `GET /api/admin/invites` | 邀請碼清單（不含邀請碼本身） |
-| 管理員 | `POST /api/admin/invites` | 產生邀請碼（備註、可用次數、有效天數），邀請碼只回傳這一次 |
+| 管理員 | `POST /api/admin/invites` | 產生邀請碼（可自訂邀請碼、備註、可用次數、有效天數），邀請碼只回傳這一次 |
 | 管理員 | `DELETE /api/admin/invites/{invite_id}` | 停用邀請碼 |
 | 管理員 | `POST /api/admin/reset-password` | 替忘記密碼的帳號產生臨時密碼，對方的登入全部失效 |
 | 跑鞋 | `GET /api/shoes/active` | 現役跑鞋，含成本、壽命與退役預估 |

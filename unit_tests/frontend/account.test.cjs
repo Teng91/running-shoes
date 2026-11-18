@@ -31,6 +31,7 @@ test('SPEC-075 the sign-up form asks for an invite only when the server requires
   await context.loadRegistrationMode();
   assert.equal(elements['reg-invite-group'].hidden, false, 'offline keeps the invite field');
   assert.match(htmlSource, /id="reg-invite"/);
+  assert.doesNotMatch(htmlSource, /placeholder="例如 [A-Z0-9]{4}-/, 'SPEC-076 the sign-up form shows no code that looks real');
   assert.equal((htmlSource.match(/<details class="auth-privacy">/g) || []).length, 2, 'login and sign-up show the privacy notice');
 });
 
@@ -76,7 +77,12 @@ test('SPEC-075 only admins see the invite panel; codes are escaped and spent one
 
   admin['invite-uses'].value = '99'; admin['invite-days'].value = '';
   await context.createInvite();
-  assert.equal(JSON.stringify(posts[0]), JSON.stringify(['/admin/invites', { note: '', max_uses: 20, days: 14 }]));
+  assert.equal(JSON.stringify(posts[0]), JSON.stringify(['/admin/invites', { code: '', note: '', max_uses: 20, days: 14 }]));
+  admin['invite-code'].value = ' Teng91 ';
+  await context.createInvite();
+  assert.equal(JSON.parse(JSON.stringify(posts[1]))[1].code, 'Teng91', 'SPEC-076 custom codes are sent trimmed');
+  assert.equal(admin['invite-code'].value, '', 'the custom code field is cleared after use');
+  posts.splice(1, 1);
   assert.match(admin['invite-result'].textContent, /K7QM-3XPA.*只顯示這一次/);
 
   admin['reset-username'].value = ' Xuan ';

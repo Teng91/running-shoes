@@ -60,6 +60,7 @@ async function loadInvites() {
 async function createInvite() {
   const result = document.getElementById('invite-result');
   const body = {
+    code: document.getElementById('invite-code').value.trim(),
     note: document.getElementById('invite-note').value.trim(),
     max_uses: Math.min(20, Math.max(1, Number(document.getElementById('invite-uses').value) || 1)),
     days: Math.min(90, Math.max(1, Number(document.getElementById('invite-days').value) || 14)),
@@ -69,6 +70,7 @@ async function createInvite() {
     const invite = await apiPost('/admin/invites', body);
     result.textContent = `邀請碼：${invite.code}（可使用 ${invite.max_uses} 次，${String(invite.expires_at).slice(0, 10)} 到期；只顯示這一次，請現在複製）`;
     document.getElementById('invite-note').value = '';
+    document.getElementById('invite-code').value = '';
     await loadInvites();
   } catch (error) {
     result.textContent = '產生失敗：' + translateError(error.message);

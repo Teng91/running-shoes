@@ -4,6 +4,13 @@
 每版的摘要見 [CHANGELOG.md](../CHANGELOG.md)；目前的功能與操作方式以 [README](../README.md) 為準。
 這裡保留當時的文字，後續版本可能已調整其中的行為。
 
+### 自訂邀請碼（SPEC-076，v4.20.1）
+
+- 註冊表單的提示「例如 K7QM-3XPA」看起來像真的邀請碼，改為「向管理員索取」。
+- `InviteCreate.code` 選填：`invites.create_invite` 去掉空白與符號、轉大寫，接受 4～20 個 ASCII 英數字，重複回 409；`redeem_invite` 接受同樣的長度範圍。自訂碼仍只存 SHA-256，面板提醒自訂碼比較好猜。
+
+Asset 4.20.1／shell v82、schema 11 不變，可直接回滾至 v4.20.0 image；舊版只接受 8 碼，自訂碼在回滾期間無法使用。
+
 ### 邀請制註冊與帳號管理（SPEC-075，v4.20.0）
 
 - 註冊先前對所有人開放（上限 100 個帳號）。`REGISTRATION_MODE` 預設為 `invite`，無法辨識的值一律視為 `closed`；`GET /api/auth/registration` 讓註冊表單決定是否顯示邀請碼欄位。邀請碼 8 碼（排除 0／O、1／I／L），只存 SHA-256；註冊在同一個交易扣用，失敗的註冊不會用掉邀請碼。
