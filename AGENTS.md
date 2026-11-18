@@ -12,7 +12,7 @@
 - `backend/shoe_metrics.py`: canonical shoe cost, discount and lifecycle arithmetic, plus the single 80%/90% lifespan alert thresholds (mirrored in `frontend/app-state.js`).
 - `backend/read_models/`: user-scoped native statistics shared by HTTP, reports and AI adapters; never import tools or HTTP frameworks.
 - `backend/seeding.py`: optional default data using an injected session factory.
-- `backend/middleware.py`: request-level transport guards: security headers on every response (SPEC-054) and Strava/backup upload size limits.
+- `backend/middleware.py`: request-level transport guards: security headers on every response (SPEC-054), the in-memory per-address `/api/` request budget (SPEC-073, no SQLite writes) and Strava/backup upload size limits.
 - `backend/observability.py`: request IDs and metadata-only structured HTTP logs; never log bodies, tokens or passwords.
 - `backend/auth.py`: HTTP bearer adapter; always decodes with the app's injected key (tests sign through `unit_tests/token_helpers.py`).
 - `backend/models.py`, `schemas.py`: ORM tables and Pydantic request/response contracts with input validation.

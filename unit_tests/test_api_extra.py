@@ -767,7 +767,7 @@ def test_static_asset_and_non404_http_errors(client):
 
     service_worker = client.get("/service-worker.js")
     assert service_worker.status_code == 200
-    assert "running-shoes-shell-v78" in service_worker.text
+    assert "running-shoes-shell-v79" in service_worker.text
 
     agent_script = client.get("/app-agent.js")
     assert agent_script.status_code == 200
@@ -879,3 +879,20 @@ def test_agent_daily_budget_caps_each_account_and_the_whole_site(client, db, use
     assert "今天全站" in over_site.json()["detail"]
     assert int(over_site.headers["Retry-After"]) > 3600
     assert run_agent.call_count == 2
+
+
+def test_every_api_route_has_a_per_address_budget_before_any_work(client, user_with_token, monkeypatch):
+    """SPEC-073: a flood gets 429 without authentication, sessions or database work; pages are not limited."""
+    _user, token = user_with_token
+    _limits(monkeypatch, api_rate_limit_per_minute=3, fly_app_name="running-shoes")
+    flood = {"Fly-Client-IP": "198.51.100.40"}
+    statuses = [client.get("/api/shoes/active", headers=flood).status_code for _ in range(3)]
+    assert statuses == [401, 401, 401]
+    blocked = client.get("/api/shoes/active", headers={**flood, **_auth(token)})
+    assert blocked.status_code == 429
+    assert blocked.json()["error"]["code"] == "rate_limited"
+    assert 1 <= int(blocked.headers["Retry-After"]) <= 61
+    assert blocked.headers["x-content-type-options"] == "nosniff", "the rejection is still hardened"
+    other = client.get("/api/shoes/active", headers={"Fly-Client-IP": "198.51.100.41", **_auth(token)})
+    assert other.status_code == 200, "another address keeps its own budget"
+    assert client.get("/health/live", headers=flood).status_code == 200

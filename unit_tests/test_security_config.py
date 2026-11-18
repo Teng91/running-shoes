@@ -241,3 +241,24 @@ def test_rate_limit_windows_never_outlive_bucket_retention():
     assert Settings.from_env({"MODEL_REFRESH_COOLDOWN_SECONDS": "90"}).model_refresh_cooldown_seconds == 90
     assert rate_limits.STALE_BUCKET_SECONDS == RATE_LIMIT_BUCKET_RETENTION_SECONDS
     assert rate_limits.LOGIN_FAILURE_WINDOW_SECONDS <= RATE_LIMIT_BUCKET_RETENTION_SECONDS
+
+
+def test_fly_caps_concurrent_requests_on_the_single_small_machine():
+    """SPEC-073: Fly's proxy sheds a flood before it exhausts the 256 MB machine."""
+    config = tomllib.loads((PROJECT_ROOT / "fly.toml").read_text(encoding="utf-8"))
+    concurrency = config["http_service"]["concurrency"]
+    assert concurrency["type"] == "requests"
+    assert 0 < concurrency["soft_limit"] <= concurrency["hard_limit"] <= 100
+
+
+def test_api_request_limiter_resets_each_minute_and_stays_bounded():
+    from backend.middleware import ApiRequestLimiter
+
+    limiter = ApiRequestLimiter(max_clients=3)
+    assert [limiter.take("a", 2, now=0.0), limiter.take("a", 2, now=1.0)] == [None, None]
+    assert limiter.take("a", 2, now=10.0) == 51, "Retry-After counts down to the window end"
+    assert limiter.take("b", 2, now=10.0) is None, "addresses have separate budgets"
+    assert limiter.take("a", 2, now=60.0) is None, "a new minute starts a new window"
+    for key in ("c", "d", "e"):
+        limiter.take(key, 2, now=61.0)
+    assert len(limiter) == 3, "the oldest addresses are dropped first"

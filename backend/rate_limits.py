@@ -11,12 +11,12 @@ client that is over its own limit never spends a shared (global) budget.
 import time
 from collections.abc import Sequence
 from dataclasses import dataclass
-from ipaddress import ip_address
 
 from fastapi import HTTPException, Request
 from sqlalchemy import text
 from sqlalchemy.engine import Connection, Engine
 
+from backend.middleware import client_address
 from backend.settings import DAILY_WINDOW_SECONDS, RATE_LIMIT_BUCKET_RETENTION_SECONDS, Settings
 
 # Failed password checks. A per-address lock alone still allows distributed
@@ -57,14 +57,8 @@ def _runtime(request: Request) -> tuple[Settings, Engine]:
 
 
 def client_key(request: Request, settings: Settings) -> str:
-    """Trust Fly's client-IP header only when running behind Fly's proxy."""
-    fly_ip = request.headers.get("fly-client-ip", "").strip()
-    if settings.is_fly_runtime and fly_ip:
-        try:
-            return str(ip_address(fly_ip))
-        except ValueError:
-            pass
-    return (request.client.host if request.client else "unknown")[:64]
+    return client_address(request.headers.get("fly-client-ip"), request.client.host if request.client else None,
+                          settings)
 
 
 def _rejection(window: Window, started: float | None, now: float) -> HTTPException:
