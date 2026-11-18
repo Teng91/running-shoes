@@ -4,6 +4,14 @@
 每版的摘要見 [CHANGELOG.md](../CHANGELOG.md)；目前的功能與操作方式以 [README](../README.md) 為準。
 這裡保留當時的文字，後續版本可能已調整其中的行為。
 
+### 被大量請求灌爆時的防護（SPEC-073，v4.19.3）
+
+- 先前只有登入、註冊、AI 與備份預覽有頻率限制。`middleware.ApiRateLimitMiddleware` 現在對每個 `/api/` 請求檢查來源位址每分鐘的上限（預設 600），在驗證、session 與路由之前回 429；計數放在記憶體（`ApiRequestLimiter`，最多 10,000 個位址），不寫 SQLite，避免灌爆時每個請求都要搶唯一的 writer。靜態檔、首頁與健康檢查不受限。
+- `fly.toml` 新增 `[http_service.concurrency]`（requests，soft 25／hard 50），超過時由 Fly 代理排隊或拒絕，不讓唯一一台 256 MB 機器被湧入的請求用光記憶體。
+- `client_address` 從 `rate_limits` 移到 `middleware`，兩種限流用同一個位址判斷。
+
+Asset 4.19.3／shell v79、schema 10 不變，可直接回滾至 v4.19.2 image。
+
 ### 過去年份的圖表看得到全年（SPEC-072，v4.19.2）
 
 - 年度月跑量對比先前把沒有月跑量資料的月份當成空白（`spanGaps: false`），2024 年從 9 月才有資料時，線只從 9 月畫起。`yearOverYearSeries` 依 `localDateISO()` 判斷已開始的月份：過去的年份 12 個月都補 0，今年補到本月，之後的月份與未來年份仍為空白。

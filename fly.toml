@@ -19,6 +19,13 @@ primary_region = "sin"
   auto_start_machines = true
   min_machines_running = 0
 
+  # SPEC-073: one 256 MB machine. Past the hard limit Fly's proxy queues or turns
+  # requests away instead of letting a flood exhaust the machine's memory.
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 25
+    hard_limit = 50
+
   [[http_service.checks]]
     grace_period = "15s"
     interval = "30s"
