@@ -178,7 +178,7 @@ test('every startup chooses the run-log home before authentication, ignoring leg
     assert.equal(loginShown, mode === 'logged-out');
   }
   assert.doesNotMatch(extract('switchTab'), /localStorage/);
-  assert.match(extract('applyTheme'), /localStorage\.setItem\('theme', theme\)/);
+  assert.match(extract('applyTheme'), /localStorage\.setItem\('theme', themePreference\)/);
 });
 
 test('persisted page restoration selects home without resetting ordinary visibility changes', () => {

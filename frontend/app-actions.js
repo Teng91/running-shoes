@@ -20,7 +20,7 @@ const UI_ACTIONS = Object.freeze({
     'export-account': element => exportAccountData(element.dataset.fromWorkspace === 'true'),
     'apply-app-update': () => applyAppUpdate(),
     'dismiss-app-update': () => dismissAppUpdate(),
-    'toggle-theme': () => toggleTheme(),
+    'set-theme': element => setThemePreference(element.dataset.themeChoice),
     logout: () => handleLogout(),
     'reload-data': () => loadData(),
     'retry-runs': () => loadRunsForSelectedMonth(runController.state.retryOptions),

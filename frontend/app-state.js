@@ -50,7 +50,11 @@ let reportLoadRequestId = 0;
 let reportLoadController = null;
 let reportGenerationRequestId = 0;
 let reportGenerationController = null;
-let currentTheme = localStorage.getItem('theme') || 'dark';
+// SPEC-082: the saved preference is light, dark or system (the default); currentTheme is
+// the theme actually shown, resolved from the device setting when following the system.
+const THEME_PREFERENCES = ['light', 'dark', 'system'];
+let themePreference = THEME_PREFERENCES.includes(localStorage.getItem('theme')) ? localStorage.getItem('theme') : 'system';
+let currentTheme = 'dark';
 
 registerFeatureReset('dashboard-data', () => {
   shoes = []; retiredShoes = []; monthlyMileages = [];
