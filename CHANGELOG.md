@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+## [4.21.0] - 2026-11-18
+
+### Added
+- Email 驗證碼找回密碼（SPEC-079）：「資料與同步」可以綁定 email（輸入寄到信箱的驗證碼才綁定），登入頁新增「忘記密碼？」，用帳號或 email 收驗證碼並重設密碼。寄信使用專用 Gmail 的應用程式密碼（`SMTP_USERNAME`／`SMTP_PASSWORD`），沒設定時自動隱藏。
+- 新 API：`POST /api/auth/email/request|confirm|remove`、`POST /api/auth/password-reset/request|confirm`；`/api/auth/registration` 新增 `mail_enabled`，`/api/auth/me` 新增 `email`。
+
+### Security
+- 驗證碼 6 位數、10 分鐘、最多試 5 次，只存 HMAC；忘記密碼不論帳號是否存在都回同樣結果，信在回應後才寄；每個 IP／帳號／全站都有寄送上限。Schema 12，asset 4.21.0／shell v86。
+
 ## [4.20.4] - 2026-11-18
 
 ### Fixed

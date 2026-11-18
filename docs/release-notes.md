@@ -4,6 +4,16 @@
 每版的摘要見 [CHANGELOG.md](../CHANGELOG.md)；目前的功能與操作方式以 [README](../README.md) 為準。
 這裡保留當時的文字，後續版本可能已調整其中的行為。
 
+### Email 驗證碼找回密碼（SPEC-079，v4.21.0）
+
+- 忘記密碼先前只能請管理員產生臨時密碼。現在使用者可以在「資料與同步」綁定 email，登入頁「忘記密碼？」用帳號或 email 收 6 位數驗證碼重設密碼，舊 token 全部失效。
+- `backend/mailer.py` 以 STARTTLS 登入 Gmail SMTP（`SMTP_USERNAME`／`SMTP_PASSWORD`，應用程式密碼的空格會自動移除），由 `create_app` 注入 `app.state.mailer`；沒有設定時為 `None`，`/registration` 回 `mail_enabled: false`，前端隱藏相關功能，相關 API 回 503。log 只記錄失敗類型。
+- `services/email_codes.py`：驗證碼只存以 `SECRET_KEY` 為金鑰的 HMAC，10 分鐘有效、錯 5 次失效、用過刪除；同一 email 不能綁兩個帳號。忘記密碼的請求不論帳號或 email 是否存在都回 `{"ok": true}`，信以 BackgroundTasks 在回應後寄出，寄信失敗也不改變回應。
+- `rate_limits.enforce_mail_limits`：每個 IP 10 分鐘 5 封、每個目標帳號 10 分鐘 3 封、全站每小時 100 封。
+- 舊版資料庫的 legacy 升級路徑也會先補上 `users.email`，避免以目前的 ORM 讀取使用者時缺欄位。
+
+Schema 12。回滾：停止寫入並備份後執行 `scripts/rollback_schema_twelve.sql`（保留欄位與資料表、移除 email 索引），再部署 v4.20.4 image。
+
 ### 異地備份的解密檢查修正（SPEC-078，v4.20.4）
 
 - 第一次手動執行時快照下載、還原演練與加密都成功，但 `openssl … | tar -tzf - | grep -Eq` 在 `grep` 找到第一筆就結束，`tar` 回報 `stdout: write error`，`pipefail` 讓整步失敗、沒有上傳。改為先把解密後的清單存成變數，再逐一確認資料庫、checksum 與 manifest。

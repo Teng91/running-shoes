@@ -49,6 +49,7 @@ let registrationMode = null;
 const AUTH_INPUT_IDS = [
   'login-username', 'login-password',
   'reg-username', 'reg-password', 'reg-password2', 'reg-invite',
+  'reset-identifier', 'reset-code', 'reset-new-password', 'reset-new-password2',
   'change-username', 'change-old-password', 'change-new-password', 'change-new-password2',
 ];
 
@@ -128,7 +129,10 @@ function showLoginForm() {
   document.getElementById('login-form').style.display = '';
   document.getElementById('register-form').style.display = 'none';
   document.getElementById('change-form').style.display = 'none';
+  const resetForm = document.getElementById('reset-form');
+  if (resetForm) resetForm.style.display = 'none';
   hideAuthError();
+  if (typeof loadRegistrationMode === 'function') void loadRegistrationMode();
 }
 function showRegisterForm() {
   cancelAuthOperation();
@@ -136,6 +140,8 @@ function showRegisterForm() {
   document.getElementById('login-form').style.display = 'none';
   document.getElementById('register-form').style.display = '';
   document.getElementById('change-form').style.display = 'none';
+  const resetForm = document.getElementById('reset-form');
+  if (resetForm) resetForm.style.display = 'none';
   hideRegError();
   if (typeof loadRegistrationMode === 'function') void loadRegistrationMode();
 }
@@ -145,6 +151,8 @@ function showChangeForm() {
   document.getElementById('login-form').style.display = 'none';
   document.getElementById('register-form').style.display = 'none';
   document.getElementById('change-form').style.display = '';
+  const resetForm = document.getElementById('reset-form');
+  if (resetForm) resetForm.style.display = 'none';
   hideChangeError();
 }
 
@@ -163,6 +171,8 @@ const ERROR_ZH = {
   'Admin only': '只有管理員可以使用', 'Invite not found': '找不到這組邀請碼',
   'Invite code must be 4-20 letters or digits': '自訂邀請碼需為 4～20 個英文字母或數字',
   'Invite code already exists': '這組邀請碼已經存在',
+  'Incorrect or expired code': '驗證碼錯誤或已過期', 'Invalid email address': 'Email 格式不正確',
+  'Email already in use': '這個 email 已經被其他帳號使用', 'Email is not configured': '目前沒有開啟 email 功能',
   'Shoe not found': '跑鞋不存在',
 };
 function translateError(detail) { return ERROR_ZH[detail] || detail; }

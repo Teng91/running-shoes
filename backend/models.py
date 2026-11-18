@@ -31,6 +31,8 @@ class User(Base):
     )
 
     backup_id: Mapped[str] = mapped_column(String(36), default=lambda: str(uuid4()), server_default="", nullable=False)
+    # Verified recovery address (SPEC-079); only set after the emailed code is confirmed.
+    email: Mapped[str | None] = mapped_column(String(254), nullable=True)
     data_revision: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
 
     shoes: Mapped[list["Shoe"]] = relationship(back_populates="owner")
@@ -145,6 +147,21 @@ class RunningGoal(Base):
     yearly_km: Mapped[float] = mapped_column(Float, default=1500, nullable=False)
 
     owner: Mapped["User"] = relationship(back_populates="running_goal")
+
+
+class EmailCode(Base):
+    """One pending email code per account and purpose (SPEC-079); only an HMAC is stored."""
+
+    __tablename__ = "email_codes"
+    __table_args__ = (UniqueConstraint("user_id", "purpose", name="uq_email_codes_user_purpose"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False)
+    purpose: Mapped[str] = mapped_column(String(20), nullable=False)
+    email: Mapped[str] = mapped_column(String(254), nullable=False)
+    code_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
 
 class Invite(Base):

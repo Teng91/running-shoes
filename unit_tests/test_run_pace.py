@@ -235,6 +235,7 @@ def test_schema_nine_rollback_keeps_times_and_reupgrades(tmp_path):
     script = Path("scripts/rollback_schema_nine.sql").read_text(encoding="utf-8")
     connection = engine.raw_connection()
     try:
+        connection.executescript(Path("scripts/rollback_schema_twelve.sql").read_text(encoding="utf-8"))
         connection.executescript(Path("scripts/rollback_schema_eleven.sql").read_text(encoding="utf-8"))
         connection.executescript(Path("scripts/rollback_schema_ten.sql").read_text(encoding="utf-8"))
         connection.executescript(script)
@@ -245,7 +246,7 @@ def test_schema_nine_rollback_keeps_times_and_reupgrades(tmp_path):
         connection.close()
     assert schema_version(engine) == 8
     run_startup_migrations(engine, sessions)
-    assert schema_version(engine) == 11
+    assert schema_version(engine) == 12
     with sessions() as db:
         assert db.query(Run).one().duration_seconds == 3330
     engine.dispose()
