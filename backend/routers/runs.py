@@ -70,6 +70,14 @@ def create_run(
         )
 
 
+@router.get("/api/runs/totals")
+def run_totals(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return run_reads.run_totals(db, current_user.id)
+
+
 @router.get("/api/runs/year-summary")
 def annual_summary(
     year: int = Query(ge=1900, le=2100),

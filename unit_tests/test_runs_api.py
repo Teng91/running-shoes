@@ -434,3 +434,29 @@ def test_shoe_month_and_report_read_models_return_only_this_account(db, user_wit
     assert [(row["year"], row["month"]) for row in list_saved_reports(db, user.id)] == [(2026, 3), (2026, 2)]
     assert saved_report(db, user.id, 2026, 2)["updated_at"] == "2026-03-01T00:00:00+00:00"
     assert saved_report(db, user.id, 2026, 4) is None
+
+
+def test_run_totals_count_every_run_like_strava_and_stay_user_scoped(client, db, user_with_token):
+    """SPEC-070: the running total counts every logged run, including runs on deleted shoes."""
+    from backend.models import Run
+    from unit_tests.token_helpers import create_access_token
+
+    user, token = user_with_token
+    other = User(username="totals-other", hashed_password=get_password_hash("pass1234"))
+    db.add(other)
+    db.flush()
+    worn = Shoe(user_id=user.id, brand="Mizuno", model="Rider", date="2025-01-01", mileage=450)
+    gone = Shoe(user_id=user.id, brand="ASICS", model="Excite", date="2024-01-01", is_deleted=True)
+    theirs = Shoe(user_id=other.id, brand="Nike", model="Pegasus", date="2025-01-01")
+    db.add_all([worn, gone, theirs])
+    db.flush()
+    db.add_all([Run(user_id=user.id, shoe_id=worn.id, date="2026-11-17", km=7.34),
+                Run(user_id=user.id, shoe_id=worn.id, date="2026-11-10", km=10.03),
+                Run(user_id=user.id, shoe_id=gone.id, date="2024-09-11", km=5.25),
+                Run(user_id=other.id, shoe_id=theirs.id, date="2026-11-01", km=42.2)])
+    db.commit()
+
+    assert client.get("/api/runs/totals", headers=_auth_header(token)).json() == {"run_count": 3, "total_km": 22.62}
+    other_headers = _auth_header(create_access_token(data={"sub": "totals-other"}))
+    assert client.get("/api/runs/totals", headers=other_headers).json() == {"run_count": 1, "total_km": 42.2}
+    assert client.get("/api/runs/totals").status_code == 401
