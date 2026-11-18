@@ -3,15 +3,16 @@
 Admins are the usernames in ``ADMIN_USERNAMES``; everyone else gets 403.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from backend import models, schemas
 from backend.auth import get_current_user
 from backend.dependencies import get_db
 from backend.rate_limits import enforce_auth_rate_limit
+from backend.routers.auth import notify_password_changed
 from backend.routers.errors import service_errors
-from backend.services import accounts, invites
+from backend.services import accounts, email_codes, invites
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -42,9 +43,11 @@ def revoke_invite(invite_id: int, _admin: models.User = Depends(require_admin), 
 
 
 @router.post("/reset-password")
-def reset_password(request: Request, payload: schemas.AdminPasswordReset,
+def reset_password(request: Request, payload: schemas.AdminPasswordReset, background: BackgroundTasks,
                    _admin: models.User = Depends(require_admin), db: Session = Depends(get_db)):
     """One-off temporary password for a user who forgot theirs; their sessions end."""
     enforce_auth_rate_limit(request)
     with service_errors():
-        return accounts.admin_reset_password(db, payload.username)
+        result = accounts.admin_reset_password(db, payload.username)
+    notify_password_changed(request, background, db, payload.username, email_codes.CHANGED_BY_ADMIN)
+    return result
