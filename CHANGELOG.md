@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [4.19.1] - 2026-11-18
+
+### Security
+- AI 對話與月報新增每日額度：每個帳號每天 50 次、全站每天 200 次，可用 `AGENT_DAILY_LIMIT_PER_USER`、`AGENT_GLOBAL_DAILY_LIMIT` 調整，避免公開註冊的帳號整天消耗 OpenRouter 額度（SPEC-071）。
+- 正式站關閉 Swagger UI（`/docs`）與 ReDoc（`/redoc`），`/openapi.json` 保留給部署檢查；所有回應加上 `Strict-Transport-Security`。Asset 4.19.1／shell v77，schema 10 不變。
+
 ## [4.19.0] - 2026-11-18
 
 ### Added

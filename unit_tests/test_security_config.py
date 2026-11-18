@@ -226,10 +226,18 @@ def test_docker_context_excludes_sqlite_sidecars_and_database_backups():
 def test_rate_limit_windows_never_outlive_bucket_retention():
     """v4.7.1: a cooldown longer than bucket retention would be silently cut short."""
     from backend import rate_limits
-    from backend.settings import RATE_LIMIT_BUCKET_RETENTION_SECONDS, Settings
+    from backend.settings import (
+        DAILY_WINDOW_SECONDS,
+        MAX_MODEL_REFRESH_COOLDOWN_SECONDS,
+        RATE_LIMIT_BUCKET_RETENTION_SECONDS,
+        Settings,
+    )
 
     long = Settings.from_env({"MODEL_REFRESH_COOLDOWN_SECONDS": "7200"})
-    assert long.model_refresh_cooldown_seconds == RATE_LIMIT_BUCKET_RETENTION_SECONDS
+    assert long.model_refresh_cooldown_seconds == MAX_MODEL_REFRESH_COOLDOWN_SECONDS
+    assert MAX_MODEL_REFRESH_COOLDOWN_SECONDS <= RATE_LIMIT_BUCKET_RETENTION_SECONDS
+    # SPEC-071: the daily AI budget must survive the stale-bucket cleanup.
+    assert DAILY_WINDOW_SECONDS <= RATE_LIMIT_BUCKET_RETENTION_SECONDS
     assert Settings.from_env({"MODEL_REFRESH_COOLDOWN_SECONDS": "90"}).model_refresh_cooldown_seconds == 90
     assert rate_limits.STALE_BUCKET_SECONDS == RATE_LIMIT_BUCKET_RETENTION_SECONDS
     assert rate_limits.LOGIN_FAILURE_WINDOW_SECONDS <= RATE_LIMIT_BUCKET_RETENTION_SECONDS
