@@ -4,6 +4,12 @@
 每版的摘要見 [CHANGELOG.md](../CHANGELOG.md)；目前的功能與操作方式以 [README](../README.md) 為準。
 這裡保留當時的文字，後續版本可能已調整其中的行為。
 
+### 異地備份的解密檢查修正（SPEC-078，v4.20.4）
+
+- 第一次手動執行時快照下載、還原演練與加密都成功，但 `openssl … | tar -tzf - | grep -Eq` 在 `grep` 找到第一筆就結束，`tar` 回報 `stdout: write error`，`pipefail` 讓整步失敗、沒有上傳。改為先把解密後的清單存成變數，再逐一確認資料庫、checksum 與 manifest。
+
+Asset 4.20.4／shell v85、schema 11 不變。
+
 ### 每日加密異地備份（SPEC-078，v4.20.3）
 
 - 自動備份先前只有部署前、放在同一個 Fly volume 的快照。新的 `.github/workflows/offsite-backup.yml` 每天以既有的 `scripts/offsite_backup.py` 把快照下載到 runner 暫存目錄（checkout 之外），驗證並做隔離還原演練，再用 `openssl enc -aes-256-cbc -pbkdf2 -iter 600000` 加密、刪除明文、先解密驗證，只上傳 `.tar.gz.enc`（保留 30 天）。

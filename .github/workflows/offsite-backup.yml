@@ -70,8 +70,11 @@ jobs:
             | openssl enc -aes-256-cbc -salt -pbkdf2 -iter 600000 -pass env:BACKUP_PASSPHRASE -out "$archive"
           rm -rf "$RUNNER_TEMP/offsite"
           # Prove the archive decrypts to the database, checksum and manifest before uploading it.
-          openssl enc -d -aes-256-cbc -pbkdf2 -iter 600000 -pass env:BACKUP_PASSPHRASE -in "$archive" \
-            | tar -tzf - | grep -Eq '\.db$'
+          # Read the whole listing first: `grep -q` would exit early and break tar's pipe under pipefail.
+          listing=$(openssl enc -d -aes-256-cbc -pbkdf2 -iter 600000 -pass env:BACKUP_PASSPHRASE -in "$archive" | tar -tzf -)
+          for part in '\.db$' '\.db\.sha256$' 'manifest\.json$'; do
+            grep -Eq "$part" <<< "$listing" || { echo "::error::encrypted archive is missing $part"; exit 1; }
+          done
           echo "Encrypted archive ready: $(basename "$archive") ($(stat -c %s "$archive") bytes)"
       - uses: actions/upload-artifact@v7
         with:
