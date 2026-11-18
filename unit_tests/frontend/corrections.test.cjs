@@ -43,7 +43,7 @@ test('SPEC-055 run log cards name the selected month instead of this month', () 
 test('SPEC-055 a retired shoe analysis says retired instead of forecasting a date', () => {
   const elements = nodes();
   const context = runContext({ document: { getElementById: id => elements[id] }, esc, chartInstances: {} });
-  vm.runInContext(extract('renderShoeAnalytics'), context);
+  vm.runInContext(['floorShoeKm', 'formatShoeMileage', 'renderShoeAnalytics'].map(extract).join('\n'), context);
   const data = retired => ({
     shoe: { brand: 'Mizuno', model: 'Sky', is_retired: retired, categories: ['Daily'], purchase_date: '2025-01-01' },
     lifecycle: { total_mileage_km: 500, usage_percent: 62.5, remaining_mileage_km: 300, forecast_monthly_km: 0,

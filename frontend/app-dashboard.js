@@ -13,8 +13,11 @@ function calc(shoe) {
 function fmtPct(v) { return (v * 100).toFixed(2) + '%'; }
 function fmtMoney(v) { return '$' + Math.round(v).toLocaleString(); }
 function fmtDate(d) { if (!d) return '-'; return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`; }
-// Shoe mileage reads like Strava's gear list: one decimal (SPEC-067). Edits keep the stored value.
-function formatShoeMileage(v) { return Number.isFinite(Number(v)) ? Number(v).toFixed(1) : '-'; }
+// Shoe mileage reads exactly like Strava's gear list: truncated, not rounded, to one
+// decimal (673.352 shows 673.3), SPEC-068. The epsilon keeps 401.7 from flooring to 401.6
+// through binary floating point. Edits keep the stored value.
+function floorShoeKm(v) { return Math.floor(Number(v) * 10 + 1e-6) / 10; }
+function formatShoeMileage(v) { return Number.isFinite(Number(v)) ? floorShoeKm(v).toFixed(1) : '-'; }
 function fmtCostPerKm(v) { return v !== null ? '$' + v.toFixed(2) : '-'; }
 // Wear ramp from the theme tokens (--wear-1 fresh … --wear-5 worn out).
 function progressColor(pct) {
@@ -76,7 +79,7 @@ function renderCards() {
 
   const cards = [
     { label: '現役跑鞋', value: shoes.length + '/' + allShoes.length, sub: '雙' },
-    { label: '總里程', value: totalMileage.toLocaleString(), sub: 'km' },
+    { label: '總里程', value: floorShoeKm(totalMileage).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 }), sub: 'km' },
     { label: '總花費', value: '$' + totalPrice.toLocaleString(), sub: '花費合計' },
     { label: '平均每km成本', value: '$' + avgCostPerKm.toFixed(2), sub: '總花費 / 總里程' },
     { label: '換鞋提醒', value: alertCount, sub: '雙鞋需留意' },
