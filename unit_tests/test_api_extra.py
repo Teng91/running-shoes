@@ -767,7 +767,7 @@ def test_static_asset_and_non404_http_errors(client):
 
     service_worker = client.get("/service-worker.js")
     assert service_worker.status_code == 200
-    assert "running-shoes-shell-v76" in service_worker.text
+    assert "running-shoes-shell-v77" in service_worker.text
 
     agent_script = client.get("/app-agent.js")
     assert agent_script.status_code == 200
@@ -855,3 +855,27 @@ def test_export_defensive_empty_rows_and_unknown_direct_format(
     assert csv_response.media_type == "text/csv; charset=utf-8"
     assert xlsx_response.media_type.endswith("spreadsheetml.sheet")
     assert unknown_response is None
+
+
+def test_agent_daily_budget_caps_each_account_and_the_whole_site(client, db, user_with_token, monkeypatch):
+    """SPEC-071: open registration cannot drain the LLM credit; minute limits alone allow ~170k calls a day."""
+    user, token = user_with_token
+    _limits(monkeypatch, agent_daily_limit_per_user=2, agent_global_daily_limit=100)
+    monkeypatch.setattr("backend.routers.agent.llm.resolve_allowed_model", MagicMock(return_value="free"))
+    run_agent = MagicMock(side_effect=lambda *a, **k: iter(['data: {"type":"done"}\n\n']))
+    monkeypatch.setattr("backend.routers.agent.agent_service.run_agent_stream", run_agent)
+    statuses = [
+        client.post("/api/agent/chat/stream", headers=_auth(token), json={"user_message": "hi"}).status_code
+        for _ in range(3)
+    ]
+    assert statuses == [200, 200, 429]
+    assert run_agent.call_count == 2
+    daily = _bucket(db, "agent-user-daily", str(user.id))
+    assert daily is not None and daily.event_count == 2
+
+    _limits(monkeypatch, agent_daily_limit_per_user=100, agent_global_daily_limit=2)
+    over_site = client.post("/api/agent/chat/stream", headers=_auth(token), json={"user_message": "hi"})
+    assert over_site.status_code == 429
+    assert "今天全站" in over_site.json()["detail"]
+    assert int(over_site.headers["Retry-After"]) > 3600
+    assert run_agent.call_count == 2

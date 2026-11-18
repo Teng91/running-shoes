@@ -99,3 +99,23 @@ def test_main_is_only_the_asgi_entry_point():
     assert main.create_app is create_app
     for removed_alias in ("register", "create_shoe", "lifespan", "engine", "SessionLocal"):
         assert not hasattr(main, removed_alias)
+
+
+def test_production_hides_the_interactive_api_console_but_keeps_the_contract(tmp_path):
+    """SPEC-071: no Swagger/ReDoc on the public site; release-check still reads /openapi.json."""
+    def get(environment, path):
+        engine, sessions = _memory_database()
+        frontend = tmp_path / environment
+        frontend.mkdir(exist_ok=True)
+        (frontend / "index.html").write_text("<!doctype html><title>shell</title>", encoding="utf-8")
+        config = replace(settings, environment=environment, seed_data=False, frontend_dir=frontend,
+                         secret_key="factory-specific-secret-at-least-32-bytes")
+        with TestClient(create_app(config, db_engine=engine, session_factory=sessions)) as client:
+            return client.get(path)
+
+    for path in ("/docs", "/redoc"):
+        hidden = get("production", path)
+        assert hidden.status_code == 404
+        assert hidden.headers["content-type"].startswith("application/json")
+        assert get("development", path).status_code == 200
+    assert "/api/runs/totals" in get("production", "/openapi.json").json()["paths"]
