@@ -159,5 +159,9 @@ def test_daily_offsite_backup_uploads_only_an_encrypted_archive():
     assert steps.index("openssl enc -d") < steps.index("actions/upload-artifact"), "decrypt check before upload"
     assert '--output-dir "$RUNNER_TEMP/offsite"' in steps, "plain snapshots stay outside the checkout"
     assert "persist-credentials: false" in steps
+    # SPEC-078 (v4.20.4): grep -q must not close tar's pipe early under pipefail.
+    assert "tar -tzf - | grep -Eq" not in steps and 'listing=$(openssl enc -d' in steps
+    for part in ("\.db$", "manifest\.json$"):
+        assert part in steps, part
     for leak in ("cat ", "sqlite3", "row_counts", "set -x"):
         assert leak not in steps, leak
