@@ -54,7 +54,7 @@ Python 3.11 · FastAPI · SQLAlchemy · SQLite · 原生 JavaScript（不需要�
 | 項目 | 數量 |
 | --- | --- |
 | 正式版本 | 93 個 tag，2026-06 開始，目前 v4.17 |
-| 自動化測試 | Python 729 項、前端 Node 回歸 223 項、40 組版面設定（WebKit／Chromium × 亮暗 × 10 種尺寸）、真實 CRUD E2E 與 PWA 升級／離線測試 |
+| 自動化測試 | Python 729 項、前端 Node 回歸 224 項、40 組版面設定（WebKit／Chromium × 亮暗 × 10 種尺寸）、真實 CRUD E2E 與 PWA 升級／離線測試 |
 | 功能規格 | 63 份 SPEC，每份含 Goals、帳號隔離、migration／rollback 與 AC 追蹤 |
 | API | 54 個端點，與 `unit_tests/api_contract.json` 及下方 API 表自動比對 |
 | 資料庫 | SQLite schema 12，每一版都有守衛的回滾腳本 |
@@ -190,7 +190,7 @@ flowchart LR
 ## 品質：測試與規格
 
 - **Python 729 項**：API、交易與並行、migration 與回滾、備份往返、帳號隔離、Agent 規劃與工具（外部 LLM 與搜尋一律 mock），一律使用暫存或記憶體資料庫，不碰正式 `shoes.db`。
-- **前端 Node 回歸 223 項**：以 `vm` 載入實際前端程式，驗證狀態、競態、草稿、串流與圖表資料。
+- **前端 Node 回歸 224 項**：以 `vm` 載入實際前端程式，驗證狀態、競態、草稿、串流與圖表資料。
 - **瀏覽器**：Playwright 在 WebKit 與 Chromium 跑 40 組版面設定（含幾何對齊與無溢出）、真實 FastAPI＋暫存 SQLite 的 CRUD E2E、Service Worker 升級與離線；失敗時保存截圖與 trace。
 - **修 bug 先寫重現測試**：例如 v4.17.0 的 CI 抓到新圖表檔案重複宣告全域常數，修正時同時加上掃描所有 script 的測試。
 - **文件也被測**：`docs-check` 比對 README 的測試數、工具數、API 表、目錄樹與規格的 AC 追蹤，數字對不上 CI 就失敗。
@@ -641,7 +641,7 @@ LLM_MAX_OUTPUT_TOKENS=4096
 - **單鞋分析**：可檢視穿著次數、30／90 天里程、最後使用日期、壽命進度、預估退役、近 12 月趨勢與最近跑步
 - **跑步時間與配速**：新增或編輯跑步時可選填跑步時間（`32:15`、`1:05:30` 或整數分鐘；手機數字鍵盤沒有冒號，直接打 `3215`、`10530` 會自動補成 `32:15`、`1:05:30`），後端自動算配速；列表、月份卡片與單雙鞋分析顯示配速與時間加權的平均配速
 - **Strava 歷史匯入**：從 Strava 匯出的 `activities.csv` 預覽並批次匯入跑步活動與移動時間，依活動 ID 去重，支援匯入前逐鞋款配對；重新匯入可替既有紀錄補上跑步時間；CSV 與資料庫工作在 worker thread 順序執行，HTTP 仍等待交易完成，不是背景佇列
-- **帳號與註冊**：註冊預設需要邀請碼（`REGISTRATION_MODE=invite`，也可設為 open 或 closed）。管理員（`ADMIN_USERNAMES`）在側邊欄的「邀請碼管理」（只有管理員看得到）產生邀請碼：可自訂好記的邀請碼（4～20 個英文字母或數字，不分大小寫；留空自動產生 8 碼），並設備註、使用次數（最多 20）與有效天數（最多 90），邀請碼只在產生時顯示一次，伺服器只存雜湊；也可以替忘記密碼的人產生一次性的臨時密碼，對方的登入會全部失效。帳號名稱不分大小寫。任何人都可以在「資料與同步」輸入密碼後永久刪除自己的帳號與所有資料；登入與註冊頁有隱私說明（SPEC-075）
+- **帳號與註冊**：註冊預設需要邀請碼（`REGISTRATION_MODE=invite`，也可設為 open 或 closed）。管理員（`ADMIN_USERNAMES`）在側邊欄的「邀請碼管理」（只有管理員看得到）產生邀請碼：可自訂好記的邀請碼（4～20 個英文字母或數字，不分大小寫；留空自動產生 8 碼），並設備註、使用次數（最多 20）與有效天數（最多 90），邀請碼只在產生時顯示一次，伺服器只存雜湊；也可以替忘記密碼的人產生一次性的臨時密碼，對方的登入會全部失效。帳號名稱不分大小寫。任何人都可以在「資料與同步」更改密碼（知道目前密碼時；忘記密碼請用登入頁的「忘記密碼？」），或輸入密碼後永久刪除自己的帳號與所有資料；登入與註冊頁有隱私說明（SPEC-075）
 - **Email 找回密碼**：在「資料與同步」綁定 email（輸入寄到信箱的 6 位數驗證碼才會綁定），忘記密碼時在登入頁「忘記密碼？」用帳號或 email 收驗證碼並設定新密碼，舊的登入全部失效。驗證碼 10 分鐘內有效、最多試 5 次，只存 HMAC；不論帳號是否存在都顯示同樣訊息，寄送次數有限制。需要 `SMTP_USERNAME`／`SMTP_PASSWORD`（專用 Gmail 與應用程式密碼）；沒設定時 Email 區塊隱藏，「忘記密碼」會提示找管理員產生臨時密碼（SPEC-079）
 - **資料匯出與備份**：跑鞋可匯出 **XLSX / CSV**，並可下載不含密碼或 token 的完整 JSON 帳號備份（跑鞋、日誌、月跑量、目標、月報與 Strava 匯入摘要）
 - **AI 跑鞋推薦助手**：依你的實際資料給換鞋與選鞋建議（需設定 OpenRouter API Key），可從本日熱門、免費且支援工具呼叫的模型中選擇
@@ -650,7 +650,7 @@ LLM_MAX_OUTPUT_TOKENS=4096
 - **按需圖表**：只建立或更新目前分頁的圖表；未變更的分頁可重用，資料或主題更新後在切入時重繪，年度跑步資料只在訓練分析分頁需要時載入
 - **個人跑量目標**：預設自 2026 年起每月 125 km，年度目標自動以月目標 × 12 計算；目標、首頁與 AI 月報統一以逐筆跑步日誌計算。訓練分析分頁的年度目標卡依上方年份一次列出 12 個月是否達標、年度累計與今天應有的進度、年底前每週需求及本月進度；「調整目標」展開後才能修改每月目標與開始計算的年份
 - **瀏覽器安全防護**：頁面有嚴格的 Content-Security-Policy，只允許同源 script 與建置時算好雜湊的三段啟動 script，inline 事件屬性、`eval` 與外部 script 都會被瀏覽器擋下；所有回應帶 `nosniff`、禁止被嵌入 iframe 等安全標頭；API 只接受同源呼叫（不開放 CORS）
-- **多使用者隔離**：每人資料完全獨立，支援註冊/登入/改密碼；認證表單防重送，切換表單／session 使舊操作失效。切換帳號會清除洞察快取並取消 AI 串流，過期回應不覆蓋新登入或 UI 狀態
+- **多使用者隔離**：每人資料完全獨立，支援邀請制註冊、登入、登入後改密碼與 email 找回密碼；認證表單防重送，切換表單／session 使舊操作失效。切換帳號會清除洞察快取並取消 AI 串流，過期回應不覆蓋新登入或 UI 狀態
 
 ## 跑步日誌
 
@@ -915,7 +915,7 @@ Playwright／Chromium／WebKit 齊全時，也會執行版面測試。
 避免每次停止都重跑。Hook 不會呼叫其他模型、外部 API，或傳送提示、diff、原始碼與測試輸出。
 GitHub Actions 仍會在 push／pull request 執行 `verify`，並以三個可獨立重跑的 browser jobs 執行完整版面矩陣、真實 CRUD E2E 與 PWA 升級／離線測試；push 到 main 時再依序快照、部署、檢查並發版（見「日常開發流程、自動部署與發版」）；Dependabot 每月以單一 PR 合併 GitHub Actions 更新；Python 只接收安全性更新 PR，例行升級依下方 `uv pip compile --universal` 步驟手動重編鎖定檔（Dependabot 產生的鎖定檔會遺失 Windows 條件）。
 
-本次驗證基線為 Python **729 passed**、前端回歸測試 **223 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
+本次驗證基線為 Python **729 passed**、前端回歸測試 **224 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
 版面檢查涵蓋 WebKit／Chromium、亮／暗模式與 10 組直橫向尺寸，共 40 組設定，檢查四個功能分頁與月報、三個認證表單、圖表、全部彈窗、行內編輯、停用／錯誤及空資料狀態。
 
 主要表單、工具列與彈窗操作統一為 44px 控制項；桌面表格內的緊湊操作為 36px，手機至少 44px。
@@ -1083,7 +1083,7 @@ GitHub Actions 無法使用時，仍可在裝好 Fly CLI 的電腦上手動部�
 ```bash
 # 先建立異地快照，驗證 checksum 與隔離還原；備份目錄必須位於 Git 外
 python3 scripts/offsite_backup.py --app running-shoes \
-  --output-dir /home/joy-teng/.local/share/running-shoes/backups
+  --output-dir ~/.local/share/running-shoes/backups
 
 fly deploy
 
@@ -1163,7 +1163,7 @@ Fly volume 裡的 `/data/backups` 仍和正式資料位於同一個基礎設施�
 
 ```bash
 python3 scripts/offsite_backup.py --app running-shoes \
-  --output-dir /home/joy-teng/.local/share/running-shoes/backups
+  --output-dir ~/.local/share/running-shoes/backups
 
 # 對既有快照重新演練，目的地只能是工具建立的 OS 暫存目錄
 python3 scripts/database_backup.py drill --backup /absolute/path/to/snapshot.db

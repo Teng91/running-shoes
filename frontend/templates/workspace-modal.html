@@ -57,6 +57,15 @@
       <p id="email-status" class="workspace-help" role="status" aria-live="polite"></p>
     </details>
     <details class="workspace-section">
+      <summary>更改密碼</summary>
+      <p class="workspace-help">知道目前密碼時在這裡更改；忘記密碼請登出後在登入頁按「忘記密碼？」。更改後所有裝置都要重新登入。</p>
+      <div class="form-group"><label for="account-old-password">目前密碼</label><input id="account-old-password" type="password" autocomplete="current-password"></div>
+      <div class="form-group"><label for="account-new-password">新密碼</label><input id="account-new-password" type="password" autocomplete="new-password"></div>
+      <div class="form-group"><label for="account-new-password2">確認新密碼</label><input id="account-new-password2" type="password" autocomplete="new-password"></div>
+      <button class="btn btn-primary" data-click="change-password">更改密碼</button>
+      <p id="password-status" class="workspace-help" role="status" aria-live="polite"></p>
+    </details>
+    <details class="workspace-section">
       <summary>刪除帳號</summary>
       <p class="workspace-help">永久刪除這個帳號，以及所有跑鞋、跑步紀錄、月跑量、目標、月報與異動紀錄，無法復原。刪除前建議先在上方下載帳號資料 JSON。</p>
       <div class="form-group"><label for="delete-account-password">輸入密碼確認</label><input id="delete-account-password" type="password" autocomplete="current-password"></div>

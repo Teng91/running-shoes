@@ -100,3 +100,33 @@ test('SPEC-079 the email section binds only after the code and can remove the ad
   await disabled.renderEmailSection();
   assert.equal(off['email-section'].hidden, true, 'hidden while email is not configured');
 });
+
+test('SPEC-080 the login page has no change-password form; signed-in users change it in「資料與同步」', async () => {
+  assert.doesNotMatch(htmlSource, /id="change-form"|data-click="show-change-form"/);
+  assert.match(htmlSource, /<summary>更改密碼<\/summary>[\s\S]*id="account-old-password" type="password" autocomplete="current-password"/);
+  const elements = nodes();
+  const calls = [];
+  const context = emailContext(elements, {
+    currentUser: 'Joy',
+    fetch: async (url, options) => {
+      const body = JSON.parse(options.body);
+      calls.push([url, body]);
+      return body.old_password === 'wrong-pass'
+        ? { ok: false, status: 401, json: async () => ({ detail: 'Incorrect username or old password' }) }
+        : { ok: true, json: async () => ({ ok: true }) };
+    },
+    closeWorkspaceModal: () => calls.push('close'), clearAuth: () => calls.push('logout'),
+    showLoginView: () => calls.push('login'), showAuthError: text => calls.push(text),
+  });
+  vm.runInContext(extract('changePassword'), context);
+  elements['account-old-password'].value = 'wrong-pass';
+  elements['account-new-password'].value = elements['account-new-password2'].value = 'brand-new-pass';
+  await context.changePassword();
+  assert.equal(elements['password-status'].textContent, '更改失敗：目前密碼不正確');
+  assert.ok(!calls.includes('logout'), 'a wrong current password keeps the session');
+  elements['account-old-password'].value = 'pass1234';
+  await context.changePassword();
+  assert.equal(JSON.stringify(calls[1][1]), JSON.stringify({ username: 'Joy', old_password: 'pass1234', new_password: 'brand-new-pass' }));
+  assert.equal(JSON.stringify(calls.slice(-4)), JSON.stringify(['close', 'logout', 'login', '密碼已更改，請用新密碼重新登入']));
+  assert.equal(elements['account-new-password'].value, '', 'password fields are cleared');
+});
