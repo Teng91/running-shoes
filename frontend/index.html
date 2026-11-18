@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-pxCDiRKsaLu63z/BVJufXiTMqcQgOlDgDJZCfMTks60=' 'sha256-03bcOQeHecByaBjKyWaE3zaVWPIlPVelCglM9pQh0BU=' 'sha256-IgIQHS5JQWyGqVRXIJS9m3tyA0JiZ2nFTbsaGJpbbDc='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'self'">
-<meta name="app-asset-version" content="4.21.1">
+<meta name="app-asset-version" content="4.21.2">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>跑鞋追蹤 Dashboard</title>
 <meta name="theme-color" content="#07090c">
@@ -39,7 +39,7 @@ body { margin: 0; opacity: 1 !important; }
 @keyframes app-boot-critical-run { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
 @media (prefers-reduced-motion: reduce) { .app-boot { transition: none; } .app-boot-spinner::after { animation: none; width: 100%; opacity: .45; } }
 </style>
-<link id="app-styles" rel="preload" href="/styles.css?v=4.21.1" as="style">
+<link id="app-styles" rel="preload" href="/styles.css?v=4.21.2" as="style">
 <script>
 // Non-blocking stylesheet: apply the preload once it arrives. A script rather
 // than an onload attribute, so the page CSP can allow it by hash (SPEC-054).
@@ -61,7 +61,7 @@ body { margin: 0; opacity: 1 !important; }
   } catch (error) {}
 })();
 </script>
-<noscript><link rel="stylesheet" href="/styles.css?v=4.21.1"></noscript>
+<noscript><link rel="stylesheet" href="/styles.css?v=4.21.2"></noscript>
 </head>
 <body>
 
@@ -646,7 +646,7 @@ window.__appBootLegacyPoll = window.setInterval(function () {
     </div>
     <div class="form-row">
       <div class="form-group"><label for="f-date">購買日期</label><input id="f-date" type="date"></div>
-      <div class="form-group"><label for="f-size">尺寸</label><input id="f-size" placeholder="us13/31cm"></div>
+      <div class="form-group"><label for="f-size">尺寸</label><input id="f-size" placeholder="us10/28cm"></div>
     </div>
     <div class="form-row">
       <div class="form-group"><label for="f-price">買價</label><input id="f-price" type="number" placeholder="2390"></div>
@@ -846,7 +846,7 @@ window.__appBootLegacyPoll = window.setInterval(function () {
     <section aria-labelledby="invite-create-title">
       <h3 id="invite-create-title">產生邀請碼</h3>
       <div class="form-group"><label for="invite-code">自訂邀請碼（選填）</label><input id="invite-code" autocapitalize="characters" spellcheck="false" maxlength="20" placeholder="留空就自動產生"></div>
-      <div class="form-group"><label for="invite-note">備註</label><input id="invite-note" maxlength="60" placeholder="例如：給 Xuan"></div>
+      <div class="form-group"><label for="invite-note">備註</label><input id="invite-note" maxlength="60" placeholder="例如：給跑友"></div>
       <div class="form-group"><label for="invite-uses">可以使用幾次</label><input id="invite-uses" type="number" inputmode="numeric" min="1" max="20" value="1"></div>
       <div class="form-group"><label for="invite-days">有效天數</label><input id="invite-days" type="number" inputmode="numeric" min="1" max="90" value="14"></div>
       <button class="btn btn-primary" data-click="create-invite">產生邀請碼</button>
@@ -876,40 +876,40 @@ window.__appBootLegacyPoll = window.setInterval(function () {
 
 <script src="/vendor/chart.umd.min.js"></script>
 <script src="/vendor/marked.min.js"></script>
-<script src="/app-boot.js?v=4.21.1"></script>
-<script src="/app-lifecycle.js?v=4.21.1"></script>
-<script src="/app-state.js?v=4.21.1"></script>
-<script src="/app-api.js?v=4.21.1"></script>
-<script src="/app-auth.js?v=4.21.1"></script>
-<script src="/app-streams.js?v=4.21.1"></script>
-<script src="/app-resources.js?v=4.21.1"></script>
-<script src="/app-inline-editors.js?v=4.21.1"></script>
-<script src="/app-local-store.js?v=4.21.1"></script>
-<script src="/app-workspace.js?v=4.21.1"></script>
-<script src="/app-account.js?v=4.21.1"></script>
-<script src="/app-account-restore.js?v=4.21.1"></script>
-<script src="/app-history.js?v=4.21.1"></script>
-<script src="/app-core.js?v=4.21.1"></script>
-<script src="/app-models.js?v=4.21.1"></script>
-<script src="/app-markdown.js?v=4.21.1"></script>
-<script src="/app-agent.js?v=4.21.1"></script>
-<script src="/app-reports.js?v=4.21.1"></script>
-<script src="/app-runs.js?v=4.21.1"></script>
-<script src="/app-dates.js?v=4.21.1"></script>
-<script src="/app-strava.js?v=4.21.1"></script>
-<script src="/app-run-insights.js?v=4.21.1"></script>
-<script src="/app-shoes.js?v=4.21.1"></script>
-<script src="/app-dashboard.js?v=4.21.1"></script>
-<script src="/app-exports.js?v=4.21.1"></script>
-<script src="/app-goals.js?v=4.21.1"></script>
-<script src="/app-charts.js?v=4.21.1"></script>
-<script src="/app-shoe-charts.js?v=4.21.1"></script>
-<script src="/app-monthly-charts.js?v=4.21.1"></script>
-<script src="/app-pace-charts.js?v=4.21.1"></script>
-<script src="/app-spending.js?v=4.21.1"></script>
-<script src="/app-dialogs.js?v=4.21.1"></script>
-<script src="/app-updates.js?v=4.21.1"></script>
-<script src="/app-actions.js?v=4.21.1"></script>
-<script src="/app.js?v=4.21.1"></script>
+<script src="/app-boot.js?v=4.21.2"></script>
+<script src="/app-lifecycle.js?v=4.21.2"></script>
+<script src="/app-state.js?v=4.21.2"></script>
+<script src="/app-api.js?v=4.21.2"></script>
+<script src="/app-auth.js?v=4.21.2"></script>
+<script src="/app-streams.js?v=4.21.2"></script>
+<script src="/app-resources.js?v=4.21.2"></script>
+<script src="/app-inline-editors.js?v=4.21.2"></script>
+<script src="/app-local-store.js?v=4.21.2"></script>
+<script src="/app-workspace.js?v=4.21.2"></script>
+<script src="/app-account.js?v=4.21.2"></script>
+<script src="/app-account-restore.js?v=4.21.2"></script>
+<script src="/app-history.js?v=4.21.2"></script>
+<script src="/app-core.js?v=4.21.2"></script>
+<script src="/app-models.js?v=4.21.2"></script>
+<script src="/app-markdown.js?v=4.21.2"></script>
+<script src="/app-agent.js?v=4.21.2"></script>
+<script src="/app-reports.js?v=4.21.2"></script>
+<script src="/app-runs.js?v=4.21.2"></script>
+<script src="/app-dates.js?v=4.21.2"></script>
+<script src="/app-strava.js?v=4.21.2"></script>
+<script src="/app-run-insights.js?v=4.21.2"></script>
+<script src="/app-shoes.js?v=4.21.2"></script>
+<script src="/app-dashboard.js?v=4.21.2"></script>
+<script src="/app-exports.js?v=4.21.2"></script>
+<script src="/app-goals.js?v=4.21.2"></script>
+<script src="/app-charts.js?v=4.21.2"></script>
+<script src="/app-shoe-charts.js?v=4.21.2"></script>
+<script src="/app-monthly-charts.js?v=4.21.2"></script>
+<script src="/app-pace-charts.js?v=4.21.2"></script>
+<script src="/app-spending.js?v=4.21.2"></script>
+<script src="/app-dialogs.js?v=4.21.2"></script>
+<script src="/app-updates.js?v=4.21.2"></script>
+<script src="/app-actions.js?v=4.21.2"></script>
+<script src="/app.js?v=4.21.2"></script>
 </body>
 </html>

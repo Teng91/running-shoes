@@ -39,7 +39,7 @@ test('SPEC-075 the sign-up form asks for an invite only when the server requires
 test('SPEC-075 registration sends the invite code and requires it in invite mode', async () => {
   const { context, elements, state } = authOperationContext();
   vm.runInContext('registrationMode = "invite"', context);
-  elements['reg-username'].value = 'Xuan';
+  elements['reg-username'].value = 'Friend';
   elements['reg-password'].value = elements['reg-password2'].value = 'password';
   const bodies = [];
   context.fetch = async (_, options) => { bodies.push(JSON.parse(options.body)); return { ok: false, status: 400, json: async () => ({ detail: 'Invalid invite code' }) }; };
@@ -60,7 +60,7 @@ test('SPEC-075 only admins see the invite panel; codes are escaped and spent one
 
   const admin = nodes();
   const invites = [
-    { id: 2, note: '<b>給 Xuan</b>', max_uses: 1, used_count: 0, expires_at: '2026-12-02T00:00:00Z', revoked: false, active: true },
+    { id: 2, note: '<b>給跑友</b>', max_uses: 1, used_count: 0, expires_at: '2026-12-02T00:00:00Z', revoked: false, active: true },
     { id: 1, note: '', max_uses: 1, used_count: 1, expires_at: '2026-12-01T00:00:00Z', revoked: false, active: false },
   ];
   const posts = [];
@@ -68,7 +68,7 @@ test('SPEC-075 only admins see the invite panel; codes are escaped and spent one
     apiGet: async url => (url === '/auth/me' ? { is_admin: true } : invites),
     apiPost: async (url, body) => { posts.push([url, body]); return url === '/admin/invites'
       ? { code: 'K7QM-3XPA', max_uses: 2, expires_at: '2026-12-02T00:00:00Z' }
-      : { username: 'Xuan', temporary_password: 'temp-pass-123' }; },
+      : { username: 'Friend', temporary_password: 'temp-pass-123' }; },
   });
   admin['admin-entry'].hidden = true;
   await context.refreshAdminEntry();
@@ -91,9 +91,9 @@ test('SPEC-075 only admins see the invite panel; codes are escaped and spent one
   posts.splice(1, 1);
   assert.match(admin['invite-result'].textContent, /K7QM-3XPA.*只顯示這一次/);
 
-  admin['reset-username'].value = ' Xuan ';
+  admin['reset-username'].value = ' Friend ';
   await context.adminResetPassword();
-  assert.equal(JSON.stringify(posts[1]), JSON.stringify(['/admin/reset-password', { username: 'Xuan' }]));
+  assert.equal(JSON.stringify(posts[1]), JSON.stringify(['/admin/reset-password', { username: 'Friend' }]));
   assert.match(admin['reset-result'].textContent, /temp-pass-123/);
   context.closeAdminModal();
   assert.ok(!admin['admin-modal'].classList.names.has('active'));

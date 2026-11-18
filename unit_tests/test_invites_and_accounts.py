@@ -55,8 +55,8 @@ def test_settings_default_to_invite_only_and_fail_closed():
     assert Settings.from_env({}).registration_mode == "invite"
     assert Settings.from_env({"REGISTRATION_MODE": " OPEN "}).registration_mode == "open"
     assert Settings.from_env({"REGISTRATION_MODE": "typo"}).registration_mode == "closed"
-    admins = Settings.from_env({"ADMIN_USERNAMES": "Joy, ,Xuan"})
-    assert admins.is_admin("joy") and admins.is_admin("XUAN") and not admins.is_admin("other")
+    admins = Settings.from_env({"ADMIN_USERNAMES": "Joy, ,Friend"})
+    assert admins.is_admin("joy") and admins.is_admin("FRIEND") and not admins.is_admin("other")
     assert Settings.from_env({}).agent_daily_limit_per_user == 20
 
 
@@ -66,7 +66,7 @@ def test_invite_only_registration_spends_one_use_and_rejects_every_bad_code(clie
     assert client.get("/api/auth/registration").json()["mode"] == "invite"
     assert _register(client, "nocode").json()["detail"] == "Invalid invite code"
 
-    created = client.post("/api/admin/invites", headers=headers, json={"note": "給 Xuan", "max_uses": 1, "days": 7})
+    created = client.post("/api/admin/invites", headers=headers, json={"note": "給跑友", "max_uses": 1, "days": 7})
     assert created.status_code == 200
     code = created.json()["code"]
     assert len(code) == 9 and code[4] == "-"
@@ -75,10 +75,10 @@ def test_invite_only_registration_spends_one_use_and_rejects_every_bad_code(clie
 
     assert _register(client, "Joy", code).json()["detail"] == "Username already registered"
     assert db.query(models.Invite).one().used_count == 0, "a failed sign-up does not spend the invite"
-    assert _register(client, "Xuan", code.lower().replace("-", " ")).status_code == 200, "codes ignore case and spacing"
+    assert _register(client, "Friend", code.lower().replace("-", " ")).status_code == 200, "codes ignore case and spacing"
     assert _register(client, "third", code).json()["detail"] == "Invalid invite code", "single use"
     listed = client.get("/api/admin/invites", headers=headers).json()[0]
-    assert (listed["used_count"], listed["active"], listed["note"]) == (1, False, "給 Xuan")
+    assert (listed["used_count"], listed["active"], listed["note"]) == (1, False, "給跑友")
 
 
 def test_revoked_and_expired_invites_are_rejected(client, db, monkeypatch):

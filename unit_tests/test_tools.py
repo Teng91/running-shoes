@@ -84,7 +84,7 @@ def test_compare_shoes_returns_both_shoes(seeded_db):
     assert out["ok"] is True
     assert out["shoe_a"]["model"] == "Wave Sky 7"
     assert out["shoe_b"]["model"] == "Wave Rider 29"
-    assert out["shoe_a"]["actual_cost_per_completed_km_twd"] == 4.43
+    assert out["shoe_a"]["actual_cost_per_completed_km_twd"] == 4.44
 
 
 def test_compare_shoes_is_user_isolated(seeded_db):
@@ -186,10 +186,10 @@ def test_monthly_mileage_stats(seeded_db):
     db, uid = seeded_db
     out = _result(db_tools.monthly_mileage_stats(db, uid))
     assert out["status"] == "available"
-    assert out["total_mileage_km"] == 747.48
-    assert out["recent_period_total_km"] == 747.48
-    assert out["latest_record"] == {"year": 2026, "month": 6, "mileage_km": 128.2}
-    assert out["recent_nonzero_months"][1]["mileage_km"] == 135.91
+    assert out["total_mileage_km"] == 728.8
+    assert out["recent_period_total_km"] == 728.8
+    assert out["latest_record"] == {"year": 2026, "month": 6, "mileage_km": 125.3}
+    assert out["recent_nonzero_months"][1]["mileage_km"] == 131.25
 
 
 def test_list_my_shoes_includes_all(seeded_db):

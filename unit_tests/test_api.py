@@ -478,8 +478,8 @@ def test_list_monthly_mileage_empty(client, user_with_token):
 def test_list_monthly_mileage_with_data(client, db, user_with_token):
     """GET /api/monthly-mileage returns entries ordered by year, then month."""
     user, token = user_with_token
-    db.add(MonthlyMileage(user_id=user.id, year=2026, month=1, km=125.71))
-    db.add(MonthlyMileage(user_id=user.id, year=2025, month=12, km=196.32))
+    db.add(MonthlyMileage(user_id=user.id, year=2026, month=1, km=120.5))
+    db.add(MonthlyMileage(user_id=user.id, year=2025, month=12, km=180.25))
     db.commit()
 
     res = client.get("/api/monthly-mileage", headers=_auth_header(token))
