@@ -52,7 +52,7 @@ def test_pace_analysis_is_time_weighted_user_scoped_and_ignores_the_future(db, c
 def test_pace_trend_points_carry_their_zone_once_a_race_goal_exists(db):
     user, shoe = _owner(db, "pace-zones")
     # Goal 2:00:00 for 20 km is 6:00/km: 6:50 is easy, 6:20 steady, 6:00 race pace, 5:40 fast.
-    db.add(RaceGoal(user_id=user.id, version=1, race_date="2026-12-06", distance_km=20, target_seconds=7200))
+    db.add(RaceGoal(user_id=user.id, version=1, race_date="2026-12-13", distance_km=20, target_seconds=7200))
     _runs(db, user, shoe, ("2026-11-01", 10, 4100), ("2026-11-02", 10, 3800), ("2026-11-03", 10, 3600),
           ("2026-11-04", 10, 3400))
     result = pace_analysis(db, user.id, date(2026, 11, 17))

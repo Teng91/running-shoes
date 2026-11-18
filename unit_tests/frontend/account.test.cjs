@@ -11,7 +11,7 @@ function accountContext(elements, globals = {}) {
   const context = runContext({
     document: { getElementById: id => elements[id], querySelector: () => submit },
     API_BASE: '/api', translateError: value => value, esc: text => String(text).replace(/[&<>"]/g, c => `&#${c.charCodeAt(0)};`),
-    confirm: () => true, currentUser: 'Joy', ...globals,
+    confirm: () => true, currentUser: 'Demo', ...globals,
   });
   vm.runInContext(`let registrationMode = null;\nlet adminRequestId = 0;\n${['loadRegistrationMode', 'refreshAdminEntry', 'openAdminModal', 'closeAdminModal', 'inviteStatus',
     'loadInvites', 'createInvite', 'revokeInvite', 'adminResetPassword', 'deleteAccount'].map(extract).join('\n')}`, context);
@@ -84,9 +84,9 @@ test('SPEC-075 only admins see the invite panel; codes are escaped and spent one
   admin['invite-uses'].value = '99'; admin['invite-days'].value = '';
   await context.createInvite();
   assert.equal(JSON.stringify(posts[0]), JSON.stringify(['/admin/invites', { code: '', note: '', max_uses: 20, days: 14 }]));
-  admin['invite-code'].value = ' Teng91 ';
+  admin['invite-code'].value = ' RUNNER24 ';
   await context.createInvite();
-  assert.equal(JSON.parse(JSON.stringify(posts[1]))[1].code, 'Teng91', 'SPEC-076 custom codes are sent trimmed');
+  assert.equal(JSON.parse(JSON.stringify(posts[1]))[1].code, 'RUNNER24', 'SPEC-076 custom codes are sent trimmed');
   assert.equal(admin['invite-code'].value, '', 'the custom code field is cleared after use');
   posts.splice(1, 1);
   assert.match(admin['invite-result'].textContent, /K7QM-3XPA.*只顯示這一次/);

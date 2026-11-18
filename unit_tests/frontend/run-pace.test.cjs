@@ -41,7 +41,7 @@ test('SPEC-066 digits typed on a phone number pad are grouped into a duration', 
   const group = value => context.groupDurationDigits(value);
   const typed = [...'15959'].reduce((steps, digit) => [...steps, group((steps.at(-1) || '') + digit)], []);
   assert.deepEqual(typed, ['1', '15', '1:59', '15:95', '1:59:59'], 'each keystroke regroups from the right');
-  assert.equal(group('5421'), '54:21');
+  assert.equal(group('5200'), '52:00');
   assert.equal(group('45'), '45', 'one or two digits stay whole minutes');
   assert.equal(group('1:59:5'), '15:95', 'deleting a digit regroups too');
   assert.equal(group('10530'), '1:05:30');

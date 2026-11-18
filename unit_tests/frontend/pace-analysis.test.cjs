@@ -40,30 +40,30 @@ const zones = [
   { key: 'race', label: '比賽配速', min_pace: 331, max_pace: 356 },
   { key: 'fast', label: '更快', min_pace: null, max_pace: 331 },
 ];
-const goal = { version: 2, race_name: '台北半馬', race_date: '2026-12-06', distance_km: 21.0975, target_seconds: 7200,
-  reference_distance_km: 10.3, reference_seconds: 3261, reference_temperature_c: 29 };
+const goal = { version: 2, race_name: '示範半馬', race_date: '2026-12-13', distance_km: 21.0975, target_seconds: 7200,
+  reference_distance_km: 10, reference_seconds: 3120, reference_temperature_c: 28 };
 const weekly = Array.from({ length: 12 }, (_, index) => ({
   week_start: new Date(Date.UTC(2026, 7, 31 + index * 7)).toISOString().slice(0, 10),
-  km: 30, longest_km: index === 7 ? 16.05 : 10, partial: index === 11,
+  km: 30, longest_km: index === 7 ? 16 : 10, partial: index === 11,
 }));
 const race = {
   as_of: '2026-11-17', goal, days_left: 19, goal_pace: 341, zones,
-  prediction: { reference_distance_km: 10.3, reference_seconds: 3261, reference_pace: 317, reference_temperature_c: 29,
-    hot_reference: true, predicted_seconds: 6973, predicted_pace: 331, margin_seconds: 227 },
+  prediction: { reference_distance_km: 10, reference_seconds: 3120, reference_pace: 312, reference_temperature_c: 28,
+    hot_reference: true, predicted_seconds: 6884, predicted_pace: 326, margin_seconds: 316 },
   intensity: { weeks: 8, total_seconds: 100000, untimed_runs: 1, zones: [
     { key: 'easy', label: '輕鬆', runs: 4, km: 19.9, seconds: 9100, share: 9.1 },
     { key: 'steady', label: '穩定', runs: 7, km: 60, seconds: 24800, share: 24.8 },
     { key: 'race', label: '比賽配速', runs: 15, km: 139.6, seconds: 54100, share: 54.1 },
     { key: 'fast', label: '更快', runs: 5, km: 33.9, seconds: 12000, share: 12 },
   ] },
-  long_runs: { weeks: 8, threshold_km: 15.8, target_count: 2, count: 1, runs: [{ date: '2026-10-25', km: 16.05, pace: 338 }],
-    longest_recent: { date: '2026-10-25', km: 16.05, pace: 338 }, longest_ever: { date: '2025-12-27', km: 21.34, pace: 393 },
-    longest_recent_percent: 76, enough: false, last_long_run_by: '2026-11-22', weekly, average_weekly_km: 31.68 },
+  long_runs: { weeks: 8, threshold_km: 15.8, target_count: 2, count: 1, runs: [{ date: '2026-10-25', km: 16, pace: 338 }],
+    longest_recent: { date: '2026-10-25', km: 16, pace: 338 }, longest_ever: { date: '2025-12-20', km: 21.1, pace: 395 },
+    longest_recent_percent: 76, enough: false, last_long_run_by: '2026-11-29', weekly, average_weekly_km: 31.68 },
 };
 const pace = {
   as_of: '2026-11-17', timed_run_count: 2, untimed_run_count: 1, goal_pace: 341, zones,
   summary: { first_date: '2025-07-01', first_90_days_pace: 388, recent_90_days_pace: 352, recent_30_days_pace: 347 },
-  runs: [{ date: '2025-07-01', km: 5.52, pace: 389, zone: 'easy' }, { date: '2026-11-15', km: 13.22, pace: 333, zone: 'race' }],
+  runs: [{ date: '2025-07-01', km: 5.52, pace: 389, zone: 'easy' }, { date: '2026-11-15', km: 13, pace: 335, zone: 'race' }],
   rolling: [{ date: '2025-07-01', pace: 389 }, { date: '2026-11-15', pace: 348 }],
 };
 
@@ -75,21 +75,21 @@ test('SPEC-065 race prep shows the backend prediction, long-run gap and intensit
   const cards = nodes['race-cards'].innerHTML;
   assert.match(cards, /19 天/);
   assert.match(cards, /5:41 <small>\/km<\/small>/);
-  assert.match(cards, /1:56:13/);
-  assert.match(cards, /比目標快 3:47/);
-  assert.match(cards, /29°C，涼爽時通常更快/);
+  assert.match(cards, /1:54:44/);
+  assert.match(cards, /比目標快 5:16/);
+  assert.match(cards, /28°C，涼爽時通常更快/);
   assert.match(cards, /1 <small>\/ 2 次<\/small>/);
-  assert.equal(nodes['race-goal-summary'].textContent, '台北半馬 · 12/6 半馬 目標 2:00:00');
+  assert.equal(nodes['race-goal-summary'].textContent, '示範半馬 · 12/13 半馬 目標 2:00:00');
   assert.equal(nodes['race-target'].value, '2:00:00');
 
   const [long, intensity, trend] = charts.map(chart => chart.config);
-  assert.equal(long.data.datasets[0].data[7], 16.05);
+  assert.equal(long.data.datasets[0].data[7], 16);
   assert.equal(long.data.datasets[0].data[11], 10, 'a partial week with a run is drawn');
   assert.equal(long.data.datasets[1].data[0], 15.8, 'the threshold line comes from the backend');
   assert.equal(long.data.datasets[2].data[0], 21.0975);
   assert.equal(nodes['race-long-note'].textContent,
-    '近 8 週達到 15.8 km（半馬的 75%）的長距離有 1 次，一般建議至少 2 次；最長是 10/25 的 16.1 km（76%）；平均每週 31.7 km。'
-    + '長距離偏少：建議在 11/22 前再跑一次 16 km 以上的輕鬆長距離，之後開始減量。');
+    '近 8 週達到 15.8 km（半馬的 75%）的長距離有 1 次，一般建議至少 2 次；最長是 10/25 的 16.0 km（76%）；平均每週 31.7 km。'
+    + '長距離偏少：建議在 11/29 前再跑一次 16 km 以上的輕鬆長距離，之後開始減量。');
 
   assert.equal(intensity.options.indexAxis, 'y');
   assert.deepEqual(JSON.parse(JSON.stringify(intensity.data.datasets[0].data)), [9.1, 24.8, 54.1, 12]);
@@ -108,7 +108,7 @@ test('SPEC-065 race prep shows the backend prediction, long-run gap and intensit
 });
 
 test('SPEC-065 inside the last two weeks the advice is to taper, not to add a long run', async () => {
-  const late = { ...race, as_of: '2026-11-25', days_left: 11 };
+  const late = { ...race, as_of: '2026-12-02', days_left: 11 };
   const { context, nodes } = racePrepContext({ race: late, pace });
   await context.renderPaceAnalysis();
   assert.match(nodes['race-long-note'].textContent, /已進入賽前兩週，不要再補長距離/);
@@ -141,19 +141,19 @@ test('SPEC-065 the race form validates its fields and saves the parsed goal', as
   context.captureAuthSession = () => ({});
   context.isCurrentAuthSession = () => true;
   const fill = values => Object.entries(values).forEach(([id, value]) => { nodes[id].value = value; });
-  fill({ 'race-name': ' 台北半馬 ', 'race-date': '2026-12-06', 'race-distance': '21.0975', 'race-target': '1:59:59',
-    'race-ref-distance': '10.3', 'race-ref-time': '54:21', 'race-ref-temp': '29' });
+  fill({ 'race-name': ' 示範半馬 ', 'race-date': '2026-12-13', 'race-distance': '21.0975', 'race-target': '1:59:59',
+    'race-ref-distance': '10', 'race-ref-time': '52:00', 'race-ref-temp': '28' });
   await context.saveRaceGoal();
   assert.deepEqual(JSON.parse(JSON.stringify(puts[0])), { path: '/race-goal', payload: {
-    expected_version: 0, race_name: '台北半馬', race_date: '2026-12-06', distance_km: 21.0975, target_seconds: 7199,
-    reference_distance_km: 10.3, reference_seconds: 3261, reference_temperature_c: 29 } });
+    expected_version: 0, race_name: '示範半馬', race_date: '2026-12-13', distance_km: 21.0975, target_seconds: 7199,
+    reference_distance_km: 10, reference_seconds: 3120, reference_temperature_c: 28 } });
   assert.equal(nodes['race-settings-status'].textContent, '比賽目標已儲存。');
 
   for (const [values, message] of [
     [{ 'race-date': '' }, /比賽日期/],
-    [{ 'race-date': '2026-12-06', 'race-target': '2 小時' }, /目標時間格式/],
+    [{ 'race-date': '2026-12-13', 'race-target': '2 小時' }, /目標時間格式/],
     [{ 'race-target': '1:59:59', 'race-ref-time': '' }, /同時填距離與時間/],
-    [{ 'race-ref-time': '54:21', 'race-ref-distance': '0.5' }, /至少 1 km/],
+    [{ 'race-ref-time': '52:00', 'race-ref-distance': '0.5' }, /至少 1 km/],
   ]) {
     fill(values);
     await context.saveRaceGoal();

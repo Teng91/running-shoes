@@ -25,6 +25,7 @@
 - 共用測試資料（`unit_tests/conftest.py`）改成虛構的價格、尺寸與月跑量，相關斷言同步更新。
 - 管理員備註提示改為「例如：給跑友」，鞋款尺寸提示改為 `us10/28cm`。
 - CHANGELOG、版本說明、規格與 README 的真實總計、單鞋里程與鞋名改成通用例子。
+- v4.21.3 補充：比賽準備的測試與版面假資料改成虛構的比賽（12/13、10 km 52:00、28°C）與跑步；時間輸入範例改為 `5200 → 52:00`；預設帳號名稱改為 `Demo`；邀請碼範例改為 `RUNNER24`；README 的 clone 網址不寫帳號、CHANGELOG 移除指向 GitHub 帳號的發版連結。
 
 ## Security and data isolation
 
@@ -45,5 +46,5 @@
 
 | Acceptance criterion | Named test / command |
 | --- | --- |
-| AC-1 | `unit_tests/test_migrations.py::test_seed_creates_joy_and_default_data` |
+| AC-1 | `unit_tests/test_migrations.py::test_seed_creates_demo_and_default_data` |
 | AC-2 | `unit_tests/frontend/trends.test.cjs::SPEC-068 shoe mileage is truncated to one decimal exactly like Strava` |

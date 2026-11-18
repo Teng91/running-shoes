@@ -96,7 +96,7 @@ def test_lifespan_converts_legacy_category_and_removes_other():
                 """
             )
         )
-        conn.execute(text("INSERT INTO users VALUES (1, 'Joy', 'hash', NULL)"))
+        conn.execute(text("INSERT INTO users VALUES (1, 'Demo', 'hash', NULL)"))
         conn.execute(
             text(
                 "INSERT INTO shoes VALUES "
@@ -182,7 +182,7 @@ def test_lifespan_repairs_partial_owner_migration_when_users_table_exists():
                 created_at DATETIME
             )
         """))
-        conn.execute(text("INSERT INTO users VALUES (1, 'Joy', 'existing-hash', NULL)"))
+        conn.execute(text("INSERT INTO users VALUES (1, 'Demo', 'existing-hash', NULL)"))
         conn.execute(text("""
             CREATE TABLE shoes (
                 id INTEGER PRIMARY KEY,
