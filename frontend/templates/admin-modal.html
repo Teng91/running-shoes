@@ -1,0 +1,29 @@
+<div class="modal-overlay" id="admin-modal">
+  <div class="modal workspace-modal admin-modal">
+    <h2 id="admin-modal-title">邀請碼管理</h2>
+    <p class="workspace-help">只有管理員看得到這裡。註冊需要邀請碼；邀請碼只在產生的當下顯示一次，請直接複製給對方。自訂的邀請碼不分大小寫，但比自動產生的好猜，建議設定使用次數與天數。</p>
+    <section aria-labelledby="invite-create-title">
+      <h3 id="invite-create-title">產生邀請碼</h3>
+      <div class="form-group"><label for="invite-code">自訂邀請碼（選填）</label><input id="invite-code" autocapitalize="characters" spellcheck="false" maxlength="20" placeholder="留空就自動產生"></div>
+      <div class="form-group"><label for="invite-note">備註</label><input id="invite-note" maxlength="60" placeholder="例如：給 Xuan"></div>
+      <div class="form-group"><label for="invite-uses">可以使用幾次</label><input id="invite-uses" type="number" inputmode="numeric" min="1" max="20" value="1"></div>
+      <div class="form-group"><label for="invite-days">有效天數</label><input id="invite-days" type="number" inputmode="numeric" min="1" max="90" value="14"></div>
+      <button class="btn btn-primary" data-click="create-invite">產生邀請碼</button>
+      <p id="invite-result" class="workspace-help" role="status" aria-live="polite"></p>
+    </section>
+    <section aria-labelledby="invite-list-title">
+      <h3 id="invite-list-title">邀請碼清單</h3>
+      <div id="invite-list"></div>
+    </section>
+    <section aria-labelledby="reset-title">
+      <h3 id="reset-title">幫忙重設密碼</h3>
+      <p class="workspace-help">對方忘記密碼時，產生一組臨時密碼給他；他登入後請到「更改密碼」換掉。他在其他裝置上的登入會被登出。</p>
+      <div class="form-group"><label for="reset-username">對方的帳號</label><input id="reset-username" autocapitalize="none" maxlength="50"></div>
+      <button class="btn btn-edit" data-click="admin-reset-password">產生臨時密碼</button>
+      <p id="reset-result" class="workspace-help" role="status" aria-live="polite"></p>
+    </section>
+    <div class="modal-actions">
+      <div class="modal-actions-primary"><button class="btn btn-cancel" data-click="close-admin">關閉</button></div>
+    </div>
+  </div>
+</div>

@@ -45,21 +45,6 @@
       <p class="workspace-help">只清除此瀏覽器中目前帳號的草稿、快取及待同步跑步，不會刪除雲端資料。尚未同步的跑步會遺失。</p>
       <button class="btn btn-delete" data-click="clear-local-workspace">清除此帳號的本機資料</button>
     </details>
-    <details class="workspace-section" id="admin-section" hidden>
-      <summary>邀請碼與帳號協助（管理員）</summary>
-      <p class="workspace-help">註冊需要邀請碼。邀請碼只在產生的當下顯示一次，請直接複製給對方。自訂的邀請碼不分大小寫，但比自動產生的好猜，建議設定使用次數與天數。</p>
-      <div class="form-group"><label for="invite-code">自訂邀請碼（選填）</label><input id="invite-code" autocapitalize="characters" spellcheck="false" maxlength="20" placeholder="留空就自動產生"></div>
-      <div class="form-group"><label for="invite-note">備註</label><input id="invite-note" maxlength="60" placeholder="例如：給 Xuan"></div>
-      <div class="form-group"><label for="invite-uses">可以使用幾次</label><input id="invite-uses" type="number" inputmode="numeric" min="1" max="20" value="1"></div>
-      <div class="form-group"><label for="invite-days">有效天數</label><input id="invite-days" type="number" inputmode="numeric" min="1" max="90" value="14"></div>
-      <button class="btn btn-edit" data-click="create-invite">產生邀請碼</button>
-      <p id="invite-result" class="workspace-help" role="status" aria-live="polite"></p>
-      <div id="invite-list"></div>
-      <p class="workspace-help"><strong>幫忙重設密碼</strong>：對方忘記密碼時，產生一組臨時密碼給他；他登入後請到「更改密碼」換掉。他在其他裝置上的登入會被登出。</p>
-      <div class="form-group"><label for="reset-username">對方的帳號</label><input id="reset-username" autocapitalize="none" maxlength="50"></div>
-      <button class="btn btn-edit" data-click="admin-reset-password">產生臨時密碼</button>
-      <p id="reset-result" class="workspace-help" role="status" aria-live="polite"></p>
-    </details>
     <details class="workspace-section">
       <summary>刪除帳號</summary>
       <p class="workspace-help">永久刪除這個帳號，以及所有跑鞋、跑步紀錄、月跑量、目標、月報與異動紀錄，無法復原。刪除前建議先在上方下載帳號資料 JSON。</p>

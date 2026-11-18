@@ -7,6 +7,7 @@ function initializeDialogs() {
     modal: closeModal, 'run-modal': closeRunModal,
     'strava-modal': closeStravaModal, 'export-modal': closeExportModal,
     'shoe-analysis-modal': closeShoeAnalytics, 'workspace-modal': closeWorkspaceModal,
+    'admin-modal': closeAdminModal,
   };
   const active = () => overlays.filter(overlay => overlay.classList.contains('active')).at(-1);
   const focusables = overlay => [...overlay.querySelectorAll('button, input, select, textarea, a[href], [tabindex]')]

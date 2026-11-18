@@ -4,6 +4,12 @@
 每版的摘要見 [CHANGELOG.md](../CHANGELOG.md)；目前的功能與操作方式以 [README](../README.md) 為準。
 這裡保留當時的文字，後續版本可能已調整其中的行為。
 
+### 側邊欄的邀請碼管理入口（SPEC-077，v4.20.2）
+
+- 管理員面板原本是「資料與同步」最下面的摺疊區塊，不好找。現在側邊欄「資料與同步」旁有「邀請碼管理」按鈕（`app-account.refreshAdminEntry` 依 `/auth/me` 的 `is_admin` 顯示），開啟 `templates/admin-modal.html` 的獨立視窗；關閉時清掉一次性的邀請碼與臨時密碼。權限仍由後端判斷。
+
+Asset 4.20.2／shell v83、schema 11 不變，可直接回滾至 v4.20.1 image。
+
 ### 自訂邀請碼（SPEC-076，v4.20.1）
 
 - 註冊表單的提示「例如 K7QM-3XPA」看起來像真的邀請碼，改為「向管理員索取」。
