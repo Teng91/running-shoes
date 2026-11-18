@@ -115,14 +115,26 @@ test('SPEC-040 the shared year selector redraws every year view and the comparis
     ...Object.fromEntries(['renderGoalProgress', 'renderMonthlyYearChart', 'renderShoeStackedChart', 'renderYearReview', 'renderTrends']
       .map(name => [name, () => calls.push(name)])),
   });
-  vm.runInContext(`let selectedYear = null;\nconst YEAR_LINE_COLORS = ['#a', '#b'];\n${['onYearChange', 'renderYearOverYearChart'].map(extract).join('\n')}`, ctx);
+  vm.runInContext(`let selectedYear = null;\nlet weeklyWindowEnd = '2026-03-01';\nconst YEAR_LINE_COLORS = ['#a', '#b'];\n${['onYearChange', 'yearOverYearSeries', 'renderYearOverYearChart'].map(extract).join('\n')}`, ctx);
   ctx.onYearChange();
   assert.deepEqual(calls, ['renderGoalProgress', 'renderMonthlyYearChart', 'renderShoeStackedChart', 'renderYearReview', 'renderTrends']);
   assert.equal(vm.runInContext('selectedYear', ctx), 2026);
+  assert.equal(vm.runInContext('weeklyWindowEnd', ctx), null, 'a new year starts at its latest 16 weeks');
   const { datasets } = ctx.chartInstances.yearOverYear.config.data;
   assert.deepEqual(Array.from(datasets, row => [row.label, row.borderWidth]), [['2025', 1.5], ['2026', 3]]);
-  assert.deepEqual(Array.from(datasets[1].data.slice(0, 3)), [80, 90, null], 'missing months stay gaps');
+  assert.deepEqual(Array.from(datasets[1].data.slice(0, 6)), [80, 90, 0, 0, 0, null], 'started months without runs are 0');
   assert.match(nodes['yoy-note'].textContent, /粗線為 2026 年/);
+});
+
+test('SPEC-072 the comparison line starts at 0 before the first recorded month instead of breaking', () => {
+  const ctx = context(elements());
+  vm.runInContext(extract('yearOverYearSeries'), ctx);
+  const series = (months, year) => Array.from(ctx.yearOverYearSeries(months, year, '2026-11-18'));
+  const first = Array(12).fill(null); first[0] = 0; first[6] = 0; first[8] = 39.83; first[11] = 10.12;
+  assert.deepEqual(series(first, 2024), [0, 0, 0, 0, 0, 0, 0, 0, 39.83, 0, 0, 10.12], 'a past year has no gaps');
+  const current = Array(12).fill(null); current[0] = 125; current[10] = 93;
+  assert.deepEqual(series(current, 2026), [125, 0, 0, 0, 0, 0, 0, 0, 0, 0, 93, null], 'December has not started');
+  assert.deepEqual(series(Array(12).fill(null), 2027), Array(12).fill(null), 'a future year is all gaps');
 });
 
 test('SPEC-040 distance mix stacks bucket counts per active shoe and names the long-run pair', async () => {
