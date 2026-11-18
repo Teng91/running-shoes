@@ -97,7 +97,7 @@ test('SPEC-070 the summary shows the Strava running total next to the shoe total
     document: { getElementById: id => (id === 'run-total'
       ? { querySelector: selector => (selector === '.card-value' ? run.value : run.sub) } : elements[id]) },
     esc, shoes: [shoe(1, 401.77, 4000), shoe(2, 261.86, 3000)], retiredShoes: [shoe(3, 629.86, 2000)],
-    apiGet: async path => { reads.push(path); return { run_count: 358, total_km: 2280.62 }; },
+    apiGet: async path => { reads.push(path); return { run_count: 210, total_km: 1234.56 }; },
     resourceStore: { read: async (name, { loader }) => ({ resource: name, status: 'fulfilled', value: await loader() }), current: () => true },
   });
   vm.runInContext(`${lifecycleConstants}\n${['calc', 'floorShoeKm', 'formatKmTotal', 'renderCards'].map(extract).join('\n')}\n`
@@ -108,7 +108,7 @@ test('SPEC-070 the summary shows the Strava running total next to the shoe total
   assert.deepEqual(labels, ['現役跑鞋', '跑步里程', '跑鞋里程', '總花費', '平均每km成本', '換鞋提醒']);
   assert.match(elements['summary-cards'].innerHTML, /跑鞋里程<\/div><div class="card-value">1,293\.4<\/div><div class="card-sub">km · 含步行、健行/);
   assert.deepEqual(reads, ['/runs/totals']);
-  assert.equal(run.value.textContent, '2,280.6', 'truncated like Strava');
-  assert.equal(run.sub.textContent, 'km · 358 次跑步');
+  assert.equal(run.value.textContent, '1,234.5', 'truncated like Strava');
+  assert.equal(run.sub.textContent, 'km · 210 次跑步');
   assert.doesNotMatch(extract('renderCards'), /需補鞋類別/);
 });

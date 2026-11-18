@@ -36,7 +36,7 @@ def test_a_pair_idle_for_90_days_gets_no_forecast_but_a_new_pair_uses_the_plan(d
 
     user, _ = user_with_token
     hiking, new, daily = (models.Shoe(user_id=user.id, brand="NB", model=name, date="2026-01-24", mileage=20.9,
-                                      expected_mileage=600, monthly_km=60) for name in ("Hierro", "New", "Daily"))
+                                      expected_mileage=600, monthly_km=60) for name in ("Trail", "New", "Daily"))
     db.add_all([hiking, new, daily])
     db.flush()
     db.add_all([models.Run(user_id=user.id, shoe_id=hiking.id, date="2026-08-02", km=5.04),
