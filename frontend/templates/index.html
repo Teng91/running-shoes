@@ -124,6 +124,13 @@ window.__appBootLegacyPoll = window.setInterval(function () {
       <span style="color:var(--border);margin:0 8px;">|</span>
       <a href="#" data-click="show-register-form" style="color:var(--accent-light);font-size:13px;">註冊</a>
     </div>
+    <details class="auth-privacy">
+      <summary>隱私說明</summary>
+      <p>這裡保存帳號、密碼的雜湊（不存原本的密碼）、跑鞋、跑步紀錄、月跑量、目標與 AI 月報。匯入 Strava CSV 時只取跑步的日期、距離、時間與鞋款，不保存檔案本身。</p>
+      <p>每個帳號只看得到自己的資料。站長可以存取伺服器上的資料庫，只用於維護與排除問題；管理員功能只能產生邀請碼和幫忙重設密碼，看不到別人的跑步資料。</p>
+      <p>使用 AI 教練或月報時，相關的跑步統計會送到 OpenRouter 上的免費模型產生回答。資料存放在 Fly.io 新加坡機房。</p>
+      <p>登入後到「資料與同步」可以下載自己的資料，也可以永久刪除帳號與所有資料。</p>
+    </details>
   </form>
 
   <!-- Register Form -->
@@ -142,11 +149,23 @@ window.__appBootLegacyPoll = window.setInterval(function () {
       <label for="reg-password2">確認密碼</label>
       <input id="reg-password2" type="password" autocomplete="new-password" placeholder="Confirm Password">
     </div>
+    <div class="form-group" id="reg-invite-group">
+      <label for="reg-invite">邀請碼</label>
+      <input id="reg-invite" autocapitalize="characters" spellcheck="false" maxlength="20" placeholder="例如 K7QM-3XPA">
+    </div>
+    <p class="auth-note" id="reg-mode-note" role="status" hidden></p>
     <div class="auth-error" id="reg-error"></div>
     <button type="submit" class="btn btn-primary" style="width:100%;margin-top:8px;">註冊</button>
     <div style="text-align:center;margin-top:12px;">
       <a href="#" data-click="show-login-form" style="color:var(--accent-light);font-size:13px;">已有帳號？登入</a>
     </div>
+    <details class="auth-privacy">
+      <summary>隱私說明</summary>
+      <p>這裡保存帳號、密碼的雜湊（不存原本的密碼）、跑鞋、跑步紀錄、月跑量、目標與 AI 月報。匯入 Strava CSV 時只取跑步的日期、距離、時間與鞋款，不保存檔案本身。</p>
+      <p>每個帳號只看得到自己的資料。站長可以存取伺服器上的資料庫，只用於維護與排除問題；管理員功能只能產生邀請碼和幫忙重設密碼，看不到別人的跑步資料。</p>
+      <p>使用 AI 教練或月報時，相關的跑步統計會送到 OpenRouter 上的免費模型產生回答。資料存放在 Fly.io 新加坡機房。</p>
+      <p>登入後到「資料與同步」可以下載自己的資料，也可以永久刪除帳號與所有資料。</p>
+    </details>
   </form>
 
   <!-- Change Password Form -->

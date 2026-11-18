@@ -78,7 +78,7 @@ function authOperationContext() {
     loadAgentModels() {}, loadData: async () => {},
     authRequest: (...args) => context.fetch(...args),
   });
-  vm.runInContext('let authGeneration = 0, authOperation = null;\n' + [
+  vm.runInContext('let authGeneration = 0, authOperation = null, registrationMode = null;\n' + [
     'setAuthControlsDisabled', 'cancelAuthOperation', 'beginAuthOperation', 'isCurrentAuthOperation',
     'finishAuthOperation', 'handleLogin', 'handleRegister', 'handleChangePassword',
   ].map(extract).join('\n'), context);

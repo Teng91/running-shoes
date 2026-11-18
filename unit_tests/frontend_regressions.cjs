@@ -23,3 +23,4 @@ require('./frontend/corrections.test.cjs');
 require('./frontend/updates.test.cjs');
 require('./frontend/run-pace.test.cjs');
 require('./frontend/pace-analysis.test.cjs');
+require('./frontend/account.test.cjs');

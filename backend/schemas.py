@@ -99,6 +99,8 @@ def _round_two_decimals(value: float) -> float:
 class UserCreate(BaseModel):
     username: Username
     password: Password
+    # Required while registration is invite-only (SPEC-075).
+    invite_code: str = Field("", max_length=20)
 
 
 class UserLogin(BaseModel):
@@ -110,6 +112,25 @@ class UserOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
     username: str
+    is_admin: bool = False
+
+
+class RegistrationOut(BaseModel):
+    mode: Literal["invite", "open", "closed"]
+
+
+class AccountDelete(BaseModel):
+    password: Password
+
+
+class InviteCreate(BaseModel):
+    note: str = Field("", max_length=60)
+    max_uses: int = Field(1, ge=1, le=20)
+    days: int = Field(14, ge=1, le=90)
+
+
+class AdminPasswordReset(BaseModel):
+    username: Username
 
 
 class Token(BaseModel):

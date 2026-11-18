@@ -1,14 +1,24 @@
 """Account use cases; transport adapters supply configuration and credentials."""
+import secrets
 from functools import cache
 
+from sqlalchemy import delete, func
 from sqlalchemy.orm import Session
 
 from backend import models
 from backend.credentials import create_access_token, get_password_hash, verify_password
-from backend.services.errors import CapacityExceeded, Conflict, Invalid, Unauthorized
+from backend.database import Base
+from backend.services import invites
+from backend.services.errors import CapacityExceeded, Conflict, Invalid, NotFound, Unauthorized
 from backend.services.transactions import write_transaction
 
 MIN_PASSWORD_LENGTH = 8
+REGISTRATION_CLOSED = "Registration is closed"
+
+
+def find_user(db: Session, username: str) -> models.User | None:
+    """Usernames are case-insensitive (SPEC-075): "Joy" and "joy" are one account."""
+    return db.query(models.User).filter(func.lower(models.User.username) == username.strip().lower()).first()
 
 
 @cache
@@ -18,7 +28,12 @@ def _unknown_user_hash() -> str:
     return get_password_hash("unknown-user-timing-equalizer")
 
 
-def register(db: Session, username: str, password: str, *, max_users: int):
+def register(db: Session, username: str, password: str, *, max_users: int,
+             mode: str = "open", invite_code: str = ""):
+    if mode == "closed":
+        raise Invalid(REGISTRATION_CLOSED)
+    if mode == "invite" and not invite_code.strip():
+        raise Invalid(invites.INVALID_INVITE)
     if len(password) < MIN_PASSWORD_LENGTH:
         raise Invalid(f"Password must be at least {MIN_PASSWORD_LENGTH} characters")
     username = username.strip()
@@ -29,10 +44,13 @@ def register(db: Session, username: str, password: str, *, max_users: int):
     # Hash before taking the SQLite writer so bcrypt cannot block other writes.
     hashed_password = get_password_hash(password)
     with write_transaction(db):
-        if db.query(models.User).filter(models.User.username == username).first():
+        if find_user(db, username):
             raise Invalid("Username already registered")
         if db.query(models.User).count() >= max_users:
             raise CapacityExceeded("Registration capacity has been reached")
+        if mode == "invite":
+            # Same transaction: a failed registration never spends the invite.
+            invites.redeem_invite(db, invite_code)
         user = models.User(username=username, hashed_password=hashed_password)
         db.add(user)
     db.refresh(user)
@@ -40,7 +58,7 @@ def register(db: Session, username: str, password: str, *, max_users: int):
 
 
 def login(db: Session, username: str, password: str, *, secret_key: str):
-    user = db.query(models.User).filter(models.User.username == username).first()
+    user = find_user(db, username)
     if user is None:
         verify_password(password, _unknown_user_hash())
         raise Unauthorized("Incorrect username or password")
@@ -55,7 +73,7 @@ def login(db: Session, username: str, password: str, *, secret_key: str):
 def change_password(db: Session, username: str, old_password: str, new_password: str):
     if len(new_password) < MIN_PASSWORD_LENGTH:
         raise Invalid(f"Password must be at least {MIN_PASSWORD_LENGTH} characters")
-    user = db.query(models.User).filter(models.User.username == username).first()
+    user = find_user(db, username)
     if user is None:
         verify_password(old_password, _unknown_user_hash())
         raise Unauthorized("Incorrect username or old password")
@@ -80,3 +98,42 @@ def change_password(db: Session, username: str, old_password: str, new_password:
         if not changed:
             raise Conflict("密碼已被更新，請重新登入後再試")
     return {"ok": True}
+
+
+def _account_tables():
+    """Every table holding per-account rows, children before parents (SPEC-075)."""
+    return [table for table in reversed(Base.metadata.sorted_tables)
+            if table.name != "users" and "user_id" in table.columns]
+
+
+def delete_account(db: Session, user: models.User, password: str) -> dict:
+    """Permanently remove the account and everything it owns, after re-checking the password."""
+    if not verify_password(password, user.hashed_password):
+        # 400, not 401: a mistyped password must not look like an expired session and sign out.
+        raise Invalid("Incorrect password")
+    user_id = user.id
+    with write_transaction(db, user_id, reason="account.delete"):
+        for table in _account_tables():
+            db.execute(delete(table).where(table.c.user_id == user_id))
+        # Deleting audited rows wrote fresh audit events and a write context; clear them last.
+        db.execute(delete(models.AuditEvent).where(models.AuditEvent.user_id == user_id))
+        db.execute(delete(models.WriteContext).where(models.WriteContext.user_id == user_id))
+        db.execute(delete(models.User).where(models.User.id == user_id))
+    db.expunge_all()
+    return {"ok": True}
+
+
+def admin_reset_password(db: Session, username: str) -> dict:
+    """Give an account a one-off temporary password and sign out its sessions (SPEC-075)."""
+    user = find_user(db, username)
+    if user is None:
+        raise NotFound("User not found")
+    user_id, stored_name = user.id, user.username
+    temporary = secrets.token_urlsafe(9)
+    hashed_password = get_password_hash(temporary)
+    with write_transaction(db):
+        db.query(models.User).filter(models.User.id == user_id).update(
+            {models.User.hashed_password: hashed_password, models.User.token_version: models.User.token_version + 1},
+            synchronize_session=False,
+        )
+    return {"username": stored_name, "temporary_password": temporary}

@@ -4,6 +4,16 @@
 每版的摘要見 [CHANGELOG.md](../CHANGELOG.md)；目前的功能與操作方式以 [README](../README.md) 為準。
 這裡保留當時的文字，後續版本可能已調整其中的行為。
 
+### 邀請制註冊與帳號管理（SPEC-075，v4.20.0）
+
+- 註冊先前對所有人開放（上限 100 個帳號）。`REGISTRATION_MODE` 預設為 `invite`，無法辨識的值一律視為 `closed`；`GET /api/auth/registration` 讓註冊表單決定是否顯示邀請碼欄位。邀請碼 8 碼（排除 0／O、1／I／L），只存 SHA-256；註冊在同一個交易扣用，失敗的註冊不會用掉邀請碼。
+- 管理員由 `ADMIN_USERNAMES`（Fly secret）決定，`routers/admin.py` 對其他帳號回 403。管理員可產生、查看、停用邀請碼，並以 `accounts.admin_reset_password` 產生臨時密碼（同時讓對方的 token 失效），在 email 找回密碼完成前先用這個方式協助。
+- `accounts.delete_account` 重新檢查密碼（打錯回 400，不會被當成登入過期而登出），在單一交易內依 metadata 由子表到父表刪除所有含 `user_id` 的資料表，最後清掉刪除時產生的稽核紀錄與使用者本身。邀請碼不屬於任何帳號，刪除管理員帳號不受影響。
+- 帳號名稱不分大小寫：`accounts.find_user` 以 `lower(username)` 查詢，schema 11 在沒有大小寫重複時加上唯一索引；登入失敗鎖定以 case-fold 後的名稱計算。
+- AI 每個帳號每天的預設上限 50 → 20 次。登入與註冊頁新增隱私說明。
+
+Schema 11。回滾：停止寫入並備份後執行 `scripts/rollback_schema_eleven.sql`（保留 `invites`、移除名稱索引），再部署 v4.19.4 image；舊版會恢復開放註冊。
+
 ### 登入耗用的 CPU 與 Strava 上傳記憶體（SPEC-074，v4.19.4）
 
 - bcrypt cost 12 在本機每次約 0.2 秒，Fly 共用 CPU 更慢。原本登入、註冊、改密碼的全站上限每分鐘 300 次，等於每分鐘 60 秒以上的 CPU；預設改為每個 IP 20 次、全站 60 次。被攻擊時正常使用者可能要等一分鐘才能登入。

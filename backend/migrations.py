@@ -13,7 +13,7 @@ from backend.audit_schema import install_audit_triggers
 from backend.credentials import get_password_hash
 from backend.database import Base
 
-CURRENT_SCHEMA_VERSION = 10
+CURRENT_SCHEMA_VERSION = 11
 
 
 def _migrate_preview_tokens(engine: Engine) -> None:
@@ -111,6 +111,23 @@ def _migrate_schema_nine(engine: Engine) -> None:
 def _migrate_schema_ten(engine: Engine) -> None:
     """One target race per user (SPEC-065); existing rows are untouched."""
     cast(Table, models.RaceGoal.__table__).create(bind=engine, checkfirst=True)
+
+
+def _migrate_schema_eleven(engine: Engine) -> None:
+    """Registration invites and case-insensitive usernames (SPEC-075).
+
+    The unique lower(username) index is only added when no two existing accounts
+    differ by case; the account service enforces it for every new name either way.
+    """
+    cast(Table, models.Invite.__table__).create(bind=engine, checkfirst=True)
+    with engine.begin() as connection:
+        collisions = connection.execute(text(
+            "SELECT 1 FROM users GROUP BY lower(username) HAVING count(*) > 1 LIMIT 1"
+        )).first()
+        if collisions is None:
+            connection.execute(text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_users_username_lower ON users (lower(username))"
+            ))
 
 
 READY_TABLES = {"users", "shoes", "runs", "monthly_mileages"}
@@ -351,6 +368,7 @@ def run_startup_migrations(
     _migrate_schema_eight(engine, applied_version)
     _migrate_schema_nine(engine)
     _migrate_schema_ten(engine)
+    _migrate_schema_eleven(engine)
     with engine.begin() as connection:
         for table in ("runs", "monthly_mileages"):
             connection.execute(text(
