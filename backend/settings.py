@@ -59,6 +59,8 @@ class Settings:
     agent_global_daily_limit: int = 200
     # Every /api/ request per client address and minute (SPEC-073); normal use stays far below.
     api_rate_limit_per_minute: int = 600
+    # Strava CSV preview/import per account and minute (SPEC-074).
+    strava_upload_rate_limit_per_minute: int = 10
 
     @property
     def is_production(self) -> bool:
@@ -93,8 +95,10 @@ class Settings:
             agent_rate_limit_per_minute=_positive_int(env, "AGENT_RATE_LIMIT_PER_MINUTE", 20),
             agent_ip_rate_limit_per_minute=_positive_int(env, "AGENT_IP_RATE_LIMIT_PER_MINUTE", 30),
             agent_global_rate_limit_per_minute=_positive_int(env, "AGENT_GLOBAL_RATE_LIMIT_PER_MINUTE", 120),
-            auth_rate_limit_per_minute=_positive_int(env, "AUTH_RATE_LIMIT_PER_MINUTE", 120),
-            auth_global_rate_limit_per_minute=_positive_int(env, "AUTH_GLOBAL_RATE_LIMIT_PER_MINUTE", 300),
+            # SPEC-074: each attempt is a ~0.2-0.3 s bcrypt check on the one shared CPU,
+            # so the site-wide budget stays well under a minute of CPU per minute.
+            auth_rate_limit_per_minute=_positive_int(env, "AUTH_RATE_LIMIT_PER_MINUTE", 20),
+            auth_global_rate_limit_per_minute=_positive_int(env, "AUTH_GLOBAL_RATE_LIMIT_PER_MINUTE", 60),
             model_refresh_cooldown_seconds=min(
                 MAX_MODEL_REFRESH_COOLDOWN_SECONDS,
                 _positive_int(env, "MODEL_REFRESH_COOLDOWN_SECONDS", 60),
@@ -109,6 +113,7 @@ class Settings:
             agent_daily_limit_per_user=_positive_int(env, "AGENT_DAILY_LIMIT_PER_USER", 50),
             agent_global_daily_limit=_positive_int(env, "AGENT_GLOBAL_DAILY_LIMIT", 200),
             api_rate_limit_per_minute=_positive_int(env, "API_RATE_LIMIT_PER_MINUTE", 600),
+            strava_upload_rate_limit_per_minute=_positive_int(env, "STRAVA_UPLOAD_RATE_LIMIT_PER_MINUTE", 10),
         )
 
 
