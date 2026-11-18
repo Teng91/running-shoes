@@ -4,6 +4,14 @@
 每版的摘要見 [CHANGELOG.md](../CHANGELOG.md)；目前的功能與操作方式以 [README](../README.md) 為準。
 這裡保留當時的文字，後續版本可能已調整其中的行為。
 
+### 淺色／深色／跟隨系統（SPEC-082，v4.22.0）
+
+- 原本只有一顆亮色／暗色切換按鈕、預設暗色。側邊欄改成三選一的分段按鈕（`aria-pressed` 標示目前選擇），偏好 `light`／`dark`／`system` 存在 `localStorage`，無效值視為 `system`。
+- `app-core.resolveTheme` 依偏好與 `prefers-color-scheme` 決定顯示的主題，`setThemePreference` 只在顯示的主題改變時重畫圖表，並監聽裝置的淺色／深色切換；`meta[name="theme-color"]` 跟著更新。啟動 inline script 依同樣規則加上 `boot-light`，CSP hash 已重新產生。
+- 沒存過偏好的裝置從「預設暗色」變成「跟隨系統」。
+
+Asset 4.22.0／shell v90、schema 12 不變，可直接回滾至 v4.21.3 image；存成 `system` 的裝置在舊版會顯示暗色。
+
 ### 個人資料清理第二輪（SPEC-081，v4.21.3）
 
 - 比賽準備的測試、版面假資料與 README 範例原本照抄站長真實的比賽日期、目標與參考成績，改成虛構的 12/13 半馬、10 km 52:00（28°C），相關預估與長距離期限重新計算；Strava 匯入測試裡的真實跑步也換掉。

@@ -17,7 +17,10 @@
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
 <script>
 try {
-  if (localStorage.getItem('theme') === 'light') document.documentElement.classList.add('boot-light');
+  var theme = localStorage.getItem('theme');
+  if (theme === 'light' || (theme !== 'dark' && window.matchMedia('(prefers-color-scheme: light)').matches)) {
+    document.documentElement.classList.add('boot-light');
+  }
 } catch {}
 </script>
 <style>
@@ -227,8 +230,12 @@ window.__appBootLegacyPoll = window.setInterval(function () {
       <span class="user-name" id="user-label"></span>
       <button class="btn btn-sm btn-edit" data-click="open-workspace">資料與同步</button>
       <button class="btn btn-sm btn-edit" id="admin-entry" data-click="open-admin" hidden>邀請碼管理</button>
+      <div class="theme-choice" role="group" aria-label="外觀主題">
+        <button type="button" class="theme-option" data-click="set-theme" data-theme-choice="light" aria-pressed="false">☀︎ 淺色</button>
+        <button type="button" class="theme-option" data-click="set-theme" data-theme-choice="dark" aria-pressed="false">☾︎ 深色</button>
+        <button type="button" class="theme-option" data-click="set-theme" data-theme-choice="system" aria-pressed="false" title="跟隨裝置的淺色／深色設定">跟隨系統</button>
+      </div>
       <div class="sidebar-actions">
-        <button class="btn btn-sm btn-edit" id="theme-toggle-btn" data-click="toggle-theme">☀︎ 亮色模式</button>
         <button class="btn btn-sm btn-edit" data-click="logout">登出</button>
       </div>
     </div>

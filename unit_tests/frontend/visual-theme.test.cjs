@@ -114,3 +114,47 @@ test('SPEC-052 the browser tab uses the volt SVG mark with a PNG fallback', () =
     assert.ok(worker.includes(`'${asset}',`), `${asset} is precached`);
   }
 });
+
+test('SPEC-082 the theme follows the system by default and remembers light, dark or system', () => {
+  const pressed = {};
+  const buttons = ['light', 'dark', 'system'].map(choice => ({ dataset: { themeChoice: choice },
+    setAttribute(name, value) { pressed[choice] = value; } }));
+  const stored = new Map();
+  const classes = new Set();
+  let meta = null;
+  const redraws = [];
+  const context = vm.createContext({
+    THEME_PREFERENCES: ['light', 'dark', 'system'], themePreference: 'system', currentTheme: 'dark',
+    localStorage: { setItem: (key, value) => stored.set(key, value) },
+    systemLightQuery: { matches: true },
+    document: {
+      body: { classList: { toggle: (name, on) => (on ? classes.add(name) : classes.delete(name)) } },
+      querySelector: () => ({ setAttribute: (_, value) => { meta = value; } }),
+      querySelectorAll: () => buttons,
+    },
+    invalidatePanels: () => redraws.push('invalidate'), renderActivePanel: () => redraws.push('render'),
+  });
+  vm.runInContext(['resolveTheme', 'applyTheme', 'setThemePreference'].map(extract).join('\n'), context);
+  context.applyTheme('system');
+  assert.equal(vm.runInContext('currentTheme', context), 'light', 'a light device shows the light theme');
+  assert.ok(classes.has('light-theme'));
+  assert.equal(meta, '#eef1f4');
+  assert.equal(stored.get('theme'), 'system');
+  assert.deepEqual({ ...pressed }, { light: 'false', dark: 'false', system: 'true' });
+
+  context.setThemePreference('dark');
+  assert.equal(vm.runInContext('currentTheme', context), 'dark');
+  assert.ok(!classes.has('light-theme'));
+  assert.deepEqual(redraws, ['invalidate', 'render'], 'charts redraw when the shown theme changes');
+  context.setThemePreference('dark');
+  assert.equal(redraws.length, 2, 'choosing the same theme again does not redraw');
+  context.applyTheme('bogus');
+  assert.equal(stored.get('theme'), 'system', 'unknown values fall back to following the system');
+
+  assert.equal(context.resolveTheme('system', false), 'dark');
+  assert.equal(context.resolveTheme('light', false), 'light');
+  const boot = htmlSource.match(/<script>\s*try \{([\s\S]*?)\} catch/)[1];
+  assert.match(boot, /theme !== 'dark' && window\.matchMedia\('\(prefers-color-scheme: light\)'\)\.matches/);
+  assert.equal((htmlSource.match(/data-click="set-theme"/g) || []).length, 3);
+  assert.doesNotMatch(htmlSource, /id="theme-toggle-btn"/);
+});
