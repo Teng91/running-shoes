@@ -297,6 +297,10 @@ SPEC-032：合成資料驗證歷史筆數上限（v4.7.3 起 10,000／10,001）�
 
 [規格與具名案例](specs/061-ci-on-every-push-and-protected-main.md) 以文字解析 workflow：觸發條件是不限分支的 push、pull request、每週排程與手動執行，沒有 `paths-ignore`；部署條件仍只有 main 的 push／手動執行；main 以外的 ref 由較新的執行取消舊的，main 不取消。ruleset 由 `.github/rulesets/main.json` 描述，Python 測試確認它要求 PR、必要檢查與 workflow 的 5 個測試 job 完全一致、禁止刪除與 force push，且沒有繞過名單。
 
+## SPEC-069 近 90 天沒穿的鞋不預估退役日
+
+[規格與具名案例](specs/069-idle-shoe-forecast.md) 以 Python 測試涵蓋純函式（穿過但近 90 天沒穿 → 不預估；新鞋 → 計畫月跑量）與批次查詢（未來日期的紀錄不算穿過、單鞋分析一致），Node vm 驗證單鞋分析顯示「—」與清單提示文字。
+
 ## SPEC-068 跑鞋里程與 Strava 相同的捨去規則
 
 [規格與具名案例](specs/068-strava-mileage-truncation.md) 以 Node vm 驗證捨去而非四捨五入（673.352 → 673.3、0.29 → 0.2）、二進位浮點數不會多捨一位（401.7、4.35、1.1），並掃描三個前端檔案，確認里程顯示不再直接 `toFixed`。

@@ -43,7 +43,7 @@ test('SPEC-055 run log cards name the selected month instead of this month', () 
 test('SPEC-055 a retired shoe analysis says retired instead of forecasting a date', () => {
   const elements = nodes();
   const context = runContext({ document: { getElementById: id => elements[id] }, esc, chartInstances: {} });
-  vm.runInContext(['floorShoeKm', 'formatShoeMileage', 'renderShoeAnalytics'].map(extract).join('\n'), context);
+  vm.runInContext(['floorShoeKm', 'formatShoeMileage', 'forecastSourceText', 'renderShoeAnalytics'].map(extract).join('\n'), context);
   const data = retired => ({
     shoe: { brand: 'Mizuno', model: 'Sky', is_retired: retired, categories: ['Daily'], purchase_date: '2025-01-01' },
     lifecycle: { total_mileage_km: 500, usage_percent: 62.5, remaining_mileage_km: 300, forecast_monthly_km: 0,
@@ -55,6 +55,13 @@ test('SPEC-055 a retired shoe analysis says retired instead of forecasting a dat
   assert.match(elements['shoe-analysis-content'].innerHTML, /預估退役<\/div><div class="insight-card-value">已退役<\/div><div class="insight-card-sub">退役後不再預估/);
   context.renderShoeAnalytics(data(false));
   assert.match(elements['shoe-analysis-content'].innerHTML, /預估退役<\/div><div class="insight-card-value">2027\/03\/01<\/div><div class="insight-card-sub">依計畫月跑量/);
+  // SPEC-069: a pair idle for 90 days shows no date instead of one invented from the plan.
+  const idle = data(false);
+  idle.lifecycle = { ...idle.lifecycle, forecast_retirement_date: null, forecast_source: 'idle_90_days' };
+  context.renderShoeAnalytics(idle);
+  assert.match(elements['shoe-analysis-content'].innerHTML, /預估退役<\/div><div class="insight-card-value">—<\/div><div class="insight-card-sub">近 90 天沒穿，偶爾穿的鞋不預估/);
+  assert.equal(context.forecastSourceText('idle_90_days'), '近 90 天沒穿，不預估');
+  assert.match(extract('renderTable'), /title="\$\{forecastSourceText\(s\.forecast_source\)\}"/);
 });
 
 test('SPEC-055 the Strava preview explains activities deleted earlier', () => {
