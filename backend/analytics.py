@@ -64,7 +64,7 @@ def _shoe_analytics(shoe: models.Shoe, statistics: dict, as_of: date) -> dict:
         "km": round_metric(statistics["km"]), "count": statistics["count"], "days": statistics["days"],
     }
     km_30, km_90 = round_metric(statistics["km_30"]), round_metric(statistics["km_90"])
-    forecast = retirement_forecast(shoe, km_90, as_of)
+    forecast = retirement_forecast(shoe, km_90, as_of, has_runs=statistics["count"] > 0)
     costs = shoe_metrics(shoe)
 
     monthly_history = []

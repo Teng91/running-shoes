@@ -226,9 +226,10 @@ function renderShoeAnalytics(data) {
   document.getElementById('shoe-analysis-sub').textContent = `${shoe.is_retired ? '已退役' : '使用中'} · ${shoe.categories.join(' / ') || '未分類'} · 購入 ${shoe.purchase_date.replace(/-/g, '/')}`;
   // A retired pair has no forecast (SPEC-055); say so instead of "cannot forecast".
   const retired = life.forecast_source === 'retired';
-  const forecast = retired ? '已退役' : life.forecast_retirement_date ? life.forecast_retirement_date.replace(/-/g, '/') : '無法預估';
-  const source = life.forecast_source === 'recent_90_days' ? '依近 90 天實際使用' : '依計畫月跑量';
-  const forecastSub = retired ? '退役後不再預估' : `${source} · ${Number(life.forecast_monthly_km).toFixed(1)} km／月`;
+  const idle = life.forecast_source === 'idle_90_days';
+  const forecast = retired ? '已退役' : idle ? '—' : life.forecast_retirement_date ? life.forecast_retirement_date.replace(/-/g, '/') : '無法預估';
+  const forecastSub = retired ? '退役後不再預估' : idle ? '近 90 天沒穿，偶爾穿的鞋不預估'
+    : `${forecastSourceText(life.forecast_source)} · ${Number(life.forecast_monthly_km).toFixed(1)} km／月`;
   const cards = [
     { label: '總里程', value: `${formatShoeMileage(life.total_mileage_km)} km`, sub: usage.average_pace_seconds_per_km ? `平均配速 ${formatPace(usage.average_pace_seconds_per_km)}` : '' },
     { label: '穿著次數', value: `${usage.count} 次`, sub: usage.count ? '已納入逐筆日誌' : '尚無日誌紀錄' },
