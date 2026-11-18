@@ -22,6 +22,9 @@
 .auth-privacy p { margin: 8px 0 0; overflow-wrap: anywhere; }
 .invite-actions { white-space: nowrap; }
 #admin-entry[hidden] { display: none; }
+.auth-forgot { text-align: center; margin-top: 8px; font-size: 13px; }
+.auth-forgot a { color: var(--text-dim); }
+#email-remove[hidden] { display: none; }
 .admin-modal section + section { margin-top: 20px; }
 
 /* Summary Cards */

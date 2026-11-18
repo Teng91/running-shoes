@@ -45,6 +45,17 @@
       <p class="workspace-help">只清除此瀏覽器中目前帳號的草稿、快取及待同步跑步，不會刪除雲端資料。尚未同步的跑步會遺失。</p>
       <button class="btn btn-delete" data-click="clear-local-workspace">清除此帳號的本機資料</button>
     </details>
+    <details class="workspace-section" id="email-section" hidden>
+      <summary>Email（忘記密碼時使用）</summary>
+      <p id="email-current" class="workspace-help" role="status" aria-live="polite"></p>
+      <p class="workspace-help">綁定後，忘記密碼時可以在登入頁用 email 收驗證碼自己重設。輸入信箱後會寄 6 位數驗證碼，輸入正確才會綁定。第一封信可能在垃圾郵件匣。</p>
+      <div class="form-group"><label for="email-address">Email</label><input id="email-address" type="email" autocomplete="email" maxlength="254"></div>
+      <button class="btn btn-edit" data-click="send-email-code">寄送驗證碼</button>
+      <div class="form-group"><label for="email-code">驗證碼</label><input id="email-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6 位數字"></div>
+      <button class="btn btn-primary" data-click="confirm-email-code">確認綁定</button>
+      <button class="btn btn-delete" id="email-remove" data-click="remove-email" hidden>移除 email</button>
+      <p id="email-status" class="workspace-help" role="status" aria-live="polite"></p>
+    </details>
     <details class="workspace-section">
       <summary>刪除帳號</summary>
       <p class="workspace-help">永久刪除這個帳號，以及所有跑鞋、跑步紀錄、月跑量、目標、月報與異動紀錄，無法復原。刪除前建議先在上方下載帳號資料 JSON。</p>

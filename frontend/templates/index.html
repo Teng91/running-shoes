@@ -124,11 +124,13 @@ window.__appBootLegacyPoll = window.setInterval(function () {
       <span style="color:var(--border);margin:0 8px;">|</span>
       <a href="#" data-click="show-register-form" style="color:var(--accent-light);font-size:13px;">註冊</a>
     </div>
+    <div class="auth-forgot"><a href="#" id="forgot-link" data-click="show-reset-form">忘記密碼？</a></div>
     <details class="auth-privacy">
       <summary>隱私說明</summary>
       <p>這裡保存帳號、密碼的雜湊（不存原本的密碼）、跑鞋、跑步紀錄、月跑量、目標與 AI 月報。匯入 Strava CSV 時只取跑步的日期、距離、時間與鞋款，不保存檔案本身。</p>
       <p>每個帳號只看得到自己的資料。站長可以存取伺服器上的資料庫，只用於維護與排除問題；管理員功能只能產生邀請碼和幫忙重設密碼，看不到別人的跑步資料。</p>
       <p>使用 AI 教練或月報時，相關的跑步統計會送到 OpenRouter 上的免費模型產生回答。資料存放在 Fly.io 新加坡機房。</p>
+      <p>如果你綁定 email，只會用來寄送綁定與重設密碼的驗證碼，可以隨時移除。</p>
       <p>登入後到「資料與同步」可以下載自己的資料，也可以永久刪除帳號與所有資料。</p>
     </details>
   </form>
@@ -164,8 +166,39 @@ window.__appBootLegacyPoll = window.setInterval(function () {
       <p>這裡保存帳號、密碼的雜湊（不存原本的密碼）、跑鞋、跑步紀錄、月跑量、目標與 AI 月報。匯入 Strava CSV 時只取跑步的日期、距離、時間與鞋款，不保存檔案本身。</p>
       <p>每個帳號只看得到自己的資料。站長可以存取伺服器上的資料庫，只用於維護與排除問題；管理員功能只能產生邀請碼和幫忙重設密碼，看不到別人的跑步資料。</p>
       <p>使用 AI 教練或月報時，相關的跑步統計會送到 OpenRouter 上的免費模型產生回答。資料存放在 Fly.io 新加坡機房。</p>
+      <p>如果你綁定 email，只會用來寄送綁定與重設密碼的驗證碼，可以隨時移除。</p>
       <p>登入後到「資料與同步」可以下載自己的資料，也可以永久刪除帳號與所有資料。</p>
     </details>
+  </form>
+
+  <!-- Forgot Password Form (SPEC-079) -->
+  <form class="auth-box" id="reset-form" style="display:none;" data-submit="reset-password">
+    <div class="auth-mark" aria-hidden="true"><svg viewBox="0 0 32 32" fill="currentColor" aria-hidden="true"><path d="M6 9.5h7l-1.6 3h-7z"/><path d="M4 14.5h9l-1.6 3h-9z" opacity=".7"/><path d="M6 19.5h7l-1.6 3h-7z" opacity=".45"/><path d="M14 6h7l8 10-8 10h-7l8-10z"/></svg></div>
+    <h1 data-eyebrow="ACCOUNT RECOVERY">忘記密碼</h1>
+    <p class="auth-note">輸入帳號或已綁定的 email，驗證碼會寄到綁定的信箱。還沒綁定 email 的帳號，請找管理員產生臨時密碼。</p>
+    <div class="form-group">
+      <label for="reset-identifier">帳號或 email</label>
+      <input id="reset-identifier" autocomplete="username" autocapitalize="none" maxlength="254">
+    </div>
+    <button type="button" class="btn btn-edit" style="width:100%;" data-click="send-reset-code">寄送驗證碼</button>
+    <p class="auth-note" id="reset-sent" role="status" aria-live="polite"></p>
+    <div class="form-group">
+      <label for="reset-code">驗證碼</label>
+      <input id="reset-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="6 位數字">
+    </div>
+    <div class="form-group">
+      <label for="reset-new-password">新密碼</label>
+      <input id="reset-new-password" type="password" autocomplete="new-password">
+    </div>
+    <div class="form-group">
+      <label for="reset-new-password2">確認新密碼</label>
+      <input id="reset-new-password2" type="password" autocomplete="new-password">
+    </div>
+    <div class="auth-error" id="reset-error"></div>
+    <button type="submit" class="btn btn-primary" style="width:100%;margin-top:8px;">重設密碼</button>
+    <div style="text-align:center;margin-top:12px;">
+      <a href="#" data-click="show-login-form" style="color:var(--accent-light);font-size:13px;">回登入頁</a>
+    </div>
   </form>
 
   <!-- Change Password Form -->

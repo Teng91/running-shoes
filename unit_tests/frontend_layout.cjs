@@ -267,9 +267,9 @@ async function run(engine, name) {
           } });
         }
         // SPEC-075: the sign-up form asks which registration mode is active.
-        if (url.pathname === '/api/auth/registration') return route.fulfill({ json: { mode: 'invite' } });
+        if (url.pathname === '/api/auth/registration') return route.fulfill({ json: { mode: 'invite', mail_enabled: true } });
         // SPEC-077: the sidebar asks whether to show the admin entry.
-        if (url.pathname === '/api/auth/me') return route.fulfill({ json: { id: 1, username: 'layout', is_admin: false } });
+        if (url.pathname === '/api/auth/me') return route.fulfill({ json: { id: 1, username: 'layout', is_admin: false, email: null } });
         if (url.pathname === '/api/runs/totals') return route.fulfill({ json: { run_count: 358, total_km: 2280.62 } });
         if (url.pathname === '/api/runs/year-summary') return route.fulfill({ json: {
           shoes: Array.from({ length: 8 }, (_, index) => ({ shoe_id: index + 1,

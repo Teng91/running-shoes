@@ -77,6 +77,15 @@ class Settings:
     # SPEC-075: who may register, and which accounts manage invites and password resets.
     registration_mode: str = "invite"
     admin_usernames: frozenset[str] = frozenset()
+    # SPEC-079: Gmail SMTP with an app password; email features are off without both.
+    smtp_username: str | None = None
+    smtp_password: str | None = None
+    smtp_host: str = "smtp.gmail.com"
+    smtp_port: int = 587
+
+    @property
+    def mail_enabled(self) -> bool:
+        return bool(self.smtp_username and self.smtp_password)
 
     def is_admin(self, username: str) -> bool:
         return username.casefold() in self.admin_usernames
@@ -135,6 +144,11 @@ class Settings:
             strava_upload_rate_limit_per_minute=_positive_int(env, "STRAVA_UPLOAD_RATE_LIMIT_PER_MINUTE", 10),
             registration_mode=_registration_mode(env),
             admin_usernames=_admin_usernames(env),
+            smtp_username=(env.get("SMTP_USERNAME") or "").strip() or None,
+            # Google shows app passwords in groups of four; spaces are not part of them.
+            smtp_password=(env.get("SMTP_PASSWORD") or "").replace(" ", "") or None,
+            smtp_host=env.get("SMTP_HOST", "smtp.gmail.com"),
+            smtp_port=_positive_int(env, "SMTP_PORT", 587),
         )
 
 
