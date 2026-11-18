@@ -266,6 +266,8 @@ async function run(engine, name) {
               state: index < 9 ? 'past' : index === 9 ? 'current' : 'future', met: index < 10 && km >= 125 })),
           } });
         }
+        // SPEC-075: the sign-up form asks which registration mode is active.
+        if (url.pathname === '/api/auth/registration') return route.fulfill({ json: { mode: 'invite' } });
         if (url.pathname === '/api/runs/totals') return route.fulfill({ json: { run_count: 358, total_km: 2280.62 } });
         if (url.pathname === '/api/runs/year-summary') return route.fulfill({ json: {
           shoes: Array.from({ length: 8 }, (_, index) => ({ shoe_id: index + 1,
