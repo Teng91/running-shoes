@@ -13,6 +13,12 @@ function calc(shoe) {
 function fmtPct(v) { return (v * 100).toFixed(2) + '%'; }
 function fmtMoney(v) { return '$' + Math.round(v).toLocaleString(); }
 function fmtDate(d) { if (!d) return '-'; return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`; }
+// Why a retirement date is (or is not) shown; SPEC-069 adds pairs idle for 90 days.
+function forecastSourceText(source) {
+  if (source === 'recent_90_days') return '依近 90 天實際使用';
+  if (source === 'idle_90_days') return '近 90 天沒穿，不預估';
+  return '依計畫月跑量';
+}
 // Shoe mileage reads exactly like Strava's gear list: truncated, not rounded, to one
 // decimal (673.352 shows 673.3), SPEC-068. The epsilon keeps 401.7 from flooring to 401.6
 // through binary floating point. Edits keep the stored value.
@@ -168,7 +174,7 @@ function renderTable() {
       <td class="editable numeric" data-dblclick="inline-edit" data-table="shoe-table" data-index="${i}" data-field="expected_mileage">${s.expected_mileage}</td>
       <td class="numeric">${fmtCostPerKm(c.expectedCost)}</td>
       <td class="numeric" style="color:${pc}">${fmtPct(c.lifeProgress)}</td>
-      <td title="${s.forecast_source === 'recent_90_days' ? '依近 90 天實際使用' : '依計畫月跑量'}">${fmtDate(c.retireDate)}</td>
+      <td title="${forecastSourceText(s.forecast_source)}">${fmtDate(c.retireDate)}</td>
       <td>${esc(shoeCategories(s).join(', ') || '未分類')}</td>
       <td>
         <button class="btn btn-sm" data-click="open-shoe-analytics" data-shoe-id="${s.id}">分析</button>
