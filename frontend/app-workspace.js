@@ -327,6 +327,7 @@ function openWorkspaceModal() {
   document.getElementById('workspace-owner').textContent = '目前網站：' + window.location.origin + '；目前帳號：' + currentUser + '。匯入只寫入這個網站的此帳號。';
   document.getElementById('workspace-modal').classList.add('active');
   void renderWorkspaceQueue(); void loadWorkspaceHistory();
+  if (typeof renderAdminSection === 'function') void renderAdminSection();
 }
 function closeWorkspaceModal() {
   document.getElementById('workspace-modal').classList.remove('active');

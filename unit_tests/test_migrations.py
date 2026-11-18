@@ -282,4 +282,4 @@ def test_startup_drops_only_empty_legacy_tables():
         assert connection.execute(text("SELECT value FROM app_settings")).scalar_one() == "row"
         assert connection.execute(text(
             "SELECT value FROM schema_metadata WHERE key = 'schema_version'"
-        )).scalar_one() == "10"
+        )).scalar_one() == "11"

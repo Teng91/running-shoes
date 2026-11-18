@@ -25,7 +25,7 @@ def fixture_fetcher():
             kind = mimetypes.guess_type(name)[0] or "application/octet-stream"
             return 200, {"Content-Type": kind}, (FRONTEND / name).read_bytes()
         if path in ("/health/live", "/health/ready"):
-            return 200, {}, json.dumps({"status": "ok", "schema_version": 10}).encode()
+            return 200, {}, json.dumps({"status": "ok", "schema_version": 11}).encode()
         if path == "/openapi.json":
             return 200, {}, json.dumps({"paths": contract}).encode()
         return 401, {}, b""
@@ -36,7 +36,7 @@ def test_release_check_accepts_only_matching_complete_public_shell():
     result = release_check.check_release(fixture_fetcher())
     expected_version = json.loads((FRONTEND / "assets.json").read_text(encoding="utf-8"))["version"]
     assert result["version"] == expected_version
-    assert result["assets"] == 52
+    assert result["assets"] == 53
 
 
 @pytest.mark.parametrize("failure", ["hash", "mime", "http", "schema", "api", "auth", "version", "module-mime"])

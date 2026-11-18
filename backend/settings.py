@@ -26,6 +26,19 @@ def _positive_int(values: Mapping[str, str], name: str, default: int) -> int:
     return max(1, int(values.get(name, str(default))))
 
 
+REGISTRATION_MODES = ("invite", "open", "closed")
+
+
+def _registration_mode(values: Mapping[str, str]) -> str:
+    """Invite-only unless explicitly opened or closed (SPEC-075); unknown values fail closed."""
+    mode = values.get("REGISTRATION_MODE", "invite").strip().casefold()
+    return mode if mode in REGISTRATION_MODES else "closed"
+
+
+def _admin_usernames(values: Mapping[str, str]) -> frozenset[str]:
+    return frozenset(name.strip().casefold() for name in values.get("ADMIN_USERNAMES", "").split(",") if name.strip())
+
+
 @dataclass(frozen=True, slots=True)
 class Settings:
     environment: str
@@ -55,12 +68,18 @@ class Settings:
     restore_preview_rate_limit_per_minute: int = 20
     restore_preview_global_rate_limit_per_minute: int = 60
     # Daily LLM budget (SPEC-071): bounds what open registration can spend.
-    agent_daily_limit_per_user: int = 50
+    agent_daily_limit_per_user: int = 20
     agent_global_daily_limit: int = 200
     # Every /api/ request per client address and minute (SPEC-073); normal use stays far below.
     api_rate_limit_per_minute: int = 600
     # Strava CSV preview/import per account and minute (SPEC-074).
     strava_upload_rate_limit_per_minute: int = 10
+    # SPEC-075: who may register, and which accounts manage invites and password resets.
+    registration_mode: str = "invite"
+    admin_usernames: frozenset[str] = frozenset()
+
+    def is_admin(self, username: str) -> bool:
+        return username.casefold() in self.admin_usernames
 
     @property
     def is_production(self) -> bool:
@@ -110,10 +129,12 @@ class Settings:
             restore_preview_global_rate_limit_per_minute=_positive_int(
                 env, "RESTORE_PREVIEW_GLOBAL_RATE_LIMIT_PER_MINUTE", 60
             ),
-            agent_daily_limit_per_user=_positive_int(env, "AGENT_DAILY_LIMIT_PER_USER", 50),
+            agent_daily_limit_per_user=_positive_int(env, "AGENT_DAILY_LIMIT_PER_USER", 20),
             agent_global_daily_limit=_positive_int(env, "AGENT_GLOBAL_DAILY_LIMIT", 200),
             api_rate_limit_per_minute=_positive_int(env, "API_RATE_LIMIT_PER_MINUTE", 600),
             strava_upload_rate_limit_per_minute=_positive_int(env, "STRAVA_UPLOAD_RATE_LIMIT_PER_MINUTE", 10),
+            registration_mode=_registration_mode(env),
+            admin_usernames=_admin_usernames(env),
         )
 
 

@@ -32,7 +32,8 @@
 - `backend/read_models/rounding.py`: shared aggregate rounding (`round_metric`); do not redefine local `_round` helpers.
 - `scripts/document_contracts.py`: Markdown links, feature-spec structure, AC completion, traceability path validation, and the README tree / SDD module inventory (SPEC-053).
 - `backend/credentials.py`: HTTP-independent bcrypt/JWT primitives; runtime secrets are injected.
-- `backend/services/accounts.py`, `goals.py`: account and goal writes, domain errors, and transactions.
+- `backend/services/accounts.py`, `goals.py`: account and goal writes, domain errors, and transactions; usernames are case-insensitive (`accounts.find_user`) and `delete_account` removes every table holding `user_id` (SPEC-075).
+- `backend/services/invites.py`, `backend/routers/admin.py`: invite-only registration (only code hashes are stored) and the admin's invite and temporary-password routes; admins come from `ADMIN_USERNAMES` (SPEC-075).
 - `backend/services/reports.py`: injected report generation and domain events; `report_storage.py` owns latest-generation conditional transactions.
 - `backend/report_llm.py`, `backend/report_protocol.py`: model and SSE adapters; neither owns persistence.
 - `backend/llm.py`: process-wide OpenRouter adapter (API key, `OR_MODEL`, output-token limit and model cache come from the environment, not `create_app` settings); users only see `user_facing_error()` text, raw provider error bodies go to the server log.
@@ -48,7 +49,7 @@
 - `backend/services/history.py`: user-scoped audit and conflict-aware deletion recovery.
 - `backend/services/run_identity.py`: user-scoped deletion tombstones (`run_tombstones`, never inferred from audit rows; schema 8 keeps the Strava activity so a CSV re-import never recreates a deleted run) and recovered source aliases; caller-owned transactions.
 - `backend/services/identifiers.py`: monotonic run/month primary-key allocation metadata.
-- `backend/migrations.py`: ordered SQLite schema upgrades and the current schema version (10); `scripts/rollback_schema_ten.sql`, `scripts/rollback_schema_nine.sql`, `scripts/rollback_schema_eight.sql` and `scripts/rollback_schema_seven.sql` are the documented 10 → 9, 9 → 8, 8 → 7 and 7 → 6 rollbacks.
+- `backend/migrations.py`: ordered SQLite schema upgrades and the current schema version (11); `scripts/rollback_schema_eleven.sql`, `scripts/rollback_schema_ten.sql`, `scripts/rollback_schema_nine.sql`, `scripts/rollback_schema_eight.sql` and `scripts/rollback_schema_seven.sql` are the documented 11 → 10, 10 → 9, 9 → 8, 8 → 7 and 7 → 6 rollbacks.
 - `backend/rate_limits.py`: SQLite fixed-window throttling for authentication, AI, backup previews and Strava uploads, consumed all-or-nothing on its own transaction with limits from app settings; never commits the request session.
 - `docs/architecture.md`: current SDD, module boundaries, diagrams, and evolution sequence.
 - `docs/release-notes.md`: per-version behavior, compatibility and rollback notes (newest first); README describes only current behavior.
@@ -82,6 +83,7 @@
 - `frontend/runtime/workspace-controller.mjs`: injected account drafts, leases and durable run queue.
 - `frontend/app-local-store.js`: atomic IndexedDB adapter; credentials never belong in records.
 - `frontend/app-workspace.js`: account cache, draft and queue DOM bridge.
+- `frontend/app-account.js`: sign-up invite field, admin invite/password panel and account deletion (SPEC-075).
 - `frontend/app-account-restore.js`: restore preview/window/session ownership.
 - `frontend/runtime/account-restore-controller.mjs`: injected restore operation, session and preview cleanup ownership; no DOM or browser transport.
 - `frontend/app-history.js`: audit paging and recover-deletion presentation.

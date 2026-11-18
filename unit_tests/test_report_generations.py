@@ -165,7 +165,7 @@ def test_schema_four_upgrade_preserves_existing_reports(tmp_path):
         connection.execute(text("INSERT INTO schema_metadata VALUES ('schema_version', '3')"))
     for _ in range(2):
         run_startup_migrations(engine, factory)
-    assert schema_version(engine) == 10
+    assert schema_version(engine) == 11
     assert "report_generations" in inspect(engine).get_table_names()
     with factory() as db:
         row = db.query(MonthlyReport).one()

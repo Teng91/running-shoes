@@ -44,9 +44,11 @@ function isCurrentAuthSession(session) {
 function requireAuthSession(session) {
   if (!isCurrentAuthSession(session)) throw new DOMException('登入工作階段已變更', 'AbortError');
 }
+// SPEC-075: 'invite', 'open' or 'closed'; null until the server answers.
+let registrationMode = null;
 const AUTH_INPUT_IDS = [
   'login-username', 'login-password',
-  'reg-username', 'reg-password', 'reg-password2',
+  'reg-username', 'reg-password', 'reg-password2', 'reg-invite',
   'change-username', 'change-old-password', 'change-new-password', 'change-new-password2',
 ];
 
@@ -134,6 +136,7 @@ function showRegisterForm() {
   document.getElementById('register-form').style.display = '';
   document.getElementById('change-form').style.display = 'none';
   hideRegError();
+  if (typeof loadRegistrationMode === 'function') void loadRegistrationMode();
 }
 function showChangeForm() {
   cancelAuthOperation();
@@ -155,6 +158,8 @@ const ERROR_ZH = {
   'User not found': '帳號不存在', 'Incorrect password': '密碼不正確',
   'Username already registered': '帳號已被註冊',
   'Password must be at least 8 characters': '密碼至少 8 個字元',
+  'Invalid invite code': '邀請碼無效、已過期或已用完', 'Registration is closed': '目前不開放註冊',
+  'Admin only': '只有管理員可以使用', 'Invite not found': '找不到這組邀請碼',
   'Shoe not found': '跑鞋不存在',
 };
 function translateError(detail) { return ERROR_ZH[detail] || detail; }
@@ -209,7 +214,9 @@ async function handleRegister() {
   const username = document.getElementById('reg-username').value.trim();
   const password = document.getElementById('reg-password').value;
   const password2 = document.getElementById('reg-password2').value;
+  const inviteCode = document.getElementById('reg-invite')?.value.trim() || '';
   if (!username || !password) { showRegError('請輸入帳號和密碼'); return; }
+  if (registrationMode === 'invite' && !inviteCode) { showRegError('請輸入邀請碼'); return; }
   if (password.length < 8) { showRegError('密碼至少 8 個字元'); return; }
   if (password !== password2) { showRegError('兩次密碼不一致'); return; }
   const operation = beginAuthOperation();
@@ -218,7 +225,7 @@ async function handleRegister() {
   try {
     const regRes = await authRequest(API_BASE + '/auth/register', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify({ username, password, invite_code: inviteCode }),
       signal: operation.controller.signal,
     });
     if (!isCurrentAuthOperation(operation)) return;

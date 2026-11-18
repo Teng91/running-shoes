@@ -147,6 +147,25 @@ class RunningGoal(Base):
     owner: Mapped["User"] = relationship(back_populates="running_goal")
 
 
+class Invite(Base):
+    """Registration invite (SPEC-075); only a SHA-256 of the code is stored.
+
+    Invites belong to the site, not to an account, so deleting the admin's account
+    never blocks on or removes them.
+    """
+
+    __tablename__ = "invites"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    code_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    note: Mapped[str] = mapped_column(String(60), default="", nullable=False)
+    max_uses: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    used_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    revoked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(UTC), nullable=False)
+
+
 class RaceGoal(Base):
     """One target race per user with an optional reference result (SPEC-065)."""
 

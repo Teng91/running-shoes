@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-pxCDiRKsaLu63z/BVJufXiTMqcQgOlDgDJZCfMTks60=' 'sha256-03bcOQeHecByaBjKyWaE3zaVWPIlPVelCglM9pQh0BU=' 'sha256-IgIQHS5JQWyGqVRXIJS9m3tyA0JiZ2nFTbsaGJpbbDc='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'self'">
-<meta name="app-asset-version" content="4.19.4">
+<meta name="app-asset-version" content="4.20.0">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>跑鞋追蹤 Dashboard</title>
 <meta name="theme-color" content="#07090c">
@@ -39,7 +39,7 @@ body { margin: 0; opacity: 1 !important; }
 @keyframes app-boot-critical-run { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
 @media (prefers-reduced-motion: reduce) { .app-boot { transition: none; } .app-boot-spinner::after { animation: none; width: 100%; opacity: .45; } }
 </style>
-<link id="app-styles" rel="preload" href="/styles.css?v=4.19.4" as="style">
+<link id="app-styles" rel="preload" href="/styles.css?v=4.20.0" as="style">
 <script>
 // Non-blocking stylesheet: apply the preload once it arrives. A script rather
 // than an onload attribute, so the page CSP can allow it by hash (SPEC-054).
@@ -61,7 +61,7 @@ body { margin: 0; opacity: 1 !important; }
   } catch (error) {}
 })();
 </script>
-<noscript><link rel="stylesheet" href="/styles.css?v=4.19.4"></noscript>
+<noscript><link rel="stylesheet" href="/styles.css?v=4.20.0"></noscript>
 </head>
 <body>
 
@@ -124,6 +124,13 @@ window.__appBootLegacyPoll = window.setInterval(function () {
       <span style="color:var(--border);margin:0 8px;">|</span>
       <a href="#" data-click="show-register-form" style="color:var(--accent-light);font-size:13px;">註冊</a>
     </div>
+    <details class="auth-privacy">
+      <summary>隱私說明</summary>
+      <p>這裡保存帳號、密碼的雜湊（不存原本的密碼）、跑鞋、跑步紀錄、月跑量、目標與 AI 月報。匯入 Strava CSV 時只取跑步的日期、距離、時間與鞋款，不保存檔案本身。</p>
+      <p>每個帳號只看得到自己的資料。站長可以存取伺服器上的資料庫，只用於維護與排除問題；管理員功能只能產生邀請碼和幫忙重設密碼，看不到別人的跑步資料。</p>
+      <p>使用 AI 教練或月報時，相關的跑步統計會送到 OpenRouter 上的免費模型產生回答。資料存放在 Fly.io 新加坡機房。</p>
+      <p>登入後到「資料與同步」可以下載自己的資料，也可以永久刪除帳號與所有資料。</p>
+    </details>
   </form>
 
   <!-- Register Form -->
@@ -142,11 +149,23 @@ window.__appBootLegacyPoll = window.setInterval(function () {
       <label for="reg-password2">確認密碼</label>
       <input id="reg-password2" type="password" autocomplete="new-password" placeholder="Confirm Password">
     </div>
+    <div class="form-group" id="reg-invite-group">
+      <label for="reg-invite">邀請碼</label>
+      <input id="reg-invite" autocapitalize="characters" spellcheck="false" maxlength="20" placeholder="例如 K7QM-3XPA">
+    </div>
+    <p class="auth-note" id="reg-mode-note" role="status" hidden></p>
     <div class="auth-error" id="reg-error"></div>
     <button type="submit" class="btn btn-primary" style="width:100%;margin-top:8px;">註冊</button>
     <div style="text-align:center;margin-top:12px;">
       <a href="#" data-click="show-login-form" style="color:var(--accent-light);font-size:13px;">已有帳號？登入</a>
     </div>
+    <details class="auth-privacy">
+      <summary>隱私說明</summary>
+      <p>這裡保存帳號、密碼的雜湊（不存原本的密碼）、跑鞋、跑步紀錄、月跑量、目標與 AI 月報。匯入 Strava CSV 時只取跑步的日期、距離、時間與鞋款，不保存檔案本身。</p>
+      <p>每個帳號只看得到自己的資料。站長可以存取伺服器上的資料庫，只用於維護與排除問題；管理員功能只能產生邀請碼和幫忙重設密碼，看不到別人的跑步資料。</p>
+      <p>使用 AI 教練或月報時，相關的跑步統計會送到 OpenRouter 上的免費模型產生回答。資料存放在 Fly.io 新加坡機房。</p>
+      <p>登入後到「資料與同步」可以下載自己的資料，也可以永久刪除帳號與所有資料。</p>
+    </details>
   </form>
 
   <!-- Change Password Form -->
@@ -783,6 +802,27 @@ window.__appBootLegacyPoll = window.setInterval(function () {
       <p class="workspace-help">只清除此瀏覽器中目前帳號的草稿、快取及待同步跑步，不會刪除雲端資料。尚未同步的跑步會遺失。</p>
       <button class="btn btn-delete" data-click="clear-local-workspace">清除此帳號的本機資料</button>
     </details>
+    <details class="workspace-section" id="admin-section" hidden>
+      <summary>邀請碼與帳號協助（管理員）</summary>
+      <p class="workspace-help">註冊需要邀請碼。邀請碼只在產生的當下顯示一次，請直接複製給對方。</p>
+      <div class="form-group"><label for="invite-note">備註</label><input id="invite-note" maxlength="60" placeholder="例如：給 Xuan"></div>
+      <div class="form-group"><label for="invite-uses">可以使用幾次</label><input id="invite-uses" type="number" inputmode="numeric" min="1" max="20" value="1"></div>
+      <div class="form-group"><label for="invite-days">有效天數</label><input id="invite-days" type="number" inputmode="numeric" min="1" max="90" value="14"></div>
+      <button class="btn btn-edit" data-click="create-invite">產生邀請碼</button>
+      <p id="invite-result" class="workspace-help" role="status" aria-live="polite"></p>
+      <div id="invite-list"></div>
+      <p class="workspace-help"><strong>幫忙重設密碼</strong>：對方忘記密碼時，產生一組臨時密碼給他；他登入後請到「更改密碼」換掉。他在其他裝置上的登入會被登出。</p>
+      <div class="form-group"><label for="reset-username">對方的帳號</label><input id="reset-username" autocapitalize="none" maxlength="50"></div>
+      <button class="btn btn-edit" data-click="admin-reset-password">產生臨時密碼</button>
+      <p id="reset-result" class="workspace-help" role="status" aria-live="polite"></p>
+    </details>
+    <details class="workspace-section">
+      <summary>刪除帳號</summary>
+      <p class="workspace-help">永久刪除這個帳號，以及所有跑鞋、跑步紀錄、月跑量、目標、月報與異動紀錄，無法復原。刪除前建議先在上方下載帳號資料 JSON。</p>
+      <div class="form-group"><label for="delete-account-password">輸入密碼確認</label><input id="delete-account-password" type="password" autocomplete="current-password"></div>
+      <button class="btn btn-delete" data-click="delete-account">永久刪除帳號</button>
+      <p id="delete-account-status" class="workspace-help" role="status" aria-live="polite"></p>
+    </details>
     <div class="modal-actions">
       <div class="modal-actions-primary"><button class="btn btn-cancel" data-click="close-workspace">關閉</button></div>
     </div>
@@ -796,39 +836,40 @@ window.__appBootLegacyPoll = window.setInterval(function () {
 
 <script src="/vendor/chart.umd.min.js"></script>
 <script src="/vendor/marked.min.js"></script>
-<script src="/app-boot.js?v=4.19.4"></script>
-<script src="/app-lifecycle.js?v=4.19.4"></script>
-<script src="/app-state.js?v=4.19.4"></script>
-<script src="/app-api.js?v=4.19.4"></script>
-<script src="/app-auth.js?v=4.19.4"></script>
-<script src="/app-streams.js?v=4.19.4"></script>
-<script src="/app-resources.js?v=4.19.4"></script>
-<script src="/app-inline-editors.js?v=4.19.4"></script>
-<script src="/app-local-store.js?v=4.19.4"></script>
-<script src="/app-workspace.js?v=4.19.4"></script>
-<script src="/app-account-restore.js?v=4.19.4"></script>
-<script src="/app-history.js?v=4.19.4"></script>
-<script src="/app-core.js?v=4.19.4"></script>
-<script src="/app-models.js?v=4.19.4"></script>
-<script src="/app-markdown.js?v=4.19.4"></script>
-<script src="/app-agent.js?v=4.19.4"></script>
-<script src="/app-reports.js?v=4.19.4"></script>
-<script src="/app-runs.js?v=4.19.4"></script>
-<script src="/app-dates.js?v=4.19.4"></script>
-<script src="/app-strava.js?v=4.19.4"></script>
-<script src="/app-run-insights.js?v=4.19.4"></script>
-<script src="/app-shoes.js?v=4.19.4"></script>
-<script src="/app-dashboard.js?v=4.19.4"></script>
-<script src="/app-exports.js?v=4.19.4"></script>
-<script src="/app-goals.js?v=4.19.4"></script>
-<script src="/app-charts.js?v=4.19.4"></script>
-<script src="/app-shoe-charts.js?v=4.19.4"></script>
-<script src="/app-monthly-charts.js?v=4.19.4"></script>
-<script src="/app-pace-charts.js?v=4.19.4"></script>
-<script src="/app-spending.js?v=4.19.4"></script>
-<script src="/app-dialogs.js?v=4.19.4"></script>
-<script src="/app-updates.js?v=4.19.4"></script>
-<script src="/app-actions.js?v=4.19.4"></script>
-<script src="/app.js?v=4.19.4"></script>
+<script src="/app-boot.js?v=4.20.0"></script>
+<script src="/app-lifecycle.js?v=4.20.0"></script>
+<script src="/app-state.js?v=4.20.0"></script>
+<script src="/app-api.js?v=4.20.0"></script>
+<script src="/app-auth.js?v=4.20.0"></script>
+<script src="/app-streams.js?v=4.20.0"></script>
+<script src="/app-resources.js?v=4.20.0"></script>
+<script src="/app-inline-editors.js?v=4.20.0"></script>
+<script src="/app-local-store.js?v=4.20.0"></script>
+<script src="/app-workspace.js?v=4.20.0"></script>
+<script src="/app-account.js?v=4.20.0"></script>
+<script src="/app-account-restore.js?v=4.20.0"></script>
+<script src="/app-history.js?v=4.20.0"></script>
+<script src="/app-core.js?v=4.20.0"></script>
+<script src="/app-models.js?v=4.20.0"></script>
+<script src="/app-markdown.js?v=4.20.0"></script>
+<script src="/app-agent.js?v=4.20.0"></script>
+<script src="/app-reports.js?v=4.20.0"></script>
+<script src="/app-runs.js?v=4.20.0"></script>
+<script src="/app-dates.js?v=4.20.0"></script>
+<script src="/app-strava.js?v=4.20.0"></script>
+<script src="/app-run-insights.js?v=4.20.0"></script>
+<script src="/app-shoes.js?v=4.20.0"></script>
+<script src="/app-dashboard.js?v=4.20.0"></script>
+<script src="/app-exports.js?v=4.20.0"></script>
+<script src="/app-goals.js?v=4.20.0"></script>
+<script src="/app-charts.js?v=4.20.0"></script>
+<script src="/app-shoe-charts.js?v=4.20.0"></script>
+<script src="/app-monthly-charts.js?v=4.20.0"></script>
+<script src="/app-pace-charts.js?v=4.20.0"></script>
+<script src="/app-spending.js?v=4.20.0"></script>
+<script src="/app-dialogs.js?v=4.20.0"></script>
+<script src="/app-updates.js?v=4.20.0"></script>
+<script src="/app-actions.js?v=4.20.0"></script>
+<script src="/app.js?v=4.20.0"></script>
 </body>
 </html>

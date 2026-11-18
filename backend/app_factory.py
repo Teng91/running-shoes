@@ -25,6 +25,7 @@ from backend.middleware import (
 )
 from backend.observability import RequestContextMiddleware
 from backend.routers import (
+    admin,
     agent,
     analytics,
     auth,
@@ -164,6 +165,7 @@ def create_app(
     app.add_middleware(RequestContextMiddleware)
     for router in (
         auth.router,
+        admin.router,
         goals.router,
         monthly.router,
         race_goal.router,
