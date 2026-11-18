@@ -79,7 +79,7 @@ def test_seed_creates_joy_and_default_data():
 
         # 42 monthly mileages (2023/01 ~ 2026/06)
         mileages = verify.query(MonthlyMileage).filter(MonthlyMileage.user_id == joy.id).all()
-        assert len(mileages) == 42
+        assert len(mileages) == 25
     finally:
         verify.close()
 

@@ -20,7 +20,7 @@ function forecastSourceText(source) {
   return '依計畫月跑量';
 }
 // Shoe mileage reads exactly like Strava's gear list: truncated, not rounded, to one
-// decimal (673.352 shows 673.3), SPEC-068. The epsilon keeps 401.7 from flooring to 401.6
+// decimal (512.352 shows 512.3), SPEC-068. The epsilon keeps 401.7 from flooring to 401.6
 // through binary floating point. Edits keep the stored value.
 function floorShoeKm(v) { return Math.floor(Number(v) * 10 + 1e-6) / 10; }
 function formatShoeMileage(v) { return Number.isFinite(Number(v)) ? floorShoeKm(v).toFixed(1) : '-'; }
