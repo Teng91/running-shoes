@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+## [4.20.0] - 2026-11-18
+
+### Added
+- 邀請制註冊（SPEC-075）：註冊預設需要邀請碼（`REGISTRATION_MODE`：invite／open／closed）。管理員（`ADMIN_USERNAMES`）在「資料與同步」產生、查看與停用邀請碼，並可替忘記密碼的人產生臨時密碼。
+- 「資料與同步」新增「刪除帳號」：輸入密碼後永久刪除帳號與所有資料。登入與註冊頁新增隱私說明。
+- 新 API：`GET /api/auth/registration`、`POST /api/auth/delete-account`、`GET/POST /api/admin/invites`、`DELETE /api/admin/invites/{invite_id}`、`POST /api/admin/reset-password`；`GET /api/auth/me` 新增 `is_admin`。
+
+### Changed
+- 帳號名稱不分大小寫（`Joy` 與 `joy` 是同一個帳號），登入失敗鎖定也不分大小寫。
+- AI 每個帳號每天的預設上限從 50 次降為 20 次（全站 200 次不變）。Schema 11（`invites` 與 `lower(username)` 唯一索引），asset 4.20.0／shell v81。
+
 ## [4.19.4] - 2026-11-18
 
 ### Security

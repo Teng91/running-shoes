@@ -1,3 +1,8 @@
+# Registration is invite-only by default (SPEC-075); most tests create accounts freely.
+import os
+
+os.environ.setdefault("REGISTRATION_MODE", "open")
+
 from collections.abc import Iterator
 from contextlib import contextmanager
 
