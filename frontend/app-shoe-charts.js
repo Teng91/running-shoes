@@ -241,6 +241,14 @@ function renderCharts() {
 let shoeTimelineRequestId = 0;
 const DAY_MS = 86400000;
 
+// The shoe total matches the shoes table; the part outside the run log is the
+// walking and warm-ups recorded on the same shoe (Strava "步行"), SPEC-067.
+function timelineMileageLines(row) {
+  const runs = `跑步 ${row.km.toFixed(1)} km · ${row.run_count} 次`;
+  if (!(Math.round(row.other_km * 10) > 0)) return [`鞋子里程 ${row.shoe_km.toFixed(1)} km`, runs];
+  return [`鞋子里程 ${row.shoe_km.toFixed(1)} km`, `${runs}｜步行與暖身 ${row.other_km.toFixed(1)} km`];
+}
+
 async function renderShoeTimeline() {
   if (chartInstances.timeline) { chartInstances.timeline.destroy(); delete chartInstances.timeline; }
   const requestId = ++shoeTimelineRequestId;
@@ -305,7 +313,7 @@ async function renderShoeTimeline() {
               const row = rows[ctx.dataIndex];
               return [
                 `${row.first_run_date.replaceAll('-', '/')} – ${row.last_run_date.replaceAll('-', '/')}`,
-                `${row.km.toFixed(1)} km · ${row.run_count} 次`,
+                ...timelineMileageLines(row),
                 `最後一次穿：${row.days_since_last_run} 天前`,
               ];
             },
