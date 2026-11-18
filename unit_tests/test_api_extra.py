@@ -767,7 +767,7 @@ def test_static_asset_and_non404_http_errors(client):
 
     service_worker = client.get("/service-worker.js")
     assert service_worker.status_code == 200
-    assert "running-shoes-shell-v79" in service_worker.text
+    assert "running-shoes-shell-v80" in service_worker.text
 
     agent_script = client.get("/app-agent.js")
     assert agent_script.status_code == 200
@@ -896,3 +896,22 @@ def test_every_api_route_has_a_per_address_budget_before_any_work(client, user_w
     other = client.get("/api/shoes/active", headers={"Fly-Client-IP": "198.51.100.41", **_auth(token)})
     assert other.status_code == 200, "another address keeps its own budget"
     assert client.get("/health/live", headers=flood).status_code == 200
+
+
+def test_strava_uploads_have_a_per_account_budget(client, user_with_token, monkeypatch):
+    """SPEC-074: each preview parses up to 10 MB in memory, so an account cannot repeat it endlessly."""
+    _user, token = user_with_token
+    _limits(monkeypatch, strava_upload_rate_limit_per_minute=1)
+    upload = {"file": ("a.csv", b"id,date\n", "text/csv")}
+    first = client.post("/api/runs/import/strava/preview", headers=_auth(token), files=upload)
+    second = client.post("/api/runs/import/strava/preview", headers=_auth(token), files=upload)
+    assert first.status_code == 400, "the first upload is parsed (and rejected for missing columns)"
+    assert second.status_code == 429 and "Strava 匯入過於頻繁" in second.json()["detail"]
+
+
+def test_default_auth_budget_keeps_bcrypt_under_a_minute_of_cpu():
+    """SPEC-074: every login/register attempt costs a ~0.2-0.3 s bcrypt check on one shared CPU."""
+    from backend.settings import Settings
+    config = Settings.from_env({})
+    assert config.auth_rate_limit_per_minute == 20
+    assert config.auth_global_rate_limit_per_minute * 0.3 < 60

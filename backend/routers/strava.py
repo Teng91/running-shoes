@@ -1,20 +1,41 @@
 """Strava CSV upload and import HTTP routes."""
 
 import json
+from collections.abc import Iterator
+from contextlib import contextmanager
+from threading import Lock
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
 from backend import models, schemas, strava_import
 from backend.auth import get_current_user
 from backend.dependencies import get_db, get_settings
+from backend.rate_limits import enforce_strava_upload_limits
 from backend.read_models.runs import recent_strava_imports
 from backend.services import strava_imports
 from backend.settings import Settings, megabytes_label
 
 router = APIRouter(tags=["strava"])
+
+STRAVA_BUSY_DETAIL = "另一個 Strava 匯入正在處理，請稍後再試。"
+
+
+@contextmanager
+def strava_upload_slot(request: Request) -> Iterator[None]:
+    """Parse one Strava CSV per process (SPEC-074); a 10 MB file takes several copies in memory.
+
+    A busy slot is rejected at once instead of queued, like the backup restore slot.
+    """
+    slot: Lock = request.app.state.strava_upload_slot
+    if not slot.acquire(blocking=False):
+        raise HTTPException(429, detail=STRAVA_BUSY_DETAIL, headers={"Retry-After": "5"})
+    try:
+        yield
+    finally:
+        slot.release()
 
 
 def _parse_strava_csv(raw: bytes, max_rows: int) -> tuple[list[dict[str, object]], int, list[str]]:
@@ -93,6 +114,7 @@ def _import_upload(db: Session, user_id: int, raw: bytes, mapping: str, start_da
 
 @router.post("/api/runs/import/strava/preview")
 async def preview_strava_import(
+    request: Request,
     file: UploadFile = File(...),
     start_date: str = Form(""),
     end_date: str = Form(""),
@@ -101,12 +123,16 @@ async def preview_strava_import(
     db: Session = Depends(get_db),
 ):
     user_id = current_user.id
-    raw = await _read_strava_upload(file, config.max_strava_csv_bytes)
-    return await run_in_threadpool(_preview_upload, db, user_id, raw, start_date, end_date, config)
+    with strava_upload_slot(request):
+        # Inside the slot, so a busy rejection does not spend the account's budget.
+        await run_in_threadpool(enforce_strava_upload_limits, request, user_id)
+        raw = await _read_strava_upload(file, config.max_strava_csv_bytes)
+        return await run_in_threadpool(_preview_upload, db, user_id, raw, start_date, end_date, config)
 
 
 @router.post("/api/runs/import/strava")
 async def import_strava_runs(
+    request: Request,
     file: UploadFile = File(...),
     mapping: str = Form("{}"),
     start_date: str = Form(""),
@@ -116,8 +142,10 @@ async def import_strava_runs(
     db: Session = Depends(get_db),
 ):
     user_id = current_user.id
-    raw = await _read_strava_upload(file, config.max_strava_csv_bytes)
-    return await run_in_threadpool(_import_upload, db, user_id, raw, mapping, start_date, end_date, config)
+    with strava_upload_slot(request):
+        await run_in_threadpool(enforce_strava_upload_limits, request, user_id)
+        raw = await _read_strava_upload(file, config.max_strava_csv_bytes)
+        return await run_in_threadpool(_import_upload, db, user_id, raw, mapping, start_date, end_date, config)
 
 
 @router.get("/api/runs/import/strava/history", response_model=list[schemas.StravaImportOut])

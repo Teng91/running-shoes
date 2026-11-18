@@ -4,6 +4,13 @@
 每版的摘要見 [CHANGELOG.md](../CHANGELOG.md)；目前的功能與操作方式以 [README](../README.md) 為準。
 這裡保留當時的文字，後續版本可能已調整其中的行為。
 
+### 登入耗用的 CPU 與 Strava 上傳記憶體（SPEC-074，v4.19.4）
+
+- bcrypt cost 12 在本機每次約 0.2 秒，Fly 共用 CPU 更慢。原本登入、註冊、改密碼的全站上限每分鐘 300 次，等於每分鐘 60 秒以上的 CPU；預設改為每個 IP 20 次、全站 60 次。被攻擊時正常使用者可能要等一分鐘才能登入。
+- `routers/strava.strava_upload_slot()` 比照備份還原的 `restore_slot`，每個程序同時只解析一個 Strava CSV，忙碌立即回 429（`Retry-After: 5`）；取得之後才消耗 `enforce_strava_upload_limits()` 的帳號視窗（預設每分鐘 10 次）。
+
+Asset 4.19.4／shell v80、schema 10 不變，可直接回滾至 v4.19.3 image。
+
 ### 被大量請求灌爆時的防護（SPEC-073，v4.19.3）
 
 - 先前只有登入、註冊、AI 與備份預覽有頻率限制。`middleware.ApiRateLimitMiddleware` 現在對每個 `/api/` 請求檢查來源位址每分鐘的上限（預設 600），在驗證、session 與路由之前回 429；計數放在記憶體（`ApiRequestLimiter`，最多 10,000 個位址），不寫 SQLite，避免灌爆時每個請求都要搶唯一的 writer。靜態檔、首頁與健康檢查不受限。

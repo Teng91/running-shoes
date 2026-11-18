@@ -372,7 +372,7 @@ ARIA 與 `agent-mode` 狀態，不以 inline style 決定 shell 幾何，因此�
 | `backend/dependencies.py`、`routers/errors.py` | app settings／request session（`get_db`）dependency 與 domain error 的 HTTP mapping | FastAPI、settings、service errors | 業務 transaction |
 | `backend/seeding.py` | 可選 seed | settings、models | `backend.main` |
 | `backend/middleware.py`、`observability.py` | 純 ASGI transport guard：安全標頭（SPEC-054）、記憶體內每位址 API 請求上限（SPEC-073）、Strava／備份上傳大小限制、request ID 與不含內容的結構化 log | ASGI、settings | routers、database、業務邏輯 |
-| `backend/rate_limits.py` | auth／AI／備份預覽的 SQLite 固定視窗限額，於 app engine 的獨立交易消耗；來源位址沿用 `middleware.client_address` | settings、SQLAlchemy engine、middleware | 請求 session、routers、`backend.main` |
+| `backend/rate_limits.py` | auth／AI／備份預覽／Strava 上傳的 SQLite 固定視窗限額，於 app engine 的獨立交易消耗；來源位址沿用 `middleware.client_address` | settings、SQLAlchemy engine、middleware | 請求 session、routers、`backend.main` |
 | `backend/routers/` | HTTP 參數、認證 dependency、response；`workspace.py` 是回執、歷史與帳號還原的 adapter | auth、domain/service、read models | `backend.main`、資料庫 query |
 | `backend/services/` | 配額、版本、里程與 application transaction owner；`accounts.py` 註冊／改密碼、`fingerprints.py` 回執與備份的 payload 指紋、`retention.py` 每帳號保留上限 | models、schemas、read models、persistence | FastAPI、routers、`backend.main` |
 | `backend/read_models/` | user-scoped native statistics：`shoes.py`、`shoe_statistics.py`、`shoe_matching.py`（名稱消歧義）、`runs.py`、`run_statistics.py`、`mileage.py`、`spending.py`、`trends.py`、`pace.py`、`race_readiness.py`、`highlights.py`、`saved_reports.py`、`strava_preview.py`，共用 `rounding.py` | models、純 domain、SQLAlchemy | HTTP frameworks、routers、tools |
