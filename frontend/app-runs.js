@@ -46,7 +46,7 @@ function parseRunDuration(text) {
 }
 
 // Phone number pads have no colon key: typed digits are grouped from the right,
-// so 5421 reads 54:21 and 15959 reads 1:59:59. One or two digits stay whole minutes.
+// so 5200 reads 52:00 and 15959 reads 1:59:59. One or two digits stay whole minutes.
 function groupDurationDigits(text) {
   const value = String(text ?? '');
   if (!/^[\d:]*$/.test(value)) return value;

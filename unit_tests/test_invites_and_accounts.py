@@ -44,7 +44,7 @@ def _register(client, username, invite_code=""):
                        json={"username": username, "password": PASSWORD, "invite_code": invite_code})
 
 
-def _admin(client, db, monkeypatch, name="Joy"):
+def _admin(client, db, monkeypatch, name="Demo"):
     db.add(models.User(username=name, hashed_password=get_password_hash(PASSWORD)))
     db.commit()
     _settings(monkeypatch, admin_usernames=frozenset({name.casefold()}))
@@ -55,8 +55,8 @@ def test_settings_default_to_invite_only_and_fail_closed():
     assert Settings.from_env({}).registration_mode == "invite"
     assert Settings.from_env({"REGISTRATION_MODE": " OPEN "}).registration_mode == "open"
     assert Settings.from_env({"REGISTRATION_MODE": "typo"}).registration_mode == "closed"
-    admins = Settings.from_env({"ADMIN_USERNAMES": "Joy, ,Friend"})
-    assert admins.is_admin("joy") and admins.is_admin("FRIEND") and not admins.is_admin("other")
+    admins = Settings.from_env({"ADMIN_USERNAMES": "Demo, ,Friend"})
+    assert admins.is_admin("demo") and admins.is_admin("FRIEND") and not admins.is_admin("other")
     assert Settings.from_env({}).agent_daily_limit_per_user == 20
 
 
@@ -73,7 +73,7 @@ def test_invite_only_registration_spends_one_use_and_rejects_every_bad_code(clie
     assert "code" not in client.get("/api/admin/invites", headers=headers).json()[0], "codes are shown only once"
     assert db.query(models.Invite).one().code_hash != code
 
-    assert _register(client, "Joy", code).json()["detail"] == "Username already registered"
+    assert _register(client, "Demo", code).json()["detail"] == "Username already registered"
     assert db.query(models.Invite).one().used_count == 0, "a failed sign-up does not spend the invite"
     assert _register(client, "Friend", code.lower().replace("-", " ")).status_code == 200, "codes ignore case and spacing"
     assert _register(client, "third", code).json()["detail"] == "Invalid invite code", "single use"
@@ -109,7 +109,7 @@ def test_only_admins_reach_admin_routes_and_me_says_who_is_admin(client, db, mon
     member = _login(client, "member")
     for method, path in (("get", "/api/admin/invites"), ("post", "/api/admin/invites"),
                          ("delete", "/api/admin/invites/1"), ("post", "/api/admin/reset-password")):
-        kwargs = {"json": {"username": "Joy"}} if path.endswith("reset-password") else {}
+        kwargs = {"json": {"username": "Demo"}} if path.endswith("reset-password") else {}
         if method == "post" and path.endswith("invites"):
             kwargs = {"json": {}}
         assert getattr(client, method)(path, headers=member, **kwargs).status_code == 403, path
@@ -221,15 +221,15 @@ def test_schema_eleven_skips_the_name_index_when_old_accounts_differ_only_by_cas
 
 
 def test_admin_can_choose_a_memorable_invite_code(client, db, monkeypatch):
-    """SPEC-076: a custom code such as "Teng91" works case-insensitively and stays unique."""
+    """SPEC-076: a custom code such as "RUNNER24" works case-insensitively and stays unique."""
     headers = _admin(client, db, monkeypatch)
     _settings(monkeypatch, registration_mode="invite")
-    created = client.post("/api/admin/invites", headers=headers, json={"code": "Teng91", "max_uses": 2})
-    assert created.status_code == 200 and created.json()["code"] == "TENG91"
-    assert client.post("/api/admin/invites", headers=headers, json={"code": "teng91"}).json()["detail"] \
+    created = client.post("/api/admin/invites", headers=headers, json={"code": "RUNNER24", "max_uses": 2})
+    assert created.status_code == 200 and created.json()["code"] == "RUNNER24"
+    assert client.post("/api/admin/invites", headers=headers, json={"code": "runner24"}).json()["detail"] \
         == "Invite code already exists"
     for bad in ("ab1", "x" * 21, "跑鞋跑鞋跑鞋"):
         assert client.post("/api/admin/invites", headers=headers, json={"code": bad}).status_code == 400, bad
-    assert _register(client, "friend", "teng91").status_code == 200
-    assert _register(client, "friend2", " TENG91 ").status_code == 200
-    assert _register(client, "friend3", "Teng91").json()["detail"] == "Invalid invite code", "two uses only"
+    assert _register(client, "friend", "runner24").status_code == 200
+    assert _register(client, "friend2", " RUNNER24 ").status_code == 200
+    assert _register(client, "friend3", "RUNNER24").json()["detail"] == "Invalid invite code", "two uses only"

@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [4.21.3] - 2026-11-18
+
+### Changed
+- 個人資料清理第二輪（SPEC-081）：比賽準備的測試與版面假資料改成虛構的比賽日期、參考成績與跑步；時間輸入的提示範例改為 `5200 → 52:00`、參考距離提示改為 10；範例資料與舊版升級的預設帳號名稱改為 `Demo`；邀請碼範例改為 `RUNNER24`；README 的 clone 網址不再寫 GitHub 帳號，CHANGELOG 移除發版連結。Asset 4.21.3／shell v89，schema 12 不變。
+
 ## [4.21.2] - 2026-11-18
 
 ### Changed
@@ -51,7 +56,7 @@
 - 新 API：`GET /api/auth/registration`、`POST /api/auth/delete-account`、`GET/POST /api/admin/invites`、`DELETE /api/admin/invites/{invite_id}`、`POST /api/admin/reset-password`；`GET /api/auth/me` 新增 `is_admin`。
 
 ### Changed
-- 帳號名稱不分大小寫（`Joy` 與 `joy` 是同一個帳號），登入失敗鎖定也不分大小寫。
+- 帳號名稱不分大小寫（`Runner` 與 `runner` 是同一個帳號），登入失敗鎖定也不分大小寫。
 - AI 每個帳號每天的預設上限從 50 次降為 20 次（全站 200 次不變）。Schema 11（`invites` 與 `lower(username)` 唯一索引），asset 4.20.0／shell v81。
 
 ## [4.19.4] - 2026-11-18
@@ -106,7 +111,7 @@
 ## [4.18.1] - 2026-11-17
 
 ### Fixed
-- 手機數字鍵盤沒有冒號，跑步時間、目標時間與參考成績時間打不出 `54:21`（SPEC-066）。現在直接打數字會從右邊每兩位自動補上冒號：`5421` → `54:21`、`15959` → `1:59:59`；一、兩位數仍是整數分鐘。Asset 4.18.1／shell v72，schema 10 不變。
+- 手機數字鍵盤沒有冒號，跑步時間、目標時間與參考成績時間打不出 `52:00`（SPEC-066）。現在直接打數字會從右邊每兩位自動補上冒號：`5200` → `52:00`、`15959` → `1:59:59`；一、兩位數仍是整數分鐘。Asset 4.18.1／shell v72，schema 10 不變。
 
 ## [4.18.0] - 2026-11-17
 
@@ -822,19 +827,4 @@
 
 - 強化資料載入、API 邊界、工程 harness 與架構驗證。
 
-[3.4.0]: https://github.com/Teng91/running-shoes/releases/tag/v3.4.0
-[3.3.1]: https://github.com/Teng91/running-shoes/releases/tag/v3.3.1
-[3.3.0]: https://github.com/Teng91/running-shoes/releases/tag/v3.3.0
-[3.2.5]: https://github.com/Teng91/running-shoes/releases/tag/v3.2.5
-[3.2.4]: https://github.com/Teng91/running-shoes/releases/tag/v3.2.4
-[3.2.3]: https://github.com/Teng91/running-shoes/releases/tag/v3.2.3
-[3.2.2]: https://github.com/Teng91/running-shoes/releases/tag/v3.2.2
-[3.2.1]: https://github.com/Teng91/running-shoes/releases/tag/v3.2.1
-[3.2.0]: https://github.com/Teng91/running-shoes/releases/tag/v3.2.0
-[3.1.0]: https://github.com/Teng91/running-shoes/releases/tag/v3.1.0
-[2.14.0]: https://github.com/Teng91/running-shoes/releases/tag/v2.14.0
-[2.13.1]: https://github.com/Teng91/running-shoes/releases/tag/v2.13.1
-[2.13.0]: https://github.com/Teng91/running-shoes/releases/tag/v2.13.0
-[2.12.0]: https://github.com/Teng91/running-shoes/releases/tag/v2.12.0
 
-[3.5.0]: https://github.com/Teng91/running-shoes/releases/tag/v3.5.0

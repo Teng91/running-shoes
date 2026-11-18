@@ -97,7 +97,7 @@ test('SPEC-059 work in progress postpones the automatic update until it is safe'
     ['dialog open', {}, ctx => ctx.setModal(false), ctx => ctx.setModal(true)],
     ['unsent AI text', {}, ctx => { ctx.elements['agent-input'].value = ''; }, ctx => { ctx.elements['agent-input'].value = '我的鞋'; }],
     ['typed sign-in form', {}, ctx => { ctx.elements['auth-view'].querySelectorAll = () => [{ value: '' }]; },
-      ctx => { ctx.elements['auth-view'].style.display = ''; ctx.elements['auth-view'].querySelectorAll = () => [{ value: 'joy' }]; }],
+      ctx => { ctx.elements['auth-view'].style.display = ''; ctx.elements['auth-view'].querySelectorAll = () => [{ value: 'demo' }]; }],
   ];
   for (const [label, globals, finish, start = () => {}] of cases) {
     const ctx = updateContext({ globals });
@@ -143,11 +143,11 @@ test('SPEC-059 completed AI turns survive a reload for the same account only', (
     },
     renderMarkdown: text => `<p>${text}</p>`,
   });
-  vm.runInContext(`let agentHistory = []; let currentUser = 'joy';\n${constant('AGENT_CHAT_STORAGE_KEY')}\n${constant('AGENT_CHAT_STORED_TURNS')}\n`
+  vm.runInContext(`let agentHistory = []; let currentUser = 'demo';\n${constant('AGENT_CHAT_STORAGE_KEY')}\n${constant('AGENT_CHAT_STORED_TURNS')}\n`
     + ['saveAgentChat', 'restoreAgentChat', 'addAgentMessage'].map(extract).join('\n'), context);
   vm.runInContext(`agentHistory = [{ role: 'user', content: '<b>今年跑多少</b>' }, { role: 'assistant', content: '**1200 km**' }]`, context);
   context.saveAgentChat();
-  assert.deepEqual(JSON.parse(storage.get('agent-chat')).user, 'joy');
+  assert.deepEqual(JSON.parse(storage.get('agent-chat')).user, 'demo');
 
   vm.runInContext('agentHistory = []', context);
   context.restoreAgentChat();
@@ -165,7 +165,7 @@ test('SPEC-059 completed AI turns survive a reload for the same account only', (
   assert.equal(container.children.length, 0);
   assert.equal(storage.has('agent-chat'), false, 'a foreign conversation is discarded');
   storage.set('agent-chat', '{bad json');
-  vm.runInContext("currentUser = 'joy'", context);
+  vm.runInContext("currentUser = 'demo'", context);
   context.restoreAgentChat();
   assert.equal(container.children.length, 0);
   vm.runInContext("agentHistory = [{ role: 'user', content: 'x' }]", context);

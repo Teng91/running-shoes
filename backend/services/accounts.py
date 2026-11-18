@@ -17,7 +17,7 @@ REGISTRATION_CLOSED = "Registration is closed"
 
 
 def find_user(db: Session, username: str) -> models.User | None:
-    """Usernames are case-insensitive (SPEC-075): "Joy" and "joy" are one account."""
+    """Usernames are case-insensitive (SPEC-075): "Runner" and "runner" are one account."""
     return db.query(models.User).filter(func.lower(models.User.username) == username.strip().lower()).first()
 
 
