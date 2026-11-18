@@ -24,6 +24,18 @@ class MailError(Exception):
     """Sending failed; the message is safe to show to users."""
 
 
+def deliver_later(mailer: Mailer, schedule: Callable[[Callable[[], None]], None]) -> Mailer:
+    """A sender that queues the mail (e.g. on BackgroundTasks) and swallows send failures (already logged)."""
+    def send(to: str, subject: str, body: str) -> None:
+        def deliver() -> None:
+            try:
+                mailer(to, subject, body)
+            except MailError:
+                pass
+        schedule(deliver)
+    return send
+
+
 def smtp_mailer(settings: Settings) -> Mailer | None:
     """A sender bound to the configured SMTP account, or None when email is off."""
     if not settings.mail_enabled:
