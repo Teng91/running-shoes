@@ -4,6 +4,14 @@
 每版的摘要見 [CHANGELOG.md](../CHANGELOG.md)；目前的功能與操作方式以 [README](../README.md) 為準。
 這裡保留當時的文字，後續版本可能已調整其中的行為。
 
+### 每日加密異地備份（SPEC-078，v4.20.3）
+
+- 自動備份先前只有部署前、放在同一個 Fly volume 的快照。新的 `.github/workflows/offsite-backup.yml` 每天以既有的 `scripts/offsite_backup.py` 把快照下載到 runner 暫存目錄（checkout 之外），驗證並做隔離還原演練，再用 `openssl enc -aes-256-cbc -pbkdf2 -iter 600000` 加密、刪除明文、先解密驗證，只上傳 `.tar.gz.enc`（保留 30 天）。
+- repo 公開，所以第一步就檢查 `BACKUP_PASSPHRASE`（至少 20 字元），缺少就失敗；workflow 只有 `contents: read`，log 只印檔名與大小。
+- 正式站程式沒有變更。
+
+Asset 4.20.3／shell v84、schema 11 不變；停用 workflow 即可回滾。
+
 ### 側邊欄的邀請碼管理入口（SPEC-077，v4.20.2）
 
 - 管理員面板原本是「資料與同步」最下面的摺疊區塊，不好找。現在側邊欄「資料與同步」旁有「邀請碼管理」按鈕（`app-account.refreshAdminEntry` 依 `/auth/me` 的 `is_admin` 顯示），開啟 `templates/admin-modal.html` 的獨立視窗；關閉時清掉一次性的邀請碼與臨時密碼。權限仍由後端判斷。

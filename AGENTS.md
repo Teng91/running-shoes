@@ -53,6 +53,7 @@
 - `backend/rate_limits.py`: SQLite fixed-window throttling for authentication, AI, backup previews and Strava uploads, consumed all-or-nothing on its own transaction with limits from app settings; never commits the request session.
 - `docs/architecture.md`: current SDD, module boundaries, diagrams, and evolution sequence.
 - `docs/release-notes.md`: per-version behavior, compatibility and rollback notes (newest first); README describes only current behavior.
+- `.github/workflows/offsite-backup.yml`: daily pull, restore drill and AES-256 encryption of the production database into a 30-day artifact; the repository is public, so only the encrypted archive is uploaded and the job fails without `BACKUP_PASSPHRASE` (SPEC-078).
 - `.github/workflows/verify.yml`: CI for every push/PR; on `main` it also snapshots the production database, deploys with `FLY_API_TOKEN` (deploy job only), runs `release-check`, and tags/releases a new `package.json` version from `CHANGELOG.md` (SPEC-048).
 - `docs/testing-strategy.md`: test design, traceability matrix, and definition of done.
 - `backend/agent.py`: LLM and tool-loop runner; planning, dispatch, and SSE serialization live in `backend/agent_*.py` modules.

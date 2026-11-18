@@ -136,3 +136,28 @@ def test_main_ruleset_requires_a_green_pull_request_without_bypass():
     assert checks["strict_required_status_checks_policy"] is True
     assert {check["context"] for check in checks["required_status_checks"]} == TEST_JOBS
     assert {check["integration_id"] for check in checks["required_status_checks"]} == {15368}
+
+
+OFFSITE = (ROOT / ".github" / "workflows" / "offsite-backup.yml").read_text(encoding="utf-8").replace("\r\n", "\n")
+
+
+def test_daily_offsite_backup_uploads_only_an_encrypted_archive():
+    """SPEC-078: the public repository's artifacts must never hold the plain database."""
+    code = "\n".join(line for line in OFFSITE.splitlines() if not line.lstrip().startswith("#"))
+    assert re.search(r'^  schedule:\n    - cron: "30 19 \* \* \*"', code, re.M)
+    assert "workflow_dispatch:" in code
+    assert re.search(r"^permissions:\n  contents: read$", code, re.M) and "contents: write" not in code
+    steps = code.split("    steps:\n", 1)[1]
+    # The passphrase check is the first step, before any data leaves Fly.
+    assert steps.index("BACKUP_PASSPHRASE}\" -lt 20") < steps.index("offsite_backup.py")
+    assert "exit 1" in steps.split("- uses: actions/checkout", 1)[0]
+    assert "openssl enc -aes-256-cbc -salt -pbkdf2 -iter 600000 -pass env:BACKUP_PASSPHRASE" in steps
+    assert 'rm -rf "$RUNNER_TEMP/offsite"' in steps
+    upload = steps.split("actions/upload-artifact", 1)[1]
+    assert "path: ${{ runner.temp }}/upload/*.tar.gz.enc" in upload
+    assert "retention-days: 30" in upload and "if-no-files-found: error" in upload
+    assert steps.index("openssl enc -d") < steps.index("actions/upload-artifact"), "decrypt check before upload"
+    assert '--output-dir "$RUNNER_TEMP/offsite"' in steps, "plain snapshots stay outside the checkout"
+    assert "persist-credentials: false" in steps
+    for leak in ("cat ", "sqlite3", "row_counts", "set -x"):
+        assert leak not in steps, leak
