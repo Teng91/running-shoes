@@ -297,6 +297,10 @@ SPEC-032：合成資料驗證歷史筆數上限（v4.7.3 起 10,000／10,001）�
 
 [規格與具名案例](specs/061-ci-on-every-push-and-protected-main.md) 以文字解析 workflow：觸發條件是不限分支的 push、pull request、每週排程與手動執行，沒有 `paths-ignore`；部署條件仍只有 main 的 push／手動執行；main 以外的 ref 由較新的執行取消舊的，main 不取消。ruleset 由 `.github/rulesets/main.json` 描述，Python 測試確認它要求 PR、必要檢查與 workflow 的 5 個測試 job 完全一致、禁止刪除與 force push，且沒有繞過名單。
 
+## SPEC-077 側邊欄的邀請碼管理入口
+
+[規格與具名案例](specs/077-admin-entry.md) 以 Node 測試確認一般帳號的側邊欄入口保持隱藏、管理員顯示入口並可開啟視窗載入清單，關閉視窗時清除邀請碼與臨時密碼；版面測試的 mock 回應 `/api/auth/me`。
+
 ## SPEC-076 自訂邀請碼
 
 [規格與具名案例](specs/076-custom-invite-code.md) 以 API 測試確認自訂碼正規化為大寫、不分大小寫與空白都能註冊、達到使用次數後拒絕，重複、太短、太長或非英數字的自訂碼被拒絕；Node 測試確認註冊表單沒有像真的邀請碼的提示，管理員面板送出修剪過的自訂碼並在成功後清空。

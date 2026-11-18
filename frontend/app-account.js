@@ -21,15 +21,27 @@ async function loadRegistrationMode() {
 
 let adminRequestId = 0;
 
-async function renderAdminSection() {
-  const section = document.getElementById('admin-section');
-  if (!section) return;
+// SPEC-077: the sidebar shows「邀請碼管理」only to admins; hidden until the server says so.
+async function refreshAdminEntry() {
+  const entry = document.getElementById('admin-entry');
+  if (!entry) return;
   const requestId = ++adminRequestId;
+  entry.hidden = true;
   let me = null;
   try { me = await apiGet('/auth/me'); } catch { me = null; }
   if (requestId !== adminRequestId) return;
-  section.hidden = !me?.is_admin;
-  if (me?.is_admin) await loadInvites();
+  entry.hidden = !me?.is_admin;
+}
+
+function openAdminModal() {
+  document.getElementById('admin-modal').classList.add('active');
+  void loadInvites();
+}
+
+function closeAdminModal() {
+  document.getElementById('admin-modal').classList.remove('active');
+  // One-time codes and temporary passwords must not linger on screen.
+  for (const id of ['invite-result', 'reset-result']) document.getElementById(id).textContent = '';
 }
 
 function inviteStatus(invite) {
