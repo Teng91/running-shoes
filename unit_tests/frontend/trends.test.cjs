@@ -100,6 +100,18 @@ test('SPEC-038 rotation timeline names active shoes and calls out idle ones with
   assert.doesNotMatch(nodes['timeline-note'].textContent, /灰色/);
 });
 
+test('SPEC-067 the rotation tooltip shows the shoe total with runs and walking at one decimal', () => {
+  const context = vm.createContext({});
+  vm.runInContext(extract('timelineMileageLines'), context);
+  const row = { km: 365.19, shoe_km: 407.2, other_km: 42.01, run_count: 50 };
+  assert.deepEqual([...context.timelineMileageLines(row)], ['鞋子里程 407.2 km', '跑步 365.2 km · 50 次｜步行與暖身 42.0 km']);
+  assert.deepEqual([...context.timelineMileageLines({ ...row, km: 49.11, shoe_km: 48.8, other_km: -0.31, run_count: 7 })],
+    ['鞋子里程 48.8 km', '跑步 49.1 km · 7 次'], 'a negative gap is not shown as walking');
+  assert.deepEqual([...context.timelineMileageLines({ ...row, other_km: 0.04 })][1], '跑步 365.2 km · 50 次');
+  vm.runInContext(extract('formatShoeMileage'), context);
+  assert.deepEqual([167.31, 407.2, 0, '261.11', null].map(context.formatShoeMileage), ['167.3', '407.2', '0.0', '261.1', '0.0']);
+});
+
 // The shoes panel draws two run-derived charts from their own reads. Real resource store,
 // cache hooks and panel bookkeeping; only the HTTP responses are held back.
 function shoesPanelContext() {
