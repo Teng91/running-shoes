@@ -71,26 +71,45 @@ function switchTab(name) {
   }
 }
 
+const systemLightQuery = window.matchMedia ? window.matchMedia('(prefers-color-scheme: light)') : null;
+
+function resolveTheme(preference, systemPrefersLight) {
+  if (preference === 'light' || preference === 'dark') return preference;
+  return systemPrefersLight ? 'light' : 'dark';
+}
+
+// Accepts a preference (light, dark or system); charts redraw when the shown theme changes.
 function applyTheme(theme) {
-  currentTheme = theme;
-  localStorage.setItem('theme', theme);
-  const btn = document.getElementById('theme-toggle-btn');
-  if (theme === 'light') {
-    document.body.classList.add('light-theme');
-    if (btn) btn.textContent = '☾︎ 暗色模式';
-  } else {
-    document.body.classList.remove('light-theme');
-    if (btn) btn.textContent = '☀︎ 亮色模式';
+  themePreference = THEME_PREFERENCES.includes(theme) ? theme : 'system';
+  try { localStorage.setItem('theme', themePreference); } catch {}
+  currentTheme = resolveTheme(themePreference, Boolean(systemLightQuery?.matches));
+  document.body.classList.toggle('light-theme', currentTheme === 'light');
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', currentTheme === 'light' ? '#eef1f4' : '#07090c');
+  document.querySelectorAll('[data-theme-choice]').forEach(button => {
+    button.setAttribute('aria-pressed', String(button.dataset.themeChoice === themePreference));
+  });
+}
+
+function setThemePreference(preference) {
+  const previous = currentTheme;
+  applyTheme(preference);
+  if (currentTheme !== previous) {
+    invalidatePanels();
+    renderActivePanel();
   }
 }
 
+// Switches the shown theme directly (used by browser checks to force a themed redraw).
 function toggleTheme() {
-  applyTheme(currentTheme === 'dark' ? 'light' : 'dark');
-  invalidatePanels();
-  renderActivePanel();
+  setThemePreference(currentTheme === 'dark' ? 'light' : 'dark');
 }
 
-applyTheme(currentTheme);
+// Following the system: redraw when the device switches between light and dark.
+systemLightQuery?.addEventListener?.('change', () => {
+  if (themePreference === 'system') setThemePreference('system');
+});
+
+applyTheme(themePreference);
 
 registerFeatureReset('panel-rendering', resetPanelRendering);
 
