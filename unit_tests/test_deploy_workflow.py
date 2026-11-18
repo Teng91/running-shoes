@@ -161,7 +161,7 @@ def test_daily_offsite_backup_uploads_only_an_encrypted_archive():
     assert "persist-credentials: false" in steps
     # SPEC-078 (v4.20.4): grep -q must not close tar's pipe early under pipefail.
     assert "tar -tzf - | grep -Eq" not in steps and 'listing=$(openssl enc -d' in steps
-    for part in ("\.db$", "manifest\.json$"):
+    for part in (r"\.db$", r"manifest\.json$"):
         assert part in steps, part
     for leak in ("cat ", "sqlite3", "row_counts", "set -x"):
         assert leak not in steps, leak

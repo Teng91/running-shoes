@@ -63,7 +63,7 @@ def test_settings_default_to_invite_only_and_fail_closed():
 def test_invite_only_registration_spends_one_use_and_rejects_every_bad_code(client, db, monkeypatch):
     headers = _admin(client, db, monkeypatch)
     _settings(monkeypatch, registration_mode="invite")
-    assert client.get("/api/auth/registration").json() == {"mode": "invite"}
+    assert client.get("/api/auth/registration").json()["mode"] == "invite"
     assert _register(client, "nocode").json()["detail"] == "Invalid invite code"
 
     created = client.post("/api/admin/invites", headers=headers, json={"note": "給 Xuan", "max_uses": 1, "days": 7})
@@ -97,7 +97,7 @@ def test_revoked_and_expired_invites_are_rejected(client, db, monkeypatch):
 
 def test_closed_registration_and_open_mode(client, monkeypatch):
     _settings(monkeypatch, registration_mode="closed")
-    assert client.get("/api/auth/registration").json() == {"mode": "closed"}
+    assert client.get("/api/auth/registration").json()["mode"] == "closed"
     assert _register(client, "anyone").json()["detail"] == "Registration is closed"
     _settings(monkeypatch, registration_mode="open")
     assert _register(client, "anyone").status_code == 200
@@ -185,12 +185,13 @@ def _engine(tmp_path, name):
 def test_schema_eleven_adds_invites_and_a_case_insensitive_name_index_then_rolls_back(tmp_path):
     engine, sessions = _engine(tmp_path, "schema11.sqlite")
     run_startup_migrations(engine, sessions)
-    assert schema_version(engine) == 11
+    assert schema_version(engine) == 12
     assert "invites" in inspect(engine).get_table_names()
     assert _name_index(engine)
     script = Path("scripts/rollback_schema_eleven.sql").read_text(encoding="utf-8")
     connection = engine.raw_connection()
     try:
+        connection.executescript(Path("scripts/rollback_schema_twelve.sql").read_text(encoding="utf-8"))
         connection.executescript(script)
         with pytest.raises(Exception, match="CHECK constraint failed"):
             connection.executescript(script)
@@ -200,7 +201,7 @@ def test_schema_eleven_adds_invites_and_a_case_insensitive_name_index_then_rolls
     assert schema_version(engine) == 10
     assert not _name_index(engine)
     run_startup_migrations(engine, sessions)
-    assert schema_version(engine) == 11
+    assert schema_version(engine) == 12
     engine.dispose()
 
 
@@ -214,7 +215,7 @@ def test_schema_eleven_skips_the_name_index_when_old_accounts_differ_only_by_cas
         db.add_all([models.User(username="Same", hashed_password="x"), models.User(username="same", hashed_password="x")])
         db.commit()
     run_startup_migrations(engine, sessions)
-    assert schema_version(engine) == 11, "startup still succeeds"
+    assert schema_version(engine) == 12, "startup still succeeds"
     assert not _name_index(engine)
     engine.dispose()
 

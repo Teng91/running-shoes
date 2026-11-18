@@ -297,6 +297,10 @@ SPEC-032：合成資料驗證歷史筆數上限（v4.7.3 起 10,000／10,001）�
 
 [規格與具名案例](specs/061-ci-on-every-push-and-protected-main.md) 以文字解析 workflow：觸發條件是不限分支的 push、pull request、每週排程與手動執行，沒有 `paths-ignore`；部署條件仍只有 main 的 push／手動執行；main 以外的 ref 由較新的執行取消舊的，main 不取消。ruleset 由 `.github/rulesets/main.json` 描述，Python 測試確認它要求 PR、必要檢查與 workflow 的 5 個測試 job 完全一致、禁止刪除與 force push，且沒有繞過名單。
 
+## SPEC-079 Email 驗證碼找回密碼
+
+[規格與具名案例](specs/079-email-recovery.md) 一律以假的寄信函式取代 `app.state.mailer`，不寄真信；SMTP adapter 以假的 `smtplib.SMTP` 確認 STARTTLS、登入與失敗訊息不含憑證。API 測試確認綁定只在輸入正確驗證碼後生效、驗證碼只存 HMAC、錯 5 次與過期失效、email 不能重複綁定；以帳號或 email 重設密碼後舊 token 失效、驗證碼只能用一次；不存在的帳號、沒有 email 的帳號與寄信失敗都回同樣結果；沒有 SMTP 時回 503、寄送過於頻繁回 429；刪除帳號一併刪除驗證碼。Migration 測試確認 schema 12 與回滾腳本。Node 測試確認登入頁與 Email 區塊依 `mail_enabled` 顯示、重設流程的中性訊息與密碼檢查。
+
 ## SPEC-078 每日加密異地備份
 
 [規格與具名案例](specs/078-daily-encrypted-offsite-backup.md) 以文字解析 `offsite-backup.yml`：每天排程且可手動觸發、只有讀取權限、第一步缺少密碼就失敗、快照放在 checkout 之外、加密後刪除明文並在上傳前解密驗證、只上傳 `.tar.gz.enc` 且保留 30 天，步驟中沒有會把資料印到 log 的指令。

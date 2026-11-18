@@ -54,10 +54,10 @@ Python 3.11 · FastAPI · SQLAlchemy · SQLite · 原生 JavaScript（不需要�
 | 項目 | 數量 |
 | --- | --- |
 | 正式版本 | 93 個 tag，2026-06 開始，目前 v4.17 |
-| 自動化測試 | Python 718 項、前端 Node 回歸 220 項、40 組版面設定（WebKit／Chromium × 亮暗 × 10 種尺寸）、真實 CRUD E2E 與 PWA 升級／離線測試 |
+| 自動化測試 | Python 729 項、前端 Node 回歸 223 項、40 組版面設定（WebKit／Chromium × 亮暗 × 10 種尺寸）、真實 CRUD E2E 與 PWA 升級／離線測試 |
 | 功能規格 | 63 份 SPEC，每份含 Goals、帳號隔離、migration／rollback 與 AC 追蹤 |
 | API | 54 個端點，與 `unit_tests/api_contract.json` 及下方 API 表自動比對 |
-| 資料庫 | SQLite schema 11，每一版都有守衛的回滾腳本 |
+| 資料庫 | SQLite schema 12，每一版都有守衛的回滾腳本 |
 | 部署 | Fly.io 1 台 256MB 機器＋加密 volume，閒置自動休眠 |
 
 ---
@@ -101,7 +101,7 @@ flowchart LR
   subgraph Fly["Fly.io · 1 台機器"]
     R["routers<br/>只做 HTTP 轉換"] --> S["services<br/>交易、版本、冪等"]
     R --> RM["read_models<br/>里程・目標・趨勢・配速"]
-    S --> DB[("SQLite /data<br/>schema 11＋稽核 trigger")]
+    S --> DB[("SQLite /data<br/>schema 12＋稽核 trigger")]
     RM --> DB
     A["agent<br/>規劃・工具・SSE"] --> RM
   end
@@ -189,8 +189,8 @@ flowchart LR
 
 ## 品質：測試與規格
 
-- **Python 718 項**：API、交易與並行、migration 與回滾、備份往返、帳號隔離、Agent 規劃與工具（外部 LLM 與搜尋一律 mock），一律使用暫存或記憶體資料庫，不碰正式 `shoes.db`。
-- **前端 Node 回歸 220 項**：以 `vm` 載入實際前端程式，驗證狀態、競態、草稿、串流與圖表資料。
+- **Python 729 項**：API、交易與並行、migration 與回滾、備份往返、帳號隔離、Agent 規劃與工具（外部 LLM 與搜尋一律 mock），一律使用暫存或記憶體資料庫，不碰正式 `shoes.db`。
+- **前端 Node 回歸 223 項**：以 `vm` 載入實際前端程式，驗證狀態、競態、草稿、串流與圖表資料。
 - **瀏覽器**：Playwright 在 WebKit 與 Chromium 跑 40 組版面設定（含幾何對齊與無溢出）、真實 FastAPI＋暫存 SQLite 的 CRUD E2E、Service Worker 升級與離線；失敗時保存截圖與 trace。
 - **修 bug 先寫重現測試**：例如 v4.17.0 的 CI 抓到新圖表檔案重複宣告全域常數，修正時同時加上掃描所有 script 的測試。
 - **文件也被測**：`docs-check` 比對 README 的測試數、工具數、API 表、目錄樹與規格的 AC 追蹤，數字對不上 CI 就失敗。
@@ -283,6 +283,7 @@ running-shoes/
 │   ├── clock.py          # 唯一的應用時區、local_now()／local_today()
 │   ├── dependencies.py   # Request-scoped app settings 與 DB session（get_db）
 │   ├── seeding.py        # 使用注入 session factory 的可選預設資料
+│   ├── mailer.py         # Gmail SMTP 寄送驗證碼（未設定時關閉，log 不含收件人與驗證碼）
 │   ├── middleware.py     # 安全標頭（CSP frame-ancestors、nosniff 等）、每位址 API 請求上限與 Strava／備份上傳大小限制
 │   ├── routers/
 │   │   ├── auth.py       # 註冊、登入、密碼管理與刪除帳號 routes
@@ -313,6 +314,7 @@ running-shoes/
 │   │   ├── identifiers.py # 單調遞增 run／month 主鍵配置
 │   │   ├── accounts.py    # 註冊容量、密碼 CAS、token revocation、刪除帳號與臨時密碼
 │   │   ├── invites.py     # 邀請碼產生、停用與註冊時扣用（只存雜湊）
+│   │   ├── email_codes.py # Email 綁定與忘記密碼的一次性驗證碼（只存 HMAC）
 │   │   ├── goals.py       # 個人目標 upsert、版本與 rollback
 │   │   ├── race_goals.py  # 目標賽事 upsert、刪除與版本
 │   │   ├── reports.py     # 月報生成身分、事件及成功保存流程
@@ -454,6 +456,7 @@ running-shoes/
 │   ├── diagnostics_drill.cjs # 產生合成瀏覽器失敗，演練診斷落檔
 │   ├── verify_diagnostics.py # 只用標準函式庫驗證下載的合成診斷
 │   ├── render_icons.cjs  # 本機由 icons/app-icon.svg 產生 PNG 圖示（不在 CI 執行）
+│   ├── rollback_schema_twelve.sql # Schema 12 → 11 的文件化回滾
 │   ├── rollback_schema_eleven.sql # Schema 11 → 10 的文件化回滾
 │   ├── rollback_schema_ten.sql # Schema 10 → 9 的文件化回滾
 │   ├── rollback_schema_nine.sql # Schema 9 → 8 的文件化回滾
@@ -569,6 +572,12 @@ AGENT_GLOBAL_DAILY_LIMIT=200
 REGISTRATION_MODE=invite
 # 選填：管理員帳號（逗號分隔、不分大小寫），可以產生邀請碼和替別人產生臨時密碼；正式站請設為 Fly secret
 ADMIN_USERNAMES=
+# 選填：寄送驗證碼用的 Gmail 與應用程式密碼；兩個都有才開啟「忘記密碼」與綁定 email（SPEC-079），正式站請設為 Fly secret
+SMTP_USERNAME=
+SMTP_PASSWORD=
+# 選填：SMTP 主機與連接埠（預設 Gmail：smtp.gmail.com／587，STARTTLS）
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
 # 選填：每個來源位址每分鐘最多 API 請求數（預設 600，記憶體計數、不寫資料庫；SPEC-073）
 API_RATE_LIMIT_PER_MINUTE=600
 # 選填：同一 IP／全站每分鐘登入、註冊、改密碼請求上限（預設 20／60；每次都要做 bcrypt，SPEC-074）
@@ -633,6 +642,7 @@ LLM_MAX_OUTPUT_TOKENS=4096
 - **跑步時間與配速**：新增或編輯跑步時可選填跑步時間（`32:15`、`1:05:30` 或整數分鐘；手機數字鍵盤沒有冒號，直接打 `3215`、`10530` 會自動補成 `32:15`、`1:05:30`），後端自動算配速；列表、月份卡片與單雙鞋分析顯示配速與時間加權的平均配速
 - **Strava 歷史匯入**：從 Strava 匯出的 `activities.csv` 預覽並批次匯入跑步活動與移動時間，依活動 ID 去重，支援匯入前逐鞋款配對；重新匯入可替既有紀錄補上跑步時間；CSV 與資料庫工作在 worker thread 順序執行，HTTP 仍等待交易完成，不是背景佇列
 - **帳號與註冊**：註冊預設需要邀請碼（`REGISTRATION_MODE=invite`，也可設為 open 或 closed）。管理員（`ADMIN_USERNAMES`）在側邊欄的「邀請碼管理」（只有管理員看得到）產生邀請碼：可自訂好記的邀請碼（4～20 個英文字母或數字，不分大小寫；留空自動產生 8 碼），並設備註、使用次數（最多 20）與有效天數（最多 90），邀請碼只在產生時顯示一次，伺服器只存雜湊；也可以替忘記密碼的人產生一次性的臨時密碼，對方的登入會全部失效。帳號名稱不分大小寫。任何人都可以在「資料與同步」輸入密碼後永久刪除自己的帳號與所有資料；登入與註冊頁有隱私說明（SPEC-075）
+- **Email 找回密碼**：在「資料與同步」綁定 email（輸入寄到信箱的 6 位數驗證碼才會綁定），忘記密碼時在登入頁「忘記密碼？」用帳號或 email 收驗證碼並設定新密碼，舊的登入全部失效。驗證碼 10 分鐘內有效、最多試 5 次，只存 HMAC；不論帳號是否存在都顯示同樣訊息，寄送次數有限制。需要 `SMTP_USERNAME`／`SMTP_PASSWORD`（專用 Gmail 與應用程式密碼）；沒設定時 Email 區塊隱藏，「忘記密碼」會提示找管理員產生臨時密碼（SPEC-079）
 - **資料匯出與備份**：跑鞋可匯出 **XLSX / CSV**，並可下載不含密碼或 token 的完整 JSON 帳號備份（跑鞋、日誌、月跑量、目標、月報與 Strava 匯入摘要）
 - **AI 跑鞋推薦助手**：依你的實際資料給換鞋與選鞋建議（需設定 OpenRouter API Key），可從本日熱門、免費且支援工具呼叫的模型中選擇
 - **AI 月度跑步報告**：可自行選擇本日免費模型，一鍵產生指定月份的跑步報告（跑量趨勢、鞋款狀態、退役提醒與下月建議），報告自動保存、可隨時回看，不需重打 LLM；更新時間以帶 offset UTC 傳輸，生成與重新讀取皆顯示裝置本地時間
@@ -905,7 +915,7 @@ Playwright／Chromium／WebKit 齊全時，也會執行版面測試。
 避免每次停止都重跑。Hook 不會呼叫其他模型、外部 API，或傳送提示、diff、原始碼與測試輸出。
 GitHub Actions 仍會在 push／pull request 執行 `verify`，並以三個可獨立重跑的 browser jobs 執行完整版面矩陣、真實 CRUD E2E 與 PWA 升級／離線測試；push 到 main 時再依序快照、部署、檢查並發版（見「日常開發流程、自動部署與發版」）；Dependabot 每月以單一 PR 合併 GitHub Actions 更新；Python 只接收安全性更新 PR，例行升級依下方 `uv pip compile --universal` 步驟手動重編鎖定檔（Dependabot 產生的鎖定檔會遺失 Windows 條件）。
 
-本次驗證基線為 Python **718 passed**、前端回歸測試 **220 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
+本次驗證基線為 Python **729 passed**、前端回歸測試 **223 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
 版面檢查涵蓋 WebKit／Chromium、亮／暗模式與 10 組直橫向尺寸，共 40 組設定，檢查四個功能分頁與月報、三個認證表單、圖表、全部彈窗、行內編輯、停用／錯誤及空資料狀態。
 
 主要表單、工具列與彈窗操作統一為 44px 控制項；桌面表格內的緊湊操作為 36px，手機至少 44px。
@@ -1018,6 +1028,10 @@ unset OPENROUTER_KEY_VALUE
 
 # 建議：管理員帳號（產生邀請碼、替忘記密碼的人產生臨時密碼）；註冊預設需要邀請碼
 fly secrets set ADMIN_USERNAMES="<你的帳號>"
+
+# 選填：寄送驗證碼的 Gmail（先開兩步驟驗證，再到 https://myaccount.google.com/apppasswords 建立應用程式密碼）
+# 也可以在 Fly 網頁的 Secrets 頁面設定，密碼就不會留在終端機紀錄
+fly secrets set SMTP_USERNAME="<專用 Gmail>" SMTP_PASSWORD="<應用程式密碼>"
 ```
 
 全新空資料庫不需要 `MIGRATION_PASSWORD`。只有升級尚未綁定使用者的舊版資料庫，或明確啟用 `SEED_DATA=true` 範例資料時才需要設定：
@@ -1261,12 +1275,17 @@ venv/bin/python -m backend.run
 
 | 分類 | API | 用途 |
 | --- | --- | --- |
-| 帳號 | `GET /api/auth/registration` | 註冊方式（invite／open／closed），不需登入 |
+| 帳號 | `GET /api/auth/registration` | 註冊方式（invite／open／closed）與是否開啟 email 功能，不需登入 |
 | 帳號 | `POST /api/auth/register` | 註冊帳號；邀請制時需要 `invite_code`（受註冊總數與頻率限制） |
 | 帳號 | `POST /api/auth/login` | 登入並取得 7 天有效的 Bearer token |
 | 帳號 | `GET /api/auth/me` | 取得目前登入的帳號 |
 | 帳號 | `POST /api/auth/change-password` | 以舊密碼更換密碼；舊 token 立即失效 |
 | 帳號 | `POST /api/auth/delete-account` | 輸入密碼後永久刪除帳號與所有資料 |
+| 帳號 | `POST /api/auth/email/request` | 寄驗證碼到要綁定的 email |
+| 帳號 | `POST /api/auth/email/confirm` | 輸入驗證碼完成綁定 |
+| 帳號 | `POST /api/auth/email/remove` | 移除綁定的 email |
+| 帳號 | `POST /api/auth/password-reset/request` | 用帳號或 email 申請重設密碼的驗證碼（不論帳號是否存在都回同樣結果） |
+| 帳號 | `POST /api/auth/password-reset/confirm` | 以驗證碼與新密碼重設，舊 token 全部失效 |
 | 管理員 | `GET /api/admin/invites` | 邀請碼清單（不含邀請碼本身） |
 | 管理員 | `POST /api/admin/invites` | 產生邀請碼（可自訂邀請碼、備註、可用次數、有效天數），邀請碼只回傳這一次 |
 | 管理員 | `DELETE /api/admin/invites/{invite_id}` | 停用邀請碼 |
