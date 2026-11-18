@@ -297,6 +297,10 @@ SPEC-032：合成資料驗證歷史筆數上限（v4.7.3 起 10,000／10,001）�
 
 [規格與具名案例](specs/061-ci-on-every-push-and-protected-main.md) 以文字解析 workflow：觸發條件是不限分支的 push、pull request、每週排程與手動執行，沒有 `paths-ignore`；部署條件仍只有 main 的 push／手動執行；main 以外的 ref 由較新的執行取消舊的，main 不取消。ruleset 由 `.github/rulesets/main.json` 描述，Python 測試確認它要求 PR、必要檢查與 workflow 的 5 個測試 job 完全一致、禁止刪除與 force push，且沒有繞過名單。
 
+## SPEC-083 密碼變更通知信
+
+[規格與具名案例](specs/083-password-change-notice.md) 以假的寄信函式確認登入後更改密碼、用 email 驗證碼重設、管理員產生臨時密碼各寄一封通知，內容含帳號、台灣時間與方式；沒有 email 的帳號不寄，寄信失敗時更改仍成功，密碼錯誤不寄。
+
 ## SPEC-082 淺色／深色／跟隨系統
 
 [規格與具名案例](specs/082-theme-choice.md) 以 Node vm 執行 `resolveTheme`、`applyTheme` 與 `setThemePreference`：裝置為淺色時跟隨系統顯示淺色、`theme-color` 與按鈕狀態正確、偏好被記住，換成深色時重畫一次、重選不重畫，無效值視為跟隨系統；並檢查啟動 script 的判斷與三個選項。版面測試仍以 `applyTheme('light'|'dark')` 檢查兩種主題。

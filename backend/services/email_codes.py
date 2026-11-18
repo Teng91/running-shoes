@@ -30,6 +30,15 @@ BAD_EMAIL = "Invalid email address"
 EMAIL_TAKEN = "Email already in use"
 EMAIL_PATTERN = re.compile(r"[^@\s]+@[^@\s]+\.[^@\s]+")
 PURPOSE_TEXT = {VERIFY_EMAIL: "綁定 email", RESET_PASSWORD: "重設密碼"}
+# SPEC-083: how the password changed, as told in the notice.
+CHANGED_BY_USER = "changed"
+CHANGED_BY_EMAIL_CODE = "email_reset"
+CHANGED_BY_ADMIN = "admin_reset"
+NOTICE_HOW = {
+    CHANGED_BY_USER: "在「資料與同步」輸入目前密碼後更改",
+    CHANGED_BY_EMAIL_CODE: "在登入頁用 email 驗證碼重設",
+    CHANGED_BY_ADMIN: "由管理員產生臨時密碼",
+}
 
 Send = Callable[[str, str, str], None]
 
@@ -157,3 +166,19 @@ def reset_password(db: Session, identifier: str, code: str, new_password: str, *
             synchronize_session=False)
         db.execute(delete(models.EmailCode).where(models.EmailCode.user_id == user_id))
     return {"ok": True}
+
+
+def notify_password_changed(db: Session, identifier: str, how: str, *, send: Send, when: datetime) -> bool:
+    """Tell the bound email that the password changed (SPEC-083); no email, no notice."""
+    user = _account(db, identifier)
+    if user is None or not user.email:
+        return False
+    send(
+        user.email,
+        "跑鞋追蹤：你的密碼已變更",
+        f"你的跑鞋追蹤帳號「{user.username}」的密碼在 {when:%Y-%m-%d %H:%M}（台灣時間）變更了。\n"
+        f"方式：{NOTICE_HOW[how]}。所有裝置上的登入都已登出。\n\n"
+        "如果是你本人操作，不用理會這封信。\n"
+        "如果不是你，請立刻在登入頁按「忘記密碼？」用這個 email 重設密碼，並通知管理員。\n",
+    )
+    return True

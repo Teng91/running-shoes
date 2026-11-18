@@ -155,6 +155,7 @@ test('SPEC-082 the theme follows the system by default and remembers light, dark
   assert.equal(context.resolveTheme('light', false), 'light');
   const boot = htmlSource.match(/<script>\s*try \{([\s\S]*?)\} catch/)[1];
   assert.match(boot, /theme !== 'dark' && window\.matchMedia\('\(prefers-color-scheme: light\)'\)\.matches/);
-  assert.equal((htmlSource.match(/data-click="set-theme"/g) || []).length, 3);
+  assert.equal((htmlSource.match(/data-click="set-theme"/g) || []).length, 6, 'sidebar and sign-in page');
+  assert.match(htmlSource, /<div class="theme-choice auth-theme-choice" role="group" aria-label="外觀主題">/);
   assert.doesNotMatch(htmlSource, /id="theme-toggle-btn"/);
 });
