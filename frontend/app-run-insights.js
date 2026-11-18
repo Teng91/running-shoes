@@ -230,7 +230,7 @@ function renderShoeAnalytics(data) {
   const source = life.forecast_source === 'recent_90_days' ? '依近 90 天實際使用' : '依計畫月跑量';
   const forecastSub = retired ? '退役後不再預估' : `${source} · ${Number(life.forecast_monthly_km).toFixed(1)} km／月`;
   const cards = [
-    { label: '總里程', value: `${Number(life.total_mileage_km).toFixed(2)} km`, sub: usage.average_pace_seconds_per_km ? `平均配速 ${formatPace(usage.average_pace_seconds_per_km)}` : '' },
+    { label: '總里程', value: `${formatShoeMileage(life.total_mileage_km)} km`, sub: usage.average_pace_seconds_per_km ? `平均配速 ${formatPace(usage.average_pace_seconds_per_km)}` : '' },
     { label: '穿著次數', value: `${usage.count} 次`, sub: usage.count ? '已納入逐筆日誌' : '尚無日誌紀錄' },
     { label: '近 30／90 天', value: `${Number(usage.km_30_days).toFixed(1)} / ${Number(usage.km_90_days).toFixed(1)} km`, sub: `實際月均 ${Number(usage.actual_monthly_km_90_days).toFixed(1)} km` },
     { label: '最後使用', value: usage.last_run_date ? usage.last_run_date.replace(/-/g, '/') : '—', sub: usage.first_run_date ? `首次紀錄 ${usage.first_run_date.replace(/-/g, '/')}` : '尚無日誌紀錄' },
