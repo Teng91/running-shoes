@@ -638,6 +638,27 @@ h1 { font-size: 28px; font-weight: 800; letter-spacing: .01em; margin-bottom: 4p
 
 /* Source: css/04-runs.css */
 /* Run log */
+/* SPEC-084: the getting-started card for new accounts. */
+.onboarding { background: var(--card); border: 1px solid var(--border); border-radius: 18px; padding: 18px 20px; margin-bottom: 16px; box-shadow: var(--shadow-card); }
+.onboarding-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 12px; }
+.onboarding-head h2 { font-size: 16px; font-weight: 800; }
+.onboarding-progress { color: var(--text-dim); font-size: 13px; margin-top: 2px; }
+.onboarding-steps { list-style: none; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 0; padding: 0; }
+.onboarding-steps li { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 10px; align-content: start; padding: 14px; border: 1px solid var(--border); border-radius: 14px; background: var(--card-raised); }
+.onboarding-steps li.current { border-color: var(--accent); }
+.onboarding-check { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--border); font-weight: 800; font-size: 13px; }
+.onboarding-steps li.current .onboarding-check { border-color: var(--accent); color: var(--accent); }
+.onboarding-steps li.done .onboarding-check { background: var(--accent); border-color: var(--accent); color: #0b1015; }
+.onboarding-steps li.done .onboarding-text { opacity: .65; }
+.onboarding-text p { color: var(--text-dim); font-size: 13px; margin-top: 4px; }
+.onboarding-hint[hidden] { display: none; }
+.onboarding-actions { grid-column: 2; display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.onboarding-steps li.done .onboarding-actions { display: none; }
+@media (max-width: 800px) {
+  .onboarding { padding: 16px; }
+  .onboarding-steps { grid-template-columns: minmax(0, 1fr); }
+  .onboarding-actions .btn { min-height: var(--control-height); }
+}
 .run-hero { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(340px, .75fr); gap: 16px; margin-bottom: 16px; }
 .run-intro {
   position: relative;
