@@ -33,7 +33,7 @@ function renderActivePanel() {
     // Spending lives at the bottom of the shoes tab.
     renderSpendingCharts();
   } else if (name === 'runs') {
-    populateRunShoeSelects(); renderRunLog(); renderHomeSummary();
+    populateRunShoeSelects(); renderRunLog(); renderHomeSummary(); renderOnboarding();
   } else if (name === 'monthly') {
     if (typeof Chart !== 'undefined') renderMonthlyCharts();
   }
