@@ -4,6 +4,13 @@
 每版的摘要見 [CHANGELOG.md](../CHANGELOG.md)；目前的功能與操作方式以 [README](../README.md) 為準。
 這裡保留當時的文字，後續版本可能已調整其中的行為。
 
+### 新帳號引導（SPEC-084，v4.23.0）
+
+- 新增 `frontend/app-onboarding.js`：三步完成狀態由已載入的鞋子、月跑量（任何月份大於 0 km）與 `runningGoal.version > 0` 推導，沒有新 API。`app-dashboard.render` 回報到達的資源，鞋子、月跑量與目標都載入過一次才可能顯示，避免既有帳號看到閃爍；登出時清空。
+- 「略過引導」存在 `localStorage` 的 `onboarding-dismissed:<小寫帳號>`；第 2 步在有鞋子前停用。
+
+Asset 4.23.0／shell v92、schema 12 不變，可直接回滾至 v4.22.1 image。
+
 ### 密碼變更通知信（SPEC-083，v4.22.1）
 
 - `services/email_codes.notify_password_changed` 依帳號或 email 找到使用者，有綁定 email 才寄通知；`routers/auth.change_password`、`confirm_password_reset` 與 `routers/admin.reset_password` 在服務成功後呼叫。`mailer.deliver_later` 把寄信排在回應之後並吞掉寄信錯誤（已記 log），忘記密碼的驗證碼也改用它。

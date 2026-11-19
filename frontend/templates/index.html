@@ -360,6 +360,35 @@ window.__appBootLegacyPoll = window.setInterval(function () {
   </div><!-- /tab-panel shoes -->
 
   <div class="tab-panel active" id="panel-runs" role="tabpanel" data-panel="runs">
+    <section class="onboarding" id="onboarding" hidden aria-labelledby="onboarding-title">
+      <div class="onboarding-head">
+        <div>
+          <h2 id="onboarding-title">開始使用：三個步驟</h2>
+          <p id="onboarding-progress" class="onboarding-progress" role="status"></p>
+        </div>
+        <button type="button" class="btn btn-sm btn-edit" data-click="dismiss-onboarding">略過引導</button>
+      </div>
+      <ol class="onboarding-steps">
+        <li data-onboarding-step="shoe">
+          <span class="onboarding-check" aria-hidden="true">1</span>
+          <div class="onboarding-text"><strong>新增第一雙鞋</strong><p>填鞋款、價格和預計壽命，之後跑步才能記到這雙鞋上。</p></div>
+          <div class="onboarding-actions"><button type="button" class="btn btn-sm btn-primary" data-click="add-shoe">新增跑鞋</button></div>
+        </li>
+        <li data-onboarding-step="run">
+          <span class="onboarding-check" aria-hidden="true">2</span>
+          <div class="onboarding-text"><strong>記錄跑步</strong><p>在下方記下一次跑步，或匯入 Strava 匯出的活動 CSV。</p><p class="onboarding-hint">先完成第 1 步。</p></div>
+          <div class="onboarding-actions">
+            <button type="button" class="btn btn-sm btn-primary" data-click="onboarding-log-run">記下一次跑步</button>
+            <button type="button" class="btn btn-sm btn-edit" data-click="open-strava">從 Strava 匯入</button>
+          </div>
+        </li>
+        <li data-onboarding-step="goal">
+          <span class="onboarding-check" aria-hidden="true">3</span>
+          <div class="onboarding-text"><strong>設定月目標</strong><p>每月想跑多少公里，「跑量與目標」頁會顯示進度。</p></div>
+          <div class="onboarding-actions"><button type="button" class="btn btn-sm btn-primary" data-click="onboarding-set-goal">設定目標</button></div>
+        </li>
+      </ol>
+    </section>
     <div class="run-hero">
       <div class="run-intro" data-mark="RUN">
         <h2 data-eyebrow="RUN LOG">這個月，你是怎麼跑的？</h2>

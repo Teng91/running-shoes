@@ -68,6 +68,7 @@ function render(resource = null) {
 
   invalidatePanels(resource);
   renderActivePanel();
+  noteOnboardingData(resource);
 }
 
 function renderCards() {

@@ -25,3 +25,4 @@ require('./frontend/run-pace.test.cjs');
 require('./frontend/pace-analysis.test.cjs');
 require('./frontend/account.test.cjs');
 require('./frontend/account-email.test.cjs');
+require('./frontend/onboarding.test.cjs');
