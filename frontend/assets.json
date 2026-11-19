@@ -1,6 +1,6 @@
 {
-  "version": "4.22.1",
-  "cache_name": "running-shoes-shell-v91",
+  "version": "4.23.0",
+  "cache_name": "running-shoes-shell-v92",
   "scripts": [
     "app-boot.js",
     "app-lifecycle.js",
@@ -26,6 +26,7 @@
     "app-run-insights.js",
     "app-shoes.js",
     "app-dashboard.js",
+    "app-onboarding.js",
     "app-exports.js",
     "app-goals.js",
     "app-charts.js",

@@ -239,6 +239,7 @@ flowchart LR
     RunCRUD --> RunInsights[app-run-insights.js]
     Core --> ShoesUI[app-shoes.js]
     Core --> Dashboard[app-dashboard.js]
+    Dashboard --> Onboarding[app-onboarding.js<br/>新帳號三步驟引導]
     Core --> ExportsUI[app-exports.js<br/>匯出下載]
     Core --> GoalsUI[app-goals.js<br/>目標設定與進度]
     Core --> Charts[app-charts.js<br/>共用 registry / utilities]
@@ -662,6 +663,7 @@ flowchart LR
 - **限流**：`rate_limits.consume()` 把同一請求的所有視窗放在一個交易，滿了就整筆回滾；限額來自 `app.state.settings`，不再保留記憶體桶。SPEC-071 再加上 AI 的每帳號與全站 24 小時視窗，限流桶保留 24 小時。
 - **稽核 trigger**：每次啟動依目前欄位重建，避免舊欄位清單使快照不完整或使寫入失敗。
 - **Strava**：`strava_import.parse_activity_dates()` 把 UTC 時間戳轉為 `clock.APP_TIMEZONE` 日期。`date_corrections()` 只修正仍停在舊 UTC 日期的既有活動，`services/strava_imports.py` 在匯入交易中移動日期與月跑量。
+- **v4.23.0**：新帳號引導（SPEC-084）。`app-onboarding.js` 只讀已載入的 `shoes`／`monthlyMileages`／`runningGoal` 推導三步狀態，由 `app-dashboard.render` 通知資源到達；沒有新 API，依賴方向不變。
 - **v4.21.0**：Email 驗證碼找回密碼（SPEC-079）。Schema 12 新增 `users.email` 與 `email_codes`（回滾腳本 `scripts/rollback_schema_twelve.sql`）。`backend/mailer.py` 是唯一的 SMTP adapter，由 `create_app` 注入 `app.state.mailer`；`services/email_codes.py` 不知道 SMTP，只接收一個寄信函式。`routers/auth.py` 在忘記密碼時以 BackgroundTasks 於回應後寄信。依賴方向不變。
 - **v4.20.3**：每日加密異地備份（SPEC-078）。`.github/workflows/offsite-backup.yml` 重用 operator 工具 `scripts/offsite_backup.py` 下載並演練，再加密成 30 天的 artifact；它與 `verify.yml` 的部署 job 一樣只讀 repo，並另外使用 `BACKUP_PASSPHRASE`。
 - **v4.20.0**：邀請制註冊與帳號管理（SPEC-075）。Schema 11 新增 `invites`（只存邀請碼雜湊、不屬於任何帳號）與 `lower(username)` 唯一索引，回滾腳本 `scripts/rollback_schema_eleven.sql`。`routers/admin.py` 以 `ADMIN_USERNAMES` 判斷管理員後轉交 `services/invites.py` 與 `services/accounts.py`；`accounts.delete_account` 依 metadata 由子表到父表刪除所有含 `user_id` 的資料表。前端 `app-account.js` 是註冊表單、管理員面板與刪除帳號的 DOM bridge。依賴方向不變。

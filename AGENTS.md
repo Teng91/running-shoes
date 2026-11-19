@@ -91,6 +91,7 @@
 - `frontend/app-history.js`: audit paging and recover-deletion presentation.
 - `frontend/app-core.js`: dashboard shell, theme, tabs, and aggregate data loading.
 - `frontend/app-dashboard.js`: dashboard cards, alerts, and shoe tables.
+- `frontend/app-onboarding.js`: the new-account getting-started card, derived only from loaded shoes, monthly mileage and the goal (SPEC-084).
 - `frontend/app-exports.js`: authenticated shoe exports and account backup downloads.
 - `frontend/app-goals.js`: running-goal settings and progress presentation.
 - `frontend/app-charts.js`: shared chart registry and label utilities.
