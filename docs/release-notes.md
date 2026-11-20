@@ -4,6 +4,15 @@
 每版的摘要見 [CHANGELOG.md](../CHANGELOG.md)；目前的功能與操作方式以 [README](../README.md) 為準。
 這裡保留當時的文字，後續版本可能已調整其中的行為。
 
+### 內建前端函式庫納入稽核與跑鞋索引（SPEC-089，v4.25.1）
+
+- `package.json` devDependencies 加入 `chart.js 4.4.7` 與 `marked 15.0.12`，只供稽核與測試比對，瀏覽器仍載入 `frontend/vendor/`。升級內建檔案時要一起更新 `package.json` 與鎖定檔，否則 `unit_tests/test_vendored_libraries.py` 會失敗。
+- `scripts/task.py dependency_audit_commands()`：`verify` 與 `audit-deps` 先跑 `pip_audit`，再跑 `npm audit --package-lock-only --audit-level=moderate`。
+- `migrations._ensure_lookup_indexes` 在啟動時建立 `idx_shoes_user_id`（`IF NOT EXISTS`），`models.Shoe` 宣告同名索引；schema 仍是 12。
+- 這一版也帶上 MIT `LICENSE`。
+
+Asset 4.25.1／shell v98、schema 12 不變，可直接回滾至 v4.25.0 image；舊版不受索引影響，不需要回滾 SQL。
+
 ### 登出所有裝置與註冊不洩漏帳號名稱（SPEC-088，v4.25.0）
 
 - 新增 `POST /api/auth/logout-all`：`accounts.logout_everywhere` 在帳號的寫入交易裡把 `token_version` 加 1，所有舊 token（包括送出請求的這一個）下一次請求回 401。前端在「資料與同步」新增區塊，成功後才清除這台的登入。

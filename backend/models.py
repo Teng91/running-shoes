@@ -57,6 +57,8 @@ class RateLimitBucket(Base):
 
 class Shoe(Base):
     __tablename__ = "shoes"
+    # SPEC-089: every shoe query filters by owner; migrations add it to older databases.
+    __table_args__ = (Index("idx_shoes_user_id", "user_id"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)

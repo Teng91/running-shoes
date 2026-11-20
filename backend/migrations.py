@@ -142,6 +142,16 @@ def _migrate_schema_twelve(engine: Engine) -> None:
     cast(Table, models.EmailCode.__table__).create(bind=engine, checkfirst=True)
 
 
+def _ensure_lookup_indexes(engine: Engine) -> None:
+    """Indexes that only speed up reads (SPEC-089).
+
+    Older code works unchanged with them, so they need no schema version or rollback
+    script; `models` declares the same names for databases created from scratch.
+    """
+    with engine.begin() as connection:
+        connection.execute(text("CREATE INDEX IF NOT EXISTS idx_shoes_user_id ON shoes (user_id)"))
+
+
 READY_TABLES = {"users", "shoes", "runs", "monthly_mileages"}
 
 
@@ -385,6 +395,7 @@ def run_startup_migrations(
     _migrate_schema_ten(engine)
     _migrate_schema_eleven(engine)
     _migrate_schema_twelve(engine)
+    _ensure_lookup_indexes(engine)
     with engine.begin() as connection:
         for table in ("runs", "monthly_mileages"):
             connection.execute(text(
