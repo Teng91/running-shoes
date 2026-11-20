@@ -24,7 +24,7 @@
 
 - `backend/llm.py`：`call_llm_stream(..., include_reasoning=False)`。為 `True` 時，每個 delta 依序讀 `reasoning`、`reasoning_content`，沒有才讀 `reasoning_details` 中 `reasoning.text`／`reasoning.summary` 的文字（加密內容略過），以 `ReasoningText`（`str` 子類別）產出；思考內容不併入回傳的 `content`。預設 `False`，月報 adapter 與既有呼叫方的行為不變。
 - `backend/agent.py`：以 `include_reasoning=True` 呼叫，遇到 `ReasoningText` 送出 SSE `{"type": "thinking", "text": ...}`，不加入 `full_content`，因此不影響文字工具標記解析、tool 訊息與歷史。
-- `frontend/app-agent.js`：`createAgentReasoning()` 在答案泡泡前插入 `<details class="agent-reasoning" open>`，以 text node `appendData` 累加內容並自動捲到底；`token`、`tool`、`reasoning_start`、`error` 或串流結束時 `finish()` 收合並顯示秒數。每秒的計時器更新思考區塊或泡泡內的 `.agent-wait` 標籤，`tool_done` 與 `reasoning_start` 時重新起算；串流結束、錯誤或取消時停止。
+- `frontend/app-agent.js`：`createAgentReasoning()` 在答案泡泡前插入 `<details class="agent-reasoning" open>`，以 text node `appendData` 累加內容並自動捲到底；`token`、`tool`、`reasoning_start`、`error` 或串流結束時 `finish()` 收合並顯示秒數。秒數從這一輪模型呼叫開始（送出訊息，或上一個工具完成）算起，包含第一個思考片段到達前的等待，區塊接續泡泡已經數到的秒數（v4.24.1 修正：原本從第一個思考片段才開始算，等了 30 秒才一口氣送來思考內容的模型會顯示「已思考 1 秒」）。每秒的計時器更新思考區塊或泡泡內的 `.agent-wait` 標籤，`tool_done` 與 `reasoning_start` 時重新起算；串流結束、錯誤或取消時停止。
 - `frontend/css/07-agent.css`：`.agent-reasoning` 與 `.agent-wait` 樣式；思考內容最多顯示約 11 行，超過可捲動。
 
 ## Security and data isolation
@@ -42,7 +42,7 @@
 - [x] AC-1：Given 模型串流 `reasoning`／`reasoning_details`，When 以 `include_reasoning=True` 呼叫，Then 產出標示為思考的片段（同一個 delta 不重複、加密內容略過），回答 `content` 不含思考內容；預設呼叫只產出回答。
 - [x] AC-2：Given Agent 對話，When 模型先思考再呼叫工具、再思考後回答，Then SSE 依序送出 `thinking`、工具事件、`thinking`、`token`，第二輪 prompt 不含第一輪的思考內容。
 - [x] AC-3：Given 前端收到 `thinking`，Then 在答案上方顯示展開的思考區塊與秒數，第一個回答 token 時收合為「已思考 N 秒」，思考內容以純文字顯示且不寫入對話歷史與 `sessionStorage`。
-- [x] AC-4：Given 多輪工具呼叫或模型不輸出思考內容，Then 每輪各有一個思考區塊並與工具列依序排列；泡泡在等待時顯示「思考中… N 秒」，工具完成後重新計時，串流結束後計時器停止。
+- [x] AC-4：Given 多輪工具呼叫或模型不輸出思考內容，Then 每輪各有一個思考區塊並與工具列依序排列；泡泡在等待時顯示「思考中… N 秒」，工具完成後重新計時；思考區塊的秒數從這一輪開始算，接續泡泡的秒數，即使思考內容在最後才一口氣送到；串流結束後計時器停止。
 
 ## Test traceability
 
@@ -51,4 +51,4 @@
 | AC-1 | `unit_tests/test_llm.py::test_call_llm_stream_yields_reasoning_only_when_requested`、`unit_tests/test_llm.py::test_call_llm_stream_reads_openrouter_reasoning_from_real_sdk_deltas` |
 | AC-2 | `unit_tests/test_agent.py::test_model_thinking_streams_as_its_own_event_and_never_joins_the_answer` |
 | AC-3 | `unit_tests/frontend/agent-thinking.test.cjs::SPEC-086 reasoning streams live above the answer, folds when it answers and is never kept` |
-| AC-4 | `unit_tests/frontend/agent-thinking.test.cjs::SPEC-086 each model round gets its own block and the bubble waits again between rounds`、`unit_tests/frontend/agent-thinking.test.cjs::SPEC-086 a model that never thinks out loud still shows the waiting seconds, then the answer` |
+| AC-4 | `unit_tests/frontend/agent-thinking.test.cjs::SPEC-086 each model round gets its own block and the bubble waits again between rounds`、`unit_tests/frontend/agent-thinking.test.cjs::SPEC-086 a long wait before a short burst of reasoning still reports the whole thinking time`、`unit_tests/frontend/agent-thinking.test.cjs::SPEC-086 a model that never thinks out loud still shows the waiting seconds, then the answer` |

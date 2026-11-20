@@ -141,14 +141,14 @@ test('SPEC-086 reasoning streams live above the answer, folds when it answers an
   assert.equal(block.open, true);
   assert.equal(view.blockText(block), '先看鞋況，<b>再</b>整理。', 'reasoning stays literal text');
   assert.equal(block.querySelector('.agent-reasoning-text').html, '');
-  assert.equal(view.summary(block), '💭 思考中…');
+  assert.equal(view.summary(block), '💭 思考中… 3 秒', 'the block continues the seconds of the waiting bubble');
   assert.equal(view.bubble().textContent, '', 'the live block shows the time instead of the bubble');
   view.tick(4);
-  assert.equal(view.summary(block), '💭 思考中… 4 秒');
+  assert.equal(view.summary(block), '💭 思考中… 7 秒');
 
   await view.send({ type: 'token', text: '鞋況' });
   assert.equal(block.open, false, 'the first answer token folds the reasoning');
-  assert.equal(view.summary(block), '💭 已思考 4 秒');
+  assert.equal(view.summary(block), '💭 已思考 7 秒');
   assert.equal(view.bubble().textContent, '鞋況');
   await view.send({ type: 'token', text: '良好。' }, { type: 'done' });
   await finished;
@@ -187,8 +187,30 @@ test('SPEC-086 each model round gets its own block and the bubble waits again be
   assert.deepEqual(view.parts(), ['agent-message', 'agent-reasoning', 'agent-tools', 'agent-reasoning', 'agent-message', 'agent-retry-btn']);
   const [, second] = view.blocks();
   assert.equal(view.blockText(second), '整理鞋況');
-  assert.equal(view.summary(second), '💭 已思考 1 秒');
+  assert.equal(view.summary(second), '💭 已思考 6 秒', 'the second round counts from the end of the tool, not the first reasoning');
   assert.equal(view.bubble().innerHTML.startsWith('<p>建議輪替。</p>'), true);
+});
+
+test('SPEC-086 a long wait before a short burst of reasoning still reports the whole thinking time', async () => {
+  // Regression: a model that thought for 30-odd seconds, then sent its reasoning in
+  // one burst right before calling a tool, used to fold into「已思考 1 秒」.
+  const view = agentContext();
+  const finished = view.context.sendAgentMessage();
+  await view.settle();
+  view.tick(31);
+  await view.send(
+    { type: 'thinking', text: '先查鞋櫃' },
+    { type: 'reasoning_start', text: '' },
+    { type: 'tool', name: 'list_my_shoes', args: {} },
+    { type: 'tool_done', name: 'list_my_shoes', ok: true },
+  );
+  view.tick(18);
+  await view.send({ type: 'thinking', text: '整理' }, { type: 'token', text: '完成。' }, { type: 'done' });
+  await finished;
+
+  const [first, second] = view.blocks();
+  assert.equal(view.summary(first), '💭 已思考 31 秒');
+  assert.equal(view.summary(second), '💭 已思考 18 秒');
 });
 
 test('SPEC-086 a model that never thinks out loud still shows the waiting seconds, then the answer', async () => {
