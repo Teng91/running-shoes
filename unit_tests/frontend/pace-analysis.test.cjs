@@ -31,6 +31,7 @@ function racePrepContext({ race, pace, puts = [], deletes = [] }) {
   nodes['race-distance'].options = [{ value: '21.0975' }, { value: '10' }, { value: '5' }, { value: '42.195' }];
   vm.runInContext(extract('reviewCard'), context);
   vm.runInContext(readText('frontend/app-pace-charts.js'), context);
+  vm.runInContext(readText('frontend/app-race-goal.js'), context);
   return { context, nodes, charts, reads };
 }
 

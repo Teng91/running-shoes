@@ -7,9 +7,10 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import event
 
-from backend import goals, models
+from backend import models
 from backend.dependencies import get_db
 from backend.main import app
+from backend.read_models import goal_progress
 from backend.tools import db_tools
 
 
@@ -44,7 +45,7 @@ def test_goal_progress_api_excludes_manual_adjustment(db, user_with_token, stats
     assert response.json()["month_km"] == 50
     assert response.json()["month_achievement_percent"] == 40
     assert response.json()["ytd_km"] == 50
-    assert response.json() == goals.goal_progress(db, user.id, 2026, 1)
+    assert response.json() == goal_progress.goal_progress(db, user.id, 2026, 1)
     assert (
         client.get("/api/running-goal/progress?year=2026&month=13", headers=headers).status_code
         == 422

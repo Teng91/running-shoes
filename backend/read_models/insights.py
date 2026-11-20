@@ -8,9 +8,10 @@ from datetime import date, timedelta
 
 from sqlalchemy.orm import Session
 
-from backend import goals, models
+from backend import models
 from backend.clock import local_today
 from backend.forecasting import retirement_forecast
+from backend.read_models import goal_progress
 from backend.read_models.rounding import round_metric
 from backend.read_models.run_statistics import month_bounds, run_period
 from backend.read_models.shoe_statistics import shoe_run_statistics
@@ -224,7 +225,7 @@ def dashboard_analytics(
                 "shoe_id": shoe.id,
                 "message": f"{shoe.brand} {shoe.model} 已使用 {pct:.1f}% 預期壽命",
             })
-    goal = goals.goal_progress(db, user_id, year, month, as_of=as_of)
+    goal = goal_progress.goal_progress(db, user_id, year, month, as_of=as_of)
     days_in_month = monthrange(year, month)[1]
     if selected == current:
         projected = round_metric(goal["month_km"] / max(1, as_of.day) * days_in_month)

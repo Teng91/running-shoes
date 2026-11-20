@@ -35,6 +35,7 @@ LAYOUT_FILES = {
     "frontend/app-charts.js",
     "frontend/app-shoe-charts.js",
     "frontend/app-monthly-charts.js",
+    "frontend/app-trend-charts.js",
     "frontend/app-spending.js",
     "frontend/app-runs.js",
     "frontend/app-strava.js",

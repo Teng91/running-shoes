@@ -2,7 +2,8 @@
 
 from sqlalchemy.orm import Session
 
-from backend import analytics, models
+from backend import models
+from backend.read_models import insights
 from backend.read_models.rounding import round_metric
 from backend.read_models.shoe_matching import resolve_shoe
 from backend.schemas import SHOE_CATEGORIES
@@ -326,7 +327,7 @@ def shoe_usage_analytics(
         shoes = [selected] if selected is not None else []
     results = []
     for shoe, payload in zip(
-        shoes, analytics.batch_shoe_analytics(db, user_id, shoes, include_details=False), strict=True
+        shoes, insights.batch_shoe_analytics(db, user_id, shoes, include_details=False), strict=True
     ):
         life = payload["lifecycle"]
         usage = payload["usage"]

@@ -3,10 +3,10 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from backend import goals as goal_service
 from backend import models, schemas
 from backend.auth import get_current_user
 from backend.dependencies import OperationKey, get_db, get_settings
+from backend.read_models import goal_progress as goal_service
 from backend.routers.errors import service_errors
 from backend.services import goals
 from backend.services.operations import legacy_operation

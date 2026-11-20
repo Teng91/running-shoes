@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [4.25.2] - 2026-11-20
+
+### Changed
+- 模組解耦（SPEC-090），功能與畫面不變：唯讀統計 `analytics.py`、`goals.py`、`reports.py` 移入 `read_models/`（`insights.py`、`goal_progress.py`、`report_snapshot.py`）；改密碼通知移到共用的 `routers/password_notices.py`，架構檢查禁止 router 互相 import；`app-monthly-charts.js` 拆出 `app-trend-charts.js`，`app-pace-charts.js` 拆出 `app-race-goal.js`。Asset 4.25.2／shell v99，schema 12 不變。
+
 ## [4.25.1] - 2026-11-20
 
 ### Added

@@ -7,7 +7,8 @@ from datetime import date, timedelta
 from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
-from backend import goals, models
+from backend import models
+from backend.read_models import goal_progress
 from backend.read_models.rounding import round_metric
 from backend.run_metrics import pace_seconds_per_km
 
@@ -136,13 +137,13 @@ def _weekday_mix(daily: dict[date, DailyRuns], start: date, end: date) -> list[d
 def training_trends(db: Session, user_id: int, year: int, as_of: date,
                     weeks_end: date | None = None) -> dict:
     end = trends_end(year, as_of)
-    goal = goals.goal_values(db, user_id)
-    days_in_year = goals.days_in_year(year)
+    goal = goal_progress.goal_values(db, user_id)
+    days_in_year = goal_progress.days_in_year(year)
     yearly_goal = goal["yearly_km"]
-    goal_line = [goals.yearly_goal_to_date(yearly_goal, year, day + 1) for day in range(days_in_year)]
+    goal_line = [goal_progress.yearly_goal_to_date(yearly_goal, year, day + 1) for day in range(days_in_year)]
     goal_active = year >= goal["start_year"]
     # The weekly target has the annual goal line's slope: yearly goal x 7 / days in the year.
-    weekly_goal_km = goals.yearly_goal_to_date(yearly_goal, year, 7)
+    weekly_goal_km = goal_progress.yearly_goal_to_date(yearly_goal, year, 7)
     base = {
         "year": year,
         "end_date": end.isoformat() if end else None,
