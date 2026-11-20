@@ -107,6 +107,24 @@ def backend_test_command() -> Command:
     )
 
 
+def dependency_audit_commands() -> tuple[Command, ...]:
+    """Known-vulnerability scans of the locked Python and npm dependencies.
+
+    SPEC-089: the vendored Chart.js and marked are pinned as npm devDependencies at the
+    vendored versions, so the npm audit (lockfile only, no install) covers them too.
+    """
+    return (
+        Command(
+            "Dependency vulnerability audit",
+            (project_python(), "-m", "pip_audit", "--require-hashes", "-r", "requirements.txt"),
+        ),
+        Command(
+            "npm dependency vulnerability audit",
+            (shutil.which("npm") or "npm", "audit", "--package-lock-only", "--audit-level=moderate"),
+        ),
+    )
+
+
 def verification_commands() -> tuple[Command, ...]:
     """Return the canonical cross-platform verification command sequence."""
     python = project_python()
@@ -120,10 +138,7 @@ def verification_commands() -> tuple[Command, ...]:
             needs_test_secret=True,
         ),
         Command("Secret scan", (python, "scripts/check_secrets.py")),
-        Command(
-            "Dependency vulnerability audit",
-            (python, "-m", "pip_audit", "--require-hashes", "-r", "requirements.txt"),
-        ),
+        *dependency_audit_commands(),
         Command(
             "README consistency",
             (python, "scripts/check_docs.py"),
@@ -254,12 +269,8 @@ def run_task(task: str, *, base_url: str | None = None) -> None:
             )
         )
     elif task == "audit-deps":
-        run_checked(
-            Command(
-                "Dependency vulnerability audit",
-                (python, "-m", "pip_audit", "--require-hashes", "-r", "requirements.txt"),
-            )
-        )
+        for command in dependency_audit_commands():
+            run_checked(command)
     elif task == "architecture-check":
         run_checked(
             Command(
