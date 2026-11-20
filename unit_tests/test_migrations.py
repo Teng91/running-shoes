@@ -283,3 +283,16 @@ def test_startup_drops_only_empty_legacy_tables():
         assert connection.execute(text(
             "SELECT value FROM schema_metadata WHERE key = 'schema_version'"
         )).scalar_one() == "12"
+
+
+def test_startup_adds_the_shoe_owner_index_to_older_databases():
+    """SPEC-089: databases created before the index get it at startup; queries by owner use it."""
+    engine = _make_test_engine()
+    with engine.begin() as connection:
+        connection.execute(text("DROP INDEX idx_shoes_user_id"))
+    run_startup_migrations(engine, sessionmaker(bind=engine))
+    with engine.connect() as connection:
+        plan = " ".join(str(row[-1]) for row in connection.execute(
+            text("EXPLAIN QUERY PLAN SELECT id FROM shoes WHERE user_id = 1 AND is_deleted = 0")))
+    assert "idx_shoes_user_id" in plan, plan
+    run_startup_migrations(engine, sessionmaker(bind=engine))  # idempotent
