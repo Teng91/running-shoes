@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Added
+- 以 MIT 授權釋出（`LICENSE`）。
+
 ## [4.25.0] - 2026-11-20
 
 ### Added
