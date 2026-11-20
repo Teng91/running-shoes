@@ -4,6 +4,15 @@
 每版的摘要見 [CHANGELOG.md](../CHANGELOG.md)；目前的功能與操作方式以 [README](../README.md) 為準。
 這裡保留當時的文字，後續版本可能已調整其中的行為。
 
+### Strava 與手動紀錄衝突時讓使用者選擇（SPEC-091，v4.26.0）
+
+- `strava_import.manual_matches` 的衝突帶 `duration_seconds`、`gear`、`candidate_run_ids`（當天未被自動連結的手動紀錄）；新的純函式 `resolve_conflicts` 驗證並套用選擇，連結時只在距離接近且配速合理時補時間。
+- 預覽新增 `manual_conflicts`（含候選紀錄的距離、時間、鞋名）；`manual_conflict_samples` 格式不變。
+- `POST /api/runs/import/strava` 新增選填 form 欄位 `conflicts`（`{"<strava_id>": "skip" | "import" | <run_id>}`）。格式錯誤回 400，選擇與目前資料不符回 409，整筆匯入不套用。
+- 前端在鞋款配對下方逐筆列出衝突與下拉選單。
+
+Asset 4.26.0／shell v100、schema 12 不變，可直接回滾至 v4.25.2 image；舊版忽略 `conflicts` 欄位，衝突照舊略過。
+
 ### 模組解耦（SPEC-090，v4.25.2）
 
 - `backend/analytics.py` → `read_models/insights.py`、`backend/goals.py` → `read_models/goal_progress.py`、`backend/reports.py` → `read_models/report_snapshot.py`，內容不變；原本只檢查 `reports.py` 的架構規則改由 read models 共同規則涵蓋。

@@ -780,6 +780,8 @@ h1 { font-size: 28px; font-weight: 800; letter-spacing: .01em; margin-bottom: 4p
 .strava-summary { margin-bottom: 14px; }
 .strava-group { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; }
 .strava-group small { color: var(--text-dim); display: block; }
+.strava-conflicts-title { margin: 14px 0 0; font-weight: 600; }
+.strava-group select { max-width: min(100%, 320px); }
 .strava-group select { min-width: 220px; max-width: 100%; padding: 10px 12px; background: var(--field-bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px; }
 .strava-groups { max-height: 300px; overflow-y: auto; margin-top: 12px; }
 .strava-sync { display: flex; align-items: flex-start; gap: 9px; margin-top: 12px; color: var(--text); font-size: 13px; line-height: 1.5; }

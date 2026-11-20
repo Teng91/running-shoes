@@ -6,6 +6,7 @@ import math
 import re
 from collections.abc import Sequence
 from datetime import UTC, date, datetime
+from typing import cast
 
 from backend import schemas
 from backend.clock import APP_TIMEZONE
@@ -315,7 +316,69 @@ def manual_matches(
                 links.append({"strava_id": str(row["strava_id"]), "run_id": partner[0],
                               "date": day, "duration_seconds": fill})
                 continue
-            conflicts.append({"strava_id": str(row["strava_id"]), "date": day, "km": km})
+            conflicts.append({"strava_id": str(row["strava_id"]), "date": day, "km": km,
+                              "duration_seconds": row.get("duration_seconds"), "gear": str(row.get("gear") or "")})
+    # SPEC-091: the user may link a conflict to any manual run that day that this import
+    # does not link automatically.
+    linked_runs = {int(cast(int, link["run_id"])) for link in links}
+    for conflict in conflicts:
+        conflict["candidate_run_ids"] = [
+            manual[0] for manual in manual_by_date[str(conflict["date"])] if manual[0] not in linked_runs
+        ]
     links.sort(key=lambda link: (str(link["date"]), str(link["strava_id"])))
     conflicts.sort(key=lambda conflict: (str(conflict["date"]), str(conflict["strava_id"])))
     return links, conflicts
+
+
+class ConflictChoiceError(ValueError):
+    """A conflict choice that does not match the current preview (SPEC-091)."""
+
+
+SKIP_CONFLICT = "skip"
+IMPORT_CONFLICT = "import"
+
+
+def resolve_conflicts(
+    conflicts: list[dict[str, object]],
+    choices: dict[str, object],
+    manual_runs: Sequence[tuple[int, str, float, int | None]],
+) -> tuple[list[dict[str, object]], set[str]]:
+    """Apply the user's choice for each same-day conflict (SPEC-091).
+
+    A choice is "skip" (the default for an activity without one), "import" (a new run) or
+    the id of one of the conflict's candidate manual runs, which links like an automatic
+    match: distance, date and shoe stay as entered. A missing moving time is filled only when
+    the two distances are close and the pace is plausible; Strava's time for a different
+    distance would give the typed run a wrong pace. Returns the extra links and the Strava IDs to import. A choice for an activity
+    that is not a conflict, a run that is not a candidate, or one run chosen twice raises
+    ConflictChoiceError, so a stale preview is never applied.
+    """
+    by_id = {str(conflict["strava_id"]): conflict for conflict in conflicts}
+    manual_by_id = {manual[0]: manual for manual in manual_runs}
+    links: list[dict[str, object]] = []
+    imports: set[str] = set()
+    chosen_runs: set[int] = set()
+    for strava_id, choice in choices.items():
+        conflict = by_id.get(str(strava_id))
+        if conflict is None:
+            raise ConflictChoiceError("not a conflict")
+        if choice == SKIP_CONFLICT:
+            continue
+        if choice == IMPORT_CONFLICT:
+            imports.add(str(strava_id))
+            continue
+        if isinstance(choice, bool) or not isinstance(choice, int):
+            raise ConflictChoiceError("unknown choice")
+        if choice not in cast(list[int], conflict["candidate_run_ids"]) or choice in chosen_runs:
+            raise ConflictChoiceError("not a candidate")
+        chosen_runs.add(choice)
+        manual = manual_by_id[choice]
+        duration = conflict.get("duration_seconds")
+        fill = (
+            duration
+            if manual[3] is None and isinstance(duration, int) and is_plausible_duration(duration, manual[2])
+            and _close_km(float(str(conflict["km"])), manual[2])
+            else None
+        )
+        links.append({"strava_id": str(strava_id), "run_id": choice, "date": conflict["date"], "duration_seconds": fill})
+    return links, imports
