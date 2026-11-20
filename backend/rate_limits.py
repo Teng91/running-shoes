@@ -43,6 +43,10 @@ _STRAVA_USER_DETAIL = "Strava 匯入過於頻繁，請稍後再試。"
 _MAIL_DETAIL = "寄送驗證碼過於頻繁，請 10 分鐘後再試。"
 _MAIL_GLOBAL_DETAIL = "驗證碼寄送服務目前忙碌，請稍後再試。"
 MAIL_WINDOW_SECONDS = 10 * 60
+# SPEC-085: each new code restarts its own 5 attempts, so the attempts on one account's
+# codes are also capped per day; the bucket retention (one day) bounds this window.
+CODE_ATTEMPTS_PER_DAY = 10
+_CODE_ATTEMPT_DETAIL = "驗證碼嘗試次數過多，請明天再試；急用請找管理員產生臨時密碼。"
 _RESTORE_GLOBAL_DETAIL = "備份還原服務目前忙碌，請稍後再試。"
 
 
@@ -191,6 +195,18 @@ def enforce_mail_limits(request: Request, account_key: str) -> None:
         Window("mail-ip", client_key(request, settings), 5, _MAIL_DETAIL, seconds=MAIL_WINDOW_SECONDS),
         Window("mail-account", account_key[:128], 3, _MAIL_DETAIL, seconds=MAIL_WINDOW_SECONDS),
         Window("mail-global", "global", 100, _MAIL_GLOBAL_DETAIL, seconds=3600),
+    ))
+
+
+def enforce_code_attempt_limit(request: Request, purpose: str, account_key: str) -> None:
+    """Count one emailed-code attempt per account and day before the code is checked (SPEC-085).
+
+    Every attempt counts, right or wrong, so parallel guesses cannot slip past the limit.
+    """
+    _settings, engine = _runtime(request)
+    consume(engine, (
+        Window("code-attempt", f"{purpose}:{account_key}"[:128], CODE_ATTEMPTS_PER_DAY, _CODE_ATTEMPT_DETAIL,
+               seconds=DAILY_WINDOW_SECONDS),
     ))
 
 

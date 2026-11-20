@@ -10,6 +10,7 @@ from backend.dependencies import get_db
 from backend.mailer import Mailer, MailError, deliver_later
 from backend.rate_limits import (
     enforce_auth_rate_limit,
+    enforce_code_attempt_limit,
     enforce_mail_limits,
     record_login_failure,
     reject_locked_account,
@@ -34,7 +35,8 @@ def register(request: Request, payload: schemas.UserCreate, db: Session = Depend
     with service_errors():
         return accounts.register(db, payload.username, payload.password,
                                  max_users=settings.max_registered_users,
-                                 mode=settings.registration_mode, invite_code=payload.invite_code)
+                                 mode=settings.registration_mode, invite_code=payload.invite_code,
+                                 admin_names=settings.admin_usernames)
 
 
 @router.post("/login", response_model=schemas.Token)
@@ -65,7 +67,8 @@ def delete_account(request: Request, payload: schemas.AccountDelete,
     """Permanently delete the signed-in account after re-entering its password (SPEC-075)."""
     enforce_auth_rate_limit(request)
     with service_errors():
-        return accounts.delete_account(db, current_user, payload.password)
+        return accounts.delete_account(db, current_user, payload.password,
+                                       is_admin=request.app.state.settings.is_admin(current_user.username))
 
 
 @router.post("/change-password")
@@ -123,6 +126,7 @@ def request_email_binding(request: Request, payload: schemas.EmailBindRequest,
 def confirm_email_binding(request: Request, payload: schemas.EmailCodeConfirm,
                           current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     enforce_auth_rate_limit(request)
+    enforce_code_attempt_limit(request, email_codes.VERIFY_EMAIL, f"user:{current_user.id}")
     with service_errors():
         return email_codes.confirm_email_binding(db, current_user, payload.code,
                                                  secret_key=request.app.state.settings.secret_key)
@@ -152,6 +156,7 @@ def request_password_reset(request: Request, payload: schemas.PasswordResetReque
 def confirm_password_reset(request: Request, payload: schemas.PasswordResetConfirm, background: BackgroundTasks,
                            db: Session = Depends(get_db)):
     enforce_auth_rate_limit(request)
+    enforce_code_attempt_limit(request, email_codes.RESET_PASSWORD, email_codes.attempt_key(db, payload.identifier))
     with service_errors():
         result = email_codes.reset_password(db, payload.identifier, payload.code, payload.new_password,
                                             secret_key=request.app.state.settings.secret_key)
