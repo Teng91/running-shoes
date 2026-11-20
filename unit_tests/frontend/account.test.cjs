@@ -1,5 +1,5 @@
 // SPEC-075: invite-only sign-up, admin invites/password help and account deletion.
-const { runContext, test, assert, vm, extract, htmlSource, authOperationContext } = require('./helpers.cjs');
+const { runContext, test, assert, vm, extract, htmlSource, source, authOperationContext } = require('./helpers.cjs');
 
 function nodes() {
   return new Proxy({}, { get: (target, id) => target[id] ||= { id, value: '', textContent: '', innerHTML: '', hidden: false, style: {},
@@ -122,4 +122,20 @@ test('SPEC-075 deleting the account needs the password and signs out only after 
   await context.deleteAccount();
   assert.deepEqual(calls.slice(-5), ['clear', 'close', 'logout', 'login', '帳號已刪除。']);
   assert.equal(elements['delete-account-password'].value, '');
+});
+
+test('SPEC-085 an admin who tries to delete the account is told why and stays signed in', async () => {
+  const translations = runContext({});
+  vm.runInContext(`${source.slice(source.indexOf('const ERROR_ZH = {'), source.indexOf('\n};', source.indexOf('const ERROR_ZH = {')) + 3)}\n${extract('translateError')}`, translations);
+  const elements = nodes();
+  const calls = [];
+  const { context } = accountContext(elements, {
+    translateError: translations.translateError,
+    apiPost: async () => { throw new Error('Admin accounts cannot be deleted'); },
+    clearAuth: () => calls.push('logout'),
+  });
+  elements['delete-account-password'].value = 'pass1234';
+  await context.deleteAccount();
+  assert.equal(elements['delete-account-status'].textContent, '刪除失敗：管理員帳號不能刪除；要刪除請先把這個帳號從 ADMIN_USERNAMES 移除');
+  assert.deepEqual(calls, [], 'the refusal keeps the session');
 });
