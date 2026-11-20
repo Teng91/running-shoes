@@ -29,6 +29,7 @@ function openStravaModal() {
   document.getElementById('strava-file').value = '';
   document.getElementById('strava-summary').innerHTML = '';
   document.getElementById('strava-mapping').innerHTML = '';
+  document.getElementById('strava-conflicts').innerHTML = '';
   document.getElementById('strava-error').style.display = 'none';
   document.getElementById('strava-import-btn').disabled = true;
   renderStravaImportHistory();
@@ -85,6 +86,7 @@ async function previewStravaFile() {
   const operation = stravaController.beginPreview();
   summary.innerHTML = '';
   mapping.innerHTML = '';
+  document.getElementById('strava-conflicts').innerHTML = '';
   error.style.display = 'none';
   document.getElementById('strava-import-btn').disabled = true;
   if (!file) return;
@@ -116,8 +118,9 @@ async function previewStravaFile() {
       if (group.suggested_shoe_id) document.getElementById(`strava-map-${index}`).value = String(group.suggested_shoe_id);
       updateStravaDateWarning(index);
     });
+    document.getElementById('strava-conflicts').innerHTML = stravaConflictsHtml(stravaController.state.preview);
     setStravaMappingDisabled(stravaController.importing());
-    document.getElementById('strava-import-btn').disabled = stravaController.importing() || !stravaHasChanges(stravaController.state.preview);
+    updateStravaImportButton();
   } catch (e) {
     if (e.name === 'AbortError' || !stravaController.current(operation)) return;
     summary.innerHTML = '';
@@ -159,9 +162,41 @@ function stravaManualMatchText(preview) {
   if (conflicts) {
     const samples = (preview.manual_conflict_samples || [])
       .map(item => `${String(item.date).replace(/-/g, '/')} ${Number(item.km).toFixed(2)} km`).join('、');
-    text += `另有 ${conflicts} 筆活動當天已有手動紀錄但無法確定是同一次，為避免重複不會匯入${samples ? `（例如 ${samples}）` : ''}。`;
+    text += `另有 ${conflicts} 筆活動當天已有手動紀錄但無法確定是同一次${samples ? `（例如 ${samples}）` : ''}，請在下方選擇略過、連結到手動紀錄或匯入為新紀錄（預設略過）。`;
   }
   return text;
+}
+
+// SPEC-091: each same-day conflict offers skip (default), a link to one of that day's
+// manual runs, or importing it as a new run. The backend re-checks every choice.
+function stravaConflictLabel(item) {
+  const time = item.duration_seconds ? ` · ${formatRunDuration(item.duration_seconds)}` : '';
+  return `${Number(item.km).toFixed(2)} km${time}`;
+}
+
+function stravaConflictsHtml(preview) {
+  const conflicts = preview?.manual_conflicts || [];
+  if (!conflicts.length) return '';
+  return '<p class="strava-conflicts-title">當天已有手動紀錄的活動</p>' + conflicts.map((conflict, index) => {
+    const links = (conflict.candidates || []).map(run => `<option value="${run.run_id}">連結到手動紀錄：${esc(stravaConflictLabel(run))}${run.shoe_name ? ` · ${esc(run.shoe_name)}` : ''}</option>`).join('');
+    return `<div class="strava-group"><div><strong>${esc(String(conflict.date).replace(/-/g, '/'))} Strava ${esc(stravaConflictLabel(conflict))}</strong><small>${esc(conflict.gear || '未指定鞋款')}</small></div>
+      <select id="strava-conflict-${index}" data-change="strava-conflict-choice" aria-label="${esc(String(conflict.date))} 的 Strava 活動要如何處理"><option value="skip">略過（不匯入）</option>${links}<option value="import">匯入為新紀錄</option></select></div>`;
+  }).join('');
+}
+
+function stravaConflictChoices(preview) {
+  const choices = {};
+  (preview?.manual_conflicts || []).forEach((conflict, index) => {
+    const value = document.getElementById(`strava-conflict-${index}`)?.value || 'skip';
+    if (value !== 'skip') choices[conflict.strava_id] = value === 'import' ? 'import' : Number(value);
+  });
+  return choices;
+}
+
+function updateStravaImportButton() {
+  const preview = stravaController.state.preview;
+  document.getElementById('strava-import-btn').disabled = stravaController.importing() || !preview
+    || (!stravaHasChanges(preview) && !Object.keys(stravaConflictChoices(preview)).length);
 }
 
 function stravaHasChanges(preview) {
@@ -205,6 +240,7 @@ async function importStrava() {
   try {
     const result = await stravaController.import(operation, file, {
       mapping: JSON.stringify(mapping), start_date: startDate, end_date: endDate,
+      conflicts: JSON.stringify(stravaConflictChoices(stravaController.state.preview)),
     });
     if (!stravaController.sessionCurrent(operation)) return;
     resourceStore.invalidate(['strava-history']);
@@ -222,11 +258,11 @@ async function importStrava() {
     stravaController.finishImport(operation);
     if (stravaController.windowCurrent(operation) && !stravaController.importing() && stravaController.state.preview) {
       setStravaMappingDisabled(false);
-      button.disabled = !stravaHasChanges(stravaController.state.preview);
+      updateStravaImportButton();
     }
   }
 }
 
 function setStravaMappingDisabled(disabled) {
-  document.querySelectorAll('#strava-mapping select').forEach(select => { select.disabled = disabled; });
+  document.querySelectorAll('#strava-mapping select, #strava-conflicts select').forEach(select => { select.disabled = disabled; });
 }

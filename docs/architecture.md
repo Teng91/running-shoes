@@ -664,6 +664,7 @@ flowchart LR
 - **限流**：`rate_limits.consume()` 把同一請求的所有視窗放在一個交易，滿了就整筆回滾；限額來自 `app.state.settings`，不再保留記憶體桶。SPEC-071 再加上 AI 的每帳號與全站 24 小時視窗，限流桶保留 24 小時。
 - **稽核 trigger**：每次啟動依目前欄位重建，避免舊欄位清單使快照不完整或使寫入失敗。
 - **Strava**：`strava_import.parse_activity_dates()` 把 UTC 時間戳轉為 `clock.APP_TIMEZONE` 日期。`date_corrections()` 只修正仍停在舊 UTC 日期的既有活動，`services/strava_imports.py` 在匯入交易中移動日期與月跑量。
+- **v4.26.0**：Strava 與手動紀錄衝突時讓使用者選擇（SPEC-091）。`strava_import.resolve_conflicts` 是純函式，`services/strava_imports.import_runs` 在同一個寫入交易中套用；`read_models/strava_preview` 列出每筆衝突與候選紀錄。依賴方向不變。
 - **v4.25.2**：模組解耦（SPEC-090）。唯讀統計移入 `read_models/`（`insights.py`、`goal_progress.py`、`report_snapshot.py`）；route module 之間不互相 import，共用的改密碼通知在 `routers/password_notices.py`，由架構檢查強制；前端拆出 `app-trend-charts.js` 與 `app-race-goal.js`。
 - **v4.25.1**：內建前端函式庫納入稽核與跑鞋索引（SPEC-089）。`scripts/task.py` 以 `dependency_audit_commands()` 同時稽核 pip 與 npm 鎖定檔；`migrations._ensure_lookup_indexes` 建立只加速讀取的索引，不提高 schema 版本。依賴方向不變。
 - **v4.25.0**：登出所有裝置與註冊不洩漏帳號名稱（SPEC-088）。`services/accounts.logout_everywhere` 遞增 `token_version`，`routers/auth.py` 新增 `POST /api/auth/logout-all`；`accounts.register` 在邀請制下先兌換邀請碼。依賴方向不變。

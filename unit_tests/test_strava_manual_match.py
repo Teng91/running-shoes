@@ -1,7 +1,15 @@
-"""SPEC-062: a Strava import never doubles a run that was already entered by hand."""
+"""SPEC-062: a Strava import never doubles a run that was already entered by hand.
+
+SPEC-091: the user chooses skip, link or import for each same-day conflict.
+"""
+
+import io
+import json
+
+import pytest
 
 from backend.models import MonthlyMileage, Run, Shoe
-from backend.strava_import import manual_matches
+from backend.strava_import import ConflictChoiceError, manual_matches, resolve_conflicts
 from unit_tests.test_run_pace import STRAVA_HEADER, client, headers, owner, strava_row, upload
 
 __all__ = ["client"]
@@ -103,3 +111,78 @@ def test_a_deleted_linked_run_is_not_imported_again(client, db):
     assert client.delete(f"/api/runs/{run['id']}", headers=headers(user)).status_code == 200
     preview = upload(client, user, "/api/runs/import/strava/preview", csv_text).json()
     assert (preview["importable_count"], preview["deleted_count"], preview["manual_link_count"]) == (0, 1, 0)
+
+
+def test_conflicts_offer_every_same_day_manual_run_not_linked_automatically():
+    """SPEC-091: a run this import links automatically is not offered again."""
+    manual = [(1, "2026-11-05", 5.0, None), (2, "2026-11-05", 12.0, None), (3, "2026-11-05", 20.0, 6000)]
+    links, conflicts = manual_matches([row("near", "2026-11-05", 5.02, 1500), row("odd", "2026-11-05", 8.0, 2400)],
+                                      manual, set())
+    assert [link["run_id"] for link in links] == [1]
+    assert conflicts[0]["strava_id"] == "odd" and conflicts[0]["candidate_run_ids"] == [2, 3]
+
+
+def test_conflict_choices_skip_import_or_link_a_candidate_and_reject_stale_ones():
+    manual = [(2, "2026-11-05", 8.1, None), (3, "2026-11-05", 20.0, 6000), (4, "2026-11-06", 6.0, None)]
+    conflicts = [
+        {"strava_id": "x", "date": "2026-11-05", "km": 8.0, "duration_seconds": 2400, "candidate_run_ids": [2, 3]},
+        {"strava_id": "y", "date": "2026-11-05", "km": 5.0, "duration_seconds": 1500, "candidate_run_ids": [2, 3]},
+        {"strava_id": "z", "date": "2026-11-06", "km": 7.0, "duration_seconds": 2100, "candidate_run_ids": [4]},
+    ]
+    links, imports = resolve_conflicts(conflicts, {"x": 2, "y": "import", "z": "skip"}, manual)
+    assert links == [{"strava_id": "x", "run_id": 2, "date": "2026-11-05", "duration_seconds": 2400}]
+    assert imports == {"y"}
+    timed, _ = resolve_conflicts(conflicts, {"x": 3}, manual)
+    assert timed[0]["duration_seconds"] is None, "a typed time is never replaced"
+    assert resolve_conflicts(conflicts, {}, manual) == ([], set()), "no choice means skip"
+    for stale in ({"unknown": "import"}, {"x": 4}, {"x": 2, "y": 2}, {"x": "link"}, {"x": True}, {"x": 2.0}):
+        with pytest.raises(ConflictChoiceError):
+            resolve_conflicts(conflicts, stale, manual)
+
+
+def _upload(client, user, path, csv_text, mapping, conflicts):
+    return client.post(path, headers=headers(user), data={"mapping": json.dumps(mapping), "conflicts": conflicts},
+                       files={"file": ("activities.csv", io.BytesIO(csv_text.encode("utf-8")), "text/csv")})
+
+
+def test_the_user_links_or_imports_a_conflict_and_mileage_follows_the_choice(client, db):
+    """SPEC-091: a linked conflict keeps the typed run; an imported one adds a run and its mileage."""
+    user, shoe = owner(db, "conflict-owner")
+    other, other_shoe = owner(db, "conflict-isolated")
+    created = {}
+    for day, km in (("2026-11-13", 10), ("2026-11-14", 12)):
+        created[day] = client.post("/api/runs", headers=headers(user), json={"date": day, "km": km, "shoe_id": shoe.id}).json()["id"]
+    foreign = client.post("/api/runs", headers=headers(other), json={"date": "2026-11-13", "km": 5, "shoe_id": other_shoe.id}).json()["id"]
+    csv_text = (STRAVA_HEADER
+                + strava_row("c13", "11月13日", 5000, 1500)    # typed 10 km that day: conflict
+                + strava_row("c14", "11月14日", 6000, 1800))   # typed 12 km that day: conflict
+    preview = upload(client, user, "/api/runs/import/strava/preview", csv_text).json()
+    assert preview["manual_conflict_count"] == 2
+    first = preview["manual_conflicts"][0]
+    assert (first["strava_id"], first["date"], first["km"], first["duration_seconds"], first["gear"]) == (
+        "c13", "2026-11-13", 5.0, 1500, "Mizuno Wave Sky 7")
+    assert first["candidates"] == [{"run_id": created["2026-11-13"], "km": 10.0, "duration_seconds": None,
+                                    "shoe_name": "Mizuno Wave Sky 7"}], "only this account's runs are offered"
+
+    mapping = {"Mizuno Wave Sky 7": shoe.id}
+    assert _upload(client, user, "/api/runs/import/strava", csv_text, mapping, "not json").status_code == 400
+    stale = _upload(client, user, "/api/runs/import/strava", csv_text, mapping, json.dumps({"c13": foreign}))
+    assert stale.status_code == 409 and stale.json()["detail"] == "重複活動的選擇已過期，請重新預覽"
+    db.expire_all()
+    assert db.get(Run, foreign).strava_id is None, "another account's run is never linked"
+
+    before = mileage(db, user, shoe)
+    result = _upload(client, user, "/api/runs/import/strava", csv_text, mapping,
+                     json.dumps({"c13": created["2026-11-13"], "c14": "import"}))
+    assert result.status_code == 200, result.text
+    body = result.json()
+    assert (body["imported"], body["linked_manual"], body["skipped_manual_conflict"]) == (1, 1, 0)
+    linked = db.get(Run, created["2026-11-13"])
+    db.refresh(linked)
+    assert (linked.strava_id, linked.km, linked.duration_seconds) == ("c13", 10, None), "Strava's time for 5 km is not copied onto a 10 km run"
+    assert db.query(Run).filter_by(user_id=user.id, strava_id="c14").one().km == 6
+    shoe_km, months = mileage(db, user, shoe)
+    assert shoe_km == before[0] + 6 and months == [(2026, 11, before[1][0][2] + 6)]
+
+    again = upload(client, user, "/api/runs/import/strava/preview", csv_text).json()
+    assert (again["manual_conflict_count"], again["duplicate_count"], again["importable_count"]) == (0, 2, 0)
