@@ -833,3 +833,49 @@ def test_database_tool_without_request_context_reports_stream_error(monkeypatch)
 
     assert _event_types(events) == ["reasoning_start", "tool", "error", "done"]
     assert "缺少使用者資料庫上下文" in events[-2]["text"]
+
+
+def test_model_thinking_streams_as_its_own_event_and_never_joins_the_answer(monkeypatch):
+    """SPEC-086: reasoning reaches the browser live but not the answer or later prompts."""
+    call = {"id": "call_shoes", "name": "list_my_shoes", "arguments": {}, "arguments_json": "{}"}
+
+    def thinking_then(content=(), tool_calls=()):
+        def generate():
+            yield llm.ReasoningText("先看鞋況，")
+            yield llm.ReasoningText("再整理建議。")
+            yield from content
+            return {
+                "content": "".join(content),
+                "finish_reason": "tool_calls" if tool_calls else "stop",
+                "tool_calls": list(tool_calls),
+                "model": "routed/model:free",
+            }
+
+        return generate()
+
+    responses = iter([thinking_then(tool_calls=[call]), thinking_then(content=("鞋況良好。",))])
+    calls = []
+
+    def fake_model(provider, model, messages, **kwargs):
+        calls.append(([dict(message) for message in messages], kwargs))
+        return next(responses)
+
+    monkeypatch.setattr(llm, "call_llm_stream", fake_model)
+    monkeypatch.setattr(
+        agent, "_execute_tool", MagicMock(return_value='{"tool":"list_my_shoes","ok":true}')
+    )
+
+    events = _events(
+        agent.run_agent_stream("分析跑鞋", model="vendor/free:free", db="db", user_id=7)
+    )
+
+    assert _event_types(events) == [
+        "thinking", "thinking", "reasoning_start", "tool", "tool_done",
+        "thinking", "thinking", "token", "done",
+    ]
+    assert events[0] == {"type": "thinking", "text": "先看鞋況，"}
+    assert events[2] == {"type": "reasoning_start", "text": ""}
+    assert events[-2] == {"type": "token", "text": "鞋況良好。"}
+    assert all(kwargs["include_reasoning"] is True for _, kwargs in calls)
+    second_prompt = json.dumps(calls[1][0], ensure_ascii=False)
+    assert "先看鞋況" not in second_prompt and "再整理建議" not in second_prompt

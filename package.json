@@ -1,7 +1,7 @@
 {
   "name": "running-shoes-harness",
   "private": true,
-  "version": "4.23.1",
+  "version": "4.24.0",
   "engines": {
     "node": ">=22"
   },

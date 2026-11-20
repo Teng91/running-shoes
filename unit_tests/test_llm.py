@@ -474,7 +474,8 @@ def test_call_llm_stream_yields_content(monkeypatch):
     assert create.call_args.kwargs["max_tokens"] == llm._LLM_MAX_OUTPUT_TOKENS
 
 
-def test_call_llm_stream_works_with_real_sdk_client(monkeypatch):
+def _real_sdk_stream(monkeypatch, deltas, **stream_kwargs):
+    """Stream ``deltas`` through the real OpenAI SDK from a local SSE server."""
     requests = []
 
     class StreamingHandler(BaseHTTPRequestHandler):
@@ -491,32 +492,11 @@ def test_call_llm_stream_works_with_real_sdk_client(monkeypatch):
                     "model": "test-model",
                     "choices": [{
                         "index": 0,
-                        "delta": {"role": "assistant", "content": "跑鞋"},
-                        "finish_reason": None,
+                        "delta": delta,
+                        "finish_reason": "stop" if index == len(deltas) - 1 else None,
                     }],
-                },
-                {
-                    "id": "chatcmpl-test",
-                    "object": "chat.completion.chunk",
-                    "created": 1,
-                    "model": "test-model",
-                    "choices": [{
-                        "index": 0,
-                        "delta": {"content": "建議"},
-                        "finish_reason": None,
-                    }],
-                },
-                {
-                    "id": "chatcmpl-test",
-                    "object": "chat.completion.chunk",
-                    "created": 1,
-                    "model": "test-model",
-                    "choices": [{
-                        "index": 0,
-                        "delta": {},
-                        "finish_reason": "stop",
-                    }],
-                },
+                }
+                for index, delta in enumerate(deltas)
             ]
             payload = "".join(
                 f"data: {json.dumps(event)}\n\n" for event in events
@@ -546,15 +526,80 @@ def test_call_llm_stream_works_with_real_sdk_client(monkeypatch):
             llm.LLMProvider.openrouter,
             "test-model",
             [{"role": "user", "content": "推薦跑鞋"}],
+            **stream_kwargs,
         ))
     finally:
         server.shutdown()
         server.server_close()
         thread.join()
+    return chunks, requests
+
+
+def test_call_llm_stream_works_with_real_sdk_client(monkeypatch):
+    chunks, requests = _real_sdk_stream(monkeypatch, [
+        {"role": "assistant", "content": "跑鞋"},
+        {"content": "建議"},
+        {},
+    ])
 
     assert chunks == ["跑鞋", "建議"]
     assert requests[0][0] == "/v1/chat/completions"
     assert requests[0][1]["stream"] is True
+
+
+def test_call_llm_stream_reads_openrouter_reasoning_from_real_sdk_deltas(monkeypatch):
+    """SPEC-086: OpenRouter's extra ``reasoning`` delta field survives SDK parsing."""
+    deltas = [
+        {"role": "assistant", "content": "", "reasoning": "先看鞋況",
+         "reasoning_details": [{"type": "reasoning.text", "text": "先看鞋況"}]},
+        {"content": "", "reasoning_details": [{"type": "reasoning.text", "text": "，再回答"}]},
+        {"content": "跑鞋建議"},
+        {},
+    ]
+
+    chunks, requests = _real_sdk_stream(monkeypatch, deltas, include_reasoning=True)
+    plain, _ = _real_sdk_stream(monkeypatch, deltas)
+
+    assert chunks == ["先看鞋況", "，再回答", "跑鞋建議"]
+    assert [isinstance(chunk, llm.ReasoningText) for chunk in chunks] == [True, True, False]
+    assert plain == ["跑鞋建議"]
+    assert "reasoning" not in requests[0][1], "the request keeps each model's own reasoning default"
+
+
+def test_call_llm_stream_yields_reasoning_only_when_requested(monkeypatch):
+    """SPEC-086: reasoning is labelled, deduplicated per delta and kept out of content."""
+    def reasoning_chunk(reasoning=None, details=None):
+        delta = SimpleNamespace(content=None, reasoning=reasoning, reasoning_details=details)
+        return SimpleNamespace(choices=[SimpleNamespace(delta=delta, finish_reason=None)],
+                               model="routed/model:free")
+
+    def chunks():
+        return [
+            reasoning_chunk(reasoning="先想", details=[{"type": "reasoning.text", "text": "先想"}]),
+            reasoning_chunk(details=[{"type": "reasoning.text", "text": "再想"},
+                                     {"type": "reasoning.encrypted", "data": "opaque"}]),
+            reasoning_chunk(details=[SimpleNamespace(type="reasoning.summary", summary="摘要")]),
+            reasoning_chunk(details=[{"type": "reasoning.encrypted", "data": "opaque"}]),
+            _chunk("回答"),
+            _chunk(finish_reason="stop"),
+        ]
+
+    create = MagicMock(side_effect=lambda **kwargs: chunks())
+    client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+    monkeypatch.setattr(llm, "_build_client", MagicMock(return_value=client))
+
+    labelled, result = _consume(llm.call_llm_stream(
+        llm.LLMProvider.openrouter, "routed/model:free", [], include_reasoning=True,
+    ))
+    plain, plain_result = _consume(llm.call_llm_stream(
+        llm.LLMProvider.openrouter, "routed/model:free", [],
+    ))
+
+    assert labelled == ["先想", "再想", "摘要", "回答"]
+    assert [type(chunk) for chunk in labelled] == [llm.ReasoningText] * 3 + [str]
+    assert result["content"] == "回答"
+    assert plain == ["回答"] and plain_result["content"] == "回答"
+    assert "opaque" not in "".join(labelled)
 
 
 def test_call_llm_stream_closes_provider_stream_when_consumer_stops_early(monkeypatch):
