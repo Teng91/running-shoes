@@ -80,8 +80,20 @@ def _preview_upload(db: Session, user_id: int, raw: bytes, start_date: str, end_
     return result
 
 
-def _import_upload(db: Session, user_id: int, raw: bytes, mapping: str, start_date: str, end_date: str, config: Settings):
+def _conflict_choices(raw_choices: str) -> dict[str, object]:
+    try:
+        parsed = json.loads(raw_choices or "{}")
+    except (TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=400, detail="重複活動的選擇格式錯誤") from exc
+    if not isinstance(parsed, dict):
+        raise HTTPException(status_code=400, detail="重複活動的選擇格式錯誤")
+    return parsed
+
+
+def _import_upload(db: Session, user_id: int, raw: bytes, mapping: str, start_date: str, end_date: str,
+                   config: Settings, conflicts: str = "{}"):
     parsed_mapping = _parsed_mapping(mapping)
+    choices = _conflict_choices(conflicts)
     rows, invalid, _ = _parse_strava_csv(raw, config.max_strava_csv_rows)
     rows, filtered_out = _filter_strava_rows(rows, start_date, end_date)
     try:
@@ -96,7 +108,10 @@ def _import_upload(db: Session, user_id: int, raw: bytes, mapping: str, start_da
             filtered_out=filtered_out,
             max_runs=config.max_runs_per_user,
             history_limit=config.max_strava_import_history_per_user,
+            conflict_choices=choices,
         )
+    except strava_import.ConflictChoiceError as exc:
+        raise HTTPException(status_code=409, detail="重複活動的選擇已過期，請重新預覽") from exc
     except strava_imports.InvalidShoeMappingError as exc:
         if str(exc) == "ownership":
             raise HTTPException(
@@ -137,6 +152,7 @@ async def import_strava_runs(
     mapping: str = Form("{}"),
     start_date: str = Form(""),
     end_date: str = Form(""),
+    conflicts: str = Form("{}"),
     config: Settings = Depends(get_settings),
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -145,7 +161,7 @@ async def import_strava_runs(
     with strava_upload_slot(request):
         await run_in_threadpool(enforce_strava_upload_limits, request, user_id)
         raw = await _read_strava_upload(file, config.max_strava_csv_bytes)
-        return await run_in_threadpool(_import_upload, db, user_id, raw, mapping, start_date, end_date, config)
+        return await run_in_threadpool(_import_upload, db, user_id, raw, mapping, start_date, end_date, config, conflicts)
 
 
 @router.get("/api/runs/import/strava/history", response_model=list[schemas.StravaImportOut])
