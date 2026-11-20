@@ -299,7 +299,7 @@ SPEC-032：合成資料驗證歷史筆數上限（v4.7.3 起 10,000／10,001）�
 
 ## SPEC-086 AI 對話即時顯示思考過程
 
-[規格與具名案例](specs/086-live-agent-reasoning.md) 以假的串流片段與本機 SSE server 搭配真正的 OpenAI SDK，確認 `reasoning`／`reasoning_details` 只在要求時以 `ReasoningText` 產出、同一個 delta 不重複、加密內容略過、回答 `content` 不含思考；Agent 測試確認 SSE 依序為 `thinking`、工具事件、`thinking`、`token`，且第二輪 prompt 不含思考內容。前端在 VM 中以假 DOM 執行完整的 `sendAgentMessage` 串流：思考區塊即時展開、回答時收合為「已思考 N 秒」、內容只以純文字顯示且不寫入歷史；多輪工具時區塊依序排列，空泡泡顯示等待秒數，串流結束後計時器停止。
+[規格與具名案例](specs/086-live-agent-reasoning.md) 以假的串流片段與本機 SSE server 搭配真正的 OpenAI SDK，確認 `reasoning`／`reasoning_details` 只在要求時以 `ReasoningText` 產出、同一個 delta 不重複、加密內容略過、回答 `content` 不含思考；Agent 測試確認 SSE 依序為 `thinking`、工具事件、`thinking`、`token`，且第二輪 prompt 不含思考內容。前端在 VM 中以假 DOM 執行完整的 `sendAgentMessage` 串流：思考區塊即時展開、回答時收合為「已思考 N 秒」、內容只以純文字顯示且不寫入歷史；多輪工具時區塊依序排列，空泡泡顯示等待秒數，思考區塊的秒數從這一輪開始算（等 31 秒後才一口氣送來的思考內容仍顯示「已思考 31 秒」），串流結束後計時器停止。
 
 ## SPEC-085 寄信憑證、管理員名稱與驗證碼次數
 

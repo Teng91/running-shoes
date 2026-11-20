@@ -4,6 +4,12 @@
 每版的摘要見 [CHANGELOG.md](../CHANGELOG.md)；目前的功能與操作方式以 [README](../README.md) 為準。
 這裡保留當時的文字，後續版本可能已調整其中的行為。
 
+### 思考秒數從這一輪開始算（SPEC-086，v4.24.1）
+
+- `createAgentReasoning(container, before, startedAt)` 改由呼叫端傳入這一輪的起點（`waitStartedAt`：送出訊息時，`tool_done` 與 `reasoning_start` 時重設），不再以第一個 `thinking` 事件為起點。免費模型多半在排隊與處理 prompt 時花掉大部分時間，思考內容常在最後才一口氣送到，舊算法因此顯示「已思考 1 秒」。
+
+Asset 4.24.1／shell v95、schema 12 不變，可直接回滾至 v4.24.0 image。
+
 ### AI 對話即時顯示思考過程（SPEC-086，v4.24.0）
 
 - `llm.call_llm_stream(include_reasoning=True)` 把 OpenRouter 串流的 `delta.reasoning`（沒有時讀 `reasoning_details` 的文字與摘要，加密內容略過）以 `ReasoningText` 產出，不併入回答 `content`；預設 `False`，月報不受影響。請求不帶 `reasoning` 參數，各模型維持原本的推理設定。
