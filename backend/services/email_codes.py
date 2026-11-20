@@ -80,19 +80,21 @@ def _send(send: Send, email: str, purpose: str, code: str) -> None:
     )
 
 
-def _redeem(db: Session, user_id: int, purpose: str, code: str, secret_key: str) -> models.EmailCode:
-    """Return the matching code row, counting a failed attempt; raises one generic error."""
-    row = db.query(models.EmailCode).filter(
-        models.EmailCode.user_id == user_id, models.EmailCode.purpose == purpose).first()
-    if row is None or row.expires_at <= _now() or row.attempts >= MAX_ATTEMPTS:
+def _redeem(db: Session, user_id: int, purpose: str, code: str, secret_key: str) -> str:
+    """Spend one attempt, then compare; returns the code's email or raises one generic error.
+
+    SPEC-085: the attempt is counted by a single conditional UPDATE before the comparison,
+    so concurrent guesses cannot get past MAX_ATTEMPTS by all reading the same count.
+    """
+    current = (models.EmailCode.user_id == user_id, models.EmailCode.purpose == purpose)
+    with write_transaction(db):
+        spent = db.query(models.EmailCode).filter(
+            *current, models.EmailCode.expires_at > _now(), models.EmailCode.attempts < MAX_ATTEMPTS,
+        ).update({models.EmailCode.attempts: models.EmailCode.attempts + 1}, synchronize_session=False)
+        row = db.query(models.EmailCode.code_hash, models.EmailCode.email).filter(*current).first() if spent else None
+    if row is None or not hmac.compare_digest(row.code_hash, _digest(secret_key, user_id, purpose, code.strip())):
         raise Invalid(BAD_CODE)
-    if not hmac.compare_digest(row.code_hash, _digest(secret_key, user_id, purpose, code.strip())):
-        row_id = row.id
-        with write_transaction(db):
-            db.query(models.EmailCode).filter(models.EmailCode.id == row_id).update(
-                {models.EmailCode.attempts: models.EmailCode.attempts + 1}, synchronize_session=False)
-        raise Invalid(BAD_CODE)
-    return row
+    return str(row.email)
 
 
 def _email_owner(db: Session, email: str) -> models.User | None:
@@ -110,8 +112,7 @@ def request_email_binding(db: Session, user: models.User, email: str, *, send: S
 
 
 def confirm_email_binding(db: Session, user: models.User, code: str, *, secret_key: str) -> dict:
-    row = _redeem(db, user.id, VERIFY_EMAIL, code, secret_key)
-    address, user_id = row.email, user.id
+    address, user_id = _redeem(db, user.id, VERIFY_EMAIL, code, secret_key), user.id
     with write_transaction(db):
         owner = _email_owner(db, address)
         if owner is not None and owner.id != user_id:
@@ -140,6 +141,16 @@ def _account(db: Session, identifier: str) -> models.User | None:
         except Invalid:
             return None
     return find_user(db, value)
+
+
+def attempt_key(db: Session, identifier: str) -> str:
+    """Rate-limit key for reset-code attempts: the account when it exists (SPEC-085).
+
+    Username and email share one budget; an unknown identifier gets its own key, so
+    the limit behaves the same whether or not the account exists.
+    """
+    user = _account(db, identifier)
+    return f"user:{user.id}" if user is not None else "name:" + identifier.strip().casefold()
 
 
 def request_password_reset(db: Session, identifier: str, *, send: Send, secret_key: str) -> dict:

@@ -14,6 +14,8 @@ from backend.services.transactions import write_transaction
 
 MIN_PASSWORD_LENGTH = 8
 REGISTRATION_CLOSED = "Registration is closed"
+USERNAME_TAKEN = "Username already registered"
+ADMIN_CANNOT_DELETE = "Admin accounts cannot be deleted"
 
 
 def find_user(db: Session, username: str) -> models.User | None:
@@ -29,7 +31,14 @@ def _unknown_user_hash() -> str:
 
 
 def register(db: Session, username: str, password: str, *, max_users: int,
-             mode: str = "open", invite_code: str = ""):
+             mode: str = "open", invite_code: str = "", admin_names: frozenset[str] = frozenset()):
+    """Create an account; ``admin_names`` are the case-folded ``ADMIN_USERNAMES``.
+
+    SPEC-085: an invite never lets anyone claim an admin name that is not registered yet
+    (or no longer is), because admin rights follow the name. The first admin registers
+    while ``REGISTRATION_MODE=open``. The answer is the same as for a taken name, so
+    sign-up does not reveal which names are admins.
+    """
     if mode == "closed":
         raise Invalid(REGISTRATION_CLOSED)
     if mode == "invite" and not invite_code.strip():
@@ -44,8 +53,8 @@ def register(db: Session, username: str, password: str, *, max_users: int,
     # Hash before taking the SQLite writer so bcrypt cannot block other writes.
     hashed_password = get_password_hash(password)
     with write_transaction(db):
-        if find_user(db, username):
-            raise Invalid("Username already registered")
+        if find_user(db, username) or (mode == "invite" and username.casefold() in admin_names):
+            raise Invalid(USERNAME_TAKEN)
         if db.query(models.User).count() >= max_users:
             raise CapacityExceeded("Registration capacity has been reached")
         if mode == "invite":
@@ -106,8 +115,14 @@ def _account_tables():
             if table.name != "users" and "user_id" in table.columns]
 
 
-def delete_account(db: Session, user: models.User, password: str) -> dict:
-    """Permanently remove the account and everything it owns, after re-checking the password."""
+def delete_account(db: Session, user: models.User, password: str, *, is_admin: bool = False) -> dict:
+    """Permanently remove the account and everything it owns, after re-checking the password.
+
+    SPEC-085: an admin account cannot be deleted. Admin rights follow the name, so a freed
+    name would let the next person who registers it manage invites and every password.
+    """
+    if is_admin:
+        raise Invalid(ADMIN_CANNOT_DELETE)
     if not verify_password(password, user.hashed_password):
         # 400, not 401: a mistyped password must not look like an expired session and sign out.
         raise Invalid("Incorrect password")

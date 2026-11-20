@@ -4,6 +4,14 @@
 每版的摘要見 [CHANGELOG.md](../CHANGELOG.md)；目前的功能與操作方式以 [README](../README.md) 為準。
 這裡保留當時的文字，後續版本可能已調整其中的行為。
 
+### 寄信憑證、管理員名稱與驗證碼次數（SPEC-085，v4.23.1）
+
+- `mailer.smtp_mailer` 以 `ssl.create_default_context()` 做 STARTTLS；正式映像已含系統 CA。若憑證驗證失敗，綁定 email 會回 503「寄信失敗」，忘記密碼照常回同樣訊息並在 log 記下錯誤類型。
+- `accounts.register` 在邀請制下把 `ADMIN_USERNAMES` 裡的名稱視為已被註冊（同一個寫入交易，邀請碼不消耗）；`accounts.delete_account` 拒絕管理員（400 `Admin accounts cannot be deleted`）。`open` 模式不受影響。
+- `email_codes._redeem` 先以條件式 UPDATE 計入一次，再比對雜湊；`rate_limits.enforce_code_attempt_limit` 的 `code-attempt` 視窗每個帳號每天 10 次（重設以帳號 id 為 key，帳號與 email 共用；綁定以登入帳號為 key）。被攻擊的帳號當天可能無法用 email 重設，仍可用密碼登入或請管理員產生臨時密碼。
+
+Asset 4.23.1／shell v93、schema 12 不變，可直接回滾至 v4.23.0 image；`code-attempt` 限流桶 24 小時後自動清除。
+
 ### 新帳號引導（SPEC-084，v4.23.0）
 
 - 新增 `frontend/app-onboarding.js`：三步完成狀態由已載入的鞋子、月跑量（任何月份大於 0 km）與 `runningGoal.version > 0` 推導，沒有新 API。`app-dashboard.render` 回報到達的資源，鞋子、月跑量與目標都載入過一次才可能顯示，避免既有帳號看到閃爍；登出時清空。
