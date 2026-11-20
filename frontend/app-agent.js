@@ -174,7 +174,11 @@ function agentThinkingLabel(startedAt, now = Date.now()) {
   return seconds ? `思考中… ${seconds} 秒` : '思考中…';
 }
 
-function createAgentReasoning(container, before, now = () => Date.now()) {
+// The time counts from the start of the model round (the request or the end of
+// the last tool), not from the first reasoning fragment: free models spend most
+// of a round before any reasoning arrives, so the block continues the seconds
+// the waiting bubble already showed.
+function createAgentReasoning(container, before, startedAt = Date.now(), now = () => Date.now()) {
   const block = document.createElement('details');
   block.className = 'agent-reasoning';
   block.open = true;
@@ -186,7 +190,6 @@ function createAgentReasoning(container, before, now = () => Date.now()) {
   block.appendChild(summary);
   block.appendChild(body);
   container.insertBefore(block, before);
-  const startedAt = now();
   let live = true;
   const view = {
     get live() { return live; },
@@ -319,7 +322,7 @@ async function sendAgentMessage(retryText) {
         if (event.type === 'thinking') {
           if (typeof event.text !== 'string' || !event.text) return;
           if (!reasoning) {
-            reasoning = createAgentReasoning(container, botDiv);
+            reasoning = createAgentReasoning(container, botDiv, waitStartedAt);
             // Later tools belong after this block, not in the group above it.
             toolStatusDiv = null;
           }
