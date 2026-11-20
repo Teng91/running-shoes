@@ -110,6 +110,8 @@ def _import_upload(db: Session, user_id: int, raw: bytes, mapping: str, start_da
             history_limit=config.max_strava_import_history_per_user,
             conflict_choices=choices,
         )
+    except strava_import.DuplicateConflictLinkError as exc:
+        raise HTTPException(status_code=400, detail="同一筆手動紀錄只能連結一個 Strava 活動") from exc
     except strava_import.ConflictChoiceError as exc:
         raise HTTPException(status_code=409, detail="重複活動的選擇已過期，請重新預覽") from exc
     except strava_imports.InvalidShoeMappingError as exc:

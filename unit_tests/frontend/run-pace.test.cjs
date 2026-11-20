@@ -171,7 +171,7 @@ test('SPEC-091 each conflict offers skip, a link to a manual run of that day or 
   const elements = nodes();
   const context = paceContext(elements, { stravaController: { importing: () => false, state: {} } });
   vm.runInContext(['stravaConflictLabel', 'stravaConflictsHtml', 'stravaConflictChoices', 'stravaHasChanges',
-    'updateStravaImportButton'].map(extract).join('\n'), context);
+    'stravaConflictProblem', 'stravaConflictSummary', 'updateStravaImportButton'].map(extract).join('\n'), context);
   const preview = { importable_count: 0, manual_conflicts: [
     { strava_id: 's13', date: '2026-11-13', km: 5, duration_seconds: 1500, gear: '<b>Pegasus</b>',
       candidates: [{ run_id: 41, km: 10, duration_seconds: null, shoe_name: 'Mizuno Wave Sky 7' }] },
@@ -192,5 +192,22 @@ test('SPEC-091 each conflict offers skip, a link to a manual run of that day or 
   assert.equal(JSON.stringify(context.stravaConflictChoices(preview)), '{"s13":41,"s14":"import"}');
   context.updateStravaImportButton();
   assert.equal(elements['strava-import-btn'].disabled, false);
+  assert.equal(elements['strava-conflict-status'].textContent, '已選擇：連結 1 筆、匯入 1 筆新紀錄（需要上方的鞋款配對）。');
   assert.match(source, /'strava-conflict-choice': \(\) => updateStravaImportButton\(\)/);
+});
+
+test('SPEC-092 two conflicts cannot link the same manual run', () => {
+  const elements = nodes();
+  const context = paceContext(elements, { stravaController: { importing: () => false, state: {} } });
+  vm.runInContext(['stravaConflictChoices', 'stravaHasChanges', 'stravaConflictProblem', 'stravaConflictSummary',
+    'updateStravaImportButton'].map(extract).join('\n'), context);
+  const preview = { importable_count: 1, manual_conflicts: [{ strava_id: 'a' }, { strava_id: 'b' }] };
+  context.stravaController.state.preview = preview;
+  elements['strava-conflict-0'].value = '41'; elements['strava-conflict-1'].value = '41';
+  context.updateStravaImportButton();
+  assert.equal(elements['strava-import-btn'].disabled, true, 'even with other importable activities');
+  assert.equal(elements['strava-conflict-status'].textContent, '同一筆手動紀錄只能連結一個 Strava 活動，請改選其中一筆。');
+  elements['strava-conflict-1'].value = 'import';
+  context.updateStravaImportButton();
+  assert.equal(elements['strava-import-btn'].disabled, false);
 });
