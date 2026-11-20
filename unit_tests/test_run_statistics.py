@@ -5,7 +5,8 @@ from datetime import date
 import pytest
 from sqlalchemy import event
 
-from backend import goals, models, reports
+from backend import models
+from backend.read_models import goal_progress, report_snapshot
 from backend.read_models.run_statistics import (
     month_bounds,
     period_distances,
@@ -90,10 +91,10 @@ def test_report_ytd_uses_one_shared_aggregate_independent_of_month(db, user_with
 
     event.listen(db.get_bind(), "before_cursor_execute", record)
     try:
-        stats = reports.build_report_stats(db, user_id, 2025, month, today=date(2026, 10, 22))
+        stats = report_snapshot.build_report_stats(db, user_id, 2025, month, today=date(2026, 10, 22))
         assert stats["ytd_run_km"] == 0
         assert len(statements) == 1
     finally:
         event.remove(db.get_bind(), "before_cursor_execute", record)
-    progress = goals.goal_progress(db, user_id, 2025, month, as_of=date(2026, 10, 22))
+    progress = goal_progress.goal_progress(db, user_id, 2025, month, as_of=date(2026, 10, 22))
     assert stats["running_goal"] == progress

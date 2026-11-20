@@ -27,8 +27,22 @@ def test_generated_frontend_is_exactly_reproducible():
 
 
 def test_reports_depend_on_read_models_not_tool_serialization():
-    path = check_architecture.ROOT / "backend" / "reports.py"
+    path = check_architecture.ROOT / "backend" / "read_models" / "report_snapshot.py"
     assert check_architecture.forbidden_dependency_chain(path, ("backend.tools",)) is None
+
+
+def test_route_modules_never_import_each_other(tmp_path, monkeypatch):
+    """SPEC-090: shared HTTP helpers may be imported; another route module may not."""
+    assert check_architecture.router_cross_imports(check_architecture.ROUTERS) == []
+    monkeypatch.setattr(check_architecture, "ROOT", tmp_path)
+    routers = tmp_path / "backend" / "routers"
+    routers.mkdir(parents=True)
+    (routers / "first.py").write_text("router = APIRouter()\n", encoding="utf-8")
+    (routers / "helpers.py").write_text("def shared():\n    return 1\n", encoding="utf-8")
+    (routers / "second.py").write_text(
+        "from backend.routers.helpers import shared\nfrom backend.routers.first import router as other\n"
+        "router = APIRouter()\n", encoding="utf-8")
+    assert check_architecture.router_cross_imports(routers) == ["second.py -> backend.routers.first"]
 
 
 def test_routers_delegate_every_database_query():

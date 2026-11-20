@@ -37,6 +37,7 @@ FRONTEND_SOURCE = "\n".join(
         "app-charts.js",
         "app-shoe-charts.js",
         "app-monthly-charts.js",
+        "app-trend-charts.js",
         "app-spending.js",
         "app.js",
     )

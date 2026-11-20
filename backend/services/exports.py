@@ -13,7 +13,7 @@ from backend import models
 from backend.backup_contract import ARCHIVE_LIMITS, MAX_RUN_ALIASES, ArchiveBudget, validate_export
 from backend.clock import APP_TIMEZONE
 from backend.exporting import export_filename, generate_shoe_rows
-from backend.goals import yearly_goal_km
+from backend.read_models.goal_progress import yearly_goal_km
 from backend.services.errors import Invalid
 from backend.services.run_identity import export_run_aliases
 

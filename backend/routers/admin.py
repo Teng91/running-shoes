@@ -10,8 +10,8 @@ from backend import models, schemas
 from backend.auth import get_current_user
 from backend.dependencies import get_db
 from backend.rate_limits import enforce_auth_rate_limit
-from backend.routers.auth import notify_password_changed
 from backend.routers.errors import service_errors
+from backend.routers.password_notices import notify_password_changed
 from backend.services import accounts, email_codes, invites
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])

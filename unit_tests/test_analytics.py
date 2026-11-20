@@ -3,10 +3,10 @@ from datetime import date
 import pytest
 from fastapi.testclient import TestClient
 
-from backend import analytics
 from backend.dependencies import get_db
 from backend.main import app
 from backend.models import MonthlyMileage, Run, Shoe
+from backend.read_models import insights
 
 
 @pytest.fixture
@@ -49,7 +49,7 @@ def test_shoe_analytics_combines_history_runs_training_and_cost(db, user_with_to
     ])
     db.commit()
 
-    result = analytics.shoe_analytics(db, user.id, shoe.id, today=date(2026, 10, 3))
+    result = insights.shoe_analytics(db, user.id, shoe.id, today=date(2026, 10, 3))
 
     assert result is not None
     assert result["lifecycle"]["logged_mileage_km"] == 30
@@ -80,7 +80,7 @@ def test_dashboard_reports_lifecycle_alert_and_goal_progress(db, user_with_token
     ))
     db.commit()
 
-    result = analytics.dashboard_analytics(
+    result = insights.dashboard_analytics(
         db, user.id, 2026, 10, today=date(2026, 10, 3)
     )
 
@@ -105,7 +105,7 @@ def test_dashboard_hides_soft_deleted_shoe_names_but_keeps_run_totals(
     db.add(Run(user_id=user.id, shoe_id=deleted.id, date="2026-10-01", km=8))
     db.commit()
 
-    result = analytics.dashboard_analytics(
+    result = insights.dashboard_analytics(
         db, user.id, 2026, 10, today=date(2026, 10, 3)
     )
 
@@ -136,10 +136,10 @@ def test_dashboard_uses_same_period_comparison_and_future_month_is_empty(
     ])
     db.commit()
 
-    current = analytics.dashboard_analytics(
+    current = insights.dashboard_analytics(
         db, user.id, 2026, 10, today=date(2026, 10, 12)
     )
-    future = analytics.dashboard_analytics(
+    future = insights.dashboard_analytics(
         db, user.id, 2026, 11, today=date(2026, 10, 12)
     )
 
@@ -213,7 +213,7 @@ def test_shoe_analytics_survives_legacy_extreme_forecast_values(db, user_with_to
     db.add(shoe)
     db.commit()
 
-    result = analytics.shoe_analytics(db, user.id, shoe.id, today=date(2026, 10, 13))
+    result = insights.shoe_analytics(db, user.id, shoe.id, today=date(2026, 10, 13))
 
     assert result is not None
     assert result["lifecycle"]["forecast_retirement_date"] is None
@@ -273,12 +273,12 @@ def test_shoe_analytics_sql_is_bounded_and_user_scoped(db, user_with_token):
     event.listen(engine, "before_cursor_execute", query)
     event.listen(db, "loaded_as_persistent", load)
     try:
-        batch = analytics.batch_shoe_analytics(db, user_id, [*shoes, foreign, deleted], today=as_of)
+        batch = insights.batch_shoe_analytics(db, user_id, [*shoes, foreign, deleted], today=as_of)
         assert len(queries) == 3
         assert "row_number() OVER" in queries[-1]
         assert not loaded
         queries.clear()
-        assert analytics.batch_shoe_analytics(db, user_id, [], today=as_of) == []
+        assert insights.batch_shoe_analytics(db, user_id, [], today=as_of) == []
         assert not queries
     finally:
         event.remove(engine, "before_cursor_execute", query)
@@ -301,9 +301,9 @@ def test_shoe_analytics_sql_is_bounded_and_user_scoped(db, user_with_token):
         ]
         assert len(result["monthly_history"]) == 12
         assert result["monthly_history"][-1]["km"] == sum(run["km"] for run in rows if run["date"].startswith("2026-10"))
-        assert analytics.shoe_analytics(db, user_id, shoe.id, today=as_of) == result
-    assert analytics.shoe_analytics(db, user_id, foreign.id, today=as_of) is None
-    assert analytics.shoe_analytics(db, user_id, deleted.id, today=as_of) is None
+        assert insights.shoe_analytics(db, user_id, shoe.id, today=as_of) == result
+    assert insights.shoe_analytics(db, user_id, foreign.id, today=as_of) is None
+    assert insights.shoe_analytics(db, user_id, deleted.id, today=as_of) is None
 
 
 def test_shoe_analytics_empty_history_has_zero_metrics(db, user_with_token):
@@ -311,7 +311,7 @@ def test_shoe_analytics_empty_history_has_zero_metrics(db, user_with_token):
     shoe = Shoe(user_id=user.id, brand="Empty", model="Pair", date="2026-01-01")
     db.add(shoe)
     db.commit()
-    result = analytics.shoe_analytics(db, user.id, shoe.id, today=date(2026, 1, 1))
+    result = insights.shoe_analytics(db, user.id, shoe.id, today=date(2026, 1, 1))
     assert result["usage"]["km"] == result["usage"]["count"] == result["usage"]["days"] == 0
     assert result["usage"]["first_run_date"] is None
     assert result["usage"]["last_run_date"] is None
@@ -331,7 +331,7 @@ def test_lifespan_thresholds_are_one_policy_for_alerts_status_and_frontend(db, u
     for model, mileage in (("Worn", 760), ("Half", 680), ("Fresh", 632)):
         db.add(Shoe(user_id=user.id, brand="T", model=model, date="2026-01-01", mileage=mileage, expected_mileage=800))
     db.commit()
-    alerts = analytics.dashboard_analytics(db, user.id, 2026, 10, today=date(2026, 10, 19))["alerts"]
+    alerts = insights.dashboard_analytics(db, user.id, 2026, 10, today=date(2026, 10, 19))["alerts"]
     assert {alert["message"].split()[1]: alert["severity"] for alert in alerts} == {"Worn": "urgent", "Half": "warning"}
     statuses = {shoe["model"]: shoe["lifecycle_status"] for shoe in list_my_shoes(db, user.id)["shoes"]}
     assert statuses == {"Worn": "replace_soon", "Half": "monitor", "Fresh": "healthy"}

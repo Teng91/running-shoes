@@ -10,12 +10,13 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from backend import llm, reports, schemas
+from backend import llm, schemas
 from backend.credentials import get_password_hash
 from backend.database import Base
 from backend.dependencies import get_db
 from backend.main import app
 from backend.models import MonthlyReport, Run, Shoe, User
+from backend.read_models import report_snapshot
 from backend.routers import reports as report_routes
 from unit_tests.token_helpers import create_access_token
 
@@ -128,7 +129,7 @@ def test_build_report_stats_computes_month_numbers(db):
     _add_run(db, user.id, shoe_a.id, "2026-05-20", 20)
     _add_run(db, user.id, shoe_a.id, "2025-12-31", 5)
 
-    stats = reports.build_report_stats(db, user.id, 2026, 6)
+    stats = report_snapshot.build_report_stats(db, user.id, 2026, 6)
 
     assert stats["report_month"] == {"year": 2026, "month": 6}
     assert stats["month_run_stats"]["month_km"] == 30.0
@@ -151,7 +152,7 @@ def test_build_report_stats_handles_month_without_runs(db):
     db.refresh(user)
     _add_shoe(db, user.id)
 
-    stats = reports.build_report_stats(db, user.id, 2026, 6)
+    stats = report_snapshot.build_report_stats(db, user.id, 2026, 6)
 
     assert stats["month_run_stats"]["month_km"] == 0.0
     assert stats["month_run_stats"]["run_count"] == 0
@@ -171,7 +172,7 @@ def test_current_month_report_compares_the_same_period(db):
     _add_run(db, user.id, shoe.id, "2026-10-05", 50)
     _add_run(db, user.id, shoe.id, "2026-10-20", 100)
 
-    stats = reports.build_report_stats(
+    stats = report_snapshot.build_report_stats(
         db, user.id, 2026, 10, today=date(2026, 10, 13)
     )
 
@@ -190,8 +191,8 @@ def test_build_report_messages_only_provides_backend_numbers(db):
     _add_shoe(db, user.id)
     _add_run(db, user.id, db.query(Shoe).first().id, "2026-06-01", 10)
 
-    stats = reports.build_report_stats(db, user.id, 2026, 6)
-    messages = reports.build_report_messages(stats)
+    stats = report_snapshot.build_report_stats(db, user.id, 2026, 6)
+    messages = report_snapshot.build_report_messages(stats)
 
     assert [m["role"] for m in messages] == ["system", "user"]
     assert "不得自行計算、估算或杜撰" in messages[0]["content"]
