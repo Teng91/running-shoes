@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+## [4.24.2] - 2026-11-20
+
+### Security
+- 登入 token 綁定帳號本身（SPEC-087）：帳號刪除後有人用同一個名稱重新註冊，被刪帳號裝置上還沒過期的登入不能進入新帳號。之前簽發的 token 照常有效到期，不需要重新登入。
+- GitHub Actions 全部釘選到 commit SHA（含第三方的 `superfly/flyctl-actions`），標籤被移動也不會改變部署 job 執行的程式。
+
+### Fixed
+- 瀏覽器封鎖網站資料（例如封鎖所有 Cookie 與網站資料）時頁面打不開；現在照常啟動，登入只保存在這個頁面，重新整理後要再登入。
+- 403 回應的 `error.code` 改為 `forbidden`，原本一律是 `capacity`；畫面訊息不變。Asset 4.24.2／shell v96，schema 12 不變。
+
 ## [4.24.1] - 2026-11-20
 
 ### Fixed

@@ -4,6 +4,15 @@
 每版的摘要見 [CHANGELOG.md](../CHANGELOG.md)；目前的功能與操作方式以 [README](../README.md) 為準。
 這裡保留當時的文字，後續版本可能已調整其中的行為。
 
+### 登入綁定帳號、Actions 釘選與瀏覽器儲存（SPEC-087，v4.24.2）
+
+- `accounts.login` 簽發的 token 多帶 `aid`（帳號的 `backup_id`），`auth.get_current_user` 在 `aid` 與帳號不符時回 401 `Session expired; please log in again`。`users.id` 沒有 AUTOINCREMENT，最新的帳號刪除後同名重新註冊會拿到相同的 id 與 `token_version`，只靠名稱和版本分不出來。沒有 `aid` 的舊 token 照常接受，最遲 2026-11-27 全部到期。
+- workflow 與 `browser-setup` composite action 的 `uses:` 改為 `owner/repo@<commit SHA> # vX.Y.Z`，釘選的就是原本主版本標籤指向的 commit；Dependabot 會一併更新 SHA 與註解。
+- `app-state.js` 新增 `readStoredValue`／`writeStoredValue`／`removeStoredValue`／`isLocalStorageEvent`，登入狀態、主題偏好與 Strava 日期範圍的寫入改走這些函式；瀏覽器封鎖網站資料時 app 照常啟動，登入只存在頁面記憶體。
+- 403 的 `error.code` 從 `capacity` 改為 `forbidden`（管理員 API 與註冊名額已滿都是 403）；`detail` 不變，前端沒有讀 `error.code`。
+
+Asset 4.24.2／shell v96、schema 12 不變，可直接回滾至 v4.24.1 image；舊版會忽略 token 裡的 `aid`。
+
 ### 思考秒數從這一輪開始算（SPEC-086，v4.24.1）
 
 - `createAgentReasoning(container, before, startedAt)` 改由呼叫端傳入這一輪的起點（`waitStartedAt`：送出訊息時，`tool_done` 與 `reasoning_start` 時重設），不再以第一個 `thinking` 事件為起點。免費模型多半在排隊與處理 prompt 時花掉大部分時間，思考內容常在最後才一口氣送到，舊算法因此顯示「已思考 1 秒」。

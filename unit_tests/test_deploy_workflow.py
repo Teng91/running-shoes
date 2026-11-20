@@ -165,3 +165,20 @@ def test_daily_offsite_backup_uploads_only_an_encrypted_archive():
         assert part in steps, part
     for leak in ("cat ", "sqlite3", "row_counts", "set -x"):
         assert leak not in steps, leak
+
+
+def test_every_action_from_another_repository_is_pinned_to_a_commit():
+    """SPEC-087: a moved tag must not change what runs next to FLY_API_TOKEN or BACKUP_PASSPHRASE.
+
+    Dependabot (``.github/dependabot.yml``) updates the commit and its release comment together.
+    """
+    remote = []
+    for path in sorted((ROOT / ".github").rglob("*.yml")):
+        for line in path.read_text(encoding="utf-8").splitlines():
+            match = re.match(r"^\s*(?:- )?uses: (\S+)(.*)$", line)
+            if match and not match.group(1).startswith("./"):
+                remote.append((path.name, match.group(1), match.group(2)))
+    assert len(remote) > 10, remote
+    for name, action, comment in remote:
+        assert re.fullmatch(r"[\w.-]+/[\w./-]+@[0-9a-f]{40}", action), f"{name}: {action} is not pinned to a commit"
+        assert re.fullmatch(r" # v?\d+(?:[.]\d+)*", comment), f"{name}: {action} must name its release"

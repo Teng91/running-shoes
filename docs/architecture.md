@@ -267,7 +267,7 @@ flowchart LR
     Updates[app-updates.js<br/>explicit PWA update] --> Bootstrap
 ```
 
-`app-state.js` 只保存共享 state 與常數；`app-api.js` 是 transport adapter；`app-auth.js` 管理 session
+`app-state.js` 只保存共享 state、常數與有 try/catch 的 localStorage 存取函式；`app-api.js` 是 transport adapter；`app-auth.js` 管理 session
 transition；`app-core.js` 組合畫面資料但不承擔 feature-specific rendering。跑步 CRUD、Strava 與洞察分別位於
 三個 module，降低修改匯入功能時誤動月曆或編輯流程的風險。
 
@@ -663,6 +663,7 @@ flowchart LR
 - **限流**：`rate_limits.consume()` 把同一請求的所有視窗放在一個交易，滿了就整筆回滾；限額來自 `app.state.settings`，不再保留記憶體桶。SPEC-071 再加上 AI 的每帳號與全站 24 小時視窗，限流桶保留 24 小時。
 - **稽核 trigger**：每次啟動依目前欄位重建，避免舊欄位清單使快照不完整或使寫入失敗。
 - **Strava**：`strava_import.parse_activity_dates()` 把 UTC 時間戳轉為 `clock.APP_TIMEZONE` 日期。`date_corrections()` 只修正仍停在舊 UTC 日期的既有活動，`services/strava_imports.py` 在匯入交易中移動日期與月跑量。
+- **v4.24.2**：登入綁定帳號、Actions 釘選與瀏覽器儲存（SPEC-087）。`services/accounts.login` 在 token 加上 `aid`（`backup_id`），`auth.get_current_user` 比對；`app-state.js` 提供有 try/catch 的 localStorage 函式給 `app-auth.js` 與 `app-strava.js`；workflow 的 action 釘選到 commit SHA。依賴方向不變。
 - **v4.24.0**：AI 對話即時顯示思考過程（SPEC-086）。`llm.call_llm_stream(include_reasoning=True)` 以 `ReasoningText` 區分思考片段，`agent.py` 轉成 SSE `thinking` 事件，`app-agent.js` 只以純文字顯示；思考內容不進入歷史或下一輪 prompt，依賴方向不變。
 - **v4.23.1**：寄信憑證、管理員名稱與驗證碼次數（SPEC-085）。`mailer.py` 以驗證憑證的 SSL context 做 STARTTLS；`services/accounts` 由 router 傳入管理員名單與是否為管理員，不讀設定；`services/email_codes` 在比對前以條件式 UPDATE 計入次數，每日次數上限由 `rate_limits.enforce_code_attempt_limit` 在 router 執行。依賴方向不變。
 - **v4.23.0**：新帳號引導（SPEC-084）。`app-onboarding.js` 只讀已載入的 `shoes`／`monthlyMileages`／`runningGoal` 推導三步狀態，由 `app-dashboard.render` 通知資源到達；沒有新 API，依賴方向不變。

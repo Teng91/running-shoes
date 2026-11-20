@@ -1,6 +1,6 @@
 // Authentication state, forms, and account transitions.
-let authToken = localStorage.getItem('token');
-let currentUser = localStorage.getItem('username');
+let authToken = readStoredValue('token');
+let currentUser = readStoredValue('username');
 let authGeneration = 0;
 let authOperation = null;
 
@@ -64,8 +64,8 @@ function setAuth(token, username) {
   clearAuth();
   authToken = token;
   currentUser = username;
-  localStorage.setItem('token', token);
-  localStorage.setItem('username', username);
+  writeStoredValue('token', token);
+  writeStoredValue('username', username);
 }
 
 function clearAuth({ persist = true } = {}) {
@@ -76,8 +76,8 @@ function clearAuth({ persist = true } = {}) {
   authToken = null;
   currentUser = null;
   if (persist) {
-    localStorage.removeItem('token');
-    localStorage.removeItem('username');
+    removeStoredValue('token');
+    removeStoredValue('username');
   }
   resetAuthInputs();
 }
@@ -89,9 +89,9 @@ function initializeAuthSync() {
     showAuthError('其他分頁已變更登入狀態，請重新登入。');
   };
   window.addEventListener('storage', event => {
-    if (event.storageArea === localStorage && [null, 'token', 'username'].includes(event.key)) invalidate();
+    if (isLocalStorageEvent(event) && [null, 'token', 'username'].includes(event.key)) invalidate();
   });
-  if (localStorage.getItem('token') !== authToken || localStorage.getItem('username') !== currentUser) invalidate();
+  if (readStoredValue('token') !== authToken || readStoredValue('username') !== currentUser) invalidate();
 }
 
 function showLoginView() {

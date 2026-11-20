@@ -297,6 +297,10 @@ SPEC-032：合成資料驗證歷史筆數上限（v4.7.3 起 10,000／10,001）�
 
 [規格與具名案例](specs/061-ci-on-every-push-and-protected-main.md) 以文字解析 workflow：觸發條件是不限分支的 push、pull request、每週排程與手動執行，沒有 `paths-ignore`；部署條件仍只有 main 的 push／手動執行；main 以外的 ref 由較新的執行取消舊的，main 不取消。ruleset 由 `.github/rulesets/main.json` 描述，Python 測試確認它要求 PR、必要檢查與 workflow 的 5 個測試 job 完全一致、禁止刪除與 force push，且沒有繞過名單。
 
+## SPEC-087 登入綁定帳號、Actions 釘選與瀏覽器儲存
+
+[規格與具名案例](specs/087-session-binding-and-hardening.md) 以 API 刪除帳號後用同一名稱重新註冊，先確認新帳號拿到相同的 id 與 `token_version`，再確認舊 token 回 401、新登入可用；解開登入 token 確認 `aid` 等於 `backup_id`，沒有 `aid` 的舊格式 token 仍可用，`aid` 不符的回 401。一般帳號呼叫管理員 API 時 `error` 為 `forbidden`。workflow 測試掃描 `.github` 下所有 YAML，確認每個外部 action 都釘選到 40 位 SHA 並標註版本。前端在 VM 裡讓 `localStorage` 的每次存取都丟出例外，實際載入 `app-lifecycle.js`、`app-state.js`、`app-auth.js`，確認不中斷、登入與登出只改記憶體，並檢查所有 script 的 `localStorage` 存取都在 try 裡。
+
 ## SPEC-086 AI 對話即時顯示思考過程
 
 [規格與具名案例](specs/086-live-agent-reasoning.md) 以假的串流片段與本機 SSE server 搭配真正的 OpenAI SDK，確認 `reasoning`／`reasoning_details` 只在要求時以 `ReasoningText` 產出、同一個 delta 不重複、加密內容略過、回答 `content` 不含思考；Agent 測試確認 SSE 依序為 `thinking`、工具事件、`thinking`、`token`，且第二輪 prompt 不含思考內容。前端在 VM 中以假 DOM 執行完整的 `sendAgentMessage` 串流：思考區塊即時展開、回答時收合為「已思考 N 秒」、內容只以純文字顯示且不寫入歷史；多輪工具時區塊依序排列，空泡泡顯示等待秒數，思考區塊的秒數從這一輪開始算（等 31 秒後才一口氣送來的思考內容仍顯示「已思考 31 秒」），串流結束後計時器停止。

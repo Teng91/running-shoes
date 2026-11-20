@@ -54,7 +54,7 @@ Python 3.11 · FastAPI · SQLAlchemy · SQLite · 原生 JavaScript（不需要�
 | 項目 | 數量 |
 | --- | --- |
 | 正式版本 | 119 個 tag，2026-06 開始，目前 v4.24 |
-| 自動化測試 | Python 739 項、前端 Node 回歸 233 項、40 組版面設定（WebKit／Chromium × 亮暗 × 10 種尺寸）、真實 CRUD E2E 與 PWA 升級／離線測試 |
+| 自動化測試 | Python 742 項、前端 Node 回歸 234 項、40 組版面設定（WebKit／Chromium × 亮暗 × 10 種尺寸）、真實 CRUD E2E 與 PWA 升級／離線測試 |
 | 功能規格 | 85 份 SPEC，每份含 Goals、帳號隔離、migration／rollback 與 AC 追蹤 |
 | API | 65 個端點，與 `unit_tests/api_contract.json` 及下方 API 表自動比對 |
 | 資料庫 | SQLite schema 12，每一版都有守衛的回滾腳本 |
@@ -167,7 +167,7 @@ flowchart LR
 | 看到別人的資料 | 每個查詢與異動都帶 `user_id` 條件；跨帳號的鞋款關聯由外鍵與擁有權檢查擋下；測試以兩個帳號驗證每個統計 |
 | XSS、點擊劫持 | 嚴格 CSP：只允許同源 script 與建置時算好雜湊的啟動 script，禁止 inline 事件與 `eval`；禁止被 iframe 嵌入、`nosniff`；不可信 Markdown 安全渲染 |
 | 暴力登入、濫用 AI | 每帳號／每 IP／全站的限流，以 SQLite 共享計數讓多 worker 共用上限；同一 IP 對同一帳號 15 分鐘內失敗 10 次、或該帳號從各處失敗 100 次就暫時鎖定；AI 另有每帳號／全站每日額度；註冊總數、每人資料量都有上限 |
-| 陌生人註冊、帳號被接管 | 預設邀請制註冊，伺服器只存邀請碼雜湊；邀請碼不能註冊管理員名稱，管理員帳號也不能刪除（權限跟著名稱走）；帳號名稱不分大小寫；改密碼、email 重設或管理員臨時密碼都讓所有舊 token 失效，綁定 email 的帳號會收到通知信 |
+| 陌生人註冊、帳號被接管 | 預設邀請制註冊，伺服器只存邀請碼雜湊；邀請碼不能註冊管理員名稱，管理員帳號也不能刪除（權限跟著名稱走）；帳號名稱不分大小寫；改密碼、email 重設或管理員臨時密碼都讓所有舊 token 失效，綁定 email 的帳號會收到通知信；token 綁定帳號本身，帳號刪除後同名重新註冊，舊 token 也進不去 |
 | 忘記密碼流程被濫用 | 驗證碼 6 位數、10 分鐘、每組最多試 5 次（比對前就計入），每個帳號每天最多試 10 次，只存 HMAC；不論帳號是否存在都回同樣結果；每 IP／帳號／全站都有寄送上限；寄信的 STARTTLS 驗證 Gmail 憑證 |
 | 大量請求灌爆服務 | 每個來源位址每分鐘 600 次 API 上限（記憶體計數，不寫資料庫），Fly 另設同時請求上限 |
 | 資料遺失 | 每次部署前在 volume 快照；每天把正式資料庫加密（AES-256）後存到 GitHub artifact，保留 30 天 |
@@ -175,6 +175,7 @@ flowchart LR
 | 提示注入 | 搜尋結果以不可信的 tool 結果傳入、限制長度並過濾網址；私人資料只來自資料庫工具 |
 | 憑證外流 | JSON 備份不含密碼雜湊或 token；改密碼後舊 token 立即失效；log 只記 metadata，不記內容或密碼 |
 | 上傳攻擊 | Strava CSV 與備份上傳在 multipart 解析前就限制大小，CSV 逐列解析並限制列數 |
+| CI 被植入惡意程式 | 外部 GitHub Actions 全部釘選到 commit SHA，Dependabot 每月更新；Fly 金鑰與備份通行碼只給部署與異地備份的 job，測試 job 拿不到任何 secret |
 
 ---
 
@@ -193,8 +194,8 @@ flowchart LR
 
 ## 品質：測試與規格
 
-- **Python 739 項**：API、交易與並行、migration 與回滾、備份往返、帳號隔離、Agent 規劃與工具（外部 LLM 與搜尋一律 mock），一律使用暫存或記憶體資料庫，不碰正式 `shoes.db`。
-- **前端 Node 回歸 233 項**：以 `vm` 載入實際前端程式，驗證狀態、競態、草稿、串流與圖表資料。
+- **Python 742 項**：API、交易與並行、migration 與回滾、備份往返、帳號隔離、Agent 規劃與工具（外部 LLM 與搜尋一律 mock），一律使用暫存或記憶體資料庫，不碰正式 `shoes.db`。
+- **前端 Node 回歸 234 項**：以 `vm` 載入實際前端程式，驗證狀態、競態、草稿、串流與圖表資料。
 - **瀏覽器**：Playwright 在 WebKit 與 Chromium 跑 40 組版面設定（含幾何對齊與無溢出）、真實 FastAPI＋暫存 SQLite 的 CRUD E2E、Service Worker 升級與離線；失敗時保存截圖與 trace。
 - **修 bug 先寫重現測試**：例如 v4.17.0 的 CI 抓到新圖表檔案重複宣告全域常數，修正時同時加上掃描所有 script 的測試。
 - **文件也被測**：`docs-check` 比對 README 的測試數、工具數、API 表、目錄樹與規格的 AC 追蹤，數字對不上 CI 就失敗。
@@ -928,7 +929,7 @@ Playwright／Chromium／WebKit 齊全時，也會執行版面測試。
 避免每次停止都重跑。Hook 不會呼叫其他模型、外部 API，或傳送提示、diff、原始碼與測試輸出。
 GitHub Actions 仍會在 push／pull request 執行 `verify`，並以三個可獨立重跑的 browser jobs 執行完整版面矩陣、真實 CRUD E2E 與 PWA 升級／離線測試；push 到 main 時再依序快照、部署、檢查並發版（見「日常開發流程、自動部署與發版」）；Dependabot 每月以單一 PR 合併 GitHub Actions 更新；Python 只接收安全性更新 PR，例行升級依下方 `uv pip compile --universal` 步驟手動重編鎖定檔（Dependabot 產生的鎖定檔會遺失 Windows 條件）。
 
-本次驗證基線為 Python **739 passed**、前端回歸測試 **233 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
+本次驗證基線為 Python **742 passed**、前端回歸測試 **234 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
 版面檢查涵蓋 WebKit／Chromium、亮／暗模式與 10 組直橫向尺寸，共 40 組設定，檢查四個功能分頁與月報、三個認證表單、圖表、全部彈窗、行內編輯、停用／錯誤及空資料狀態。
 
 主要表單、工具列與彈窗操作統一為 44px 控制項；桌面表格內的緊湊操作為 36px，手機至少 44px。
@@ -1299,7 +1300,7 @@ venv/bin/python -m backend.run
 
 註冊方式由 `REGISTRATION_MODE` 決定：預設 `invite` 需要管理員產生的邀請碼，`open` 任何人都能註冊，`closed` 不開放註冊（其他值一律視為 `closed`）。每個使用者的跑鞋資料完全隔離，互看不到；管理員只能管理邀請碼和產生臨時密碼，看不到別人的跑步資料。
 
-登入後的 token 存在這台裝置的瀏覽器，7 天後過期。「登出」只清除這台裝置；懷疑別的裝置或 token 外流時，請更改密碼，所有裝置上的登入會立即失效。
+登入後的 token 存在這台裝置的瀏覽器，7 天後過期；瀏覽器封鎖網站資料時仍可使用，但登入只保存在這個頁面，重新整理後要再登入。「登出」只清除這台裝置；懷疑別的裝置或 token 外流時，請更改密碼，所有裝置上的登入會立即失效。
 
 ## API 一覽
 
