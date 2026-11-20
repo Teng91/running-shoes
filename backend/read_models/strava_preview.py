@@ -101,7 +101,15 @@ def build_preview(
         group["first_date"] = min(str(group["first_date"]), str(row["date"]))
         group["count"] = int(cast(int, group["count"])) + 1
         group["km"] = round(float(cast(float, group["km"])) + float(cast(float, row["km"])), 2)
+    # SPEC-092: a conflict the user imports needs a shoe, so its gear always gets a group;
+    # conflict_count says how many of the group's activities wait for that choice.
+    for conflict in conflicts:
+        gear = str(conflict["gear"])
+        group = groups.setdefault(gear, {"gear": gear, "count": 0, "km": 0.0, "first_date": str(conflict["date"])})
+        group["first_date"] = min(str(group["first_date"]), str(conflict["date"]))
+        group["conflict_count"] = int(cast(int, group.get("conflict_count", 0))) + 1
     for group in groups.values():
+        group.setdefault("conflict_count", 0)
         candidates = shoes_by_key.get(_normalize_gear(str(group["gear"])), [])
         suggested_shoe = candidates[0] if len(candidates) == 1 else None
         group["suggested_shoe_id"] = suggested_shoe.id if suggested_shoe else None

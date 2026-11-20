@@ -111,7 +111,7 @@ async function previewStravaFile() {
       (unknown ? `有 ${unknown} 個鞋款需要手動配對或略過。` : '待匯入鞋款已全部自動配對。');
     const shoeOptions = allRunShoes().map(shoe => `<option value="${shoe.id}">${esc(shoeLabel(shoe))}</option>`).join('');
     mapping.innerHTML = stravaController.state.preview.gear_groups.map((group, index) => `
-      <div class="strava-group"><div><strong>${esc(group.gear || '未指定鞋款')}</strong><small>${group.count} 次 · ${Number(group.km).toFixed(2)} km</small>
+      <div class="strava-group"><div><strong>${esc(group.gear || '未指定鞋款')}</strong><small>${group.count} 次 · ${Number(group.km).toFixed(2)} km${group.conflict_count ? ` · 另有 ${group.conflict_count} 筆待選擇的重複活動` : ''}</small>
         <small class="strava-date-warning" id="strava-warn-${index}" role="status" hidden></small></div>
         <select id="strava-map-${index}" data-change="strava-date-warning" data-index="${index}"><option value="">不匯入此鞋款</option>${shoeOptions}</select></div>`).join('');
     stravaController.state.preview.gear_groups.forEach((group, index) => {
@@ -181,7 +181,7 @@ function stravaConflictsHtml(preview) {
     const links = (conflict.candidates || []).map(run => `<option value="${run.run_id}">連結到手動紀錄：${esc(stravaConflictLabel(run))}${run.shoe_name ? ` · ${esc(run.shoe_name)}` : ''}</option>`).join('');
     return `<div class="strava-group"><div><strong>${esc(String(conflict.date).replace(/-/g, '/'))} Strava ${esc(stravaConflictLabel(conflict))}</strong><small>${esc(conflict.gear || '未指定鞋款')}</small></div>
       <select id="strava-conflict-${index}" data-change="strava-conflict-choice" aria-label="${esc(String(conflict.date))} 的 Strava 活動要如何處理"><option value="skip">略過（不匯入）</option>${links}<option value="import">匯入為新紀錄</option></select></div>`;
-  }).join('');
+  }).join('') + '<p id="strava-conflict-status" class="strava-conflicts-status" role="status" aria-live="polite"></p>';
 }
 
 function stravaConflictChoices(preview) {
@@ -193,10 +193,31 @@ function stravaConflictChoices(preview) {
   return choices;
 }
 
+// SPEC-092: one manual run can take only one activity; the choice summary follows the selects.
+function stravaConflictProblem(choices) {
+  const runs = Object.values(choices).filter(value => value !== 'import');
+  return new Set(runs).size === runs.length ? '' : '同一筆手動紀錄只能連結一個 Strava 活動，請改選其中一筆。';
+}
+
+function stravaConflictSummary(choices) {
+  const values = Object.values(choices);
+  const imports = values.filter(value => value === 'import').length;
+  const links = values.length - imports;
+  if (!values.length) return '';
+  return `已選擇：${links ? `連結 ${links} 筆` : ''}${links && imports ? '、' : ''}${imports ? `匯入 ${imports} 筆新紀錄（需要上方的鞋款配對）` : ''}。`;
+}
+
 function updateStravaImportButton() {
   const preview = stravaController.state.preview;
-  document.getElementById('strava-import-btn').disabled = stravaController.importing() || !preview
-    || (!stravaHasChanges(preview) && !Object.keys(stravaConflictChoices(preview)).length);
+  const choices = stravaConflictChoices(preview);
+  const problem = stravaConflictProblem(choices);
+  const status = document.getElementById('strava-conflict-status');
+  if (status) {
+    status.textContent = problem || stravaConflictSummary(choices);
+    status.classList?.toggle('strava-date-warning', Boolean(problem));
+  }
+  document.getElementById('strava-import-btn').disabled = stravaController.importing() || !preview || Boolean(problem)
+    || (!stravaHasChanges(preview) && !Object.keys(choices).length);
 }
 
 function stravaHasChanges(preview) {

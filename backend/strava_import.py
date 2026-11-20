@@ -334,6 +334,10 @@ class ConflictChoiceError(ValueError):
     """A conflict choice that does not match the current preview (SPEC-091)."""
 
 
+class DuplicateConflictLinkError(ConflictChoiceError):
+    """Two conflicts chose the same manual run; re-previewing cannot fix it (SPEC-092)."""
+
+
 SKIP_CONFLICT = "skip"
 IMPORT_CONFLICT = "import"
 
@@ -369,8 +373,10 @@ def resolve_conflicts(
             continue
         if isinstance(choice, bool) or not isinstance(choice, int):
             raise ConflictChoiceError("unknown choice")
-        if choice not in cast(list[int], conflict["candidate_run_ids"]) or choice in chosen_runs:
+        if choice not in cast(list[int], conflict["candidate_run_ids"]):
             raise ConflictChoiceError("not a candidate")
+        if choice in chosen_runs:
+            raise DuplicateConflictLinkError("run chosen twice")
         chosen_runs.add(choice)
         manual = manual_by_id[choice]
         duration = conflict.get("duration_seconds")

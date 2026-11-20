@@ -9,7 +9,12 @@ import json
 import pytest
 
 from backend.models import MonthlyMileage, Run, Shoe
-from backend.strava_import import ConflictChoiceError, manual_matches, resolve_conflicts
+from backend.strava_import import (
+    ConflictChoiceError,
+    DuplicateConflictLinkError,
+    manual_matches,
+    resolve_conflicts,
+)
 from unit_tests.test_run_pace import STRAVA_HEADER, client, headers, owner, strava_row, upload
 
 __all__ = ["client"]
@@ -135,9 +140,11 @@ def test_conflict_choices_skip_import_or_link_a_candidate_and_reject_stale_ones(
     timed, _ = resolve_conflicts(conflicts, {"x": 3}, manual)
     assert timed[0]["duration_seconds"] is None, "a typed time is never replaced"
     assert resolve_conflicts(conflicts, {}, manual) == ([], set()), "no choice means skip"
-    for stale in ({"unknown": "import"}, {"x": 4}, {"x": 2, "y": 2}, {"x": "link"}, {"x": True}, {"x": 2.0}):
+    for stale in ({"unknown": "import"}, {"x": 4}, {"x": "link"}, {"x": True}, {"x": 2.0}):
         with pytest.raises(ConflictChoiceError):
             resolve_conflicts(conflicts, stale, manual)
+    with pytest.raises(DuplicateConflictLinkError):
+        resolve_conflicts(conflicts, {"x": 2, "y": 2}, manual)
 
 
 def _upload(client, user, path, csv_text, mapping, conflicts):
@@ -186,3 +193,26 @@ def test_the_user_links_or_imports_a_conflict_and_mileage_follows_the_choice(cli
 
     again = upload(client, user, "/api/runs/import/strava/preview", csv_text).json()
     assert (again["manual_conflict_count"], again["duplicate_count"], again["importable_count"]) == (0, 2, 0)
+
+
+def test_a_conflict_with_its_own_gear_can_be_mapped_and_two_links_to_one_run_are_refused(client, db):
+    """SPEC-092: a chosen import always has a shoe group; one manual run takes one activity."""
+    user, shoe = owner(db, "conflict-gear-owner")
+    typed = client.post("/api/runs", headers=headers(user), json={"date": "2026-11-13", "km": 10, "shoe_id": shoe.id}).json()["id"]
+    csv_text = (STRAVA_HEADER
+                + strava_row("p1", "11月13日", 5000, 1500, gear="Nike Pegasus 41")
+                + strava_row("p2", "11月13日", 3000, 900, gear="Nike Pegasus 41"))
+    preview = upload(client, user, "/api/runs/import/strava/preview", csv_text).json()
+    assert preview["importable_count"] == 0
+    assert preview["gear_groups"] == [{"gear": "Nike Pegasus 41", "count": 0, "km": 0.0, "first_date": "2026-11-13",
+                                       "conflict_count": 2, "suggested_shoe_id": None, "shoe_name": None,
+                                       "ambiguous_match": False}]
+
+    twice = _upload(client, user, "/api/runs/import/strava", csv_text, {"Nike Pegasus 41": shoe.id},
+                    json.dumps({"p1": typed, "p2": typed}))
+    assert twice.status_code == 400 and twice.json()["detail"] == "同一筆手動紀錄只能連結一個 Strava 活動"
+
+    result = _upload(client, user, "/api/runs/import/strava", csv_text, {"Nike Pegasus 41": shoe.id},
+                     json.dumps({"p1": typed, "p2": "import"}))
+    assert result.status_code == 200, result.text
+    assert (result.json()["imported"], result.json()["linked_manual"], result.json()["skipped_unmapped"]) == (1, 1, 0)
