@@ -78,7 +78,7 @@ async function previewStravaFile() {
   const summary = document.getElementById('strava-summary');
   const error = document.getElementById('strava-error');
   const mapping = document.getElementById('strava-mapping');
-  localStorage.setItem(
+  writeStoredValue(
     `strava-import-range:${currentUser || 'anonymous'}`,
     JSON.stringify({ start: startDate, end: endDate }),
   );

@@ -14,7 +14,7 @@
 - `backend/seeding.py`: optional default data using an injected session factory.
 - `backend/middleware.py`: request-level transport guards: security headers on every response (SPEC-054), the in-memory per-address `/api/` request budget (SPEC-073, no SQLite writes) and Strava/backup upload size limits.
 - `backend/observability.py`: request IDs and metadata-only structured HTTP logs; never log bodies, tokens or passwords.
-- `backend/auth.py`: HTTP bearer adapter; always decodes with the app's injected key (tests sign through `unit_tests/token_helpers.py`).
+- `backend/auth.py`: HTTP bearer adapter; always decodes with the app's injected key (tests sign through `unit_tests/token_helpers.py`) and rejects a token whose `aid` is not the account's `backup_id` (SPEC-087).
 - `backend/models.py`, `schemas.py`: ORM tables and Pydantic request/response contracts with input validation.
 - `backend/analytics.py`, `goals.py`, `reports.py`: read-only home insights, goal progress and monthly-report snapshots; their writes live in `backend/services/`.
 - `backend/exporting.py`, `strava_import.py`: pure CSV/XLSX export rows and Strava CSV parsing; `backend/services/exports.py`, `strava_imports.py` own the use cases.
@@ -77,7 +77,7 @@
 - `frontend/app-dialogs.js`: modal semantics and keyboard/focus lifecycle.
 - `frontend/app-updates.js`: shell version diagnostics, open-app deployment checks (focus, visibility, reconnect, 30 min), automatic reload at safe moments (background, untouched after returning, 5 idle minutes; postponed by `appUpdateBusy()`) and the update prompt (SPEC-049, SPEC-059).
 - `frontend/app-boot.js`: startup loading, stylesheet readiness, timeout, and retry state.
-- `frontend/app-state.js`: shared browser state and presentation constants.
+- `frontend/app-state.js`: shared browser state, presentation constants and the guarded localStorage helpers (`readStoredValue` and friends); classic scripts never touch `localStorage` outside a try (SPEC-087).
 - `frontend/app-api.js`: authenticated JSON and upload transport helpers.
 - `frontend/app-auth.js`: authentication state, forms, and account transitions.
 - `frontend/app-streams.js`: shared authenticated SSE decoding, cancellation, and terminal state.

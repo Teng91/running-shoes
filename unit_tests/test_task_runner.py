@@ -108,7 +108,7 @@ def test_diagnostics_roundtrip_requires_capture_upload_download_and_content_veri
     assert 'name: browser-diagnostics-roundtrip' in capture
     assert 'if-no-files-found: error' in capture
     assert 'needs: frontend-pwa' in download
-    assert 'actions/download-artifact@v8' in download
+    assert re.search(r'actions/download-artifact@[0-9a-f]{40} # v8[.]', download)
     assert 'name: browser-diagnostics-roundtrip' in download
     assert 'python scripts/task.py diagnostics-verify' in download
 
