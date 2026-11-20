@@ -16,10 +16,10 @@
 - `backend/observability.py`: request IDs and metadata-only structured HTTP logs; never log bodies, tokens or passwords.
 - `backend/auth.py`: HTTP bearer adapter; always decodes with the app's injected key (tests sign through `unit_tests/token_helpers.py`) and rejects a token whose `aid` is not the account's `backup_id` (SPEC-087).
 - `backend/models.py`, `schemas.py`: ORM tables and Pydantic request/response contracts with input validation.
-- `backend/analytics.py`, `goals.py`, `reports.py`: read-only home insights, goal progress and monthly-report snapshots; their writes live in `backend/services/`.
+- `backend/read_models/insights.py`, `goal_progress.py`, `report_snapshot.py`: read-only home insights, goal progress and monthly-report snapshots (moved from `backend/` in SPEC-090); their writes live in `backend/services/`.
 - `backend/exporting.py`, `strava_import.py`: pure CSV/XLSX export rows and Strava CSV parsing; `backend/services/exports.py`, `strava_imports.py` own the use cases.
 - `backend/services/mileage.py`: transactional shoe/month mileage deltas shared by run and import writes.
-- `backend/routers/`: feature-oriented HTTP routes; routers must never import `backend.main` and never build database queries (read models, services or `migrations.ready_schema_version` own them).
+- `backend/routers/`: feature-oriented HTTP routes; routers must never import `backend.main` or another route module (shared helpers such as `errors.py` and `password_notices.py` define no router; SPEC-090) and never build database queries (read models, services or `migrations.ready_schema_version` own them).
 - `backend/services/`: framework-independent application services; services must not import FastAPI or routers.
 - `backend/services/transactions.py`: SQLite writer reservation and commit/rollback ownership; validate quotas and versions only after acquiring the reservation.
 - `backend/services/runs.py`, `shoes.py`, `monthly.py`: user-scoped CRUD application use cases; HTTP routers must not own mutations or commits.
@@ -96,8 +96,10 @@
 - `frontend/app-goals.js`: running-goal settings and progress presentation.
 - `frontend/app-charts.js`: shared chart registry and label utilities.
 - `frontend/app-shoe-charts.js`: shoe lifecycle, cost, retirement, and allocation charts.
-- `frontend/app-monthly-charts.js`: month/year selectors and monthly/annual mileage charts.
-- `frontend/app-pace-charts.js`: race goal form, race readiness cards and pace trend charts (SPEC-065).
+- `frontend/app-monthly-charts.js`: month/year selectors, monthly/annual/year-over-year mileage charts and the year in review.
+- `frontend/app-trend-charts.js`: training trends: heatmap, weekly load and long run, weekday distribution and the cumulative year line (SPEC-090).
+- `frontend/app-pace-charts.js`: shared race state, race readiness cards and pace trend charts (SPEC-065).
+- `frontend/app-race-goal.js`: the race goal form: open, validate, save and delete (SPEC-090).
 - `frontend/app-spending.js`: spending cards, charts, and table.
 - `frontend/app-actions.js`: delegated `data-click`/`data-change`/… UI actions; markup and generated rows never contain inline JavaScript handlers (the page CSP blocks them).
 - `frontend/offline.html`: script-free offline fallback with its own strict CSP.

@@ -5,11 +5,11 @@ from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from backend import analytics, models
+from backend import models
 from backend.auth import get_current_user
 from backend.clock import local_today
 from backend.dependencies import get_db
-from backend.read_models import highlights, pace, race_readiness, trends
+from backend.read_models import highlights, insights, pace, race_readiness, trends
 
 router = APIRouter(tags=["analytics"])
 
@@ -21,7 +21,7 @@ def dashboard_analytics(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    return analytics.dashboard_analytics(db, current_user.id, year, month)
+    return insights.dashboard_analytics(db, current_user.id, year, month)
 
 
 @router.get("/api/analytics/race")
@@ -80,7 +80,7 @@ def get_shoe_analytics(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    result = analytics.shoe_analytics(db, current_user.id, shoe_id)
+    result = insights.shoe_analytics(db, current_user.id, shoe_id)
     if result is None:
         raise HTTPException(status_code=404, detail="Shoe not found")
     return result

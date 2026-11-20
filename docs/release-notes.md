@@ -4,6 +4,15 @@
 每版的摘要見 [CHANGELOG.md](../CHANGELOG.md)；目前的功能與操作方式以 [README](../README.md) 為準。
 這裡保留當時的文字，後續版本可能已調整其中的行為。
 
+### 模組解耦（SPEC-090，v4.25.2）
+
+- `backend/analytics.py` → `read_models/insights.py`、`backend/goals.py` → `read_models/goal_progress.py`、`backend/reports.py` → `read_models/report_snapshot.py`，內容不變；原本只檢查 `reports.py` 的架構規則改由 read models 共同規則涵蓋。
+- `notify_password_changed` 從 `routers/auth.py` 移到 `routers/password_notices.py`；`check_architecture.router_cross_imports()` 讓 route module 互相 import 時失敗。
+- 前端 `app-trend-charts.js`（熱力圖、每週跑量與長距離、星期分布、年度累計）與 `app-race-goal.js`（目標賽事表單）在原檔之後載入；shell 多兩個資產。
+- `llm.py` 的模型快取與設定刻意維持 process-wide，理由見 SPEC-090 Non-goals。
+
+Asset 4.25.2／shell v99、schema 12 不變，可直接回滾至 v4.25.1 image。
+
 ### 內建前端函式庫納入稽核與跑鞋索引（SPEC-089，v4.25.1）
 
 - `package.json` devDependencies 加入 `chart.js 4.4.7` 與 `marked 15.0.12`，只供稽核與測試比對，瀏覽器仍載入 `frontend/vendor/`。升級內建檔案時要一起更新 `package.json` 與鎖定檔，否則 `unit_tests/test_vendored_libraries.py` 會失敗。

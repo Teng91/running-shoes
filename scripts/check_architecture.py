@@ -94,6 +94,25 @@ def forbidden_dependency_chain(start: Path, forbidden: tuple[str, ...]) -> list[
     return None
 
 
+def router_cross_imports(routers: Path) -> list[str]:
+    """SPEC-090: a route module never imports another one.
+
+    Shared HTTP helpers (``errors.py``, ``password_notices.py``) define no router and may be
+    imported by any route module.
+    """
+    route_modules = {
+        path.stem for path in routers.glob("*.py")
+        if re.search(r"^router = APIRouter\(", path.read_text(encoding="utf-8"), re.M)
+    }
+    offenders = []
+    for path in sorted(routers.glob("*.py")):
+        for name in sorted(project_dependencies(path)):
+            parts = name.split(".")
+            if parts[:2] == ["backend", "routers"] and len(parts) > 2 and parts[2] in route_modules:
+                offenders.append(f"{path.name} -> {name}")
+    return offenders
+
+
 def check_feature_boundaries() -> None:
     for filename in ("runs.py", "shoes.py", "monthly.py", "auth.py", "goals.py", "reports.py", "workspace.py"):
         path = ROUTERS / filename
@@ -113,9 +132,8 @@ def check_feature_boundaries() -> None:
             chain = forbidden_dependency_chain(path, ("fastapi", "starlette", "backend.routers", "backend.main", "backend.tools"))
             if chain:
                 fail("domain/service dependency violation: " + " -> ".join(chain))
-    report_chain = forbidden_dependency_chain(ROOT / "backend" / "reports.py", ("backend.tools", "backend.routers"))
-    if report_chain:
-        fail("reports must use read models: " + " -> ".join(report_chain))
+    for offender in router_cross_imports(ROUTERS):
+        fail(f"router modules must not import each other: {offender}")
     frontend = ROOT / "frontend"
     manifest = json.loads((frontend / "assets.json").read_text(encoding="utf-8"))
     owners: dict[str, str] = {}

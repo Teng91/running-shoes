@@ -6,11 +6,11 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from backend import llm, models, schemas
-from backend import reports as report_statistics
 from backend.auth import get_current_user
 from backend.clock import local_today
 from backend.dependencies import get_db
 from backend.rate_limits import enforce_agent_request_limits
+from backend.read_models import report_snapshot as report_statistics
 from backend.read_models.saved_reports import list_saved_reports, saved_report
 from backend.report_llm import stream_report_text
 from backend.report_protocol import report_sse
