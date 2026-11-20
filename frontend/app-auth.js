@@ -159,6 +159,8 @@ const ERROR_ZH = {
   'Incorrect or expired code': '驗證碼錯誤或已過期', 'Invalid email address': 'Email 格式不正確',
   'Email already in use': '這個 email 已經被其他帳號使用', 'Email is not configured': '目前沒有開啟 email 功能',
   'Shoe not found': '跑鞋不存在',
+  // SPEC-085: admin rights follow the name, so an admin account stays until it leaves ADMIN_USERNAMES.
+  'Admin accounts cannot be deleted': '管理員帳號不能刪除；要刪除請先把這個帳號從 ADMIN_USERNAMES 移除',
 };
 function translateError(detail) { return ERROR_ZH[detail] || detail; }
 

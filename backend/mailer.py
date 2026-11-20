@@ -8,6 +8,7 @@ recipient, the code or the credentials.
 
 import logging
 import smtplib
+import ssl
 from collections.abc import Callable
 from email.message import EmailMessage
 from email.utils import formataddr
@@ -51,7 +52,9 @@ def smtp_mailer(settings: Settings) -> Mailer | None:
         message.set_content(body)
         try:
             with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=20) as client:
-                client.starttls()
+                # SPEC-085: smtplib's default STARTTLS context verifies neither the certificate
+                # nor the host name, so the app password could be read on the way to Gmail.
+                client.starttls(context=ssl.create_default_context())
                 client.login(username, password)
                 client.send_message(message)
         except (OSError, smtplib.SMTPException) as error:

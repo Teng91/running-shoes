@@ -233,3 +233,33 @@ def test_admin_can_choose_a_memorable_invite_code(client, db, monkeypatch):
     assert _register(client, "friend", "runner24").status_code == 200
     assert _register(client, "friend2", " RUNNER24 ").status_code == 200
     assert _register(client, "friend3", "RUNNER24").json()["detail"] == "Invalid invite code", "two uses only"
+
+
+def test_an_invite_cannot_claim_an_admin_name_that_is_not_registered(client, db, monkeypatch):
+    """SPEC-085: admin rights follow the name, so an invitee must not be able to take a free admin name."""
+    headers = _admin(client, db, monkeypatch)
+    _settings(monkeypatch, registration_mode="invite", admin_usernames=frozenset({"demo", "boss"}))
+    code = client.post("/api/admin/invites", headers=headers, json={"max_uses": 2}).json()["code"]
+    claimed = _register(client, " BOSS ", code)
+    assert claimed.status_code == 400 and claimed.json()["detail"] == "Username already registered", \
+        "the same answer as a taken name, so sign-up does not reveal admin names"
+    assert db.query(models.Invite).one().used_count == 0, "a refused sign-up does not spend the invite"
+    assert db.query(models.User).filter(models.User.username.ilike("boss")).first() is None
+    assert _register(client, "Friend", code).status_code == 200
+
+    _settings(monkeypatch, registration_mode="open")
+    assert _register(client, "Boss").status_code == 200, "the first admin registers while registration is open"
+    assert client.get("/api/auth/me", headers=_login(client, "boss")).json()["is_admin"] is True
+
+
+def test_an_admin_account_cannot_be_deleted(client, db, monkeypatch):
+    """SPEC-085: deleting an admin would free its name for the next person who registers it."""
+    headers = _admin(client, db, monkeypatch)
+    refused = client.post("/api/auth/delete-account", headers=headers, json={"password": PASSWORD})
+    assert refused.status_code == 400 and refused.json()["detail"] == "Admin accounts cannot be deleted"
+    db.expire_all()
+    assert db.query(models.User).filter_by(username="Demo").one()
+    assert client.get("/api/auth/me", headers=headers).status_code == 200, "a refusal does not sign the admin out"
+
+    _settings(monkeypatch, admin_usernames=frozenset())
+    assert client.post("/api/auth/delete-account", headers=headers, json={"password": PASSWORD}).status_code == 200

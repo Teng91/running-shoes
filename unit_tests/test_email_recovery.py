@@ -2,6 +2,7 @@
 
 import re
 import smtplib
+import ssl
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -18,6 +19,7 @@ from backend.dependencies import get_db
 from backend.mailer import MailError, smtp_mailer
 from backend.main import app
 from backend.migrations import run_startup_migrations, schema_version
+from backend.services import email_codes
 from backend.settings import Settings
 
 PASSWORD = "pass1234"
@@ -84,7 +86,7 @@ def test_smtp_sender_uses_starttls_login_and_hides_failures(monkeypatch):
         def __exit__(self, *exc):
             return False
 
-        def starttls(self):
+        def starttls(self, context=None):
             sent.append(("starttls",))
 
         def login(self, user, password):
@@ -282,3 +284,89 @@ def test_no_notice_without_an_email_and_mail_failures_do_not_block_the_change(cl
     wrong = client.post("/api/auth/change-password", json={
         "username": "Loud", "old_password": "wrong-pass", "new_password": "third-pass1"})
     assert wrong.status_code == 401
+
+
+def test_smtp_starttls_verifies_the_server_certificate(monkeypatch):
+    """SPEC-085: smtplib's default STARTTLS context accepts any certificate; ours must not."""
+    contexts = []
+
+    class FakeSMTP:
+        def __init__(self, host, port, timeout):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def starttls(self, context=None):
+            contexts.append(context)
+
+        def login(self, user, password):
+            pass
+
+        def send_message(self, message):
+            pass
+
+    monkeypatch.setattr(smtplib, "SMTP", FakeSMTP)
+    smtp_mailer(Settings.from_env({"SMTP_USERNAME": "bot@gmail.com", "SMTP_PASSWORD": "secret"}))("me@example.com", "s", "b")
+    [context] = contexts
+    assert isinstance(context, ssl.SSLContext)
+    assert context.verify_mode == ssl.CERT_REQUIRED and context.check_hostname is True
+
+
+def test_an_attempt_is_counted_before_the_code_is_compared(client, db, outbox, monkeypatch):
+    """SPEC-085: concurrent guesses cannot all read the same count and exceed five attempts."""
+    headers = _account(client, "Racer")
+    client.post("/api/auth/email/request", headers=headers, json={"email": "race@example.com"})
+    code = outbox.code()
+    seen = []
+    real_compare = email_codes.hmac.compare_digest
+
+    def compare(stored, given):
+        if isinstance(stored, str):  # JWT signatures are compared as bytes; code HMACs as hex text
+            db.expire_all()
+            seen.append(db.query(models.EmailCode.attempts).scalar())
+        return real_compare(stored, given)
+
+    monkeypatch.setattr(email_codes.hmac, "compare_digest", compare)
+    wrong = "123456" if code != "123456" else "654321"
+    for _ in range(4):
+        client.post("/api/auth/email/confirm", headers=headers, json={"code": wrong})
+    assert seen == [1, 2, 3, 4], "each attempt is already stored when its code is compared"
+    assert client.post("/api/auth/email/confirm", headers=headers, json={"code": code}).status_code == 200, \
+        "the fifth attempt may still be the right one"
+
+    client.post("/api/auth/email/request", headers=headers, json={"email": "race2@example.com"})
+    db.query(models.EmailCode).update({"attempts": email_codes.MAX_ATTEMPTS})
+    db.commit()
+    seen.clear()
+    assert client.post("/api/auth/email/confirm", headers=headers, json={"code": outbox.code()}).status_code == 400
+    assert seen == [], "a spent code is refused without comparing"
+
+
+def test_code_attempts_are_capped_per_account_and_day_across_new_codes(client, db, outbox, monkeypatch):
+    """SPEC-085: requesting a new code restarts its five attempts, but not the daily budget."""
+    monkeypatch.setattr(app.state, "settings", replace(
+        app.state.settings, auth_rate_limit_per_minute=1000, auth_global_rate_limit_per_minute=1000))
+    headers = _account(client, "Target")
+    _bind(client, outbox, headers, "target@example.com")
+
+    def guess(identifier, code):
+        return client.post("/api/auth/password-reset/confirm",
+                           json={"identifier": identifier, "code": code, "new_password": "taken-over-1"})
+
+    for identifier in ("Target", "target@example.com"):
+        client.post("/api/auth/password-reset/request", json={"identifier": identifier})
+        wrong = "123456" if outbox.code() != "123456" else "654321"
+        for _ in range(5):
+            assert guess(identifier, wrong).status_code == 400
+    client.post("/api/auth/password-reset/request", json={"identifier": "TARGET"})
+    blocked = guess("target", outbox.code())
+    assert blocked.status_code == 429, "username and email share one budget of ten attempts a day"
+    assert "明天再試" in blocked.json()["detail"]
+    assert client.post("/api/auth/login", json={"username": "Target", "password": PASSWORD}).status_code == 200
+
+    answers = [guess("ghost", "123456").status_code for _ in range(11)]
+    assert answers == [400] * 10 + [429], "an unknown account is limited the same way"
