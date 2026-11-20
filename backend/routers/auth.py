@@ -61,6 +61,13 @@ def read_current_user(request: Request, current_user: models.User = Depends(get_
             "is_admin": request.app.state.settings.is_admin(current_user.username), "email": current_user.email}
 
 
+@router.post("/logout-all")
+def logout_everywhere(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """SPEC-088: sign out on every device without changing the password."""
+    with service_errors():
+        return accounts.logout_everywhere(db, current_user)
+
+
 @router.post("/delete-account")
 def delete_account(request: Request, payload: schemas.AccountDelete,
                    current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):

@@ -297,3 +297,28 @@ def test_a_token_names_its_account_and_older_tokens_keep_working(client, db):
     stranger = create_access_token({"sub": "veteran", "token_version": 0, "aid": "another-account"},
                                    secret_key=app.state.settings.secret_key)
     assert client.get("/api/auth/me", headers={"Authorization": f"Bearer {stranger}"}).status_code == 401
+
+
+def test_without_a_valid_invite_sign_up_does_not_reveal_taken_names(client, db, monkeypatch):
+    """SPEC-088: the invite is checked before the name; a refusal never spends the invite."""
+    headers = _admin(client, db, monkeypatch)
+    _settings(monkeypatch, registration_mode="invite")
+    for name in ("Demo", "nobody-has-this"):
+        refused = _register(client, name, "WRONG-CODE")
+        assert refused.status_code == 400 and refused.json()["detail"] == "Invalid invite code", name
+    code = client.post("/api/admin/invites", headers=headers, json={"max_uses": 1}).json()["code"]
+    assert _register(client, "Demo", code).json()["detail"] == "Username already registered"
+    assert db.query(models.Invite).one().used_count == 0, "a taken name rolls back the invite"
+    assert _register(client, "newcomer", code).status_code == 200
+
+
+def test_logging_out_everywhere_ends_every_session_and_keeps_the_password(client, db):
+    """SPEC-088: every device, this one included, must log in again with the same password."""
+    _register(client, "traveller")
+    phone, laptop = _login(client, "traveller"), _login(client, "traveller")
+    assert client.post("/api/auth/logout-all", headers=phone).json() == {"ok": True}
+    for headers in (phone, laptop):
+        refused = client.get("/api/auth/me", headers=headers)
+        assert refused.status_code == 401 and refused.json()["detail"] == "Session expired; please log in again"
+    assert client.get("/api/auth/me", headers=_login(client, "traveller")).status_code == 200, "same password"
+    assert client.post("/api/auth/logout-all").status_code == 401, "needs a signed-in account"

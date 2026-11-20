@@ -14,7 +14,7 @@ function accountContext(elements, globals = {}) {
     confirm: () => true, currentUser: 'Demo', ...globals,
   });
   vm.runInContext(`let registrationMode = null;\nlet adminRequestId = 0;\n${['loadRegistrationMode', 'refreshAdminEntry', 'openAdminModal', 'closeAdminModal', 'inviteStatus',
-    'loadInvites', 'createInvite', 'revokeInvite', 'adminResetPassword', 'deleteAccount'].map(extract).join('\n')}`, context);
+    'loadInvites', 'createInvite', 'revokeInvite', 'adminResetPassword', 'deleteAccount', 'logoutEverywhere'].map(extract).join('\n')}`, context);
   return { context, submit };
 }
 
@@ -138,4 +138,27 @@ test('SPEC-085 an admin who tries to delete the account is told why and stays si
   await context.deleteAccount();
   assert.equal(elements['delete-account-status'].textContent, '刪除失敗：管理員帳號不能刪除；要刪除請先把這個帳號從 ADMIN_USERNAMES 移除');
   assert.deepEqual(calls, [], 'the refusal keeps the session');
+});
+
+test('SPEC-088 logging out everywhere asks first and signs this device out only after the server confirms', async () => {
+  const elements = nodes();
+  const calls = [];
+  let answer = false, fail = true;
+  const { context } = accountContext(elements, {
+    confirm: () => answer,
+    apiPost: async (url, body) => { calls.push([url, body]); if (fail) throw new Error('synthetic offline'); return { ok: true }; },
+    closeWorkspaceModal: () => calls.push('close'), clearAuth: () => calls.push('logout'),
+    showLoginView: () => calls.push('login'), showAuthError: text => calls.push(text),
+  });
+  await context.logoutEverywhere();
+  assert.deepEqual(calls, [], 'cancelling sends nothing');
+  answer = true;
+  await context.logoutEverywhere();
+  assert.equal(elements['logout-all-status'].textContent, '登出失敗：synthetic offline');
+  assert.ok(!calls.includes('logout'), 'a failed request keeps the session');
+  fail = false;
+  await context.logoutEverywhere();
+  assert.deepEqual(JSON.parse(JSON.stringify(calls.at(-5))), ['/auth/logout-all', {}]);
+  assert.deepEqual(calls.slice(-4), ['close', 'logout', 'login', '已登出所有裝置，請重新登入。']);
+  assert.match(htmlSource, /data-click="logout-everywhere"/);
 });
