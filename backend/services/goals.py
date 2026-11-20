@@ -2,8 +2,8 @@
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
-from backend import goals as goal_service
 from backend import models, schemas
+from backend.read_models import goal_progress as goal_service
 from backend.services.errors import Conflict
 from backend.services.transactions import write_transaction
 

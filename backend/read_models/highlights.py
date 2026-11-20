@@ -7,7 +7,8 @@ from datetime import date, timedelta
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from backend import goals, models
+from backend import models
+from backend.read_models import goal_progress
 from backend.read_models.rounding import round_metric
 from backend.read_models.trends import run_streaks, trends_end
 from backend.shoe_metrics import REPLACE_SOON_USAGE_PERCENT, shoe_metrics
@@ -76,7 +77,7 @@ def home_summary(db: Session, user_id: int, as_of: date) -> dict:
 def year_review(db: Session, user_id: int, year: int, as_of: date) -> dict:
     """Calendar-year summary from the run log; a future year has no data."""
     end = trends_end(year, as_of)
-    goal = goals.goal_values(db, user_id)
+    goal = goal_progress.goal_values(db, user_id)
     base = {"year": year, "end_date": end.isoformat() if end else None, "complete": end == date(year, 12, 31)}
     start = date(year, 1, 1)
     if end is None:

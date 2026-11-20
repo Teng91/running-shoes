@@ -5,7 +5,6 @@ from sqlalchemy.orm import Session
 
 from backend import models, schemas
 from backend.auth import get_current_user
-from backend.clock import local_now
 from backend.dependencies import get_db
 from backend.mailer import Mailer, MailError, deliver_later
 from backend.rate_limits import (
@@ -16,6 +15,7 @@ from backend.rate_limits import (
     reject_locked_account,
 )
 from backend.routers.errors import service_errors
+from backend.routers.password_notices import notify_password_changed
 from backend.services import accounts, email_codes
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -94,16 +94,6 @@ def change_password(request: Request, payload: schemas.UserChangePassword, backg
         raise
     notify_password_changed(request, background, db, payload.username, email_codes.CHANGED_BY_USER)
     return result
-
-
-def notify_password_changed(request: Request, background: BackgroundTasks, db: Session, identifier: str,
-                            how: str) -> None:
-    """SPEC-083: email the bound address after the response; mail problems never fail the change."""
-    mailer = request.app.state.mailer
-    if mailer is not None:
-        email_codes.notify_password_changed(db, identifier, how, send=deliver_later(mailer, background.add_task),
-                                            when=local_now())
-
 
 MAIL_OFF = "Email is not configured"
 

@@ -5,9 +5,9 @@ from collections.abc import Callable
 
 from sqlalchemy.orm import Session
 
-from backend import goals, models
+from backend import models
 from backend.clock import local_today
-from backend.read_models import highlights, mileage, shoes, spending, trends
+from backend.read_models import goal_progress, highlights, mileage, shoes, spending, trends
 from backend.tools import legacy_calls
 from backend.tools.tool_definitions import TOOL_DEFINITIONS as TOOL_DEFINITIONS
 
@@ -84,7 +84,7 @@ def _shoe_names(db: Session, user_id: int) -> dict[int, str]:
 
 def running_goal_progress(db: Session, user_id: int, year: int | None = None) -> str:
     today = local_today()
-    overview = goals.year_goal_overview(db, user_id, year or today.year, as_of=today)
+    overview = goal_progress.year_goal_overview(db, user_id, year or today.year, as_of=today)
     return _json_result(
         "running_goal_progress",
         ok=True,

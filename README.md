@@ -55,7 +55,7 @@ Python 3.11 · FastAPI · SQLAlchemy · SQLite · 原生 JavaScript（不需要�
 | 項目 | 數量 |
 | --- | --- |
 | 正式版本 | 119 個 tag，2026-06 開始，目前 v4.24 |
-| 自動化測試 | Python 750 項、前端 Node 回歸 235 項、40 組版面設定（WebKit／Chromium × 亮暗 × 10 種尺寸）、真實 CRUD E2E 與 PWA 升級／離線測試 |
+| 自動化測試 | Python 751 項、前端 Node 回歸 235 項、40 組版面設定（WebKit／Chromium × 亮暗 × 10 種尺寸）、真實 CRUD E2E 與 PWA 升級／離線測試 |
 | 功能規格 | 85 份 SPEC，每份含 Goals、帳號隔離、migration／rollback 與 AC 追蹤 |
 | API | 65 個端點，與 `unit_tests/api_contract.json` 及下方 API 表自動比對 |
 | 資料庫 | SQLite schema 12，每一版都有守衛的回滾腳本 |
@@ -156,7 +156,7 @@ flowchart LR
 
 1. PR 的 5 個測試 job 全部通過才能合併到 `main`。
 2. 合併後喚醒正式機器，在 volume 上先做資料庫快照，再部署新映像。
-3. `release-check` 匿名、唯讀地確認 schema、API contract、54 個資產的雜湊與 MIME、未登入一律被拒、手機啟動與離線 shell。
+3. `release-check` 匿名、唯讀地確認 schema、API contract、56 個資產的雜湊與 MIME、未登入一律被拒、手機啟動與離線 shell。
 4. `package.json` 版號是新的就自動打 tag、用 CHANGELOG 發 GitHub Release；開著的 App 在安全時機自動換成新版。
 
 ---
@@ -195,7 +195,7 @@ flowchart LR
 
 ## 品質：測試與規格
 
-- **Python 750 項**：API、交易與並行、migration 與回滾、備份往返、帳號隔離、Agent 規劃與工具（外部 LLM 與搜尋一律 mock），一律使用暫存或記憶體資料庫，不碰正式 `shoes.db`。
+- **Python 751 項**：API、交易與並行、migration 與回滾、備份往返、帳號隔離、Agent 規劃與工具（外部 LLM 與搜尋一律 mock），一律使用暫存或記憶體資料庫，不碰正式 `shoes.db`。
 - **前端 Node 回歸 235 項**：以 `vm` 載入實際前端程式，驗證狀態、競態、草稿、串流與圖表資料。
 - **瀏覽器**：Playwright 在 WebKit 與 Chromium 跑 40 組版面設定（含幾何對齊與無溢出）、真實 FastAPI＋暫存 SQLite 的 CRUD E2E、Service Worker 升級與離線；失敗時保存截圖與 trace。
 - **修 bug 先寫重現測試**：例如 v4.17.0 的 CI 抓到新圖表檔案重複宣告全域常數，修正時同時加上掃描所有 script 的測試。
@@ -309,6 +309,7 @@ running-shoes/
 │   │   ├── workspace.py  # 操作回執、歷史與帳號還原 adapters
 │   │   ├── runs.py       # 跑步日誌 CRUD routes
 │   │   ├── shoes.py      # 跑鞋 CRUD HTTP routes
+│   │   ├── password_notices.py # 改密碼通知信（auth 與 admin 共用，不定義 router）
 │   │   └── errors.py     # Service domain error 對應 HTTP 狀態碼
 │   ├── services/
 │   │   ├── errors.py      # Transport 無關的 application errors
@@ -350,10 +351,8 @@ running-shoes/
 │   ├── agent_planner.py  # Deterministic intent 與最小查詢計畫
 │   ├── agent_tools.py    # 受信任工具 dispatch
 │   ├── agent_protocol.py # SSE 與搜尋來源摘要 contract
-│   ├── reports.py        # 月報唯讀統計快照與提示詞
 │   ├── report_llm.py     # One-shot LLM adapter
 │   ├── report_protocol.py # 月報 domain events 的 SSE 序列化
-│   ├── goals.py          # 個人月／年跑量目標與達成率計算
 │   ├── forecasting.py    # 共用退役預估與 user-scoped 批次查詢
 │   ├── shoe_metrics.py   # 共用折數、成本與壽命算術
 │   ├── run_metrics.py    # 跑步時間合理範圍與配速推導
@@ -371,8 +370,10 @@ running-shoes/
 │   │   ├── highlights.py # 今天穿哪雙、年度回顧與距離分布
 │   │   ├── saved_reports.py # 已保存月報的摘要與內容
 │   │   ├── strava_preview.py # Strava CSV 配對預覽
+│   │   ├── insights.py   # 首頁洞察與單鞋使用分析
+│   │   ├── goal_progress.py # 個人月／年跑量目標與達成率計算
+│   │   ├── report_snapshot.py # 月報唯讀統計快照與提示詞
 │   │   └── rounding.py   # 共用彙總四捨五入 round_metric
-│   ├── analytics.py      # 首頁洞察與單鞋使用分析
 │   ├── strava_import.py  # 純 Strava CSV 解析、篩選與領域錯誤
 │   ├── exporting.py      # CSV／XLSX 安全匯出列與檔名
 │   ├── llm.py            # LLM 抽象層（OpenRouter）
@@ -420,8 +421,10 @@ running-shoes/
 │   ├── app-goals.js      # 年度目標總覽、每月達標與目標設定
 │   ├── app-charts.js     # 共用圖表 registry 與 label utilities
 │   ├── app-shoe-charts.js # 跑鞋生命週期、成本、時間軸與分配
-│   ├── app-monthly-charts.js # 月份／年度選擇與跑量圖表
-│   ├── app-pace-charts.js # 比賽準備：目標表單、摘要卡、長距離、強度分布與配速趨勢
+│   ├── app-monthly-charts.js # 月份／年度選擇、跑量圖表、歷年比較與年度回顧
+│   ├── app-trend-charts.js # 訓練趨勢：熱力圖、每週跑量與長距離、星期分布、年度累計
+│   ├── app-pace-charts.js # 比賽準備：摘要卡、長距離、強度分布與配速趨勢
+│   ├── app-race-goal.js  # 目標賽事表單：新增、修改與刪除
 │   ├── app-spending.js   # 支出摘要、圖表與表格
 │   ├── app-agent.js      # AI 助手對話與串流呈現
 │   ├── app-models.js     # AI／月報共用模型選單
@@ -915,7 +918,7 @@ CI 失敗／取消時嘗試上傳已有產物；引擎完全卡死時可能只�
 CI 的 `frontend-pwa` job 上傳獨立 `browser-diagnostics-roundtrip` artifact，另一個 job 下載並驗證 PNG、trace ZIP 與合成錯誤標記，缺檔／損毀會讓 pipeline 失敗。
 
 `frontend-e2e` 會對真實 FastAPI 與暫存 SQLite 執行同一個 `release-check`：檢查 readiness／schema、
-完整 API contract、manifest 對應的 54 個 shell／worker 資產雜湊與 MIME、四個統計 API 的匿名拒絕存取，
+完整 API contract、manifest 對應的 56 個 shell／worker 資產雜湊與 MIME、四個統計 API 的匿名拒絕存取，
 再驗證 Chromium／WebKit 匿名手機啟動與 native runtime cache，以及 Chromium 離線重開。
 WebKit 離線 shell 由 `frontend-pwa` 的 fixture transport 中斷驗證；API probe 在 HTTP headers 後截斷 response body，完整讀取 JSON 並檢查 server 請求計數，避免 headers 前 TCP 中斷讓裸 fetch 一直 pending。這些不取代引擎之外的實機驗證。
 這個 task 不登入、不送出資料、不發布或回滾；正式 origin 必須是 HTTPS，HTTP 只允許 loopback。
@@ -931,7 +934,7 @@ Playwright／Chromium／WebKit 齊全時，也會執行版面測試。
 避免每次停止都重跑。Hook 不會呼叫其他模型、外部 API，或傳送提示、diff、原始碼與測試輸出。
 GitHub Actions 仍會在 push／pull request 執行 `verify`，並以三個可獨立重跑的 browser jobs 執行完整版面矩陣、真實 CRUD E2E 與 PWA 升級／離線測試；push 到 main 時再依序快照、部署、檢查並發版（見「日常開發流程、自動部署與發版」）；Dependabot 每月以單一 PR 合併 GitHub Actions 更新；Python 只接收安全性更新 PR，例行升級依下方 `uv pip compile --universal` 步驟手動重編鎖定檔（Dependabot 產生的鎖定檔會遺失 Windows 條件）。
 
-本次驗證基線為 Python **750 passed**、前端回歸測試 **235 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
+本次驗證基線為 Python **751 passed**、前端回歸測試 **235 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
 版面檢查涵蓋 WebKit／Chromium、亮／暗模式與 10 組直橫向尺寸，共 40 組設定，檢查四個功能分頁與月報、三個認證表單、圖表、全部彈窗、行內編輯、停用／錯誤及空資料狀態。
 
 主要表單、工具列與彈窗操作統一為 44px 控制項；桌面表格內的緊湊操作為 36px，手機至少 44px。

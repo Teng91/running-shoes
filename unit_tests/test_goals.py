@@ -4,11 +4,11 @@ from datetime import date
 
 from fastapi.testclient import TestClient
 
-from backend import goals
 from backend.credentials import get_password_hash
 from backend.dependencies import get_db
 from backend.main import app
 from backend.models import Run, RunningGoal, Shoe, User
+from backend.read_models import goal_progress
 from unit_tests.token_helpers import create_access_token
 
 
@@ -88,7 +88,7 @@ def test_goal_update_rejects_stale_version(db, user_with_token):
         assert first.status_code == 200
         assert first.json()["version"] == 1
         assert stale.status_code == 409
-        assert goals.goal_values(db, _user.id)["monthly_km"] == 130
+        assert goal_progress.goal_values(db, _user.id)["monthly_km"] == 130
     finally:
         app.dependency_overrides.clear()
 
@@ -105,7 +105,7 @@ def test_goal_progress_stops_ytd_at_requested_month(db, user_with_token):
     ])
     db.commit()
 
-    progress = goals.goal_progress(db, user.id, 2026, 2, as_of=date(2026, 2, 10))
+    progress = goal_progress.goal_progress(db, user.id, 2026, 2, as_of=date(2026, 2, 10))
 
     assert progress["active"] is True
     assert progress["month_achievement_percent"] == 100.0
@@ -143,7 +143,7 @@ def test_year_goal_overview_marks_every_month_against_the_monthly_target(db, use
     db.commit()
     as_of = date(2026, 4, 10)
 
-    overview = goals.year_goal_overview(db, user.id, 2026, as_of=as_of)
+    overview = goal_progress.year_goal_overview(db, user.id, 2026, as_of=as_of)
 
     months = overview["months"]
     assert [row["km"] for row in months] == [130, 100, 125, 20] + [0.0] * 8
@@ -169,19 +169,19 @@ def test_year_goal_overview_handles_past_future_and_untracked_years(db, user_wit
     db.commit()
     as_of = date(2026, 4, 10)
 
-    past = goals.year_goal_overview(db, user.id, 2025, as_of=as_of)
+    past = goal_progress.year_goal_overview(db, user.id, 2025, as_of=as_of)
     assert past["active"] is True and past["year_state"] == "past"
     assert past["focus_month"] == 12 and past["ytd_km"] == 200
     assert (past["months_closed"], past["months_met"]) == (12, 1)
     assert past["year_expected_km_to_date"] == 1200 and past["required_weekly_km"] is None
 
-    future = goals.year_goal_overview(db, user.id, 2027, as_of=as_of)
+    future = goal_progress.year_goal_overview(db, user.id, 2027, as_of=as_of)
     assert future["year_state"] == "future" and future["ytd_km"] == 0
     assert {row["state"] for row in future["months"]} == {"future"}
     assert (future["months_closed"], future["months_met"]) == (0, 0)
     assert future["year_expected_km_to_date"] == 0 and future["required_weekly_km"] is None
 
-    untracked = goals.year_goal_overview(db, user.id, 2024, as_of=as_of)
+    untracked = goal_progress.year_goal_overview(db, user.id, 2024, as_of=as_of)
     assert untracked["active"] is False
     assert untracked["months"][5]["km"] == 200
     assert not any(row["met"] for row in untracked["months"]) and untracked["months_met"] == 0
@@ -204,7 +204,7 @@ def test_year_goal_api_is_user_scoped(db):
         with TestClient(app) as client:
             response = client.get("/api/running-goal/year?year=2026", headers=_headers("year-a"))
             assert response.status_code == 200
-            assert response.json() == goals.year_goal_overview(db, first.id, 2026)
+            assert response.json() == goal_progress.year_goal_overview(db, first.id, 2026)
             assert response.json()["months"][0]["km"] == 10
             assert client.get("/api/running-goal/year?year=1800", headers=_headers("year-a")).status_code == 422
             assert client.get("/api/running-goal/year?year=2026").status_code == 401
@@ -236,6 +236,6 @@ def test_derived_yearly_goal_is_stored_returned_and_exported_at_two_decimals(db,
     # A row written before the fix still exports and reports the clean value.
     row.yearly_km = 12.3 * 12
     db.commit()
-    assert goals.goal_values(db, user.id)["yearly_km"] == 147.6
+    assert goal_progress.goal_values(db, user.id)["yearly_km"] == 147.6
     assert build_account_export(db, user)[0]["running_goal"]["yearly_km"] == 147.6
-    assert goals.yearly_goal_km(0.1) == 1.2
+    assert goal_progress.yearly_goal_km(0.1) == 1.2

@@ -3,7 +3,7 @@
 from collections.abc import Iterator
 
 from backend import llm
-from backend.reports import build_report_messages
+from backend.read_models.report_snapshot import build_report_messages
 from backend.services.reports import ReportModelError
 
 

@@ -11,8 +11,9 @@ from datetime import date
 
 from sqlalchemy.orm import Session
 
-from backend import goals, models
+from backend import models
 from backend.clock import local_today
+from backend.read_models import goal_progress
 from backend.read_models import mileage as mileage_stats
 from backend.read_models import shoes as shoe_stats
 from backend.read_models.rounding import round_metric
@@ -153,7 +154,7 @@ def build_report_stats(
         "comparison_label": comparison_label,
         "comparison_through_day": comparison_through_day,
         "ytd_run_km": ytd_km,
-        "running_goal": goals.goal_progress(db, user_id, year, month, as_of=as_of, distances=distances),
+        "running_goal": goal_progress.goal_progress(db, user_id, year, month, as_of=as_of, distances=distances),
         "overall_monthly_stats": overall,
         "shoes": shoes_context,
         "nearing_end_of_life": end_of_life,

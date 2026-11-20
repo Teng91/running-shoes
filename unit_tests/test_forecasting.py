@@ -3,7 +3,8 @@ from datetime import date
 import pytest
 from sqlalchemy import event
 
-from backend import analytics, forecasting, models
+from backend import forecasting, models
+from backend.read_models import insights
 from backend.routers.shoes import list_active, list_retired
 
 
@@ -47,7 +48,7 @@ def test_a_pair_idle_for_90_days_gets_no_forecast_but_a_new_pair_uses_the_plan(d
     batch = forecasting.forecasts_for_shoes(db, user.id, [hiking, new, daily], today=as_of)
     assert [batch[shoe.id]["forecast_source"] for shoe in (hiking, new, daily)] == [
         "idle_90_days", "planned_monthly_km", "recent_90_days"]
-    analysis = analytics.shoe_analytics(db, user.id, hiking.id, today=as_of)["lifecycle"]
+    analysis = insights.shoe_analytics(db, user.id, hiking.id, today=as_of)["lifecycle"]
     assert (analysis["forecast_source"], analysis["forecast_retirement_date"]) == ("idle_90_days", None)
 
 
@@ -94,7 +95,7 @@ def test_batch_forecast_is_scoped_bounded_and_matches_analysis(db, user_with_tok
     active = list_active(user, db)
     retired = list_retired(user, db)
     for output in [*active, *retired]:
-        result = analytics.shoe_analytics(db, user.id, output.id, today=as_of)
+        result = insights.shoe_analytics(db, user.id, output.id, today=as_of)
         assert result is not None
         analysis = {**result["lifecycle"], **result["usage"]}
         for field in forecasting.SHOE_RESPONSE_FIELDS:
@@ -121,7 +122,7 @@ def test_retired_shoes_have_no_retirement_forecast_in_analysis_or_ai_tools(db, u
     db.flush()
     db.add(models.Run(user_id=user.id, shoe_id=shoe.id, date="2026-10-01", km=30))
     db.commit()
-    lifecycle = analytics.shoe_analytics(db, user.id, shoe.id, today=date(2026, 10, 19))["lifecycle"]
+    lifecycle = insights.shoe_analytics(db, user.id, shoe.id, today=date(2026, 10, 19))["lifecycle"]
     assert (lifecycle["forecast_retirement_date"], lifecycle["forecast_source"]) == (None, "retired")
     assert lifecycle["remaining_mileage_km"] == 300
     tool = json.loads(db_tools.shoe_usage_analytics(db, user.id))["shoes"][0]
