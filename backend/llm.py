@@ -307,16 +307,56 @@ def user_facing_error(exc: Exception) -> str:
     return "模型呼叫發生錯誤，請稍後再試或更換模型。"
 
 
+class ReasoningText(str):
+    """A streamed fragment of the model's reasoning, never part of the answer.
+
+    Only yielded when ``call_llm_stream(include_reasoning=True)``; callers tell it
+    apart from answer text with ``isinstance`` (SPEC-086).
+    """
+
+
+def _reasoning_text(delta: Any) -> str:
+    """Readable reasoning carried by one streamed delta, or ``""``.
+
+    OpenRouter streams reasoning as ``delta.reasoning`` (``reasoning_content`` is
+    its alias) together with structured ``reasoning_details``. Only one source is
+    read per delta so the same text is never shown twice; encrypted details are
+    opaque and skipped.
+    """
+    for name in ("reasoning", "reasoning_content"):
+        value = getattr(delta, name, None)
+        if isinstance(value, str) and value:
+            return value
+    details = getattr(delta, "reasoning_details", None)
+    parts: list[str] = []
+    for detail in details if isinstance(details, list) else []:
+        key = _READABLE_REASONING_FIELDS.get(_detail_field(detail, "type"))
+        value = _detail_field(detail, key) if key else None
+        if isinstance(value, str):
+            parts.append(value)
+    return "".join(parts)
+
+
+_READABLE_REASONING_FIELDS = {"reasoning.text": "text", "reasoning.summary": "summary"}
+
+
+def _detail_field(detail: Any, key: str) -> Any:
+    return detail.get(key) if isinstance(detail, dict) else getattr(detail, key, None)
+
+
 def call_llm_stream(
     provider: LLMProvider,
     model: str,
     messages: list[dict[str, Any]],
     tools: list[dict[str, Any]] | None = None,
+    include_reasoning: bool = False,
 ) -> Generator[str, None, dict[str, Any]]:
     """串流呼叫模型，逐 token 產出文字並收集原生 tool calls。
 
     Yields:
         每個 token 的文字片段（可能為空字串，由呼叫方自行過濾）。
+        include_reasoning=True 時，模型的思考片段以 ``ReasoningText`` 產出；
+        它不會併入回傳的 content。
 
     Returns:
         {"content": str, "finish_reason": str | None, "tool_calls": list,
@@ -350,6 +390,10 @@ def call_llm_stream(
                 continue
             choice = chunk.choices[0]
             delta = choice.delta
+            if include_reasoning and delta:
+                reasoning = _reasoning_text(delta)
+                if reasoning:
+                    yield ReasoningText(reasoning)
             if delta and delta.content:
                 full_content += delta.content
                 yield delta.content

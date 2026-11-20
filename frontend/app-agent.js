@@ -160,6 +160,54 @@ function agentHistoryForRequest(history = agentHistory) {
   return selected;
 }
 
+// SPEC-086: free reasoning models think for a while before the first answer token.
+// That thinking streams into a block above the answer — live while the model
+// thinks, folded to「已思考 N 秒」once it answers or calls a tool — and the answer
+// bubble counts the seconds while nothing has arrived yet. Reasoning is untrusted
+// model text: it is only ever set as plain text, never rendered or saved.
+function agentElapsedSeconds(startedAt, now = Date.now()) {
+  return Math.max(0, Math.floor((now - startedAt) / 1000));
+}
+
+function agentThinkingLabel(startedAt, now = Date.now()) {
+  const seconds = agentElapsedSeconds(startedAt, now);
+  return seconds ? `思考中… ${seconds} 秒` : '思考中…';
+}
+
+function createAgentReasoning(container, before, now = () => Date.now()) {
+  const block = document.createElement('details');
+  block.className = 'agent-reasoning';
+  block.open = true;
+  const summary = document.createElement('summary');
+  const body = document.createElement('div');
+  body.className = 'agent-reasoning-text';
+  const text = document.createTextNode('');
+  body.appendChild(text);
+  block.appendChild(summary);
+  block.appendChild(body);
+  container.insertBefore(block, before);
+  const startedAt = now();
+  let live = true;
+  const view = {
+    get live() { return live; },
+    append(chunk) {
+      text.appendData(chunk);
+      if (live) body.scrollTop = body.scrollHeight;
+    },
+    tick() {
+      if (live) summary.textContent = '💭 ' + agentThinkingLabel(startedAt, now());
+    },
+    finish() {
+      if (!live) return;
+      live = false;
+      block.open = false;
+      summary.textContent = `💭 已思考 ${Math.max(1, Math.round((now() - startedAt) / 1000))} 秒`;
+    },
+  };
+  view.tick();
+  return view;
+}
+
 async function sendAgentMessage(retryText) {
   if (agentController) return;
   const input = document.getElementById('agent-input');
@@ -222,6 +270,33 @@ async function sendAgentMessage(retryText) {
   const model = document.getElementById('agent-model').value;
   let fullText = '';
 
+  // SPEC-086: one reasoning block per model round, and a waiting label in the
+  // still-empty answer bubble whenever no live reasoning shows the time.
+  let reasoning = null;
+  let waitStartedAt = Date.now();
+  const waitLabel = document.createElement('span');
+  waitLabel.className = 'agent-wait';
+  const refreshWait = () => {
+    reasoning?.tick();
+    if (fullText || reasoning?.live) {
+      waitLabel.remove();
+      return;
+    }
+    if (waitLabel.parentNode !== botContent) {
+      botContent.textContent = '';
+      botContent.appendChild(waitLabel);
+    }
+    waitLabel.textContent = agentThinkingLabel(waitStartedAt);
+  };
+  let waitTimer = setInterval(refreshWait, 1000);
+  const stopWaiting = () => {
+    if (waitTimer !== null) clearInterval(waitTimer);
+    waitTimer = null;
+    reasoning?.finish();
+    waitLabel.remove();
+  };
+  refreshWait();
+
   try {
     const res = await authenticatedFetch(API_BASE + '/agent/chat/stream', {
       method: 'POST',
@@ -241,7 +316,19 @@ async function sendAgentMessage(retryText) {
     const result = await readJsonEventStream(res, {
       signal: controller.signal, isCurrent: isCurrentRequest,
       onEvent: event => {
-        if (event.type === 'tool') {
+        if (event.type === 'thinking') {
+          if (typeof event.text !== 'string' || !event.text) return;
+          if (!reasoning) {
+            reasoning = createAgentReasoning(container, botDiv);
+            // Later tools belong after this block, not in the group above it.
+            toolStatusDiv = null;
+          }
+          reasoning.append(event.text);
+          refreshWait();
+          container.scrollTop = container.scrollHeight;
+        } else if (event.type === 'tool') {
+          reasoning?.finish();
+          reasoning = null;
           if (event.name === 'web_search') webSearchAttempted = true;
           // Finalize current thinking bubble
           thinkingDiv = null;
@@ -263,6 +350,7 @@ async function sendAgentMessage(retryText) {
           toolStatusDiv.appendChild(toolItem);
           container.scrollTop = container.scrollHeight;
         } else if (event.type === 'tool_done') {
+          waitStartedAt = Date.now();
           if (event.name === 'web_search' && event.ok !== false) webSearchSucceeded = true;
           // 個別工具完成；執行完成不等於成功，搜尋失敗需明確顯示。
           const group = toolStatusDiv;
@@ -282,6 +370,9 @@ async function sendAgentMessage(retryText) {
             }
           }
         } else if (event.type === 'reasoning_start') {
+          reasoning?.finish();
+          reasoning = null;
+          waitStartedAt = Date.now();
           // 串流過程中發現 LLM 要呼叫工具 → 把已顯示的文字移到思考氣泡
           const reasoningText = typeof event.text === 'string' ? event.text : fullText;
           if (reasoningText) {
@@ -293,14 +384,17 @@ async function sendAgentMessage(retryText) {
           }
           fullText = '';
           botContent.textContent = '';
+          refreshWait();
         } else if (event.type === 'token') {
           // First token — allow next reasoning round
           thinkingDiv = null;
+          reasoning?.finish();
           fullText += event.text;
           // During streaming, use textContent to avoid broken partial markdown rendering
           botContent.textContent = fullText;
           container.scrollTop = container.scrollHeight;
         } else if (event.type === 'error') {
+          reasoning?.finish();
           fullText += '\n\n⚠️ ' + event.text;
           botContent.textContent = fullText;
         } else if (event.type === 'source_summary') {
@@ -310,6 +404,7 @@ async function sendAgentMessage(retryText) {
     });
 
     if (!isCurrentRequest()) return;
+    stopWaiting();
     botDiv.classList.remove('agent-typing');
     if (fullText) {
       botContent.innerHTML = renderMarkdown(fullText);
@@ -340,6 +435,7 @@ async function sendAgentMessage(retryText) {
     addRetryButton(); // 不管成功失敗都顯示重試
   } catch (e) {
     if (e.name === 'AbortError' || !isCurrentRequest()) return;
+    stopWaiting();
     const message = e instanceof TypeError
       ? '連線失敗，請確認後端服務已啟動。'
       : (e.message || 'Agent 請求失敗，請稍後再試。');
@@ -348,6 +444,7 @@ async function sendAgentMessage(retryText) {
     console.error('Agent 請求失敗:', e);
     addRetryButton();
   } finally {
+    stopWaiting();
     if (isCurrentRequest()) {
       agentController = null;
       setAgentLoading(false);

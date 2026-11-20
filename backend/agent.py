@@ -243,12 +243,19 @@ def run_agent_stream(
         llm_result: dict[str, Any] = {}
         try:
             stream_gen = llm.call_llm_stream(
-                prov, model, messages, tools=None if is_last_turn else available_tools
+                prov, model, messages,
+                tools=None if is_last_turn else available_tools,
+                include_reasoning=True,
             )
             try:
                 while True:
                     chunk = next(stream_gen)
                     if not chunk:
+                        continue
+                    if isinstance(chunk, llm.ReasoningText):
+                        # SPEC-086: show the model's thinking while it happens; it
+                        # never joins the answer, tool parsing or the history.
+                        yield _sse({"type": "thinking", "text": str(chunk)})
                         continue
                     full_content += chunk
                     if not seen_tool:
