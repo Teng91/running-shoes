@@ -6,6 +6,7 @@ Python 3.11 · FastAPI · SQLAlchemy · SQLite · 原生 JavaScript（不需要�
 
 - 線上網址：https://running-shoes.fly.dev （邀請制註冊：向管理員索取邀請碼；每個帳號的資料完全隔離）
 - 版本紀錄：[`CHANGELOG.md`](CHANGELOG.md)、相容性與回滾細節 [`docs/release-notes.md`](docs/release-notes.md)
+- 授權：[MIT](LICENSE)；內建的 Chart.js 與 marked 也是 MIT，授權全文在 `frontend/vendor/`
 - 設計文件：[`docs/architecture.md`](docs/architecture.md)（SDD）、[`docs/testing-strategy.md`](docs/testing-strategy.md)、[`docs/specs/`](docs/specs/)（每個功能一份規格）、[`docs/adr/`](docs/adr/)
 
 ---
@@ -484,6 +485,7 @@ running-shoes/
 ├── AGENTS.md             # Coding Agent 專案規則與完成條件
 ├── CLAUDE.md             # 讓 Claude Code 匯入共用的 AGENTS.md
 ├── CHANGELOG.md          # 版本演進與 release 摘要
+├── LICENSE               # MIT 授權
 ├── pyproject.toml        # pytest、Ruff 與 mypy 設定
 ├── requirements.in       # 正式環境直接依賴與核准版本
 ├── requirements.txt      # 含雜湊的完整正式環境鎖定檔
@@ -1375,3 +1377,9 @@ venv/bin/python -m backend.run
 | 匯出與備份 | `DELETE /api/account-restore/preview/{token}` | 捨棄不用的預覽 |
 | 工作區 | `POST /api/operations` | 帶操作 ID 與版本的統一異動，成功回執可重播 |
 | 工作區 | `GET /api/history` | 異動歷史分頁（`before`、`limit`） |
+
+---
+
+## 授權
+
+程式碼以 [MIT 授權](LICENSE) 釋出：可以自由使用、修改、商用與再散布，只要保留版權聲明與授權全文。內建在 `frontend/vendor/` 的 Chart.js 與 marked 也是 MIT 授權，各自的授權全文放在同一個資料夾。
