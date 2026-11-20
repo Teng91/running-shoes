@@ -79,7 +79,7 @@ async def http_exception_handler(request: Request, exc: Exception) -> Response:
     exc = cast(StarletteHTTPException, exc)
     if exc.status_code != 404:
         return JSONResponse(
-            {"detail": exc.detail, "error": {"code": {400: "invalid", 401: "unauthorized", 403: "capacity",
+            {"detail": exc.detail, "error": {"code": {400: "invalid", 401: "unauthorized", 403: "forbidden",
                 409: "conflict", 413: "too_large", 422: "validation"}.get(exc.status_code, "http_error"),
                 "message": exc.detail}}, status_code=exc.status_code, headers=exc.headers
         )

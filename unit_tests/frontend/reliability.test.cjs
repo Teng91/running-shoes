@@ -1,4 +1,5 @@
-const { runContext, test, assert, fs, vm, extract, transportContext } = require('./helpers.cjs');
+const nodeVm = require('node:vm');
+const { runContext, test, assert, fs, vm, extract, transportContext, readText, scriptSource } = require('./helpers.cjs');
 
 test('SPEC-019 run retry clears only its own error and keeps aggregate failures visible', async () => {
   const nodes = { 'run-load-error': { hidden: true }, 'data-load-error': { hidden: false } };
@@ -21,11 +22,33 @@ test('SPEC-019 storage invalidation never deletes the replacement tab credential
     localStorage: storage, authToken: 'A', currentUser: 'alice',
     clearAuth: options => cleared.push(options), showLoginView() {}, showAuthError: text => notices.push(text),
   });
-  vm.runInContext(extract('initializeAuthSync'), context); context.initializeAuthSync();
+  vm.runInContext(['readStoredValue', 'isLocalStorageEvent', 'initializeAuthSync'].map(extract).join('\n'), context);
+  context.initializeAuthSync();
   listeners.storage({ storageArea: storage, key: 'theme' }); assert.equal(cleared.length, 0);
   for (const key of ['token', 'username', null]) listeners.storage({ storageArea: storage, key });
   assert.equal(cleared.length, 3); assert.ok(cleared.every(options => options.persist === false));
   assert.equal(notices.length, 3);
+});
+
+test('SPEC-087 a browser that blocks site storage still starts and keeps the login in memory', () => {
+  const context = nodeVm.createContext({ document: { getElementById: () => null, querySelectorAll: () => [] } });
+  nodeVm.runInContext(`Object.defineProperty(globalThis, 'localStorage', {
+    get() { throw new Error('SecurityError: site data is blocked'); } })`, context);
+  for (const file of ['app-lifecycle.js', 'app-state.js', 'app-auth.js']) {
+    nodeVm.runInContext(readText('frontend/' + file), context, { filename: file });
+  }
+  context.resetFeatureLifecycles = () => {};
+  const state = names => nodeVm.runInContext(`JSON.stringify([${names}])`, context);
+  assert.equal(state('authToken, currentUser, themePreference'), '[null,null,"system"]');
+  context.setAuth('synthetic-token', 'synthetic-user');
+  assert.equal(state('authToken, currentUser'), '["synthetic-token","synthetic-user"]', 'the login lives in memory');
+  context.clearAuth();
+  assert.equal(nodeVm.runInContext('authToken', context), null);
+  for (const line of scriptSource.split('\n')) {
+    if (line.includes('localStorage') && !line.trim().startsWith('//')) {
+      assert.match(line, /try \{/, `every localStorage access is guarded: ${line.trim()}`);
+    }
+  }
 });
 
 test('SPEC-019 JSON deadline bounds both stalled headers and stalled response bodies', async () => {

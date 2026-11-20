@@ -40,4 +40,11 @@ def get_current_user(
         raise HTTPException(status_code=401, detail="User not found")
     if payload.get("token_version", 0) != user.token_version:
         raise HTTPException(status_code=401, detail="Session expired; please log in again")
+    # SPEC-087: a deleted account's token must not open a new account registered under the
+    # same name. User ids can be reused, so the token names backup_id, the account's random
+    # and never-reused identity. Tokens issued before v4.24.2 have no "aid" and expire
+    # within ACCESS_TOKEN_EXPIRE_MINUTES (7 days), so nobody has to log in again.
+    account_id = payload.get("aid")
+    if account_id is not None and account_id != user.backup_id:
+        raise HTTPException(status_code=401, detail="Session expired; please log in again")
     return user

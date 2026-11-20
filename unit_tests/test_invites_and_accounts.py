@@ -10,13 +10,14 @@ from sqlalchemy import create_engine, event, inspect, text
 from sqlalchemy.orm import sessionmaker
 
 from backend import models
-from backend.credentials import get_password_hash
+from backend.credentials import decode_access_token, get_password_hash
 from backend.database import configure_sqlite_connection
 from backend.dependencies import get_db
 from backend.main import app
 from backend.migrations import run_startup_migrations, schema_version
 from backend.services import accounts
 from backend.settings import Settings
+from unit_tests.token_helpers import create_access_token
 
 PASSWORD = "pass1234"
 
@@ -112,7 +113,10 @@ def test_only_admins_reach_admin_routes_and_me_says_who_is_admin(client, db, mon
         kwargs = {"json": {"username": "Demo"}} if path.endswith("reset-password") else {}
         if method == "post" and path.endswith("invites"):
             kwargs = {"json": {}}
-        assert getattr(client, method)(path, headers=member, **kwargs).status_code == 403, path
+        refused = getattr(client, method)(path, headers=member, **kwargs)
+        assert refused.status_code == 403, path
+        # SPEC-087: the error code says what happened; it used to call every 403 "capacity".
+        assert refused.json()["error"] == {"code": "forbidden", "message": "Admin only"}, path
     assert client.get("/api/admin/invites").status_code == 401
     assert client.get("/api/auth/me", headers=admin).json()["is_admin"] is True
     assert client.get("/api/auth/me", headers=member).json()["is_admin"] is False
@@ -263,3 +267,33 @@ def test_an_admin_account_cannot_be_deleted(client, db, monkeypatch):
 
     _settings(monkeypatch, admin_usernames=frozenset())
     assert client.post("/api/auth/delete-account", headers=headers, json={"password": PASSWORD}).status_code == 200
+
+
+def test_a_deleted_accounts_token_never_opens_a_new_account_with_the_same_name(client, db):
+    """SPEC-087: the new account can get the same id and token version, so tokens name the account itself."""
+    _register(client, "leaver")
+    old_session = _login(client, "leaver")
+    old_id = db.query(models.User).filter_by(username="leaver").one().id
+    assert client.post("/api/auth/delete-account", headers=old_session, json={"password": PASSWORD}).status_code == 200
+
+    assert _register(client, "leaver").status_code == 200
+    db.expire_all()
+    newcomer = db.query(models.User).filter_by(username="leaver").one()
+    assert (newcomer.id, newcomer.token_version) == (old_id, 0), "same id and token version as the deleted account"
+    refused = client.get("/api/auth/me", headers=old_session)
+    assert refused.status_code == 401 and refused.json()["detail"] == "Session expired; please log in again"
+    assert client.get("/api/auth/me", headers=_login(client, "leaver")).json()["id"] == old_id
+
+
+def test_a_token_names_its_account_and_older_tokens_keep_working(client, db):
+    """SPEC-087: tokens issued before the change have no account id and stay valid until they expire."""
+    _register(client, "veteran")
+    user = db.query(models.User).filter_by(username="veteran").one()
+    token = _login(client, "veteran")["Authorization"].removeprefix("Bearer ")
+    assert decode_access_token(token, secret_key=app.state.settings.secret_key)["aid"] == user.backup_id
+
+    legacy = create_access_token({"sub": "veteran", "token_version": 0}, secret_key=app.state.settings.secret_key)
+    assert client.get("/api/auth/me", headers={"Authorization": f"Bearer {legacy}"}).status_code == 200
+    stranger = create_access_token({"sub": "veteran", "token_version": 0, "aid": "another-account"},
+                                   secret_key=app.state.settings.secret_key)
+    assert client.get("/api/auth/me", headers={"Authorization": f"Bearer {stranger}"}).status_code == 401

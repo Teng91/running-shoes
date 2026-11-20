@@ -1,4 +1,24 @@
 // Shared in-memory state and presentation constants.
+
+// SPEC-087: when the browser blocks site data, every localStorage access throws. Scripts
+// reach localStorage only through these helpers or their own try/catch, so the app still
+// starts and keeps the login in memory for this page.
+function readStoredValue(key) {
+  try { return localStorage.getItem(key); } catch { return null; }
+}
+
+function writeStoredValue(key, value) {
+  try { localStorage.setItem(key, value); } catch {}
+}
+
+function removeStoredValue(key) {
+  try { localStorage.removeItem(key); } catch {}
+}
+
+function isLocalStorageEvent(event) {
+  try { return event.storageArea === localStorage; } catch { return false; }
+}
+
 function esc(str) {
   return String(str)
     .replace(/&/g, '&amp;')
@@ -53,7 +73,7 @@ let reportGenerationController = null;
 // SPEC-082: the saved preference is light, dark or system (the default); currentTheme is
 // the theme actually shown, resolved from the device setting when following the system.
 const THEME_PREFERENCES = ['light', 'dark', 'system'];
-let themePreference = THEME_PREFERENCES.includes(localStorage.getItem('theme')) ? localStorage.getItem('theme') : 'system';
+let themePreference = THEME_PREFERENCES.includes(readStoredValue('theme')) ? readStoredValue('theme') : 'system';
 let currentTheme = 'dark';
 
 registerFeatureReset('dashboard-data', () => {

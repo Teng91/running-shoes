@@ -32,12 +32,12 @@ jobs:
     timeout-minutes: 10
 
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.11"
           cache: pip
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "22"
       - name: Install dependencies
@@ -52,7 +52,7 @@ jobs:
       image: mcr.microsoft.com/playwright:v1.63.0-noble
       options: --ipc=host
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/browser-setup
       # Browser jobs retry once: CI WebKit occasionally reports an internal error. A real
       # regression fails both attempts; a passing retry still leaves a visible warning.
@@ -60,7 +60,7 @@ jobs:
         run: python scripts/task.py frontend-layout || { echo "::warning::frontend-layout failed once; retrying"; python scripts/task.py frontend-layout; }
       - name: Save browser failure diagnostics
         if: always() && (failure() || cancelled())
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: frontend-layout-failure-diagnostics
           path: .artifacts/browser/
@@ -75,13 +75,13 @@ jobs:
       image: mcr.microsoft.com/playwright:v1.63.0-noble
       options: --ipc=host
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/browser-setup
       - name: Run browser CRUD flow
         run: python scripts/task.py frontend-e2e || { echo "::warning::frontend-e2e failed once; retrying"; python scripts/task.py frontend-e2e; }
       - name: Save browser failure diagnostics
         if: always() && (failure() || cancelled())
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: frontend-e2e-failure-diagnostics
           path: .artifacts/browser/
@@ -96,14 +96,14 @@ jobs:
       image: mcr.microsoft.com/playwright:v1.63.0-noble
       options: --ipc=host
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/browser-setup
       - name: Run PWA upgrade and offline flow
         run: python scripts/task.py frontend-pwa || { echo "::warning::frontend-pwa failed once; retrying"; python scripts/task.py frontend-pwa; }
       - name: Exercise synthetic failure capture
         run: python scripts/task.py diagnostics-generate
       - name: Upload synthetic diagnostics for roundtrip verification
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: browser-diagnostics-roundtrip
           path: .artifacts/browser/roundtrip/
@@ -112,7 +112,7 @@ jobs:
           retention-days: 7
       - name: Save browser failure diagnostics
         if: always() && (failure() || cancelled())
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: frontend-pwa-failure-diagnostics
           path: .artifacts/browser/
@@ -125,12 +125,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.11"
       - name: Download synthetic diagnostics
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: browser-diagnostics-roundtrip
           path: .artifacts/browser/roundtrip/
@@ -147,10 +147,10 @@ jobs:
     env:
       FLY_APP: running-shoes
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: superfly/flyctl-actions/setup-flyctl@1.5
+      - uses: superfly/flyctl-actions/setup-flyctl@fc53c09e1bc3be6f54706524e3b82c4f462f77be # 1.5
       - name: Require the deploy token
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
@@ -189,7 +189,7 @@ jobs:
       image: mcr.microsoft.com/playwright:v1.63.0-noble
       options: --ipc=host
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - uses: ./.github/actions/browser-setup
@@ -205,7 +205,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
       - name: Tag and publish a new version
