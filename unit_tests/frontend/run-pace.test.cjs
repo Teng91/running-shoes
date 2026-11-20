@@ -161,8 +161,36 @@ test('SPEC-062 the Strava preview explains linked and skipped hand-entered runs'
     manual_conflict_samples: [{ strava_id: 's3', date: '2026-11-13', km: 5 }] };
   assert.equal(context.stravaManualMatchText(preview),
     '另有 3 筆和手動輸入的紀錄相符，不會重複新增，會改為連結 Strava，並補上 2 筆跑步時間。'
-    + '另有 1 筆活動當天已有手動紀錄但無法確定是同一次，為避免重複不會匯入（例如 2026/11/13 5.00 km）。');
+    + '另有 1 筆活動當天已有手動紀錄但無法確定是同一次（例如 2026/11/13 5.00 km），請在下方選擇略過、連結到手動紀錄或匯入為新紀錄（預設略過）。');
   assert.equal(context.stravaHasChanges(preview), true, 'linking alone can be imported');
   assert.equal(context.stravaHasChanges({ ...preview, manual_link_count: 0 }), false, 'conflicts alone change nothing');
   assert.equal(context.stravaManualMatchText({}), '');
+});
+
+test('SPEC-091 each conflict offers skip, a link to a manual run of that day or a new run, and the choice is sent', () => {
+  const elements = nodes();
+  const context = paceContext(elements, { stravaController: { importing: () => false, state: {} } });
+  vm.runInContext(['stravaConflictLabel', 'stravaConflictsHtml', 'stravaConflictChoices', 'stravaHasChanges',
+    'updateStravaImportButton'].map(extract).join('\n'), context);
+  const preview = { importable_count: 0, manual_conflicts: [
+    { strava_id: 's13', date: '2026-11-13', km: 5, duration_seconds: 1500, gear: '<b>Pegasus</b>',
+      candidates: [{ run_id: 41, km: 10, duration_seconds: null, shoe_name: 'Mizuno Wave Sky 7' }] },
+    { strava_id: 's14', date: '2026-11-14', km: 6, duration_seconds: null, gear: '', candidates: [] },
+  ] };
+  const html = context.stravaConflictsHtml(preview);
+  assert.match(html, /2026\/11\/13 Strava 5\.00 km · 25:00/);
+  assert.match(html, /<option value="skip">略過（不匯入）<\/option><option value="41">連結到手動紀錄：10\.00 km · Mizuno Wave Sky 7<\/option><option value="import">匯入為新紀錄<\/option>/);
+  assert.match(html, /&lt;b&gt;Pegasus&lt;\/b&gt;/, 'gear names are escaped');
+  assert.match(html, /id="strava-conflict-1"[^>]*><option value="skip">略過（不匯入）<\/option><option value="import">/, 'no candidate, no link option');
+  assert.equal(context.stravaConflictsHtml({ manual_conflicts: [] }), '');
+
+  context.stravaController.state.preview = preview;
+  elements['strava-conflict-0'].value = 'skip'; elements['strava-conflict-1'].value = 'skip';
+  context.updateStravaImportButton();
+  assert.equal(elements['strava-import-btn'].disabled, true, 'skipping everything changes nothing');
+  elements['strava-conflict-0'].value = '41'; elements['strava-conflict-1'].value = 'import';
+  assert.equal(JSON.stringify(context.stravaConflictChoices(preview)), '{"s13":41,"s14":"import"}');
+  context.updateStravaImportButton();
+  assert.equal(elements['strava-import-btn'].disabled, false);
+  assert.match(source, /'strava-conflict-choice': \(\) => updateStravaImportButton\(\)/);
 });

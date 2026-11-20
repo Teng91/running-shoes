@@ -81,6 +81,7 @@ const UI_ACTIONS = Object.freeze({
     'spending-year': () => onSpendingYearChange(),
     'preview-strava': () => previewStravaFile(),
     'strava-date-warning': element => updateStravaDateWarning(Number(element.dataset.index)),
+    'strava-conflict-choice': () => updateStravaImportButton(),
     'preview-restore': () => previewAccountRestore(),
     'load-saved-report': () => loadSavedReport(),
     'report-history': () => onReportHistoryChange(),

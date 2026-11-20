@@ -11,7 +11,7 @@ from backend.read_models.strava_preview import build_preview, stored_runs
 from backend.services.identifiers import allocate_id
 from backend.services.mileage import apply_run_mileage_deltas
 from backend.services.transactions import write_transaction
-from backend.strava_import import date_corrections, duration_backfills
+from backend.strava_import import date_corrections, duration_backfills, resolve_conflicts
 
 
 class InvalidShoeMappingError(Exception):
@@ -80,16 +80,23 @@ def import_runs(
     filtered_out: int,
     max_runs: int,
     history_limit: int,
+    conflict_choices: dict[str, object] | None = None,
 ) -> ImportResult:
-    """Validate, persist, and mileage-sync a user-scoped Strava import."""
+    """Validate, persist, and mileage-sync a user-scoped Strava import.
+
+    SPEC-091: ``conflict_choices`` maps a same-day conflict's Strava ID to "skip", "import"
+    or a candidate manual run id; activities without a choice are skipped as before.
+    """
     with write_transaction(db, user_id, reason="strava.import"):
         normalized_mapping = _normalize_mapping(db, user_id, mapping)
         stored = stored_runs(db, user_id)
         backfilled = _backfill_durations(db, user_id, duration_backfills(rows, stored.durations))
         corrected = _correct_utc_dates(db, user_id, date_corrections(rows, stored.existing_dates))
         links, conflicts = stored.manual_matches(rows)
+        chosen_links, chosen_imports = resolve_conflicts(conflicts, conflict_choices or {}, stored.manual)
+        links = links + chosen_links
         linked = _link_manual_runs(db, user_id, links)
-        manual_ids = {str(item["strava_id"]) for item in links + conflicts}
+        manual_ids = {str(item["strava_id"]) for item in links + conflicts} - chosen_imports
         runs, duplicate_count, unmapped_count, deleted_count = _prepare_runs(
             rows, user_id, normalized_mapping, set(stored.strava) | manual_ids, stored.deleted_ids
         )
@@ -138,7 +145,7 @@ def import_runs(
             skipped_deleted=deleted_count,
             backfilled_durations=backfilled,
             linked_manual=linked,
-            skipped_manual_conflict=len(conflicts),
+            skipped_manual_conflict=len(conflicts) - len(chosen_links) - len(chosen_imports),
         )
 
 

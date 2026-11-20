@@ -61,6 +61,7 @@ def test_strava_worker_keeps_event_loop_responsive(monkeypatch, action):
                       current_user=SimpleNamespace(id=7), db=session)
         if action == "import":
             kwargs["mapping"] = "{}"
+            kwargs["conflicts"] = "{}"
         route = strava_routes.preview_strava_import if action == "preview" else strava_routes.import_strava_runs
         task = asyncio.create_task(route(**kwargs))
         try:

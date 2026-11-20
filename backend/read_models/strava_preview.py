@@ -110,6 +110,14 @@ def build_preview(
         )
         group["ambiguous_match"] = len(candidates) > 1
     corrections = date_corrections(rows, existing_dates)
+    candidate_ids = {run_id for conflict in conflicts for run_id in cast(list[int], conflict["candidate_run_ids"])}
+    conflict_candidates = {
+        row.id: {"run_id": row.id, "km": float(row.km), "duration_seconds": row.duration_seconds,
+                 "shoe_name": f"{row.brand} {row.model}".strip() if row.brand else None}
+        for row in db.query(models.Run.id, models.Run.km, models.Run.duration_seconds, models.Shoe.brand, models.Shoe.model)
+        .outerjoin(models.Shoe, (models.Shoe.id == models.Run.shoe_id) & (models.Shoe.user_id == user_id))
+        .filter(models.Run.user_id == user_id, models.Run.id.in_(candidate_ids))
+    } if candidate_ids else {}
     return {
         "total_rows": len(rows) + invalid,
         "run_count": len(rows),
@@ -124,7 +132,17 @@ def build_preview(
         "manual_link_count": len(links),
         "manual_link_duration_count": sum(link["duration_seconds"] is not None for link in links),
         "manual_conflict_count": len(conflicts),
-        "manual_conflict_samples": conflicts[:5],
+        "manual_conflict_samples": [
+            {key: conflict[key] for key in ("strava_id", "date", "km")} for conflict in conflicts[:5]
+        ],
+        # SPEC-091: the user picks skip, link or import for each conflict.
+        "manual_conflicts": [
+            {"strava_id": conflict["strava_id"], "date": conflict["date"], "km": conflict["km"],
+             "duration_seconds": conflict["duration_seconds"], "gear": conflict["gear"],
+             "candidates": [conflict_candidates[run_id] for run_id in cast(list[int], conflict["candidate_run_ids"])
+                            if run_id in conflict_candidates]}
+            for conflict in conflicts
+        ],
         "invalid_count": invalid,
         "gear_groups": sorted(groups.values(), key=lambda group: str(group["gear"])),
         "warnings": warnings,

@@ -297,6 +297,10 @@ SPEC-032：合成資料驗證歷史筆數上限（v4.7.3 起 10,000／10,001）�
 
 [規格與具名案例](specs/061-ci-on-every-push-and-protected-main.md) 以文字解析 workflow：觸發條件是不限分支的 push、pull request、每週排程與手動執行，沒有 `paths-ignore`；部署條件仍只有 main 的 push／手動執行；main 以外的 ref 由較新的執行取消舊的，main 不取消。ruleset 由 `.github/rulesets/main.json` 描述，Python 測試確認它要求 PR、必要檢查與 workflow 的 5 個測試 job 完全一致、禁止刪除與 force push，且沒有繞過名單。
 
+## SPEC-091 Strava 與手動紀錄衝突時讓使用者選擇
+
+[規格與具名案例](specs/091-strava-conflict-choices.md) 以純函式測試確認候選紀錄扣除本次自動連結的、略過／匯入／連結照選擇套用、只有距離接近時補時間，以及不屬於衝突、不是候選、重複選擇、布林與浮點數等格式都被拒絕。API 測試以兩個帳號建立同日手動紀錄，確認預覽只列出本帳號的候選、格式錯誤回 400、選別人的紀錄回 409 且資料不變，一筆連結一筆匯入後里程只增加匯入的距離，重新預覽沒有衝突。前端 VM 測試確認選項內容、名稱跳脫、全部略過時不能匯入，以及送出的選擇格式。
+
 ## SPEC-090 模組解耦
 
 [規格與具名案例](specs/090-module-decoupling.md) 以架構測試確認目前沒有 route module 互相 import，並在暫存目錄建立「route module import 另一個 route module」與「import 共用 helper」兩種情況，只有前者被找出；移入 `read_models/` 的模組由既有的 read models 依賴規則與月報快照規則檢查。前端的目標賽事 VM 測試同時載入 `app-pace-charts.js` 與 `app-race-goal.js`，其餘回歸測試以函式名稱擷取，不受檔案拆分影響。
