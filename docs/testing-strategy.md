@@ -297,6 +297,10 @@ SPEC-032：合成資料驗證歷史筆數上限（v4.7.3 起 10,000／10,001）�
 
 [規格與具名案例](specs/061-ci-on-every-push-and-protected-main.md) 以文字解析 workflow：觸發條件是不限分支的 push、pull request、每週排程與手動執行，沒有 `paths-ignore`；部署條件仍只有 main 的 push／手動執行；main 以外的 ref 由較新的執行取消舊的，main 不取消。ruleset 由 `.github/rulesets/main.json` 描述，Python 測試確認它要求 PR、必要檢查與 workflow 的 5 個測試 job 完全一致、禁止刪除與 force push，且沒有繞過名單。
 
+## SPEC-086 AI 對話即時顯示思考過程
+
+[規格與具名案例](specs/086-live-agent-reasoning.md) 以假的串流片段與本機 SSE server 搭配真正的 OpenAI SDK，確認 `reasoning`／`reasoning_details` 只在要求時以 `ReasoningText` 產出、同一個 delta 不重複、加密內容略過、回答 `content` 不含思考；Agent 測試確認 SSE 依序為 `thinking`、工具事件、`thinking`、`token`，且第二輪 prompt 不含思考內容。前端在 VM 中以假 DOM 執行完整的 `sendAgentMessage` 串流：思考區塊即時展開、回答時收合為「已思考 N 秒」、內容只以純文字顯示且不寫入歷史；多輪工具時區塊依序排列，空泡泡顯示等待秒數，串流結束後計時器停止。
+
 ## SPEC-085 寄信憑證、管理員名稱與驗證碼次數
 
 [規格與具名案例](specs/085-auth-hardening.md) 以假的 SMTP 類別確認 STARTTLS 收到要求憑證、檢查主機名稱的 context；以 API 確認邀請制下註冊管理員名稱得到與名稱已被使用相同的回應且邀請碼未消耗、open 模式可以註冊，管理員刪帳號被拒且不登出；攔截 `hmac.compare_digest` 確認每次比對時次數已寫入、用完 5 次不再比對；重寄驗證碼與換用 email 後第 11 次嘗試回 429，不存在的帳號同樣如此。前端 VM 測試確認管理員看到中文原因且不被登出。

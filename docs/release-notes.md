@@ -4,6 +4,14 @@
 每版的摘要見 [CHANGELOG.md](../CHANGELOG.md)；目前的功能與操作方式以 [README](../README.md) 為準。
 這裡保留當時的文字，後續版本可能已調整其中的行為。
 
+### AI 對話即時顯示思考過程（SPEC-086，v4.24.0）
+
+- `llm.call_llm_stream(include_reasoning=True)` 把 OpenRouter 串流的 `delta.reasoning`（沒有時讀 `reasoning_details` 的文字與摘要，加密內容略過）以 `ReasoningText` 產出，不併入回答 `content`；預設 `False`，月報不受影響。請求不帶 `reasoning` 參數，各模型維持原本的推理設定。
+- Agent SSE 新增 `{"type": "thinking"}` 事件；思考內容不進入工具標記解析、下一輪 prompt 與對話歷史。舊前端會忽略這個事件。
+- `app-agent.js` 每輪模型呼叫建立一個 `<details class="agent-reasoning">`，以純文字累加、回答或工具開始時收合並顯示秒數；空泡泡顯示「思考中… N 秒」，工具完成後重新計時。
+
+Asset 4.24.0／shell v94、schema 12 不變，可直接回滾至 v4.23.1 image。
+
 ### 寄信憑證、管理員名稱與驗證碼次數（SPEC-085，v4.23.1）
 
 - `mailer.smtp_mailer` 以 `ssl.create_default_context()` 做 STARTTLS；正式映像已含系統 CA。若憑證驗證失敗，綁定 email 會回 503「寄信失敗」，忘記密碼照常回同樣訊息並在 log 記下錯誤類型。
