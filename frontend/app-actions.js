@@ -33,6 +33,7 @@ const UI_ACTIONS = Object.freeze({
     'revoke-invite': element => revokeInvite(Number(element.dataset.inviteId)),
     'admin-reset-password': () => adminResetPassword(),
     'delete-account': () => deleteAccount(),
+    'logout-everywhere': () => logoutEverywhere(),
     'show-reset-form': () => showResetForm(),
     'send-reset-code': () => sendResetCode(),
     'send-email-code': () => sendEmailCode(),

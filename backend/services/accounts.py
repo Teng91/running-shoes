@@ -38,6 +38,9 @@ def register(db: Session, username: str, password: str, *, max_users: int,
     (or no longer is), because admin rights follow the name. The first admin registers
     while ``REGISTRATION_MODE=open``. The answer is the same as for a taken name, so
     sign-up does not reveal which names are admins.
+
+    SPEC-088: in invite mode the invite is checked before the name, so without a valid
+    invite sign-up cannot be used to find out which names are taken.
     """
     if mode == "closed":
         raise Invalid(REGISTRATION_CLOSED)
@@ -53,13 +56,13 @@ def register(db: Session, username: str, password: str, *, max_users: int,
     # Hash before taking the SQLite writer so bcrypt cannot block other writes.
     hashed_password = get_password_hash(password)
     with write_transaction(db):
+        if mode == "invite":
+            # Same transaction: a refused registration rolls back and never spends the invite.
+            invites.redeem_invite(db, invite_code)
         if find_user(db, username) or (mode == "invite" and username.casefold() in admin_names):
             raise Invalid(USERNAME_TAKEN)
         if db.query(models.User).count() >= max_users:
             raise CapacityExceeded("Registration capacity has been reached")
-        if mode == "invite":
-            # Same transaction: a failed registration never spends the invite.
-            invites.redeem_invite(db, invite_code)
         user = models.User(username=username, hashed_password=hashed_password)
         db.add(user)
     db.refresh(user)
@@ -107,6 +110,16 @@ def change_password(db: Session, username: str, old_password: str, new_password:
         )
         if not changed:
             raise Conflict("密碼已被更新，請重新登入後再試")
+    return {"ok": True}
+
+
+def logout_everywhere(db: Session, user: models.User) -> dict:
+    """SPEC-088: end every session of the account, this one included, keeping the password."""
+    user_id = user.id
+    with write_transaction(db, user_id, reason="account.logout_all"):
+        db.query(models.User).filter(models.User.id == user_id).update(
+            {models.User.token_version: models.User.token_version + 1}, synchronize_session=False,
+        )
     return {"ok": True}
 
 
