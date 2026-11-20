@@ -143,15 +143,22 @@ async function deleteAccount() {
 }
 
 // SPEC-088: end every session of the account without changing the password.
+let logoutEverywhereRunning = false;
+
 async function logoutEverywhere() {
+  // SPEC-092: a second click while the first request runs would fail with the revoked token.
+  if (logoutEverywhereRunning) return;
   const status = document.getElementById('logout-all-status');
   if (!confirm('確定要登出所有裝置嗎？這一台也會被登出。')) return;
+  logoutEverywhereRunning = true;
   status.textContent = '登出中…';
   try {
     await apiPost('/auth/logout-all', {});
   } catch (error) {
     status.textContent = '登出失敗：' + translateError(error.message);
     return;
+  } finally {
+    logoutEverywhereRunning = false;
   }
   status.textContent = '';
   closeWorkspaceModal();

@@ -310,6 +310,8 @@ def test_registration_capacity_is_enforced(client, db, monkeypatch):
         json={"username": "new-user", "password": "pass1234"},
     )
     assert response.status_code == 403
+    # SPEC-092: other 403s say "forbidden"; a full registration keeps "capacity".
+    assert response.json()["error"] == {"code": "capacity", "message": "Registration capacity has been reached"}
 
 
 def test_auth_endpoint_rate_limit_uses_client_ip(client, monkeypatch):
@@ -767,7 +769,7 @@ def test_static_asset_and_non404_http_errors(client):
 
     service_worker = client.get("/service-worker.js")
     assert service_worker.status_code == 200
-    assert "running-shoes-shell-v100" in service_worker.text
+    assert "running-shoes-shell-v101" in service_worker.text
 
     agent_script = client.get("/app-agent.js")
     assert agent_script.status_code == 200

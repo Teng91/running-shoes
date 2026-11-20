@@ -201,6 +201,7 @@ def test_strava_import_is_idempotent_and_syncs_totals(client, db, user_with_toke
             "count": 1,
             "km": 6.1,
             "first_date": "2026-08-28",
+            "conflict_count": 0,
             "suggested_shoe_id": None,
             "shoe_name": None,
             "ambiguous_match": False,

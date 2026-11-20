@@ -183,7 +183,6 @@ def main() -> None:
         "frontend/app-streams.js",
         "frontend/app-core.js",
         "frontend/app-dashboard.js",
-
         "frontend/app-exports.js",
         "frontend/app-goals.js",
         "frontend/app-charts.js",
