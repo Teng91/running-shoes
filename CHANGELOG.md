@@ -2,8 +2,16 @@
 
 ## [Unreleased]
 
+## [4.25.1] - 2026-11-20
+
 ### Added
 - 以 MIT 授權釋出（`LICENSE`）。
+
+### Security
+- 內建的 Chart.js 4.4.7 與 marked 15.0.12 以相同版本列入 npm 鎖定檔，`verify` 與 `audit-deps` 會稽核 npm 套件，GitHub 的相依套件警示也看得到它們（SPEC-089）。
+
+### Changed
+- 跑鞋資料表加上擁有者索引，啟動時自動建立。Asset 4.25.1／shell v98，schema 12 不變。
 
 ## [4.25.0] - 2026-11-20
 

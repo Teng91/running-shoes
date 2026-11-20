@@ -663,6 +663,7 @@ flowchart LR
 - **限流**：`rate_limits.consume()` 把同一請求的所有視窗放在一個交易，滿了就整筆回滾；限額來自 `app.state.settings`，不再保留記憶體桶。SPEC-071 再加上 AI 的每帳號與全站 24 小時視窗，限流桶保留 24 小時。
 - **稽核 trigger**：每次啟動依目前欄位重建，避免舊欄位清單使快照不完整或使寫入失敗。
 - **Strava**：`strava_import.parse_activity_dates()` 把 UTC 時間戳轉為 `clock.APP_TIMEZONE` 日期。`date_corrections()` 只修正仍停在舊 UTC 日期的既有活動，`services/strava_imports.py` 在匯入交易中移動日期與月跑量。
+- **v4.25.1**：內建前端函式庫納入稽核與跑鞋索引（SPEC-089）。`scripts/task.py` 以 `dependency_audit_commands()` 同時稽核 pip 與 npm 鎖定檔；`migrations._ensure_lookup_indexes` 建立只加速讀取的索引，不提高 schema 版本。依賴方向不變。
 - **v4.25.0**：登出所有裝置與註冊不洩漏帳號名稱（SPEC-088）。`services/accounts.logout_everywhere` 遞增 `token_version`，`routers/auth.py` 新增 `POST /api/auth/logout-all`；`accounts.register` 在邀請制下先兌換邀請碼。依賴方向不變。
 - **v4.24.2**：登入綁定帳號、Actions 釘選與瀏覽器儲存（SPEC-087）。`services/accounts.login` 在 token 加上 `aid`（`backup_id`），`auth.get_current_user` 比對；`app-state.js` 提供有 try/catch 的 localStorage 函式給 `app-auth.js` 與 `app-strava.js`；workflow 的 action 釘選到 commit SHA。依賴方向不變。
 - **v4.24.0**：AI 對話即時顯示思考過程（SPEC-086）。`llm.call_llm_stream(include_reasoning=True)` 以 `ReasoningText` 區分思考片段，`agent.py` 轉成 SSE `thinking` 事件，`app-agent.js` 只以純文字顯示；思考內容不進入歷史或下一輪 prompt，依賴方向不變。

@@ -297,6 +297,10 @@ SPEC-032：合成資料驗證歷史筆數上限（v4.7.3 起 10,000／10,001）�
 
 [規格與具名案例](specs/061-ci-on-every-push-and-protected-main.md) 以文字解析 workflow：觸發條件是不限分支的 push、pull request、每週排程與手動執行，沒有 `paths-ignore`；部署條件仍只有 main 的 push／手動執行；main 以外的 ref 由較新的執行取消舊的，main 不取消。ruleset 由 `.github/rulesets/main.json` 描述，Python 測試確認它要求 PR、必要檢查與 workflow 的 5 個測試 job 完全一致、禁止刪除與 force push，且沒有繞過名單。
 
+## SPEC-089 內建前端函式庫納入稽核與跑鞋索引
+
+[規格與具名案例](specs/089-vendored-audit-and-shoe-index.md) 從內建檔案的標頭讀出版本，確認與 `package.json`、鎖定檔一致且來源是 registry.npmjs.org；已 `npm ci` 時再逐字比對內建檔案與 npm 套件發布的檔案（沒安裝時跳過）。task runner 測試確認 `verify` 包含 pip 與 npm 兩個稽核。migration 測試先刪掉索引再啟動，以 `EXPLAIN QUERY PLAN` 確認以擁有者查詢跑鞋時使用 `idx_shoes_user_id`，並重複執行一次。
+
 ## SPEC-088 登出所有裝置與註冊不洩漏帳號名稱
 
 [規格與具名案例](specs/088-logout-everywhere.md) 以 API 讓同一帳號登入兩次，其中一個登出所有裝置後兩個 token 都回 401、原密碼可以重新登入；以無效邀請碼註冊已存在與不存在的名稱都得到 `Invalid invite code`，有效邀請碼註冊已存在的名稱不會用掉邀請碼。前端 VM 測試確認取消時不送請求、失敗時保留登入、成功後才登出並說明。
