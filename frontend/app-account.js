@@ -142,6 +142,24 @@ async function deleteAccount() {
   showAuthError('帳號已刪除。');
 }
 
+// SPEC-088: end every session of the account without changing the password.
+async function logoutEverywhere() {
+  const status = document.getElementById('logout-all-status');
+  if (!confirm('確定要登出所有裝置嗎？這一台也會被登出。')) return;
+  status.textContent = '登出中…';
+  try {
+    await apiPost('/auth/logout-all', {});
+  } catch (error) {
+    status.textContent = '登出失敗：' + translateError(error.message);
+    return;
+  }
+  status.textContent = '';
+  closeWorkspaceModal();
+  clearAuth();
+  showLoginView();
+  showAuthError('已登出所有裝置，請重新登入。');
+}
+
 // ===== SPEC-079: email binding and forgot password =====
 
 async function publicPost(path, body) {

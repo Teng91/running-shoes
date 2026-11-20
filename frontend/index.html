@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-2bT6CtJchO06Xn0AApmW9o5a2pDMJz9hpC08eAf5DuI=' 'sha256-03bcOQeHecByaBjKyWaE3zaVWPIlPVelCglM9pQh0BU=' 'sha256-IgIQHS5JQWyGqVRXIJS9m3tyA0JiZ2nFTbsaGJpbbDc='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'self'">
-<meta name="app-asset-version" content="4.24.2">
+<meta name="app-asset-version" content="4.25.0">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>跑鞋追蹤 Dashboard</title>
 <meta name="theme-color" content="#07090c">
@@ -42,7 +42,7 @@ body { margin: 0; opacity: 1 !important; }
 @keyframes app-boot-critical-run { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
 @media (prefers-reduced-motion: reduce) { .app-boot { transition: none; } .app-boot-spinner::after { animation: none; width: 100%; opacity: .45; } }
 </style>
-<link id="app-styles" rel="preload" href="/styles.css?v=4.24.2" as="style">
+<link id="app-styles" rel="preload" href="/styles.css?v=4.25.0" as="style">
 <script>
 // Non-blocking stylesheet: apply the preload once it arrives. A script rather
 // than an onload attribute, so the page CSP can allow it by hash (SPEC-054).
@@ -64,7 +64,7 @@ body { margin: 0; opacity: 1 !important; }
   } catch (error) {}
 })();
 </script>
-<noscript><link rel="stylesheet" href="/styles.css?v=4.24.2"></noscript>
+<noscript><link rel="stylesheet" href="/styles.css?v=4.25.0"></noscript>
 </head>
 <body>
 
@@ -870,6 +870,12 @@ window.__appBootLegacyPoll = window.setInterval(function () {
       <p id="password-status" class="workspace-help" role="status" aria-live="polite"></p>
     </details>
     <details class="workspace-section">
+      <summary>登出所有裝置</summary>
+      <p class="workspace-help">手機遺失或懷疑別人登入過時使用：所有裝置（包括這一台）都會被登出，密碼不變。懷疑密碼外流時請改用上面的「更改密碼」。</p>
+      <button class="btn btn-edit" data-click="logout-everywhere">登出所有裝置</button>
+      <p id="logout-all-status" class="workspace-help" role="status" aria-live="polite"></p>
+    </details>
+    <details class="workspace-section">
       <summary>刪除帳號</summary>
       <p class="workspace-help">永久刪除這個帳號，以及所有跑鞋、跑步紀錄、月跑量、目標、月報與異動紀錄，無法復原。刪除前建議先在上方下載帳號資料 JSON。</p>
       <div class="form-group"><label for="delete-account-password">輸入密碼確認</label><input id="delete-account-password" type="password" autocomplete="current-password"></div>
@@ -918,41 +924,41 @@ window.__appBootLegacyPoll = window.setInterval(function () {
 
 <script src="/vendor/chart.umd.min.js"></script>
 <script src="/vendor/marked.min.js"></script>
-<script src="/app-boot.js?v=4.24.2"></script>
-<script src="/app-lifecycle.js?v=4.24.2"></script>
-<script src="/app-state.js?v=4.24.2"></script>
-<script src="/app-api.js?v=4.24.2"></script>
-<script src="/app-auth.js?v=4.24.2"></script>
-<script src="/app-streams.js?v=4.24.2"></script>
-<script src="/app-resources.js?v=4.24.2"></script>
-<script src="/app-inline-editors.js?v=4.24.2"></script>
-<script src="/app-local-store.js?v=4.24.2"></script>
-<script src="/app-workspace.js?v=4.24.2"></script>
-<script src="/app-account.js?v=4.24.2"></script>
-<script src="/app-account-restore.js?v=4.24.2"></script>
-<script src="/app-history.js?v=4.24.2"></script>
-<script src="/app-core.js?v=4.24.2"></script>
-<script src="/app-models.js?v=4.24.2"></script>
-<script src="/app-markdown.js?v=4.24.2"></script>
-<script src="/app-agent.js?v=4.24.2"></script>
-<script src="/app-reports.js?v=4.24.2"></script>
-<script src="/app-runs.js?v=4.24.2"></script>
-<script src="/app-dates.js?v=4.24.2"></script>
-<script src="/app-strava.js?v=4.24.2"></script>
-<script src="/app-run-insights.js?v=4.24.2"></script>
-<script src="/app-shoes.js?v=4.24.2"></script>
-<script src="/app-dashboard.js?v=4.24.2"></script>
-<script src="/app-onboarding.js?v=4.24.2"></script>
-<script src="/app-exports.js?v=4.24.2"></script>
-<script src="/app-goals.js?v=4.24.2"></script>
-<script src="/app-charts.js?v=4.24.2"></script>
-<script src="/app-shoe-charts.js?v=4.24.2"></script>
-<script src="/app-monthly-charts.js?v=4.24.2"></script>
-<script src="/app-pace-charts.js?v=4.24.2"></script>
-<script src="/app-spending.js?v=4.24.2"></script>
-<script src="/app-dialogs.js?v=4.24.2"></script>
-<script src="/app-updates.js?v=4.24.2"></script>
-<script src="/app-actions.js?v=4.24.2"></script>
-<script src="/app.js?v=4.24.2"></script>
+<script src="/app-boot.js?v=4.25.0"></script>
+<script src="/app-lifecycle.js?v=4.25.0"></script>
+<script src="/app-state.js?v=4.25.0"></script>
+<script src="/app-api.js?v=4.25.0"></script>
+<script src="/app-auth.js?v=4.25.0"></script>
+<script src="/app-streams.js?v=4.25.0"></script>
+<script src="/app-resources.js?v=4.25.0"></script>
+<script src="/app-inline-editors.js?v=4.25.0"></script>
+<script src="/app-local-store.js?v=4.25.0"></script>
+<script src="/app-workspace.js?v=4.25.0"></script>
+<script src="/app-account.js?v=4.25.0"></script>
+<script src="/app-account-restore.js?v=4.25.0"></script>
+<script src="/app-history.js?v=4.25.0"></script>
+<script src="/app-core.js?v=4.25.0"></script>
+<script src="/app-models.js?v=4.25.0"></script>
+<script src="/app-markdown.js?v=4.25.0"></script>
+<script src="/app-agent.js?v=4.25.0"></script>
+<script src="/app-reports.js?v=4.25.0"></script>
+<script src="/app-runs.js?v=4.25.0"></script>
+<script src="/app-dates.js?v=4.25.0"></script>
+<script src="/app-strava.js?v=4.25.0"></script>
+<script src="/app-run-insights.js?v=4.25.0"></script>
+<script src="/app-shoes.js?v=4.25.0"></script>
+<script src="/app-dashboard.js?v=4.25.0"></script>
+<script src="/app-onboarding.js?v=4.25.0"></script>
+<script src="/app-exports.js?v=4.25.0"></script>
+<script src="/app-goals.js?v=4.25.0"></script>
+<script src="/app-charts.js?v=4.25.0"></script>
+<script src="/app-shoe-charts.js?v=4.25.0"></script>
+<script src="/app-monthly-charts.js?v=4.25.0"></script>
+<script src="/app-pace-charts.js?v=4.25.0"></script>
+<script src="/app-spending.js?v=4.25.0"></script>
+<script src="/app-dialogs.js?v=4.25.0"></script>
+<script src="/app-updates.js?v=4.25.0"></script>
+<script src="/app-actions.js?v=4.25.0"></script>
+<script src="/app.js?v=4.25.0"></script>
 </body>
 </html>

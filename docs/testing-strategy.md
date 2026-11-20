@@ -297,6 +297,10 @@ SPEC-032：合成資料驗證歷史筆數上限（v4.7.3 起 10,000／10,001）�
 
 [規格與具名案例](specs/061-ci-on-every-push-and-protected-main.md) 以文字解析 workflow：觸發條件是不限分支的 push、pull request、每週排程與手動執行，沒有 `paths-ignore`；部署條件仍只有 main 的 push／手動執行；main 以外的 ref 由較新的執行取消舊的，main 不取消。ruleset 由 `.github/rulesets/main.json` 描述，Python 測試確認它要求 PR、必要檢查與 workflow 的 5 個測試 job 完全一致、禁止刪除與 force push，且沒有繞過名單。
 
+## SPEC-088 登出所有裝置與註冊不洩漏帳號名稱
+
+[規格與具名案例](specs/088-logout-everywhere.md) 以 API 讓同一帳號登入兩次，其中一個登出所有裝置後兩個 token 都回 401、原密碼可以重新登入；以無效邀請碼註冊已存在與不存在的名稱都得到 `Invalid invite code`，有效邀請碼註冊已存在的名稱不會用掉邀請碼。前端 VM 測試確認取消時不送請求、失敗時保留登入、成功後才登出並說明。
+
 ## SPEC-087 登入綁定帳號、Actions 釘選與瀏覽器儲存
 
 [規格與具名案例](specs/087-session-binding-and-hardening.md) 以 API 刪除帳號後用同一名稱重新註冊，先確認新帳號拿到相同的 id 與 `token_version`，再確認舊 token 回 401、新登入可用；解開登入 token 確認 `aid` 等於 `backup_id`，沒有 `aid` 的舊格式 token 仍可用，`aid` 不符的回 401。一般帳號呼叫管理員 API 時 `error` 為 `forbidden`。workflow 測試掃描 `.github` 下所有 YAML，確認每個外部 action 都釘選到 40 位 SHA 並標註版本。前端在 VM 裡讓 `localStorage` 的每次存取都丟出例外，實際載入 `app-lifecycle.js`、`app-state.js`、`app-auth.js`，確認不中斷、登入與登出只改記憶體，並檢查所有 script 的 `localStorage` 存取都在 try 裡。
