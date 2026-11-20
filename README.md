@@ -48,15 +48,15 @@ Python 3.11 · FastAPI · SQLAlchemy · SQLite · 原生 JavaScript（不需要�
 - **數字只算一次、到處一致**：里程、成本、壽命門檻、配速、目標進度都在後端算好；首頁、圖表、月報和 AI 讀的是同一個 read model，AI 只負責把數字寫成文字。
 - **不會弄丟或算錯資料**：每筆異動有版本檢查、冪等鍵與同交易的稽核紀錄；里程增減和跑步紀錄在同一個交易完成；刪除可以從異動歷史復原。
 - **手機優先、離線可用**：PWA 安裝到主畫面；離線時新增的跑步先存在 IndexedDB 佇列，恢復連線後自動送出且不重複。
-- **長期可維護**：每個功能先寫規格（90 份 spec）、每個驗收條件都對應到具名測試；`main` 受保護，只能透過 CI 全綠的 PR 合併。
+- **長期可維護**：每個功能先寫規格（91 份 spec）、每個驗收條件都對應到具名測試；`main` 受保護，只能透過 CI 全綠的 PR 合併。
 
 ### 規模
 
 | 項目 | 數量 |
 | --- | --- |
-| 正式版本 | 124 個 tag，2026-06 開始，目前 v4.26 |
-| 自動化測試 | Python 754 項、前端 Node 回歸 236 項、40 組版面設定（WebKit／Chromium × 亮暗 × 10 種尺寸）、真實 CRUD E2E 與 PWA 升級／離線測試 |
-| 功能規格 | 90 份 SPEC，每份含 Goals、帳號隔離、migration／rollback 與 AC 追蹤 |
+| 正式版本 | 125 個 tag，2026-06 開始，目前 v4.26 |
+| 自動化測試 | Python 755 項、前端 Node 回歸 238 項、40 組版面設定（WebKit／Chromium × 亮暗 × 10 種尺寸）、真實 CRUD E2E 與 PWA 升級／離線測試 |
+| 功能規格 | 91 份 SPEC，每份含 Goals、帳號隔離、migration／rollback 與 AC 追蹤 |
 | API | 66 個端點，與 `unit_tests/api_contract.json` 及下方 API 表自動比對 |
 | 資料庫 | SQLite schema 12，每一版都有守衛的回滾腳本 |
 | 部署 | Fly.io 1 台 256MB 機器＋加密 volume，閒置自動休眠 |
@@ -195,8 +195,8 @@ flowchart LR
 
 ## 品質：測試與規格
 
-- **Python 754 項**：API、交易與並行、migration 與回滾、備份往返、帳號隔離、Agent 規劃與工具（外部 LLM 與搜尋一律 mock），一律使用暫存或記憶體資料庫，不碰正式 `shoes.db`。
-- **前端 Node 回歸 236 項**：以 `vm` 載入實際前端程式，驗證狀態、競態、草稿、串流與圖表資料。
+- **Python 755 項**：API、交易與並行、migration 與回滾、備份往返、帳號隔離、Agent 規劃與工具（外部 LLM 與搜尋一律 mock），一律使用暫存或記憶體資料庫，不碰正式 `shoes.db`。
+- **前端 Node 回歸 238 項**：以 `vm` 載入實際前端程式，驗證狀態、競態、草稿、串流與圖表資料。
 - **瀏覽器**：Playwright 在 WebKit 與 Chromium 跑 40 組版面設定（含幾何對齊與無溢出）、真實 FastAPI＋暫存 SQLite 的 CRUD E2E、Service Worker 升級與離線；失敗時保存截圖與 trace。
 - **修 bug 先寫重現測試**：例如 v4.17.0 的 CI 抓到新圖表檔案重複宣告全域常數，修正時同時加上掃描所有 script 的測試。
 - **文件也被測**：`docs-check` 比對 README 的測試數、工具數、API 表、目錄樹與規格的 AC 追蹤，數字對不上 CI 就失敗。
@@ -235,7 +235,7 @@ merge 到 main ─▶ 喚醒機器 → volume 上快照資料庫 → 部署 → 
 | 2026-11-17 | v4.18 | 比賽準備：目標賽事、預估完賽、強度分布與長距離檢查，取代只描述資料的配速圖 |
 | 2026-11-18 | v4.19–4.20 | 公開服務防護：AI 每日額度、全站 API 限流、HSTS；邀請制註冊、管理員邀請碼與臨時密碼、刪除帳號；每日加密異地備份 |
 | 2026-11-18～19 | v4.21–4.23 | Email 驗證碼找回密碼與密碼變更通知；淺色／深色／跟隨系統；公開 repo 的個人資料清理；新帳號引導 |
-| 2026-11-20 | v4.23.1–4.26 | 資安強化（寄信驗證憑證、管理員名稱保護、驗證碼次數、token 綁定帳號、Actions 釘選 SHA、註冊不洩漏帳號名稱）；AI 即時顯示思考過程；登出所有裝置；MIT 授權；內建函式庫納入稽核；模組解耦；Strava 衝突可自選 |
+| 2026-11-20～21 | v4.23.1–4.26.1 | 資安強化（寄信驗證憑證、管理員名稱保護、驗證碼次數、token 綁定帳號、Actions 釘選 SHA、註冊不洩漏帳號名稱）；AI 即時顯示思考過程；登出所有裝置；MIT 授權；內建函式庫納入稽核；模組解耦；Strava 衝突可自選 |
 
 ---
 
@@ -707,7 +707,7 @@ LLM_MAX_OUTPUT_TOKENS=4096
 | `DELETE /api/runs/{run_id}` | 刪除指定跑步紀錄 |
 | `GET /api/runs/import/strava/history` | 取得最近 10 次 Strava 匯入摘要 |
 | `POST /api/runs/import/strava/preview` | 預覽 Strava CSV 中的跑步活動與鞋款配對 |
-| `POST /api/runs/import/strava` | 依鞋款配對批次匯入 Strava 跑步活動 |
+| `POST /api/runs/import/strava` | 依鞋款配對批次匯入 Strava 跑步活動；選填 `conflicts` 決定每筆當天已有手動紀錄的活動要略過、連結或匯入 |
 | `GET /api/analytics/dashboard` | 取得指定月份的趨勢、目標、月底預測與壽命洞察 |
 | `GET /api/shoes/{shoe_id}/analytics` | 取得單雙鞋的使用、成本與退役預測 |
 | `GET /api/analytics/pace` | 取得全部紀錄的配速趨勢；有目標賽事時每筆帶強度 |
@@ -935,7 +935,7 @@ Playwright／Chromium／WebKit 齊全時，也會執行版面測試。
 避免每次停止都重跑。Hook 不會呼叫其他模型、外部 API，或傳送提示、diff、原始碼與測試輸出。
 GitHub Actions 仍會在 push／pull request 執行 `verify`，並以三個可獨立重跑的 browser jobs 執行完整版面矩陣、真實 CRUD E2E 與 PWA 升級／離線測試；push 到 main 時再依序快照、部署、檢查並發版（見「日常開發流程、自動部署與發版」）；Dependabot 每月以單一 PR 合併 GitHub Actions 更新；Python 只接收安全性更新 PR，例行升級依下方 `uv pip compile --universal` 步驟手動重編鎖定檔（Dependabot 產生的鎖定檔會遺失 Windows 條件）。
 
-本次驗證基線為 Python **754 passed**、前端回歸測試 **236 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
+本次驗證基線為 Python **755 passed**、前端回歸測試 **238 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
 版面檢查涵蓋 WebKit／Chromium、亮／暗模式與 10 組直橫向尺寸，共 40 組設定，檢查四個功能分頁與月報、三個認證表單、圖表、全部彈窗、行內編輯、停用／錯誤及空資料狀態。
 
 主要表單、工具列與彈窗操作統一為 44px 控制項；桌面表格內的緊湊操作為 36px，手機至少 44px。
@@ -1345,7 +1345,7 @@ venv/bin/python -m backend.run
 | 跑步日誌 | `PUT /api/runs/{run_id}` | 編輯跑步或跑步時間 |
 | 跑步日誌 | `DELETE /api/runs/{run_id}` | 刪除跑步；Strava 活動會記住，重新匯入不會回來 |
 | Strava | `POST /api/runs/import/strava/preview` | 預覽 CSV 的跑步活動、重複／已刪除／待補時間筆數與鞋款配對 |
-| Strava | `POST /api/runs/import/strava` | 依鞋款配對匯入，並補上既有紀錄的跑步時間 |
+| Strava | `POST /api/runs/import/strava` | 依鞋款配對匯入，並補上既有紀錄的跑步時間；`conflicts` 選擇重複活動的處理方式（過期回 409） |
 | Strava | `GET /api/runs/import/strava/history` | 最近 10 次匯入摘要 |
 | 月跑量 | `GET /api/monthly-mileage` | 每月跑量（日誌合計加歷史調整） |
 | 月跑量 | `POST /api/monthly-mileage` | 新增月份的歷史跑量 |

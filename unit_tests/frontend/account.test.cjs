@@ -13,7 +13,7 @@ function accountContext(elements, globals = {}) {
     API_BASE: '/api', translateError: value => value, esc: text => String(text).replace(/[&<>"]/g, c => `&#${c.charCodeAt(0)};`),
     confirm: () => true, currentUser: 'Demo', ...globals,
   });
-  vm.runInContext(`let registrationMode = null;\nlet adminRequestId = 0;\n${['loadRegistrationMode', 'refreshAdminEntry', 'openAdminModal', 'closeAdminModal', 'inviteStatus',
+  vm.runInContext(`let registrationMode = null;\nlet adminRequestId = 0;\nlet logoutEverywhereRunning = false;\n${['loadRegistrationMode', 'refreshAdminEntry', 'openAdminModal', 'closeAdminModal', 'inviteStatus',
     'loadInvites', 'createInvite', 'revokeInvite', 'adminResetPassword', 'deleteAccount', 'logoutEverywhere'].map(extract).join('\n')}`, context);
   return { context, submit };
 }
@@ -161,4 +161,19 @@ test('SPEC-088 logging out everywhere asks first and signs this device out only 
   assert.deepEqual(JSON.parse(JSON.stringify(calls.at(-5))), ['/auth/logout-all', {}]);
   assert.deepEqual(calls.slice(-4), ['close', 'logout', 'login', '已登出所有裝置，請重新登入。']);
   assert.match(htmlSource, /data-click="logout-everywhere"/);
+});
+
+test('SPEC-092 a second click while logging out everywhere sends nothing', async () => {
+  const elements = nodes();
+  let posts = 0, confirms = 0, release;
+  const { context } = accountContext(elements, {
+    confirm: () => { confirms++; return true; },
+    apiPost: () => { posts++; return new Promise(resolve => { release = resolve; }); },
+    closeWorkspaceModal() {}, clearAuth() {}, showLoginView() {}, showAuthError() {},
+  });
+  const first = context.logoutEverywhere();
+  await context.logoutEverywhere();
+  assert.equal(posts, 1); assert.equal(confirms, 1, 'the second click does not ask again');
+  release({ ok: true }); await first;
+  assert.equal(vm.runInContext('logoutEverywhereRunning', context), false);
 });

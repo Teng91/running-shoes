@@ -4,6 +4,15 @@
 每版的摘要見 [CHANGELOG.md](../CHANGELOG.md)；目前的功能與操作方式以 [README](../README.md) 為準。
 這裡保留當時的文字，後續版本可能已調整其中的行為。
 
+### 程式碼審查修正（SPEC-092，v4.26.1）
+
+- 預覽的 `gear_groups` 為每個衝突活動的裝備建立群組並加上 `conflict_count`（`count`／`km` 仍只算可直接匯入的活動）。
+- `strava_import.DuplicateConflictLinkError` 在同一筆手動紀錄被選兩次時丟出，`POST /api/runs/import/strava` 回 400「同一筆手動紀錄只能連結一個 Strava 活動」；其他不符的選擇仍回 409。
+- `routers/errors.CodedHTTPException` 讓註冊名額已滿回 `error.code = "capacity"`。
+- 前端衝突狀態列、重複連結檢查，以及「登出所有裝置」的重入保護。
+
+Asset 4.26.1／shell v101、schema 12 不變，可直接回滾至 v4.26.0 image。
+
 ### Strava 與手動紀錄衝突時讓使用者選擇（SPEC-091，v4.26.0）
 
 - `strava_import.manual_matches` 的衝突帶 `duration_seconds`、`gear`、`candidate_run_ids`（當天未被自動連結的手動紀錄）；新的純函式 `resolve_conflicts` 驗證並套用選擇，連結時只在距離接近且配速合理時補時間。
