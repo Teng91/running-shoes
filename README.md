@@ -4,7 +4,7 @@
 
 Python 3.11 · FastAPI · SQLAlchemy · SQLite · 原生 JavaScript（不需要打包）· Chart.js · PWA · OpenRouter（function calling）· Docker · Fly.io · GitHub Actions · Playwright
 
-- 線上網址：https://running-shoes.fly.dev （開放註冊，每個帳號的資料完全隔離）
+- 線上網址：https://running-shoes.fly.dev （邀請制註冊：向管理員索取邀請碼；每個帳號的資料完全隔離）
 - 版本紀錄：[`CHANGELOG.md`](CHANGELOG.md)、相容性與回滾細節 [`docs/release-notes.md`](docs/release-notes.md)
 - 設計文件：[`docs/architecture.md`](docs/architecture.md)（SDD）、[`docs/testing-strategy.md`](docs/testing-strategy.md)、[`docs/specs/`](docs/specs/)（每個功能一份規格）、[`docs/adr/`](docs/adr/)
 
@@ -47,16 +47,16 @@ Python 3.11 · FastAPI · SQLAlchemy · SQLite · 原生 JavaScript（不需要�
 - **數字只算一次、到處一致**：里程、成本、壽命門檻、配速、目標進度都在後端算好；首頁、圖表、月報和 AI 讀的是同一個 read model，AI 只負責把數字寫成文字。
 - **不會弄丟或算錯資料**：每筆異動有版本檢查、冪等鍵與同交易的稽核紀錄；里程增減和跑步紀錄在同一個交易完成；刪除可以從異動歷史復原。
 - **手機優先、離線可用**：PWA 安裝到主畫面；離線時新增的跑步先存在 IndexedDB 佇列，恢復連線後自動送出且不重複。
-- **長期可維護**：每個功能先寫規格（63 份 spec）、每個驗收條件都對應到具名測試；`main` 受保護，只能透過 CI 全綠的 PR 合併。
+- **長期可維護**：每個功能先寫規格（83 份 spec）、每個驗收條件都對應到具名測試；`main` 受保護，只能透過 CI 全綠的 PR 合併。
 
 ### 規模
 
 | 項目 | 數量 |
 | --- | --- |
-| 正式版本 | 93 個 tag，2026-06 開始，目前 v4.17 |
+| 正式版本 | 116 個 tag，2026-06 開始，目前 v4.23 |
 | 自動化測試 | Python 731 項、前端 Node 回歸 228 項、40 組版面設定（WebKit／Chromium × 亮暗 × 10 種尺寸）、真實 CRUD E2E 與 PWA 升級／離線測試 |
-| 功能規格 | 63 份 SPEC，每份含 Goals、帳號隔離、migration／rollback 與 AC 追蹤 |
-| API | 54 個端點，與 `unit_tests/api_contract.json` 及下方 API 表自動比對 |
+| 功能規格 | 83 份 SPEC，每份含 Goals、帳號隔離、migration／rollback 與 AC 追蹤 |
+| API | 65 個端點，與 `unit_tests/api_contract.json` 及下方 API 表自動比對 |
 | 資料庫 | SQLite schema 12，每一版都有守衛的回滾腳本 |
 | 部署 | Fly.io 1 台 256MB 機器＋加密 volume，閒置自動休眠 |
 
@@ -166,7 +166,11 @@ flowchart LR
 | --- | --- |
 | 看到別人的資料 | 每個查詢與異動都帶 `user_id` 條件；跨帳號的鞋款關聯由外鍵與擁有權檢查擋下；測試以兩個帳號驗證每個統計 |
 | XSS、點擊劫持 | 嚴格 CSP：只允許同源 script 與建置時算好雜湊的啟動 script，禁止 inline 事件與 `eval`；禁止被 iframe 嵌入、`nosniff`；不可信 Markdown 安全渲染 |
-| 暴力登入、濫用 AI | 每帳號／每 IP／全站的限流，以 SQLite 共享計數讓多 worker 共用上限；註冊總數、每人資料量都有上限 |
+| 暴力登入、濫用 AI | 每帳號／每 IP／全站的限流，以 SQLite 共享計數讓多 worker 共用上限；同一 IP 對同一帳號 15 分鐘內失敗 10 次、或該帳號從各處失敗 100 次就暫時鎖定；AI 另有每帳號／全站每日額度；註冊總數、每人資料量都有上限 |
+| 陌生人註冊、帳號被接管 | 預設邀請制註冊，伺服器只存邀請碼雜湊；帳號名稱不分大小寫；改密碼、email 重設或管理員臨時密碼都讓所有舊 token 失效，綁定 email 的帳號會收到通知信 |
+| 忘記密碼流程被濫用 | 驗證碼 6 位數、10 分鐘、最多試 5 次，只存 HMAC；不論帳號是否存在都回同樣結果；每 IP／帳號／全站都有寄送上限 |
+| 大量請求灌爆服務 | 每個來源位址每分鐘 600 次 API 上限（記憶體計數，不寫資料庫），Fly 另設同時請求上限 |
+| 資料遺失 | 每次部署前在 volume 快照；每天把正式資料庫加密（AES-256）後存到 GitHub artifact，保留 30 天 |
 | 偷換模型、燒付費額度 | 後端只接受當日免費 tools 模型清單內的模型 ID，前端傳任意 ID 也不會使用伺服器金鑰 |
 | 提示注入 | 搜尋結果以不可信的 tool 結果傳入、限制長度並過濾網址；私人資料只來自資料庫工具 |
 | 憑證外流 | JSON 備份不含密碼雜湊或 token；改密碼後舊 token 立即失效；log 只記 metadata，不記內容或密碼 |
@@ -227,6 +231,8 @@ merge 到 main ─▶ 喚醒機器 → volume 上快照資料庫 → 部署 → 
 | 2026-10～11 | v4.0–4.14 | 安全標頭與 CSP、自動更新、訓練趨勢與年度回顧、AI 讀取統計工具 |
 | 2026-11-17 | v4.15–4.17 | repo 公開、每次 push 跑 CI、`main` 保護；跑步時間與配速；Strava 與手動紀錄配對；配速分析 |
 | 2026-11-17 | v4.18 | 比賽準備：目標賽事、預估完賽、強度分布與長距離檢查，取代只描述資料的配速圖 |
+| 2026-11-18 | v4.19–4.20 | 公開服務防護：AI 每日額度、全站 API 限流、HSTS；邀請制註冊、管理員邀請碼與臨時密碼、刪除帳號；每日加密異地備份 |
+| 2026-11-18～19 | v4.21–4.23 | Email 驗證碼找回密碼與密碼變更通知；淺色／深色／跟隨系統；公開 repo 的個人資料清理；新帳號引導 |
 
 ---
 
@@ -244,7 +250,7 @@ merge 到 main ─▶ 喚醒機器 → volume 上快照資料庫 → 部署 → 
 
 ### 直接使用線上服務
 
-開啟 [running-shoes.fly.dev](https://running-shoes.fly.dev/)，註冊帳號即可開始使用，每個人的跑鞋資料完全隔離。
+開啟 [running-shoes.fly.dev](https://running-shoes.fly.dev/)，用管理員給的邀請碼註冊帳號即可開始使用，每個人的跑鞋資料完全隔離。沒有邀請碼時請聯絡管理員。
 
 #### 安裝到 iPhone 主畫面
 
@@ -261,7 +267,7 @@ merge 到 main ─▶ 喚醒機器 → volume 上快照資料庫 → 部署 → 
 ### 自己部署
 
 開源專案，可依照下方「快速開始」在本機執行，也可以部署到自己的
-Fly.io 帳號或其他支援 Docker 的平台。
+Fly.io 帳號或其他支援 Docker 的平台。註冊預設需要邀請碼，而邀請碼只有管理員能產生，所以全新部署要先照下方「[第一次建立管理員帳號](#第一次建立管理員帳號)」建立第一個帳號。
 
 ## 目錄結構
 
@@ -509,6 +515,10 @@ venv/bin/python -m backend.run
 # 5. 開啟瀏覽器
 open http://localhost:8000
 ```
+
+Windows 把 `python3` 換成 `py -3`、`venv/bin/python` 換成 `venv\Scripts\python`，例如
+`py -3 -m venv venv`、`venv\Scripts\python -m backend.run`；本文件其他 `python3 scripts/task.py ...` 指令同理。
+本機註冊同樣預設需要邀請碼，第一個帳號請照「[第一次建立管理員帳號](#第一次建立管理員帳號)」建立。
 
 建議直接使用 `venv/bin/python`，因為指令本身就明確指定虛擬環境，不會因為換了
 Terminal、忘記 activate，或 IDE 使用另一個 shell 而誤用系統 Python。
@@ -1006,8 +1016,12 @@ Docker build context 排除 SQLite 主檔、WAL／SHM、DB 備份、backups 目�
 docker build -t running-shoes .
 
 # 2. 啟動 container（資料持久化）
+#    SECRET_KEY 必要，請產生一次後保存（例如 openssl rand -hex 32）：換新值會讓所有人重新登入、email 驗證碼失效
+#    ADMIN_USERNAMES 是之後能產生邀請碼的帳號；要用 AI 功能再加 -e OPENROUTER_API_KEY=...
 docker run -d -p 8000:8000 -v shoes-data:/data \
-  -e SECRET_KEY="$(openssl rand -hex 32)" --name running-shoes running-shoes
+  -e SECRET_KEY="<保存好的 64 字元密鑰>" \
+  -e ADMIN_USERNAMES="<你的帳號>" \
+  --name running-shoes running-shoes
 
 # 3. 在任何裝置瀏覽器開啟
 open http://你的IP:8000
@@ -1036,6 +1050,20 @@ fly secrets set ADMIN_USERNAMES="<你的帳號>"
 # 也可以在 Fly 網頁的 Secrets 頁面設定，密碼就不會留在終端機紀錄
 fly secrets set SMTP_USERNAME="<專用 Gmail>" SMTP_PASSWORD="<應用程式密碼>"
 ```
+
+### 第一次建立管理員帳號
+
+註冊預設是邀請制（`REGISTRATION_MODE=invite`），邀請碼只有 `ADMIN_USERNAMES` 裡的帳號能產生，但全新的資料庫一個帳號都沒有。第一次請暫時開放註冊，自己註冊完再關掉：
+
+```bash
+# Fly.io：設定管理員名稱並暫時開放註冊（設定 secret 會自動重新部署）
+fly secrets set ADMIN_USERNAMES="<你的帳號>" REGISTRATION_MODE=open
+# 打開網站，用上面那個名稱註冊；側邊欄出現「邀請碼管理」就代表是管理員
+# 註冊完立刻改回預設的邀請制
+fly secrets unset REGISTRATION_MODE
+```
+
+本機或 Docker 一樣：在 `.env` 或 `-e` 加上 `REGISTRATION_MODE=open`，註冊完移除並重新啟動。開放期間任何知道網址的人都能註冊，包括搶先註冊管理員的名稱，所以請部署後立刻完成，並確認自己看得到「邀請碼管理」。之後其他人用你在「邀請碼管理」產生的邀請碼註冊。
 
 全新空資料庫不需要 `MIGRATION_PASSWORD`。只有升級尚未綁定使用者的舊版資料庫，或明確啟用 `SEED_DATA=true` 範例資料時才需要設定：
 
@@ -1269,11 +1297,13 @@ venv/bin/python -m backend.run
 
 ## 多使用者
 
-任何人都可以在登入頁面註冊帳號，每個使用者的跑鞋資料完全隔離，互看不到。
+註冊方式由 `REGISTRATION_MODE` 決定：預設 `invite` 需要管理員產生的邀請碼，`open` 任何人都能註冊，`closed` 不開放註冊（其他值一律視為 `closed`）。每個使用者的跑鞋資料完全隔離，互看不到；管理員只能管理邀請碼和產生臨時密碼，看不到別人的跑步資料。
+
+登入後的 token 存在這台裝置的瀏覽器，7 天後過期。「登出」只清除這台裝置；懷疑別的裝置或 token 外流時，請更改密碼，所有裝置上的登入會立即失效。
 
 ## API 一覽
 
-除了 `/health/live`、`/health/ready` 與登入／註冊，所有端點都需要 `Authorization: Bearer <token>`，而且只讀寫目前帳號的資料。
+除了 `/health/live`、`/health/ready`、`GET /api/auth/registration`、登入、註冊與忘記密碼（`/api/auth/password-reset/*`），所有端點都需要 `Authorization: Bearer <token>`，而且只讀寫目前帳號的資料。
 本機（`ENVIRONMENT=development`）啟動後可以開啟 `http://localhost:8000/docs` 查看 Swagger 文件；正式環境關閉 `/docs` 與 `/redoc`，只保留 `/openapi.json` 給部署檢查使用（SPEC-071）。`docs-check` 會確認下表列出 `unit_tests/api_contract.json` 的每一個端點（SPEC-058）。
 
 | 分類 | API | 用途 |

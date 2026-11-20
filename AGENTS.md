@@ -97,6 +97,7 @@
 - `frontend/app-charts.js`: shared chart registry and label utilities.
 - `frontend/app-shoe-charts.js`: shoe lifecycle, cost, retirement, and allocation charts.
 - `frontend/app-monthly-charts.js`: month/year selectors and monthly/annual mileage charts.
+- `frontend/app-pace-charts.js`: race goal form, race readiness cards and pace trend charts (SPEC-065).
 - `frontend/app-spending.js`: spending cards, charts, and table.
 - `frontend/app-actions.js`: delegated `data-click`/`data-change`/… UI actions; markup and generated rows never contain inline JavaScript handlers (the page CSP blocks them).
 - `frontend/offline.html`: script-free offline fallback with its own strict CSP.
