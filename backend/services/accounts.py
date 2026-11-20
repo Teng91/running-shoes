@@ -74,7 +74,8 @@ def login(db: Session, username: str, password: str, *, secret_key: str):
     if not verify_password(password, user.hashed_password):
         raise Unauthorized("Incorrect username or password")
     token = create_access_token(
-        {"sub": user.username, "token_version": user.token_version}, secret_key=secret_key,
+        {"sub": user.username, "token_version": user.token_version, "aid": user.backup_id},
+        secret_key=secret_key,
     )
     return {"access_token": token, "token_type": "bearer"}
 

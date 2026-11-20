@@ -37,13 +37,13 @@ jobs:
             echo "::error::FLY_API_TOKEN is not set"
             exit 1
           fi
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.11"
-      - uses: superfly/flyctl-actions/setup-flyctl@1.5
+      - uses: superfly/flyctl-actions/setup-flyctl@fc53c09e1bc3be6f54706524e3b82c4f462f77be # 1.5
       - name: Wake the production machine
         run: |
           for attempt in $(seq 1 12); do
@@ -76,7 +76,7 @@ jobs:
             grep -Eq "$part" <<< "$listing" || { echo "::error::encrypted archive is missing $part"; exit 1; }
           done
           echo "Encrypted archive ready: $(basename "$archive") ($(stat -c %s "$archive") bytes)"
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: encrypted-database-${{ github.run_id }}
           path: ${{ runner.temp }}/upload/*.tar.gz.enc
