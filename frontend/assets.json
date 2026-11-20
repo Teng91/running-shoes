@@ -1,6 +1,6 @@
 {
-  "version": "4.24.2",
-  "cache_name": "running-shoes-shell-v96",
+  "version": "4.25.0",
+  "cache_name": "running-shoes-shell-v97",
   "scripts": [
     "app-boot.js",
     "app-lifecycle.js",

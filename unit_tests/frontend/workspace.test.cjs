@@ -337,9 +337,9 @@ test('SPEC-035 workspace hides detailed offline caveats behind a disclosure', ()
   assert.match(modal, /<summary>離線時如何記錄<\/summary>/);
   assert.match(modal, /id="workspace-sync"[^>]*>更新雲端資料<\/button>/);
   assert.match(modal, /沒有待送出的跑步時|清單為空時可用它重新載入雲端資料/);
-  assert.equal((modal.match(/<details class="workspace-section">/g) || []).length, 6, 'SPEC-075 account deletion and SPEC-080 password change');
+  assert.equal((modal.match(/<details class="workspace-section">/g) || []).length, 7, 'SPEC-075 account deletion, SPEC-080 password change and SPEC-088 logging out everywhere');
   assert.doesNotMatch(modal, /<details class="workspace-section" open/);
-  for (const label of ['未完成的編輯草稿', '備份／匯入帳號資料', '異動紀錄與誤刪復原', '清除此裝置的本機資料', '刪除帳號']) {
+  for (const label of ['未完成的編輯草稿', '備份／匯入帳號資料', '異動紀錄與誤刪復原', '清除此裝置的本機資料', '登出所有裝置', '刪除帳號']) {
     assert.match(modal, new RegExp(label));
   }
 });

@@ -49,6 +49,7 @@
   "POST /api/auth/email/remove",
   "POST /api/auth/email/request",
   "POST /api/auth/login",
+  "POST /api/auth/logout-all",
   "POST /api/auth/password-reset/confirm",
   "POST /api/auth/password-reset/request",
   "POST /api/auth/register",

@@ -4,6 +4,13 @@
 每版的摘要見 [CHANGELOG.md](../CHANGELOG.md)；目前的功能與操作方式以 [README](../README.md) 為準。
 這裡保留當時的文字，後續版本可能已調整其中的行為。
 
+### 登出所有裝置與註冊不洩漏帳號名稱（SPEC-088，v4.25.0）
+
+- 新增 `POST /api/auth/logout-all`：`accounts.logout_everywhere` 在帳號的寫入交易裡把 `token_version` 加 1，所有舊 token（包括送出請求的這一個）下一次請求回 401。前端在「資料與同步」新增區塊，成功後才清除這台的登入。
+- `accounts.register` 在邀請制下先兌換邀請碼，再檢查名稱、管理員名稱與名額；被拒時整個交易回滾，邀請碼不會被用掉。無效邀請碼一律回 `Invalid invite code`。
+
+Asset 4.25.0／shell v97、schema 12 不變，可直接回滾至 v4.24.2 image；舊版沒有這個 API，按鈕會顯示失敗訊息。
+
 ### 登入綁定帳號、Actions 釘選與瀏覽器儲存（SPEC-087，v4.24.2）
 
 - `accounts.login` 簽發的 token 多帶 `aid`（帳號的 `backup_id`），`auth.get_current_user` 在 `aid` 與帳號不符時回 401 `Session expired; please log in again`。`users.id` 沒有 AUTOINCREMENT，最新的帳號刪除後同名重新註冊會拿到相同的 id 與 `token_version`，只靠名稱和版本分不出來。沒有 `aid` 的舊 token 照常接受，最遲 2026-11-27 全部到期。
