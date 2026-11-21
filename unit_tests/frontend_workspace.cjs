@@ -73,17 +73,17 @@ module.exports = async function checkWorkspace(browser, baseUrl) {
       if (!await summary.evaluate(element => element.parentElement.open)) await summary.click();
     }
     await page.goto(browserUrl, { waitUntil: 'networkidle' });
-    await page.waitForFunction(() => localWorkspace.controller?.account && shoes.length === 1);
+    await page.waitForFunction(() => localWorkspace.controller?.account && coreData.shoes.length === 1);
     await page.evaluate(async () => { await navigator.serviceWorker.ready; });
     await page.waitForFunction(() => navigator.serviceWorker.controller);
     await page.locator('.tab[data-tab="runs"]').click();
     await page.locator('#run-date').fill('2026-01-02');
     await page.locator('#run-shoe').selectOption(String(shoe.id));
     await page.locator('#run-km').fill('5');
-    await page.evaluate(() => { shoeModal.openForEdit(shoes[0], false); });
+    await page.evaluate(() => { shoeModal.openForEdit(coreData.shoes[0], false); });
     await page.locator('#f-nickname').fill('Unfinished nickname');
     await page.evaluate(() => { shoeModal.close(); });
-    await waitForAsync(page, async () => (await localWorkspace.controller.read('drafts'))[0]?.value.editors['shoe:' + shoes[0].id]?.values['f-nickname'] === 'Unfinished nickname');
+    await waitForAsync(page, async () => (await localWorkspace.controller.read('drafts'))[0]?.value.editors['shoe:' + coreData.shoes[0].id]?.values['f-nickname'] === 'Unfinished nickname');
     await page.reload({ waitUntil: 'networkidle' });
     await page.waitForFunction(() => document.getElementById('run-km').value === '5');
     await page.getByRole('button', { name: '資料與同步', exact: true }).click();
@@ -111,9 +111,9 @@ module.exports = async function checkWorkspace(browser, baseUrl) {
     await waitForAsync(page, async () => document.getElementById('run-km').value === '' && (await localWorkspace.controller.read('queue')).length === 1);
     assert.equal((await api(a.token, '/runs')).length, 0, 'offline acceptance does not write server');
     await page.reload({ waitUntil: 'domcontentloaded' });
-    await waitForAsync(page, async () => localWorkspace.controller?.account && shoes.length === 1 && (await localWorkspace.controller.read('queue')).length === 1, null, {
+    await waitForAsync(page, async () => localWorkspace.controller?.account && coreData.shoes.length === 1 && (await localWorkspace.controller.read('queue')).length === 1, null, {
       describe: async () => ({ ready: localWorkspace.ready, account: localWorkspace.controller?.account ?? null, error: localWorkspace.error,
-        shoes: typeof shoes === 'undefined' ? 'undefined' : shoes.length, user: typeof currentUser === 'undefined' ? 'undefined' : currentUser,
+        shoes: typeof coreData === 'undefined' ? 'undefined' : coreData.shoes.length, user: typeof currentUser === 'undefined' ? 'undefined' : currentUser,
         queue: localWorkspace.controller ? (await localWorkspace.controller.read('queue')).length : 'no-controller',
         onLine: navigator.onLine, sw: Boolean(navigator.serviceWorker?.controller), title: document.title,
         bootText: document.getElementById('boot-status')?.textContent ?? null, body: document.body?.innerText.slice(0, 300) }),
@@ -268,7 +268,7 @@ module.exports = async function checkWorkspace(browser, baseUrl) {
     // Real BroadcastChannel between two tabs; only the second tab consumes IDB.
     const otherPage = await context.newPage();
     await otherPage.goto(browserUrl, { waitUntil: 'networkidle' });
-    await otherPage.waitForFunction(() => localWorkspace.controller?.account && shoes.length === 1);
+    await otherPage.waitForFunction(() => localWorkspace.controller?.account && coreData.shoes.length === 1);
     const queuedIdentity = 'cross-tab-' + suffix;
     const date = await page.evaluate(() => localDateISO());
     await page.evaluate(async ({ date, shoeId, identity }) => {

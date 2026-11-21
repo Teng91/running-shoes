@@ -102,10 +102,10 @@ async function fixture(browser, url, scenario) {
       await page.getByRole('button', { name: /匯入 Strava/ }).click();
       await chooseFile('first.csv'); await page.locator('#strava-import-btn').click();
       if (scenario === 'history') {
-        await page.waitForFunction(() => stravaImports.length === 1);
+        await page.waitForFunction(() => coreData.stravaImports.length === 1);
         gate.resolve();
         await page.waitForFunction(() => activeHttpRequests.size === 0);
-        assert.equal(await page.evaluate(() => stravaImports.length), 1);
+        assert.equal(await page.evaluate(() => coreData.stravaImports.length), 1);
         await page.getByRole('button', { name: /匯入 Strava/ }).click();
         assert.equal(await page.locator('#strava-start-date').inputValue(), '2026-10-01');
         assert.equal(importCalls, 1); assert.equal(historyCalls, 2);
