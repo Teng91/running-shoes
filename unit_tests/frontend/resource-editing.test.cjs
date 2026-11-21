@@ -115,7 +115,7 @@ test('SPEC-026 Strava mapping lock follows the current import window', async () 
   controller.open(); let preview = controller.beginPreview(); controller.acceptPreview(preview, { gear_groups: [{ gear: 'A' }], importable_count: 1 }, 'a|1|1||');
   const context = vm.createContext({ stravaController: controller, document: { getElementById: id => elements[id], querySelectorAll: () => controls },
     closeStravaModal: () => controller.close(), alert() {}, loadData: async () => {} });
-  vm.runInContext(['stravaInputKey', 'setStravaMappingDisabled', 'importStrava', 'stravaConflictChoices',
+  vm.runInContext(['stravaInputKey', 'stravaIncludesWalks', 'setStravaMappingDisabled', 'importStrava', 'stravaConflictChoices',
     'stravaHasChanges', 'updateStravaImportButton'].map(extract).join('\n'), context);
   const importing = context.importStrava(); assert.equal(controls[0].disabled, true);
   controller.close(); controller.open(); preview = controller.beginPreview();
