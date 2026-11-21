@@ -582,7 +582,7 @@ def test_reimport_moves_runs_stored_on_the_old_utc_date(client, db, user_with_to
 def test_deleted_strava_activity_is_not_reimported_and_preview_counts_it(client, db, user_with_token):
     """SPEC-055: deleting an imported run keeps that activity deleted across CSV re-imports."""
     from backend.models import User
-    from unit_tests.token_helpers import create_access_token
+    from unit_tests.token_helpers import token_for
 
     user, token = user_with_token
     shoe = Shoe(user_id=user.id, brand="Mizuno", model="Wave Sky 7", date="2026-01-01", mileage=0)
@@ -609,6 +609,6 @@ def test_deleted_strava_activity_is_not_reimported_and_preview_counts_it(client,
     other_shoe = Shoe(user_id=other.id, brand="Mizuno", model="Wave Sky 7", date="2026-01-01")
     db.add(other_shoe)
     db.commit()
-    other_token = create_access_token({"sub": other.username})
+    other_token = token_for(other)
     other_mapping = f'{{"Mizuno Wave Sky 7": {other_shoe.id}, "": null}}'
     assert upload(client, "/api/runs/import/strava", other_token, other_mapping).json()["imported"] == 1

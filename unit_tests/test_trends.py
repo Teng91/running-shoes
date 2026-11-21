@@ -10,7 +10,7 @@ from backend.dependencies import get_db
 from backend.main import app
 from backend.models import Run, RunningGoal, Shoe, User
 from backend.read_models.trends import shoe_timeline, training_trends
-from unit_tests.token_helpers import create_access_token
+from unit_tests.token_helpers import token_for
 
 
 @pytest.fixture
@@ -155,7 +155,7 @@ def test_trend_endpoints_are_user_scoped(client, db, user_with_token):
 
     assert [row["date"] for row in trends["daily"]] == ["2026-01-05"]
     assert [row["shoe_id"] for row in timeline["shoes"]] == [mine.id]
-    other_headers = {"Authorization": f"Bearer {create_access_token(data={'sub': 'other'})}"}
+    other_headers = {"Authorization": f"Bearer {token_for(other)}"}
     other_trends = client.get("/api/analytics/trends?year=2026", headers=other_headers).json()
     assert [row["km"] for row in other_trends["daily"]] == [42]
     assert client.get("/api/analytics/trends?year=2026").status_code == 401

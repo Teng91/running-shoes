@@ -42,8 +42,8 @@ def register(request: Request, payload: schemas.UserCreate, db: Session = Depend
 @router.post("/login", response_model=schemas.Token)
 def login(request: Request, payload: schemas.UserLogin, db: Session = Depends(get_db)):
     enforce_auth_rate_limit(request)
-    # Lockouts key on the case-folded name, like the account lookup (SPEC-075).
-    account = payload.username.strip().casefold()
+    # Lockouts key on the account identity of the name, like the lookup (SPEC-075, SPEC-093).
+    account = accounts.username_key(payload.username)
     reject_locked_account(request, account)
     try:
         with service_errors():
@@ -82,7 +82,7 @@ def delete_account(request: Request, payload: schemas.AccountDelete,
 def change_password(request: Request, payload: schemas.UserChangePassword, background: BackgroundTasks,
                     db: Session = Depends(get_db)):
     enforce_auth_rate_limit(request)
-    account = payload.username.strip().casefold()
+    account = accounts.username_key(payload.username)
     reject_locked_account(request, account)
     try:
         with service_errors():
@@ -141,7 +141,8 @@ def request_password_reset(request: Request, payload: schemas.PasswordResetReque
     """Same answer and timing whether or not the account exists: mail is sent after the response."""
     mailer = _mailer(request)
     enforce_auth_rate_limit(request)
-    enforce_mail_limits(request, "reset:" + payload.identifier.strip().casefold())
+    # SPEC-093: the username and the bound email of one account share one mail budget.
+    enforce_mail_limits(request, "reset:" + email_codes.attempt_key(db, payload.identifier))
 
     with service_errors():
         return email_codes.request_password_reset(db, payload.identifier,

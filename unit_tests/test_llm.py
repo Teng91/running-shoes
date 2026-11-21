@@ -15,8 +15,13 @@ from backend import llm
 
 
 @pytest.fixture(autouse=True)
-def restore_model_cache():
-    """Keep global model-cache state isolated between tests."""
+def restore_model_cache(monkeypatch):
+    """Keep global model-cache state isolated between tests.
+
+    These tests set OPENROUTER_API_KEY in the environment, which the adapter reads only
+    while no application has configured it (SPEC-093), so clear any earlier app's config.
+    """
+    monkeypatch.setattr(llm, "_config", None)
     cached_models = dict(llm._MODELS_CACHE)
     cache_meta = dict(llm._MODELS_CACHE_META)
     yield
@@ -267,7 +272,7 @@ def test_fetch_free_models_rejects_or_skips_malformed_catalog(monkeypatch, paylo
 def test_get_models_preserves_today_usage_order(monkeypatch):
     llm._MODELS_CACHE.clear()
     llm._MODELS_CACHE_META.clear()
-    monkeypatch.setattr(llm, "_OR_DEFAULT", None)
+    monkeypatch.setattr(llm, "_config", llm.LLMConfig(default_model=None))
     monkeypatch.setattr(
         llm,
         "_fetch_free_models",
@@ -287,7 +292,7 @@ def test_get_models_preserves_today_usage_order(monkeypatch):
 def test_get_models_honors_current_day_preference_only(monkeypatch):
     llm._MODELS_CACHE.clear()
     llm._MODELS_CACHE_META.clear()
-    monkeypatch.setattr(llm, "_OR_DEFAULT", "vendor/preferred:free")
+    monkeypatch.setattr(llm, "_config", llm.LLMConfig(default_model="vendor/preferred:free"))
     monkeypatch.setattr(
         llm,
         "_fetch_free_models",
@@ -471,7 +476,7 @@ def test_call_llm_stream_yields_content(monkeypatch):
     assert chunks == ["跑鞋", "建議"]
     assert create.call_args.kwargs["model"] == "openrouter/free"
     assert create.call_args.kwargs["stream"] is True
-    assert create.call_args.kwargs["max_tokens"] == llm._LLM_MAX_OUTPUT_TOKENS
+    assert create.call_args.kwargs["max_tokens"] == llm.current_config().max_output_tokens
 
 
 def _real_sdk_stream(monkeypatch, deltas, **stream_kwargs):
@@ -809,3 +814,24 @@ def test_call_llm_stream_preserves_llm_errors_from_iterator(monkeypatch):
 
     with pytest.raises(llm.LLMError, match="upstream detail"):
         list(llm.call_llm_stream(llm.LLMProvider.openrouter, "openrouter/free", []))
+
+
+def test_spec_093_create_app_injects_the_key_and_limits_without_import_time_reads(monkeypatch, tmp_path):
+    """The adapter takes its key, preferred model and output limit from the app's settings."""
+    from dataclasses import replace
+
+    from backend.app_factory import create_app
+    from backend.settings import settings
+
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    config = replace(settings, seed_data=False, frontend_dir=tmp_path, openrouter_api_key="injected-key",
+                     openrouter_default_model="vendor/model:free", llm_max_output_tokens=777)
+    from sqlalchemy import create_engine
+
+    create_app(config, db_engine=create_engine("sqlite://"))
+    assert llm.current_config() == llm.LLMConfig("injected-key", "vendor/model:free", 777)
+    assert "injected-key" not in repr(llm.current_config())
+    assert "injected-key" not in repr(config)
+    import inspect
+    source = inspect.getsource(llm)
+    assert "os.environ" not in source and "load_dotenv" not in source

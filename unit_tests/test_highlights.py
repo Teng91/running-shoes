@@ -15,7 +15,7 @@ from backend.read_models.highlights import (
     shoe_suggestion,
     year_review,
 )
-from unit_tests.token_helpers import create_access_token
+from unit_tests.token_helpers import token_for
 
 
 @pytest.fixture
@@ -141,7 +141,7 @@ def test_highlight_endpoints_are_user_scoped(client, db, user_with_token):
     assert [row["shoe_id"] for row in home["suggestion"]] == [mine.id]
     assert review["total_km"] == 5
     assert [row["shoe_id"] for row in mix["shoes"]] == [mine.id]
-    other_headers = {"Authorization": f"Bearer {create_access_token(data={'sub': 'other'})}"}
+    other_headers = {"Authorization": f"Bearer {token_for(other)}"}
     assert [row["shoe_id"] for row in client.get("/api/analytics/home", headers=other_headers).json()["suggestion"]] == [theirs.id]
     for path in ("/api/analytics/home", "/api/analytics/year-review?year=2026", "/api/analytics/shoe-distance-mix"):
         assert client.get(path).status_code == 401

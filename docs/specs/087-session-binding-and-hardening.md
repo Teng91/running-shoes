@@ -59,7 +59,7 @@
 | Acceptance criterion | Named test / command |
 | --- | --- |
 | AC-1 | `unit_tests/test_invites_and_accounts.py::test_a_deleted_accounts_token_never_opens_a_new_account_with_the_same_name` |
-| AC-2 | `unit_tests/test_invites_and_accounts.py::test_a_token_names_its_account_and_older_tokens_keep_working` |
+| AC-2 | `unit_tests/test_invites_and_accounts.py::test_a_token_names_its_account_and_one_without_it_is_refused` |
 | AC-3 | `unit_tests/test_deploy_workflow.py::test_every_action_from_another_repository_is_pinned_to_a_commit` |
 | AC-4 | `unit_tests/frontend/reliability.test.cjs::SPEC-087 a browser that blocks site storage still starts and keeps the login in memory` |
 | AC-5 | `unit_tests/test_invites_and_accounts.py::test_only_admins_reach_admin_routes_and_me_says_who_is_admin` |

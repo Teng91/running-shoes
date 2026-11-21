@@ -5,7 +5,7 @@
 - `backend/main.py`: minimal ASGI entry point; it must only import `backend.app_factory`.
 - `backend/app_factory.py`: FastAPI composition, injectable lifecycle dependencies, routers, and SPA fallback.
 - `backend/settings.py`: immutable typed runtime configuration.
-- `backend/clock.py`: the single application timezone, `local_now()` and `local_today()`; never hard-code UTC offsets or use the server zone elsewhere.
+- `backend/clock.py`: the single application timezone, `local_now()` and `local_today()`; never hard-code UTC offsets or use the server zone elsewhere (the frontend mirrors it as `APP_UTC_OFFSET_MINUTES` in `app-state.js` and never takes calendar days from the device zone, SPEC-093).
 - `backend/forecasting.py`: shared retirement policy and batched user-scoped forecasts.
 - `backend/run_metrics.py`: canonical run duration bounds and pace (seconds per km, time-weighted averages); pace is derived, never stored (SPEC-060), and the bounds are mirrored in `frontend/app-state.js`.
 - `backend/read_models/race_readiness.py`: target race, Riegel prediction, intensity zones relative to goal race pace and long-run readiness (SPEC-065); `routers/race_goal.py` and `services/race_goals.py` own the race goal reads and writes.
@@ -14,7 +14,7 @@
 - `backend/seeding.py`: optional default data using an injected session factory.
 - `backend/middleware.py`: request-level transport guards: security headers on every response (SPEC-054), the in-memory per-address `/api/` request budget (SPEC-073, no SQLite writes) and Strava/backup upload size limits.
 - `backend/observability.py`: request IDs and metadata-only structured HTTP logs; never log bodies, tokens or passwords.
-- `backend/auth.py`: HTTP bearer adapter; always decodes with the app's injected key (tests sign through `unit_tests/token_helpers.py`) and rejects a token whose `aid` is not the account's `backup_id` (SPEC-087).
+- `backend/auth.py`: HTTP bearer adapter; always decodes with the app's injected key (tests sign through `unit_tests/token_helpers.token_for`) and rejects a token whose `aid` is missing or not the account's `backup_id` (SPEC-087, SPEC-093).
 - `backend/models.py`, `schemas.py`: ORM tables and Pydantic request/response contracts with input validation.
 - `backend/read_models/insights.py`, `goal_progress.py`, `report_snapshot.py`: read-only home insights, goal progress and monthly-report snapshots (moved from `backend/` in SPEC-090); their writes live in `backend/services/`.
 - `backend/exporting.py`, `strava_import.py`: pure CSV/XLSX export rows and Strava CSV parsing; `backend/services/exports.py`, `strava_imports.py` own the use cases.
@@ -32,12 +32,12 @@
 - `backend/read_models/rounding.py`: shared aggregate rounding (`round_metric`); do not redefine local `_round` helpers.
 - `scripts/document_contracts.py`: Markdown links, feature-spec structure, AC completion, traceability path validation, and the README tree / SDD module inventory (SPEC-053).
 - `backend/credentials.py`: HTTP-independent bcrypt/JWT primitives; runtime secrets are injected.
-- `backend/services/accounts.py`, `goals.py`: account and goal writes, domain errors, and transactions; usernames are case-insensitive (`accounts.find_user`) and `delete_account` removes every table holding `user_id` (SPEC-075).
+- `backend/services/accounts.py`, `goals.py`: account and goal writes, domain errors, and transactions; usernames ignore ASCII case only, like SQLite's `lower()` (`accounts.username_key`/`find_user`, SPEC-093) and `delete_account` removes every table holding `user_id` (SPEC-075).
 - `backend/mailer.py`, `backend/services/email_codes.py`: Gmail SMTP adapter injected as `app.state.mailer` (None without `SMTP_USERNAME`/`SMTP_PASSWORD`; tests inject a fake) and the email-binding / password-reset codes (HMAC only, 10 minutes, 5 attempts, neutral answers) (SPEC-079).
 - `backend/services/invites.py`, `backend/routers/admin.py`: invite-only registration (only code hashes are stored) and the admin's invite and temporary-password routes; admins come from `ADMIN_USERNAMES` (SPEC-075).
 - `backend/services/reports.py`: injected report generation and domain events; `report_storage.py` owns latest-generation conditional transactions.
 - `backend/report_llm.py`, `backend/report_protocol.py`: model and SSE adapters; neither owns persistence.
-- `backend/llm.py`: process-wide OpenRouter adapter (API key, `OR_MODEL`, output-token limit and model cache come from the environment, not `create_app` settings); users only see `user_facing_error()` text, raw provider error bodies go to the server log.
+- `backend/llm.py`: OpenRouter adapter with a process-wide model cache; `create_app` injects the API key, `OR_MODEL` and output-token limit as `LLMConfig` (SPEC-093), and the module never reads the environment itself; users only see `user_facing_error()` text, raw provider error bodies go to the server log.
 - `backend/services/fingerprints.py`: canonical payload fingerprints for receipts, backups and import plans; `mutation_receipts` is the only keyed receipt and operation keys never replace authentication.
 - `backend/services/retention.py`: per-account caps for audit events, receipts and run tombstones, applied inside `write_transaction`.
 - `backend/audit_schema.py`: same-transaction domain audit and revision triggers; never audit credentials.

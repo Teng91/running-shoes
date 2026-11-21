@@ -15,7 +15,7 @@ from sqlalchemy.pool import StaticPool
 from backend.credentials import get_password_hash
 from backend.database import Base
 from backend.models import MonthlyMileage, Shoe, User
-from unit_tests.token_helpers import create_access_token
+from unit_tests.token_helpers import token_for
 
 
 @contextmanager
@@ -81,7 +81,7 @@ def user_with_token(db):
     db.add(user)
     db.commit()
     db.refresh(user)
-    token = create_access_token(data={"sub": "testuser"})
+    token = token_for(user)
     return user, token
 
 

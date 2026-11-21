@@ -9,11 +9,11 @@ from backend.dependencies import get_db
 from backend.main import app
 from backend.models import Run, RunningGoal, Shoe, User
 from backend.read_models import goal_progress
-from unit_tests.token_helpers import create_access_token
+from unit_tests.token_helpers import token_for_name
 
 
-def _headers(username: str) -> dict[str, str]:
-    token = create_access_token(data={"sub": username})
+def _headers(db, username: str) -> dict[str, str]:
+    token = token_for_name(db, username)
     return {"Authorization": f"Bearer {token}"}
 
 
@@ -29,20 +29,20 @@ def test_goal_defaults_and_update_are_per_user(db):
     app.dependency_overrides[get_db] = override_get_db
     try:
         with TestClient(app) as client:
-            default = client.get("/api/running-goal", headers=_headers("goal-a"))
+            default = client.get("/api/running-goal", headers=_headers(db, "goal-a"))
             assert default.json() == {
                 "version": 0, "start_year": 2026,
                 "monthly_km": 125.0, "yearly_km": 1500.0,
             }
             updated = client.put(
-                "/api/running-goal", headers=_headers("goal-a"),
+                "/api/running-goal", headers=_headers(db, "goal-a"),
                 json={"start_year": 2027, "monthly_km": 130},
             )
             assert updated.status_code == 200
             assert updated.json()["version"] == 1
             assert updated.json()["monthly_km"] == 130.0
             assert client.get(
-                "/api/running-goal", headers=_headers("goal-b")
+                "/api/running-goal", headers=_headers(db, "goal-b")
             ).json()["monthly_km"] == 125.0
             assert db.query(RunningGoal).count() == 1
     finally:
@@ -202,11 +202,11 @@ def test_year_goal_api_is_user_scoped(db):
     app.dependency_overrides[get_db] = override_get_db
     try:
         with TestClient(app) as client:
-            response = client.get("/api/running-goal/year?year=2026", headers=_headers("year-a"))
+            response = client.get("/api/running-goal/year?year=2026", headers=_headers(db, "year-a"))
             assert response.status_code == 200
             assert response.json() == goal_progress.year_goal_overview(db, first.id, 2026)
             assert response.json()["months"][0]["km"] == 10
-            assert client.get("/api/running-goal/year?year=1800", headers=_headers("year-a")).status_code == 422
+            assert client.get("/api/running-goal/year?year=1800", headers=_headers(db, "year-a")).status_code == 422
             assert client.get("/api/running-goal/year?year=2026").status_code == 401
     finally:
         app.dependency_overrides.clear()

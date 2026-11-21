@@ -297,6 +297,10 @@ SPEC-032：合成資料驗證歷史筆數上限（v4.7.3 起 10,000／10,001）�
 
 [規格與具名案例](specs/061-ci-on-every-push-and-protected-main.md) 以文字解析 workflow：觸發條件是不限分支的 push、pull request、每週排程與手動執行，沒有 `paths-ignore`；部署條件仍只有 main 的 push／手動執行；main 以外的 ref 由較新的執行取消舊的，main 不取消。ruleset 由 `.github/rulesets/main.json` 描述，Python 測試確認它要求 PR、必要檢查與 workflow 的 5 個測試 job 完全一致、禁止刪除與 force push，且沒有繞過名單。
 
+## SPEC-093 整體審查修正
+
+[規格與具名案例](specs/093-project-review-hardening.md) 以 Python 比對前端的時區偏移與 `clock.py`，並掃描前端不以裝置時區取年月日；Node VM 以 `Date.UTC` 固定的時刻確認東京午夜後的今天與預設月份仍是台灣日期。服務層測試確認只改距離造成不合理配速時回錯且資料不變；API 測試以真實的限流函式建立各種帳號視窗後刪除帳號、輪流以名稱與 email 申請重設密碼、在 open 模式註冊管理員名稱、註冊並登入「Ärger」，以及沒有 `aid` 的 token 回 401。另確認驗證碼雜湊用衍生金鑰、工具呼叫與串流開始前 session 不在交易中、`round_metric` 四捨五入且 read model 不再直接呼叫 `round(x, n)`、`create_app` 注入 LLM 設定且 `repr` 不含密鑰。
+
 ## SPEC-092 程式碼審查修正
 
 [規格與具名案例](specs/092-review-fixes.md) 以只出現在衝突活動的裝備建立 CSV，確認預覽有它的配對群組、兩筆連到同一筆手動紀錄回 400、配對後選擇匯入會真的匯入；註冊名額已滿回 `capacity`。前端 VM 測試確認重複連結時停用匯入並說明、狀態列顯示已選擇的筆數，以及「登出所有裝置」進行中再按不會送出第二個請求。

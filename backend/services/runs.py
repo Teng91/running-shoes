@@ -59,10 +59,15 @@ def update_run(db: Session, user_id: int, run_id: int, payload: schemas.RunUpdat
         expected_version = update_data.pop("expected_version", getattr(run, "version", 0))
         if "shoe_id" in update_data:
             _user_shoe_or_404(db, user_id, update_data["shoe_id"])
+        # The schema checks a duration against a submitted distance; these cover the stored
+        # side. SPEC-093: a distance edit must also keep a stored moving time plausible.
         duration = update_data.get("duration_seconds")
         if duration is not None and "km" not in update_data and not is_plausible_duration(duration, run.km):
-            # The schema checks duration against a submitted distance; this covers the stored one.
             raise Invalid("跑步時間與距離換算的配速不合理（每公里 1:00–60:00）")
+        stored_duration = getattr(run, "duration_seconds", None)
+        if ("km" in update_data and "duration_seconds" not in update_data and stored_duration is not None
+                and not is_plausible_duration(stored_duration, float(update_data["km"]))):
+            raise Invalid("新距離與已記錄的跑步時間換算的配速不合理（每公里 1:00–60:00），請一併修改或清除跑步時間")
         old_values = (run.shoe_id, run.date, run.km)
         new_values = (
             int(update_data.get("shoe_id", run.shoe_id)),
