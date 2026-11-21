@@ -113,6 +113,41 @@ def router_cross_imports(routers: Path) -> list[str]:
     return offenders
 
 
+# SPEC-094: shared core data is read everywhere but written only by the native-rule bridge.
+CORE_DATA_GLOBALS = (
+    "shoes", "retiredShoes", "monthlyMileages", "runningGoal", "stravaImports", "spendingSummary", "monthlySpending",
+)
+CORE_DATA_WRITER = "app-resources.js"
+CORE_DATA_DECLARATIONS = "app-state.js"
+_MUTATING_METHODS = "push|pop|shift|unshift|splice|sort|reverse|fill|copyWithin"
+
+
+def core_data_writers(frontend: Path, scripts: list[str]) -> list[str]:
+    """Lines outside app-resources.js that assign or mutate a core data global (SPEC-094)."""
+    names = "|".join(CORE_DATA_GLOBALS)
+    patterns = (
+        # Plain or compound assignment, not a comparison, arrow or a local declaration.
+        re.compile(rf"(?<![\w.$])(?<!let )(?<!const )(?<!var )(?:{names})\s*(?:[-+*/]?=)(?![=>])"),
+        # Destructuring into a global: [shoes, retiredShoes] = value
+        re.compile(rf"\[[^\]\n]*(?<![\w.$])(?:{names})\b[^\]\n]*\]\s*=(?![=>])"),
+        # Writes to an element or property: runningGoal.version = 2, shoes[0] = x
+        re.compile(rf"(?<![\w.$])(?:{names})(?:\[[^\]\n]+\]|\.\w+)+\s*(?:[-+*/]?=)(?![=>])"),
+        # In-place array mutation: shoes.sort(...)
+        re.compile(rf"(?<![\w.$])(?:{names})\.(?:{_MUTATING_METHODS})\("),
+    )
+    offenders = []
+    for filename in scripts:
+        if filename == CORE_DATA_WRITER:
+            continue
+        for number, line in enumerate((frontend / filename).read_text(encoding="utf-8").splitlines(), 1):
+            code = line.split("//", 1)[0]
+            if filename == CORE_DATA_DECLARATIONS and re.match(rf"\s*let (?:{names}) = ", code):
+                continue
+            if any(pattern.search(code) for pattern in patterns):
+                offenders.append(f"{filename}:{number}: {line.strip()}")
+    return offenders
+
+
 def check_feature_boundaries() -> None:
     for filename in ("runs.py", "shoes.py", "monthly.py", "auth.py", "goals.py", "reports.py", "workspace.py"):
         path = ROUTERS / filename
@@ -147,6 +182,8 @@ def check_feature_boundaries() -> None:
         source = (frontend / filename).read_text(encoding="utf-8")
         if re.search(r"\b(?:document|window|localStorage|fetch)\b", source):
             fail(f"native runtime module must remain DOM/transport independent: {filename}")
+    for offender in core_data_writers(frontend, manifest["scripts"]):
+        fail(f"core data must be written through applyCoreResource() in {CORE_DATA_WRITER}: {offender}")
 
 
 def iter_routes(routes):

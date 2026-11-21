@@ -18,7 +18,12 @@ async function loadStravaHistory() {
     if (result.error.name !== 'AbortError') console.warn('載入 Strava 匯入歷史失敗:', result.error);
     return;
   }
-  stravaImports = result.value;
+  try {
+    applyCoreResource('strava-history', result.value);
+  } catch (error) {
+    console.warn('Strava 匯入歷史格式不正確:', error);
+    return;
+  }
   renderStravaStatus();
   if (document.getElementById('strava-modal').classList.contains('active')) renderStravaImportHistory();
 }

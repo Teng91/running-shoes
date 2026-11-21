@@ -194,7 +194,7 @@ async function saveRunningGoal() {
     if (goalSaveOperation !== operation || !isCurrentAuthSession(operation.session)) return;
     invalidateDataResources(['goal', 'goal-progress', 'dashboard-analytics']);
     const serverValues = goalFormValues(goal);
-    runningGoal = goal;
+    applyCoreResource('goal', goal);
     const values = getFormDraft('goal').acknowledge(serverValues, operation.form, readForm(Object.keys(serverValues)));
     for (const [id, value] of Object.entries(values)) setGoalField(id, value);
     if (typeof persistWorkspaceDrafts === 'function') persistWorkspaceDrafts();

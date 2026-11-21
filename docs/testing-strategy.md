@@ -297,6 +297,10 @@ SPEC-032：合成資料驗證歷史筆數上限（v4.7.3 起 10,000／10,001）�
 
 [規格與具名案例](specs/061-ci-on-every-push-and-protected-main.md) 以文字解析 workflow：觸發條件是不限分支的 push、pull request、每週排程與手動執行，沒有 `paths-ignore`；部署條件仍只有 main 的 push／手動執行；main 以外的 ref 由較新的執行取消舊的，main 不取消。ruleset 由 `.github/rulesets/main.json` 描述，Python 測試確認它要求 PR、必要檢查與 workflow 的 5 個測試 job 完全一致、禁止刪除與 force push，且沒有繞過名單。
 
+## SPEC-094 前端核心資料只有一個寫入點
+
+[規格與具名案例](specs/094-core-data-single-writer.md) 以 Node 直接 import `runtime/core-data.mjs`，確認鞋款排序成新陣列、月跑量年份的保留與挑選、每種資源只傳回自己的欄位且格式錯誤被拒絕；再於 VM 實際載入 `app-lifecycle.js`、`app-state.js`、`app-resources.js`，確認初始值等於模組預設、bridge 只寫入傳回的欄位、登出重設回到預設。架構測試確認目前的前端沒有其他寫入點，並以暫存檔確認指定、解構、屬性寫入與就地排序會被逐行指出，讀取、比較、物件屬性、註解與區域宣告不會。其餘前端回歸測試透過共用 context 使用真正的 bridge 與規則。
+
 ## SPEC-093 整體審查修正
 
 [規格與具名案例](specs/093-project-review-hardening.md) 以 Python 比對前端的時區偏移與 `clock.py`，並掃描前端不以裝置時區取年月日；Node VM 以 `Date.UTC` 固定的時刻確認東京午夜後的今天與預設月份仍是台灣日期。服務層測試確認只改距離造成不合理配速時回錯且資料不變；API 測試以真實的限流函式建立各種帳號視窗後刪除帳號、輪流以名稱與 email 申請重設密碼、在 open 模式註冊管理員名稱、註冊並登入「Ärger」，以及沒有 `aid` 的 token 回 401。另確認驗證碼雜湊用衍生金鑰、工具呼叫與串流開始前 session 不在交易中、`round_metric` 四捨五入且 read model 不再直接呼叫 `round(x, n)`、`create_app` 注入 LLM 設定且 `repr` 不含密鑰。
