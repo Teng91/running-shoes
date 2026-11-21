@@ -115,14 +115,14 @@ def _intensity(runs: list[tuple[date, float, int | None]], pace_goal: float) -> 
         "total_seconds": total,
         "untimed_runs": untimed,
         "zones": [{"key": key, "label": label, "runs": counts[key], "km": round_metric(distance[key]),
-                   "seconds": time[key], "share": round(time[key] / total * 100, 1) if total else 0.0}
+                   "seconds": time[key], "share": round_metric(time[key] / total * 100, 1) if total else 0.0}
                   for key, label, _, _ in ZONES],
     }
 
 
 def _long_runs(runs: list[tuple[date, float, int | None]], goal: dict, as_of: date) -> dict:
     distance = goal["distance_km"]
-    threshold = round(distance * LONG_RUN_SHARE, 1)
+    threshold = round_metric(distance * LONG_RUN_SHARE, 1)
     start = as_of - timedelta(weeks=LONG_RUN_WEEKS)
     recent = [run for run in runs if run[0] > start]
     qualifying = [run for run in recent if run[1] >= threshold]

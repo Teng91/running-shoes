@@ -18,7 +18,7 @@ from backend.migrations import run_startup_migrations, schema_version
 from backend.models import Run, Shoe, User
 from backend.run_metrics import is_plausible_duration, pace_seconds_per_km
 from backend.strava_import import duration_backfills, parse_csv
-from unit_tests.token_helpers import create_access_token
+from unit_tests.token_helpers import token_for
 
 # The column layout of a real zh-TW Strava export: 經過時間 and 距離 appear twice
 # (the second 距離 is metres), 移動時間 once.
@@ -40,7 +40,7 @@ def client(db):
 
 
 def headers(user):
-    return {"Authorization": f"Bearer {create_access_token({'sub': user.username})}"}
+    return {"Authorization": f"Bearer {token_for(user)}"}
 
 
 def owner(db, name="pace-owner"):

@@ -21,7 +21,7 @@ function formatGoalKm(value, digits = 1) {
 
 // Years with history, the saved start year and next year; a draft year is always kept selectable.
 function goalStartYearOptions(selected) {
-  const current = new Date().getFullYear();
+  const current = appCalendarDate().year;
   const known = [...monthlyMileages.map(item => item.year), runningGoal.start_year, current, Number(selected || NaN)]
     .filter(year => Number.isInteger(year) && year >= 1900 && year <= 2100);
   const first = Math.min(...known), last = Math.max(current + 1, ...known);
@@ -80,7 +80,7 @@ function renderGoalProgress() {
   const target = document.getElementById('goal-overview');
   if (!target) return;
   prepareGoalForm();
-  loadGoalProgress(selectedYear || new Date().getFullYear());
+  loadGoalProgress(selectedYear || appCalendarDate().year);
 }
 
 async function loadGoalProgress(year) {

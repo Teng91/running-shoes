@@ -572,11 +572,14 @@ class StravaImportOut(BaseModel):
         return serialize_utc_timestamp(value)
 
 
+MutationKind = Literal["run.create", "run.update", "run.delete", "shoe.create", "shoe.update", "shoe.delete",
+                       "monthly.create", "monthly.update", "monthly.delete", "goal.update", "history.restore"]
+
+
 class MutationCommand(BaseModel):
     model_config = ConfigDict(extra="forbid")
     operation_id: str = Field(min_length=16, max_length=128, pattern=r"^[A-Za-z0-9._:-]+$")
-    kind: Literal["run.create", "run.update", "run.delete", "shoe.create", "shoe.update", "shoe.delete",
-                  "monthly.create", "monthly.update", "monthly.delete", "goal.update", "history.restore"]
+    kind: MutationKind
     entity_id: int | None = Field(default=None, gt=0)
     expected_version: int | None = Field(default=None, ge=0)
     payload: dict = Field(default_factory=dict)

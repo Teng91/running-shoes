@@ -4,6 +4,16 @@
 每版的摘要見 [CHANGELOG.md](../CHANGELOG.md)；目前的功能與操作方式以 [README](../README.md) 為準。
 這裡保留當時的文字，後續版本可能已調整其中的行為。
 
+### 整體審查修正（SPEC-093，v4.27.0）
+
+- 前端 `appCalendarDate()`／`localDateISO()` 依 `APP_UTC_OFFSET_MINUTES`（台灣 UTC+8，與 `backend/clock.py` 相同）計算日期，不再用裝置時區。
+- `services/runs.update_run` 只改距離時檢查已記錄時間的配速；`accounts.register` 只讓全新部署（open 模式、沒有任何帳號）的第一個帳號註冊管理員名稱；`accounts.username_key()` 只轉換 A–Z 大小寫，與 `uq_users_username_lower` 索引一致；`delete_account` 刪除以帳號 id 命名的限流紀錄；重設密碼寄信上限以 `email_codes.attempt_key()` 為 key。
+- `auth.get_current_user` 要求 `aid`；`email_codes.code_key()` 衍生驗證碼專用金鑰，部署當下尚未使用的驗證碼失效。
+- `llm.LLMConfig` 由 `create_app` 以 `Settings.openrouter_api_key`、`OR_MODEL`、`LLM_MAX_OUTPUT_TOKENS` 設定；環境變數名稱不變。Agent 串流開始前與每次工具呼叫後歸還資料庫連線。
+- `read_models/rounding.round_metric` 改為四捨五入，read model 統一使用；`agent.py` 的轉接函式移除。
+
+Asset 4.27.0／shell v102、schema 12 不變，可直接回滾至 v4.26.1 image（回滾後新版發出的驗證碼同樣失效）。
+
 ### 程式碼審查修正（SPEC-092，v4.26.1）
 
 - 預覽的 `gear_groups` 為每個衝突活動的裝備建立群組並加上 `conflict_count`（`count`／`km` 仍只算可直接匯入的活動）。

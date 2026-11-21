@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from backend import agent, llm
+from backend import agent, agent_planner, agent_protocol, llm
 from backend.tools import db_tools
 
 
@@ -66,11 +66,11 @@ def test_build_messages_keeps_only_nonempty_chat_turns():
     ],
 )
 def test_external_product_questions_require_web_search(message):
-    assert agent._requires_web_search(message) is True
+    assert agent_planner.requires_web_search(message) is True
 
 
 def test_personal_shoe_summary_does_not_force_web_search():
-    assert agent._requires_web_search("幫我分析目前的跑鞋") is False
+    assert agent_planner.requires_web_search("幫我分析目前的跑鞋") is False
 
 
 def test_time_sensitive_product_question_runs_search_before_model(monkeypatch):
@@ -108,7 +108,7 @@ def test_time_sensitive_product_question_runs_search_before_model(monkeypatch):
 
 
 def test_personal_fit_query_plan_prefetches_web_and_personal_data():
-    plan = agent._build_query_plan("EVO SL適合我嗎")
+    plan = agent_planner.build_query_plan("EVO SL適合我嗎")
 
     assert plan.web_queries == (
         "EVO SL 官方 規格",
@@ -118,7 +118,7 @@ def test_personal_fit_query_plan_prefetches_web_and_personal_data():
 
 
 def test_affirmative_follow_up_reuses_previous_suitability_question():
-    plan = agent._build_query_plan(
+    plan = agent_planner.build_query_plan(
         "好",
         [
             {"role": "user", "content": "EVO SL適合我嗎"},
@@ -176,13 +176,13 @@ def test_personal_fit_stream_executes_complete_plan_before_model(monkeypatch):
     ],
 )
 def test_latest_personal_data_uses_database_not_web(message, expected_tools):
-    plan = agent._build_query_plan(message)
+    plan = agent_planner.build_query_plan(message)
     assert plan.web_queries == ()
     assert plan.database_tools == expected_tools
 
 
 def test_latest_market_shoes_still_use_web():
-    plan = agent._build_query_plan("NB 最新跑鞋有哪些？")
+    plan = agent_planner.build_query_plan("NB 最新跑鞋有哪些？")
     assert len(plan.web_queries) == 2
     assert plan.database_tools == ()
 
@@ -290,8 +290,8 @@ def test_source_summary_prioritizes_official_taiwan_and_limits_noise(monkeypatch
 
 
 def test_search_payload_rejects_invalid_or_unrelated_output():
-    assert agent._search_payload("not json") is None
-    assert agent._search_payload('{"tool":"other"}') is None
+    assert agent_protocol.search_payload("not json") is None
+    assert agent_protocol.search_payload('{"tool":"other"}') is None
 
 
 def test_personal_fit_plan_reports_missing_database_context(monkeypatch):
@@ -316,29 +316,29 @@ def test_personal_fit_plan_reports_missing_database_context(monkeypatch):
 
 @pytest.mark.parametrize("message", ["hi", "你好", "謝謝你", "你是誰？"])
 def test_simple_conversation_does_not_offer_tools(message):
-    assert agent._should_offer_tools(message) is False
+    assert agent_planner.should_offer_tools(message) is False
 
 
 @pytest.mark.parametrize("message", ["分析我的跑鞋", "幫我排課表", "比較兩雙鞋"])
 def test_running_intents_offer_tools(message):
-    assert agent._should_offer_tools(message) is True
+    assert agent_planner.should_offer_tools(message) is True
 
 
 def test_lookup_and_contextual_follow_ups_offer_tools_without_forcing_a_call():
-    assert agent._should_offer_tools("幫我查 NB 的 SC Rebel v1") is True
-    assert agent._should_offer_tools(
+    assert agent_planner.should_offer_tools("幫我查 NB 的 SC Rebel v1") is True
+    assert agent_planner.should_offer_tools(
         "對",
         [{"role": "assistant", "content": "你要我上網查詢這雙鞋嗎？"}],
     ) is True
-    assert agent._should_offer_tools(
+    assert agent_planner.should_offer_tools(
         "SC Rebel v1 呢",
         [{"role": "user", "content": "幫我搜尋 NB 最新跑鞋"}],
     ) is True
-    assert agent._should_offer_tools(
+    assert agent_planner.should_offer_tools(
         "對",
         [{"role": "assistant", "content": "你喜歡藍色嗎？"}],
     ) is False
-    assert agent._should_offer_tools(
+    assert agent_planner.should_offer_tools(
         "謝謝你",
         [{"role": "user", "content": "幫我搜尋 NB 最新跑鞋"}],
     ) is False
@@ -403,7 +403,7 @@ def test_execute_tool_safely_contains_failures_and_rolls_back(monkeypatch):
 
     output = agent._execute_tool_safely("shoe_summary", [], database, 7)
     payload = json.loads(output)
-    event = _events([agent._tool_done_event("shoe_summary", output)])[0]
+    event = _events([agent_protocol.tool_done_event("shoe_summary", output)])[0]
 
     database.rollback.assert_called_once_with()
     assert payload["status"] == "tool_execution_failed"
@@ -414,7 +414,7 @@ def test_execute_tool_safely_contains_failures_and_rolls_back(monkeypatch):
 
 def test_tool_done_event_marks_structured_search_failure():
     event = _events([
-        agent._tool_done_event(
+        agent_protocol.tool_done_event(
             "web_search",
             '{"tool":"web_search","ok":false,"status":"request_failed",'
             '"error":"blocked"}',

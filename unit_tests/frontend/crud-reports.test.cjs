@@ -99,6 +99,18 @@ test('the report month defaults to the last complete month', () => {
   vm.runInContext(extract('previousMonthValue'), context);
   assert.equal(context.previousMonthValue(new Date(2027, 0, 15)), '2026-12');
   assert.equal(context.previousMonthValue(new Date(2026, 8, 19)), '2026-08');
+  // SPEC-093: 2026-12-01 00:30 in Tokyo is still 2026-11-30 in Taiwan, the service's calendar.
+  assert.equal(context.previousMonthValue(new Date(Date.UTC(2026, 10, 30, 15, 30))), '2026-10');
+});
+
+test('SPEC-093 today is the service calendar day, not the device time zone', () => {
+  const context = vm.createContext({ Date });
+  vm.runInContext(extract('localDateISO'), context);
+  // 23:30 in Taiwan is already 00:30 the next day in Tokyo; the backend still calls it the 21st.
+  assert.equal(context.localDateISO(new Date(Date.UTC(2026, 10, 21, 15, 30))), '2026-11-21');
+  // 16:00 UTC is midnight in Taiwan: the new day starts there, wherever the device is.
+  assert.equal(context.localDateISO(new Date(Date.UTC(2026, 10, 21, 16, 0))), '2026-11-22');
+  assert.equal(context.localDateISO(new Date(Date.UTC(2026, 11, 31, 16, 0))), '2027-01-01');
 });
 
 test('shoe purposes use four full-width, non-shrinking options', () => {

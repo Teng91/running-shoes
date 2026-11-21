@@ -251,9 +251,12 @@ def test_an_invite_cannot_claim_an_admin_name_that_is_not_registered(client, db,
     assert db.query(models.User).filter(models.User.username.ilike("boss")).first() is None
     assert _register(client, "Friend", code).status_code == 200
 
+    # SPEC-093: once any account exists, not even open registration hands out a free admin name.
     _settings(monkeypatch, registration_mode="open")
-    assert _register(client, "Boss").status_code == 200, "the first admin registers while registration is open"
-    assert client.get("/api/auth/me", headers=_login(client, "boss")).json()["is_admin"] is True
+    assert _register(client, "Boss").json()["detail"] == "Username already registered"
+    # A later admin registers an ordinary name first and is then listed in ADMIN_USERNAMES.
+    _settings(monkeypatch, admin_usernames=frozenset({"demo", "boss", "friend"}))
+    assert client.get("/api/auth/me", headers=_login(client, "friend")).json()["is_admin"] is True
 
 
 def test_an_admin_account_cannot_be_deleted(client, db, monkeypatch):
@@ -285,15 +288,16 @@ def test_a_deleted_accounts_token_never_opens_a_new_account_with_the_same_name(c
     assert client.get("/api/auth/me", headers=_login(client, "leaver")).json()["id"] == old_id
 
 
-def test_a_token_names_its_account_and_older_tokens_keep_working(client, db):
-    """SPEC-087: tokens issued before the change have no account id and stay valid until they expire."""
+def test_a_token_names_its_account_and_one_without_it_is_refused(client, db):
+    """SPEC-087: a token names its account. SPEC-093: the pre-v4.24.2 form without it has expired."""
     _register(client, "veteran")
     user = db.query(models.User).filter_by(username="veteran").one()
     token = _login(client, "veteran")["Authorization"].removeprefix("Bearer ")
     assert decode_access_token(token, secret_key=app.state.settings.secret_key)["aid"] == user.backup_id
+    assert client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"}).status_code == 200
 
     legacy = create_access_token({"sub": "veteran", "token_version": 0}, secret_key=app.state.settings.secret_key)
-    assert client.get("/api/auth/me", headers={"Authorization": f"Bearer {legacy}"}).status_code == 200
+    assert client.get("/api/auth/me", headers={"Authorization": f"Bearer {legacy}"}).status_code == 401
     stranger = create_access_token({"sub": "veteran", "token_version": 0, "aid": "another-account"},
                                    secret_key=app.state.settings.secret_key)
     assert client.get("/api/auth/me", headers={"Authorization": f"Bearer {stranger}"}).status_code == 401

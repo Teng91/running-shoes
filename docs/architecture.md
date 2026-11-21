@@ -389,7 +389,7 @@ ARIA 與 `agent-mode` 狀態，不以 inline style 決定 shell 幾何，因此�
 | `backend/migrations.py` | ordered/idempotent schema upgrade 與版本 | models、database | routers、frontend |
 | `backend/exporting.py`、`strava_import.py` | 輸入／輸出轉換 | models 或純資料 | FastAPI／HTTP exception |
 | `backend/tools/` | `db_tools.py` Agent JSON adapter 與 registry、`tool_definitions.py` schema、`legacy_calls.py` 舊模型文字 tool call parser、`search_tool.py` 不可信網路搜尋 | read models、受信任 adapter | route 與 UI state |
-| `backend/llm.py` | OpenRouter adapter 與今日免費模型快取；只回傳 `user_facing_error()` 文字 | OpenAI SDK、環境變數 | database、routers |
+| `backend/llm.py` | OpenRouter adapter 與今日免費模型快取；只回傳 `user_facing_error()` 文字 | OpenAI SDK、`create_app` 注入的 `LLMConfig` | database、routers |
 | `backend/agent.py` | LLM／tool loop runner | planner、tools、protocol、LLM adapter | HTTP response、frontend state |
 | `backend/agent_planner.py` | deterministic query plan | Python stdlib | database、FastAPI、LLM network |
 | `backend/agent_tools.py` | user-scoped tool dispatch | trusted tools、database session | routers、SSE serialization |
@@ -397,10 +397,10 @@ ARIA 與 `agent-mode` 狀態，不以 inline style 決定 shell 幾何，因此�
 | `backend/database.py`、`models.py` | ORM base、連線 pragma、engine 工廠與 schema；import 無 I/O | SQLAlchemy | router、FastAPI、frontend |
 | `backend/schemas.py` | Pydantic request／response 契約與輸入驗證（密碼 72 bytes、兩位小數、partial update 禁止 null） | pydantic、clock | database、FastAPI app |
 
-`backend/llm.py` 是**程序層級**的 adapter：OpenRouter API key 直接讀環境變數，`OR_MODEL` 與
-`LLM_MAX_OUTPUT_TOKENS` 取自環境 `settings`，今日免費模型清單也是整個程序共用的快取。因此
-`create_app(config)` 注入的 `Settings` 不會改變這三項；同一程序內的多個 app 共用同一份模型目錄。
-這是刻意的取捨：模型目錄是外部的全域狀態，逐 app 注入只會讓快取鍵與測試 mock 變複雜（SPEC-053）。
+`backend/llm.py` 是**程序層級**的 adapter：今日免費模型清單是整個程序共用的快取，同一程序內的多個
+app 共用同一份模型目錄（刻意的取捨，模型目錄是外部的全域狀態，SPEC-053）。OpenRouter API key、
+`OR_MODEL` 與 `LLM_MAX_OUTPUT_TOKENS` 則由 `create_app` 以 `llm.configure(LLMConfig.from_settings(...))`
+注入，`llm.py` 本身不讀環境變數；只有沒有 app 設定它時（腳本、單元測試）才在呼叫當下讀環境（SPEC-093）。
 
 依賴方向由入口往內：`main → app factory → router → domain/service → persistence/adapters`。CI 的
 `architecture-check` 會阻止 router 反向 import `backend.main`、service 穿透 HTTP layer，並檢查
@@ -664,6 +664,7 @@ flowchart LR
 - **限流**：`rate_limits.consume()` 把同一請求的所有視窗放在一個交易，滿了就整筆回滾；限額來自 `app.state.settings`，不再保留記憶體桶。SPEC-071 再加上 AI 的每帳號與全站 24 小時視窗，限流桶保留 24 小時。
 - **稽核 trigger**：每次啟動依目前欄位重建，避免舊欄位清單使快照不完整或使寫入失敗。
 - **Strava**：`strava_import.parse_activity_dates()` 把 UTC 時間戳轉為 `clock.APP_TIMEZONE` 日期。`date_corrections()` 只修正仍停在舊 UTC 日期的既有活動，`services/strava_imports.py` 在匯入交易中移動日期與月跑量。
+- **v4.27.0**：整體審查修正（SPEC-093）。`llm.LLMConfig` 由 composition root 注入，不再於 import 時讀設定；`agent.py` 直接使用 `agent_planner`／`agent_protocol`；read model 的捨入集中在 `rounding.round_metric`。前端 `app-state.js` 鏡像 `clock.py` 的時區偏移。依賴方向不變。
 - **v4.26.1**：程式碼審查修正（SPEC-092）。`routers/errors.CodedHTTPException` 讓 transport 錯誤帶自己的 `error.code`；Strava 預覽為衝突裝備建立配對群組。依賴方向不變。
 - **v4.26.0**：Strava 與手動紀錄衝突時讓使用者選擇（SPEC-091）。`strava_import.resolve_conflicts` 是純函式，`services/strava_imports.import_runs` 在同一個寫入交易中套用；`read_models/strava_preview` 列出每筆衝突與候選紀錄。依賴方向不變。
 - **v4.25.2**：模組解耦（SPEC-090）。唯讀統計移入 `read_models/`（`insights.py`、`goal_progress.py`、`report_snapshot.py`）；route module 之間不互相 import，共用的改密碼通知在 `routers/password_notices.py`，由架構檢查強制；前端拆出 `app-trend-charts.js` 與 `app-race-goal.js`。

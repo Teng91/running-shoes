@@ -58,36 +58,8 @@ SOURCE_SUMMARY_LIMIT = 8
 QueryPlan = agent_planner.QueryPlan
 
 
-def _should_offer_tools(user_message: str, history: list[dict] | None = None) -> bool:
-    return agent_planner.should_offer_tools(user_message, history)
-
-
-def _requires_web_search(user_message: str) -> bool:
-    return agent_planner.requires_web_search(user_message)
-
-
-def _search_subject(user_message: str) -> str:
-    return agent_planner.search_subject(user_message)
-
-
-def _build_query_plan(user_message: str, history: list[dict] | None = None) -> QueryPlan:
-    return agent_planner.build_query_plan(user_message, history)
-
-
-def _sse(event: dict) -> str:
-    return agent_protocol.sse(event)
-
-
-def _search_payload(output: str) -> dict[str, Any] | None:
-    return agent_protocol.search_payload(output)
-
-
 def _source_summary_event(search_payloads: list[dict[str, Any]]) -> str:
     return agent_protocol.source_summary_event(search_payloads, limit=SOURCE_SUMMARY_LIMIT)
-
-
-def _tool_done_event(name: str, output: str) -> str:
-    return agent_protocol.tool_done_event(name, output)
 
 
 def _build_messages(history: list[dict] | None, user_message: str) -> list[dict]:
@@ -153,6 +125,19 @@ def _execute_tool_safely(
             "status": "tool_execution_failed",
             "error": "The tool could not process the supplied arguments.",
         }, ensure_ascii=False, separators=(",", ":"))
+    finally:
+        _release_connection(db)
+
+
+def _release_connection(db: Session | None) -> None:
+    """Give the pooled connection back between tool calls (SPEC-093).
+
+    A chat stream can wait minutes on the model; the session reconnects on its next query,
+    so it must not hold a SQLite connection (and read transaction) while it waits.
+    """
+    close = getattr(db, "close", None)
+    if callable(close):
+        close()
 
 
 def _prefetch_plan(
@@ -168,12 +153,12 @@ def _prefetch_plan(
     sequence = 0
     for query in query_plan.web_queries:
         args = {"query": query}
-        yield _sse({"type": "tool", "name": "web_search", "args": args})
+        yield agent_protocol.sse({"type": "tool", "name": "web_search", "args": args})
         output = run_web_search(args)
-        yield _tool_done_event("web_search", output)
+        yield agent_protocol.tool_done_event("web_search", output)
         search_calls += 1
         executed_calls.add(("web_search", json.dumps(args, ensure_ascii=False, sort_keys=True)))
-        payload = _search_payload(output)
+        payload = agent_protocol.search_payload(output)
         if payload is not None:
             search_payloads.append(payload)
         if is_failure(output):
@@ -182,12 +167,12 @@ def _prefetch_plan(
         sequence += 1
     for tool_name in query_plan.database_tools:
         db_args: dict[str, Any] = {}
-        yield _sse({"type": "tool", "name": tool_name, "args": db_args})
+        yield agent_protocol.sse({"type": "tool", "name": tool_name, "args": db_args})
         if db is None or user_id is None:
-            yield _sse({"type": "error", "text": "無法執行資料庫工具：缺少使用者資料庫上下文。"})
+            yield agent_protocol.sse({"type": "error", "text": "無法執行資料庫工具：缺少使用者資料庫上下文。"})
             return search_fails, search_calls, executed_calls, search_payloads
         output = _execute_tool_safely(tool_name, db_args, db, user_id)
-        yield _tool_done_event(tool_name, output)
+        yield agent_protocol.tool_done_event(tool_name, output)
         executed_calls.add((tool_name, "{}"))
         _append_preexecuted_tool(messages, tool_name, db_args, output, sequence)
         sequence += 1
@@ -205,18 +190,18 @@ def run_agent_stream(
     try:
         prov = llm.LLMProvider.from_str(provider)
     except llm.LLMError as exc:
-        yield _sse({"type": "error", "text": str(exc)})
-        yield _sse({"type": "done"})
+        yield agent_protocol.sse({"type": "error", "text": str(exc)})
+        yield agent_protocol.sse({"type": "done"})
         return
     if model is None:
         available_models = llm.MODELS.get(prov.value, [])
         model = available_models[0]["id"] if available_models else ""
 
     messages = _build_messages(history, user_message)
-    query_plan = _build_query_plan(user_message, history)
+    query_plan = agent_planner.build_query_plan(user_message, history)
     available_tools = db_tools.TOOL_DEFINITIONS if (
         query_plan.web_queries or query_plan.database_tools
-        or _should_offer_tools(user_message, history)
+        or agent_planner.should_offer_tools(user_message, history)
     ) else None
     prefetch = _prefetch_plan(query_plan, messages, db, user_id)
     try:
@@ -226,7 +211,7 @@ def run_agent_stream(
         web_search_fails, web_search_calls, executed_calls, search_payloads = stop.value
     if query_plan.database_tools and (db is None or user_id is None):
         yield _source_summary_event(search_payloads)
-        yield _sse({"type": "done"})
+        yield agent_protocol.sse({"type": "done"})
         return
 
     for turn in range(MAX_TURNS):
@@ -255,7 +240,7 @@ def run_agent_stream(
                     if isinstance(chunk, llm.ReasoningText):
                         # SPEC-086: show the model's thinking while it happens; it
                         # never joins the answer, tool parsing or the history.
-                        yield _sse({"type": "thinking", "text": str(chunk)})
+                        yield agent_protocol.sse({"type": "thinking", "text": str(chunk)})
                         continue
                     full_content += chunk
                     if not seen_tool:
@@ -263,7 +248,7 @@ def run_agent_stream(
                         if parsed and not is_last_turn:
                             seen_tool = True
                             tool_calls = parsed
-                            yield _sse({
+                            yield agent_protocol.sse({
                                 "type": "reasoning_start",
                                 "text": db_tools.strip_tool_markers(full_content),
                             })
@@ -271,26 +256,26 @@ def run_agent_stream(
                             if close_stream is not None:
                                 close_stream()
                             break
-                        yield _sse({"type": "token", "text": chunk})
+                        yield agent_protocol.sse({"type": "token", "text": chunk})
             except StopIteration as stop:
                 llm_result = stop.value or {}
         except llm.LLMError as exc:
-            yield _sse({"type": "error", "text": str(exc)})
+            yield agent_protocol.sse({"type": "error", "text": str(exc)})
             break
         except Exception:
             # Unexpected exception text may contain provider URLs or internal state.
             logger.exception("Unexpected model stream failure")
-            yield _sse({"type": "error", "text": "模型呼叫發生錯誤，請稍後再試或更換模型。"})
+            yield agent_protocol.sse({"type": "error", "text": "模型呼叫發生錯誤，請稍後再試或更換模型。"})
             break
 
         native_tool_calls = llm_result.get("tool_calls", [])
         if native_tool_calls and not is_last_turn:
             seen_tool = True
             tool_calls = native_tool_calls
-            yield _sse({"type": "reasoning_start", "text": full_content.strip()})
+            yield agent_protocol.sse({"type": "reasoning_start", "text": full_content.strip()})
         if not seen_tool:
             if not full_content.strip():
-                yield _sse({"type": "token", "text": "（模型沒有回應，請再試一次或更換模型。）"})
+                yield agent_protocol.sse({"type": "token", "text": "（模型沒有回應，請再試一次或更換模型。）"})
             break
 
         if native_tool_calls:
@@ -315,10 +300,10 @@ def run_agent_stream(
         for call in tool_calls:
             name = call["name"]
             arguments = call["arguments"]
-            yield _sse({"type": "tool", "name": name, "args": arguments})
+            yield agent_protocol.sse({"type": "tool", "name": name, "args": arguments})
             if name in db_tools.REGISTRY and (db is None or user_id is None):
-                yield _sse({"type": "error", "text": "無法執行資料庫工具：缺少使用者資料庫上下文。"})
-                yield _sse({"type": "done"})
+                yield agent_protocol.sse({"type": "error", "text": "無法執行資料庫工具：缺少使用者資料庫上下文。"})
+                yield agent_protocol.sse({"type": "done"})
                 return
             call_key = (name, json.dumps(arguments, ensure_ascii=False, sort_keys=True))
             duplicate = call_key in executed_calls
@@ -335,9 +320,9 @@ def run_agent_stream(
                 if name == "web_search":
                     web_search_calls += 1
                 output = _execute_tool_safely(name, arguments, db, user_id)
-            yield _tool_done_event(name, output)
+            yield agent_protocol.tool_done_event(name, output)
             if name == "web_search":
-                payload = _search_payload(output)
+                payload = agent_protocol.search_payload(output)
                 if payload is not None:
                     search_payloads.append(payload)
                 if is_failure(output):
@@ -356,4 +341,4 @@ def run_agent_stream(
             )})
 
     yield _source_summary_event(search_payloads)
-    yield _sse({"type": "done"})
+    yield agent_protocol.sse({"type": "done"})

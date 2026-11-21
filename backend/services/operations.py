@@ -1,6 +1,6 @@
 """One transaction owns the business mutation, audit context and replay receipt."""
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -103,11 +103,16 @@ def _dispatch(db: Session, user_id: int, command: schemas.MutationCommand, confi
     return response
 
 
-def legacy_operation(db, user_id, kind, config, key, payload=None, entity_id=None, expected_version=None):
+def legacy_operation(
+    db: Session, user_id: int, kind: schemas.MutationKind, config: Settings, key: str | None,
+    payload: Mapping[str, Any] | None = None, entity_id: int | None = None, expected_version: int | None = None,
+) -> dict:
+    """Run a legacy per-entity route through the canonical receipt-keyed operation."""
     data = dict(payload or {})
     version = data.pop("expected_version", expected_version)
     try:
-        command = schemas.MutationCommand(operation_id=key, kind=kind, payload=data,
+        # A missing key fails validation like any malformed one and becomes Invalid below.
+        command = schemas.MutationCommand(operation_id=key or "", kind=kind, payload=data,
                                            entity_id=entity_id, expected_version=version)
         return execute_operation(db, user_id, command, config)
     except ValidationError as exc:

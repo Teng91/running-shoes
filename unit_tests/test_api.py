@@ -427,8 +427,8 @@ def test_shoe_isolation_between_users(client, db):
     db.add(shoe)
     db.commit()
 
-    from unit_tests.token_helpers import create_access_token
-    token_b = create_access_token(data={"sub": "bob"})
+    from unit_tests.token_helpers import token_for
+    token_b = token_for(user_b)
 
     # Bob cannot see Alice's shoes
     res = client.get("/api/shoes/active", headers=_auth_header(token_b))
@@ -591,8 +591,8 @@ def test_monthly_mileage_isolation_between_users(client, db):
     db.commit()
     db.refresh(entry)
 
-    from unit_tests.token_helpers import create_access_token
-    token_b = create_access_token(data={"sub": "bob"})
+    from unit_tests.token_helpers import token_for
+    token_b = token_for(user_b)
 
     # Bob cannot see Alice's monthly mileage
     res = client.get("/api/monthly-mileage", headers=_auth_header(token_b))

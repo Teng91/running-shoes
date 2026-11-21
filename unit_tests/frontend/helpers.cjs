@@ -35,6 +35,8 @@ function featureContext(globals = {}) {
   // SPEC-060 pace helpers are shared by run creation, editing and rendering.
   vm.runInContext(source.match(/const RUN_PACE_MIN_SECONDS = \d+;\s*const RUN_PACE_MAX_SECONDS = \d+;/)[0] + '\n'
     + ['parseRunDuration', 'groupDurationDigits', 'formatDurationInput', 'plausibleRunPace', 'updateRunPacePreview', 'readRunDuration'].map(extract).join('\n'), context);
+  // SPEC-093: calendar days come from the service's fixed zone, shared by every feature.
+  vm.runInContext(source.match(/const APP_UTC_OFFSET_MINUTES = \d+;/)[0] + '\n' + extract('appCalendarDate'), context);
   context.registerResourceCaches();
   return context;
 }

@@ -54,9 +54,21 @@ def normalize_email(email: str) -> str:
     return value
 
 
+CODE_KEY_LABEL = b"running-shoes/email-code/v1"
+
+
+def code_key(secret_key: str) -> bytes:
+    """A key used only for email codes, derived from the app secret (SPEC-093).
+
+    The same SECRET_KEY signs session tokens; deriving a purpose-bound key keeps the two
+    uses apart, so neither kind of value can stand in for the other.
+    """
+    return hmac.new(secret_key.encode(), CODE_KEY_LABEL, hashlib.sha256).digest()
+
+
 def _digest(secret_key: str, user_id: int, purpose: str, code: str) -> str:
     message = f"{user_id}:{purpose}:{code}".encode()
-    return hmac.new(secret_key.encode(), message, hashlib.sha256).hexdigest()
+    return hmac.new(code_key(secret_key), message, hashlib.sha256).hexdigest()
 
 
 def _issue(db: Session, user_id: int, purpose: str, email: str, secret_key: str) -> str:

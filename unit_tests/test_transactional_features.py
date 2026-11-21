@@ -13,7 +13,7 @@ from backend import models
 from backend.app_factory import create_app
 from backend.database import configure_sqlite_connection
 from backend.settings import settings
-from unit_tests.token_helpers import create_access_token
+from unit_tests.token_helpers import token_for_name
 
 
 @pytest.fixture
@@ -30,7 +30,7 @@ def feature_app(tmp_path):
             user = models.User(username="features", hashed_password="synthetic")
             db.add(user)
             db.commit()
-        headers = {"Authorization": f"Bearer {create_access_token({'sub': 'features'})}"}
+        headers = {"Authorization": f"Bearer {token_for_name(sessions, 'features')}"}
         yield app, client, sessions, headers
     engine.dispose()
 
