@@ -346,7 +346,7 @@ def test_update_http_mode_and_legacy_preview_compatibility(workspace):
 
     from backend.app_factory import create_app
     from backend.services.fingerprints import payload_hash
-    from unit_tests.token_helpers import create_access_token
+    from unit_tests.token_helpers import token_for_name
     with workspace.sessions() as db:
         raw = json.dumps(archive(db)).encode()
         preview = account_restore.preview_restore(db, 2, raw, workspace.config)
@@ -356,7 +356,7 @@ def test_update_http_mode_and_legacy_preview_compatibility(workspace):
         db.commit()
         account_restore.apply_restore(db, 2, preview['token'], 'legacy-preview-apply', workspace.config)
     app = create_app(workspace.config, db_engine=workspace.engine, session_factory=workspace.sessions)
-    headers = {'Authorization': 'Bearer ' + create_access_token({'sub': 'two'}, secret_key=workspace.config.secret_key or None)}
+    headers = {'Authorization': 'Bearer ' + token_for_name(workspace.sessions, 'two', secret_key=workspace.config.secret_key or None)}
     with TestClient(app) as client:
         response = client.post('/api/account-restore/preview?mode=update', content=raw, headers=headers)
         assert response.status_code == 200 and response.json()['summary']['mode'] == 'update'
@@ -500,12 +500,12 @@ def test_discard_preview_http_requires_its_account(workspace):
     from fastapi.testclient import TestClient
 
     from backend.app_factory import create_app
-    from unit_tests.token_helpers import create_access_token
+    from unit_tests.token_helpers import token_for_name
     with workspace.sessions() as db:
         preview = account_restore.preview_restore(db, 2, json.dumps(archive(db)).encode(), workspace.config)
     app = create_app(workspace.config, db_engine=workspace.engine, session_factory=workspace.sessions)
     def headers(name):
-        return {'Authorization': 'Bearer ' + create_access_token({'sub': name}, secret_key=workspace.config.secret_key or None)}
+        return {'Authorization': 'Bearer ' + token_for_name(workspace.sessions, name, secret_key=workspace.config.secret_key or None)}
     with TestClient(app) as client:
         path = '/api/account-restore/preview/' + preview['token']
         assert client.delete(path).status_code in (401, 403)
@@ -553,7 +553,7 @@ def test_export_contract_limits_and_explicit_history_omission(workspace):
 
     from backend.app_factory import create_app
     from backend.backup_contract import ARCHIVE_LIMITS
-    from unit_tests.token_helpers import create_access_token
+    from unit_tests.token_helpers import token_for_name
     with workspace.sessions() as db:
         history = {'user_id': 1, 'operation_id': 'synthetic-export-boundary', 'reason': 'shoe.update',
                    'entity': 'shoes', 'entity_id': 1, 'action': 'update', 'before_json': None,
@@ -572,7 +572,7 @@ def test_export_contract_limits_and_explicit_history_omission(workspace):
         other, _ = exports.build_account_export(db, db.get(models.User, 2))
         assert len(other['history']) == 1
     app = create_app(workspace.config, db_engine=workspace.engine, session_factory=workspace.sessions)
-    headers = {'Authorization': 'Bearer ' + create_access_token({'sub': 'one'}, secret_key=workspace.config.secret_key or None)}
+    headers = {'Authorization': 'Bearer ' + token_for_name(workspace.sessions, 'one', secret_key=workspace.config.secret_key or None)}
     with TestClient(app) as client:
         failure = client.get('/api/export/account', headers=headers)
         assert failure.status_code == 400 and '取消包含異動歷史' in failure.json()['detail']
@@ -991,8 +991,8 @@ def test_startup_discards_every_accounts_expired_previews_only(workspace, tmp_pa
 
 
 def _bearer(workspace, name):
-    from unit_tests.token_helpers import create_access_token
-    return {'Authorization': 'Bearer ' + create_access_token({'sub': name}, secret_key=workspace.config.secret_key or None)}
+    from unit_tests.token_helpers import token_for_name
+    return {'Authorization': 'Bearer ' + token_for_name(workspace.sessions, name, secret_key=workspace.config.secret_key or None)}
 
 
 def test_archive_limits_follow_account_quotas_and_fit_a_full_real_account(workspace):

@@ -16,7 +16,7 @@ from backend.main import app
 from backend.migrations import run_startup_migrations, schema_version
 from backend.read_models.runs import year_run_summary
 from backend.settings import settings
-from unit_tests.token_helpers import create_access_token
+from unit_tests.token_helpers import token_for, token_for_name
 
 
 @pytest.fixture
@@ -70,7 +70,7 @@ def test_request_keys_are_user_scoped_and_legacy_clients_remain_supported(db, re
     shoe = models.Shoe(user_id=other.id, brand="Other", model="Private", date="2026-01-01")
     db.add(shoe)
     db.commit()
-    other_headers = {**headers, "Authorization": f"Bearer {create_access_token({'sub': other.username})}"}
+    other_headers = {**headers, "Authorization": f"Bearer {token_for(other)}"}
     assert client.post("/api/runs", json=payload, headers=other_headers).status_code == 404
     assert db.query(models.MutationReceipt).count() == 1
     assert client.post("/api/runs", json={**payload, "shoe_id": shoe.id}, headers=other_headers).status_code == 200
@@ -121,7 +121,7 @@ def test_concurrent_requests_share_one_committed_receipt(tmp_path, conflicting):
             db.add(shoe)
             db.commit()
             shoe_id = shoe.id
-        headers = {"Authorization": f"Bearer {create_access_token({'sub': 'parallel'})}", "Idempotency-Key": "concurrent-operation-0001"}
+        headers = {"Authorization": f"Bearer {token_for_name(sessions, 'parallel')}", "Idempotency-Key": "concurrent-operation-0001"}
 
         def submit(index):
             return client.post("/api/runs", json={"shoe_id": shoe_id, "date": "2026-01-05", "km": 5 + index * conflicting}, headers=headers)

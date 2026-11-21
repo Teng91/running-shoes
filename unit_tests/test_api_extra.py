@@ -28,7 +28,7 @@ from backend.routers.monthly import (
 )
 from backend.routers.runs import create_run, delete_run, update_run
 from backend.routers.shoes import create_shoe, delete_shoe, update_shoe
-from unit_tests.token_helpers import create_access_token
+from unit_tests.token_helpers import create_access_token, token_for
 
 
 @pytest.fixture
@@ -284,7 +284,7 @@ def test_model_refresh_has_global_limit_across_users(
     )
     db.add(second_user)
     db.commit()
-    second_token = create_access_token(data={"sub": second_user.username})
+    second_token = token_for(second_user)
     _limits(monkeypatch, model_refresh_global_per_minute=1)
     monkeypatch.setattr("backend.routers.agent.llm.list_providers", MagicMock(return_value=[]))
 
@@ -769,7 +769,7 @@ def test_static_asset_and_non404_http_errors(client):
 
     service_worker = client.get("/service-worker.js")
     assert service_worker.status_code == 200
-    assert "running-shoes-shell-v101" in service_worker.text
+    assert "running-shoes-shell-v102" in service_worker.text
 
     agent_script = client.get("/app-agent.js")
     assert agent_script.status_code == 200

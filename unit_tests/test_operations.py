@@ -7,7 +7,7 @@ from backend import models, schemas
 from backend.app_factory import create_app
 from backend.services.errors import Conflict
 from backend.services.operations import execute_operation
-from unit_tests.token_helpers import create_access_token
+from unit_tests.token_helpers import token_for_name
 from unit_tests.workspace_helpers import workspace as workspace
 
 
@@ -41,7 +41,7 @@ def test_concurrent_operation_key_commits_once(workspace):
 
 def test_canonical_and_legacy_http_contracts_are_isolated(workspace):
     app = create_app(workspace.config, db_engine=workspace.engine, session_factory=workspace.sessions)
-    headers = {"Authorization": "Bearer " + create_access_token({"sub": "one"}, secret_key=workspace.config.secret_key or None)}
+    headers = {"Authorization": "Bearer " + token_for_name(workspace.sessions, "one", secret_key=workspace.config.secret_key or None)}
     with TestClient(app) as client:
         response = client.post("/api/operations", headers=headers, json=shoe_command().model_dump())
         assert response.status_code == 200

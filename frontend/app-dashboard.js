@@ -59,8 +59,7 @@ function shoeName(shoeId) {
 
 // ====== Render ======
 function render(resource = null) {
-  const now = new Date();
-  const todayStr = `${now.getFullYear()}/${String(now.getMonth()+1).padStart(2,'0')}/${String(now.getDate()).padStart(2,'0')}`;
+  const todayStr = localDateISO().replace(/-/g, '/');
   document.getElementById('today-label').textContent = '資料日期：' + todayStr;
 
   shoes.sort(byDate);

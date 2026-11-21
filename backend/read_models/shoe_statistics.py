@@ -6,6 +6,7 @@ from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from backend.models import Run
+from backend.read_models.rounding import round_metric
 from backend.run_metrics import pace_seconds_per_km
 
 
@@ -112,7 +113,7 @@ def shoe_run_statistics(
         .all()
     ):
         result[row.shoe_id]["recent"].append(
-            {"id": row.id, "date": row.date, "km": round(float(row.km), 2),
+            {"id": row.id, "date": row.date, "km": round_metric(float(row.km), 2),
              "pace_seconds_per_km": pace_seconds_per_km(row.duration_seconds, float(row.km))}
         )
     return result

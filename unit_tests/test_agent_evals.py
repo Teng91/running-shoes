@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from backend import agent
+from backend import agent, agent_planner
 
 CASES_PATH = Path(__file__).with_name("agent_eval_cases.json")
 CASES = json.loads(CASES_PATH.read_text(encoding="utf-8"))
@@ -11,11 +11,11 @@ CASES = json.loads(CASES_PATH.read_text(encoding="utf-8"))
 
 @pytest.mark.parametrize("case", CASES, ids=lambda case: case["id"])
 def test_agent_query_plan_contract(case):
-    plan = agent._build_query_plan(case["message"])
+    plan = agent_planner.build_query_plan(case["message"])
 
     assert list(plan.database_tools) == case["expected_database_tools"]
     assert len(plan.web_queries) == case["expected_web_queries"]
-    assert agent._should_offer_tools(case["message"]) is case["tools_offered"]
+    assert agent_planner.should_offer_tools(case["message"]) is case["tools_offered"]
 
 
 def test_agent_prompt_keeps_security_and_data_authority_contracts():

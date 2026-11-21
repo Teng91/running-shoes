@@ -55,6 +55,17 @@ const LIFECYCLE_REPLACE_SOON_PERCENT = 90;
 const RUN_PACE_MIN_SECONDS = 60;
 const RUN_PACE_MAX_SECONDS = 3600;
 
+// The service keeps one calendar: Taiwan time, a fixed UTC+8 without daylight saving,
+// mirrored from backend/clock.py (SPEC-093). "Today" comes from it, not from the device's
+// zone, or a phone in Tokyo just after midnight offers a run date the backend rejects as
+// the future. A Python test keeps both sides equal.
+const APP_UTC_OFFSET_MINUTES = 480;
+
+function appCalendarDate(instant = new Date()) {
+  const shifted = new Date(instant.getTime() + APP_UTC_OFFSET_MINUTES * 60000);
+  return { year: shifted.getUTCFullYear(), month: shifted.getUTCMonth() + 1, day: shifted.getUTCDate() };
+}
+
 const byDate = (a, b) => new Date(a.date) - new Date(b.date);
 let shoes = [];
 let retiredShoes = [];

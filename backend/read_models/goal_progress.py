@@ -21,7 +21,7 @@ DEFAULT_YEARLY_GOAL_KM = 1500.0
 
 def yearly_goal_km(monthly_km: float) -> float:
     """The derived annual target at the stored two-decimal precision (12.3 → 147.6)."""
-    return round(float(monthly_km) * 12, 2)
+    return round_metric(float(monthly_km) * 12, 2)
 
 
 def goal_values(db: Session, user_id: int) -> dict:
@@ -79,9 +79,9 @@ def goal_progress(
         month_state = "current"
         elapsed_days = today.day
         remaining_days = days_in_month - today.day
-    expected_km = round(monthly_goal * elapsed_days / days_in_month, 2)
-    pace_delta = round(month_km - expected_km, 2)
-    month_remaining = round(max(0, monthly_goal - month_km), 2)
+    expected_km = round_metric(monthly_goal * elapsed_days / days_in_month, 2)
+    pace_delta = round_metric(month_km - expected_km, 2)
+    month_remaining = round_metric(max(0, monthly_goal - month_km), 2)
     return {
         **goal,
         "active": active,
@@ -92,14 +92,14 @@ def goal_progress(
         "remaining_days": remaining_days,
         "expected_km_to_date": expected_km,
         "pace_delta_km": pace_delta,
-        "month_achievement_percent": round(month_km / monthly_goal * 100, 1),
+        "month_achievement_percent": round_metric(month_km / monthly_goal * 100, 1),
         "month_remaining_km": month_remaining,
         "required_daily_km": (
-            round(month_remaining / remaining_days, 2) if remaining_days > 0 else None
+            round_metric(month_remaining / remaining_days, 2) if remaining_days > 0 else None
         ),
         "ytd_km": ytd_km,
-        "year_achievement_percent": round(ytd_km / yearly_goal * 100, 1),
-        "year_remaining_km": round(max(0, yearly_goal - ytd_km), 2),
+        "year_achievement_percent": round_metric(ytd_km / yearly_goal * 100, 1),
+        "year_remaining_km": round_metric(max(0, yearly_goal - ytd_km), 2),
     }
 
 
@@ -136,7 +136,7 @@ def year_goal_overview(
             "month": month,
             "km": km,
             "state": state,
-            "percent": round(km / monthly_goal * 100, 1),
+            "percent": round_metric(km / monthly_goal * 100, 1),
             "met": progress["active"] and km >= monthly_goal,
         })
     expected = yearly_goal_to_date(yearly_goal, year, elapsed)

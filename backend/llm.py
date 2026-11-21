@@ -7,22 +7,19 @@ OpenRouter 提供 OpenAI-compatible 端點，用同一個 `openai` SDK 設定
 
 import json
 import logging
-import os
 import time
 from collections.abc import Generator
+from dataclasses import dataclass
 from enum import StrEnum
 from threading import Lock
 from typing import TYPE_CHECKING, Any
 
 import httpx
-from dotenv import load_dotenv
 
 if TYPE_CHECKING:
     from openai import OpenAI
 
-from backend.settings import settings
-
-load_dotenv()
+from backend.settings import Settings
 
 
 class LLMError(Exception):
@@ -40,11 +37,42 @@ class LLMProvider(StrEnum):
             raise LLMError(f"未知的 provider：{value!r}（可用：openrouter）") from None
 
 
-# 各家 endpoint + 從哪個 env 取 key
+@dataclass(frozen=True, slots=True)
+class LLMConfig:
+    """Provider credentials and limits, injected by the composition root (SPEC-093)."""
+
+    api_key: str | None = None
+    default_model: str | None = None
+    max_output_tokens: int = 4096
+
+    def __repr__(self) -> str:
+        return f"LLMConfig(api_key={'set' if self.api_key else None}, default_model={self.default_model!r}, "                f"max_output_tokens={self.max_output_tokens})"
+
+    @classmethod
+    def from_settings(cls, config: Settings) -> "LLMConfig":
+        return cls(api_key=config.openrouter_api_key, default_model=config.openrouter_default_model,
+                   max_output_tokens=config.llm_max_output_tokens)
+
+
+# One process serves one application, so create_app configures this adapter once. Scripts
+# and tests that call it directly without an app read the environment at call time.
+_config: LLMConfig | None = None
+
+
+def configure(config: LLMConfig | None) -> None:
+    """Install the application's LLM configuration; ``None`` returns to the environment."""
+    global _config
+    _config = config
+
+
+def current_config() -> LLMConfig:
+    return _config if _config is not None else LLMConfig.from_settings(Settings.from_env())
+
+
+# 各家 endpoint 與缺 key 時顯示的設定名稱
 _PROVIDER_CONFIG = {
     LLMProvider.openrouter: {
         "base_url": "https://openrouter.ai/api/v1",
-        "key_env": "OPENROUTER_API_KEY",
         "key_label": "OPENROUTER_API_KEY",
     },
 }
@@ -71,7 +99,6 @@ _MODELS_URL = "https://openrouter.ai/api/v1/models?supported_parameters=tools"
 _RANKINGS_URL = "https://openrouter.ai/api/v1/datasets/rankings-daily"
 _DAILY_USAGE_POOL_LIMIT = 50
 
-_LLM_MAX_OUTPUT_TOKENS = settings.llm_max_output_tokens
 # OpenAI SDK 2.47+ uses httpx2 internally while older supported releases use
 # httpx. A plain number is accepted by both clients and keeps the application
 # independent of either transport's private Timeout type.
@@ -87,7 +114,7 @@ def _fetch_free_models() -> list[dict[str, str]]:
     obscure catalog entries as today's usable models.
     """
     cfg = _PROVIDER_CONFIG[LLMProvider.openrouter]
-    api_key = os.environ.get(cfg["key_env"])
+    api_key = current_config().api_key
     if not api_key:
         raise LLMError(f"未設定 {cfg['key_label']}，無法抓取模型列表。")
 
@@ -182,11 +209,6 @@ def _fetch_free_models() -> list[dict[str, str]]:
             seen.add(model_id)
     return models
 
-# Optional local preference; it is honored only when the model is present in
-# today's live free catalog, so it can never opt into a paid or stale model.
-_OR_DEFAULT = settings.openrouter_default_model
-
-
 def _get_models(provider: LLMProvider, force: bool = False) -> list[dict[str, str]]:
     """取得模型列表，優先使用快取，快取失效時從 OpenRouter API 抓取。
     預設模型會排到最前面。
@@ -211,8 +233,10 @@ def _get_models(provider: LLMProvider, force: bool = False) -> list[dict[str, st
                 raise LLMError("OpenRouter 沒有回傳可用的免費工具模型。")
             # A local preference may move a model to the front only when it is
             # present in today's live free list; it can never add a stale/paid ID.
-            if _OR_DEFAULT in {model["id"] for model in models}:
-                models = sorted(models, key=lambda m: 0 if m["id"] == _OR_DEFAULT else 1)
+            # The optional OR_MODEL preference can only reorder today's live free list.
+            preferred = current_config().default_model
+            if preferred in {model["id"] for model in models}:
+                models = sorted(models, key=lambda m: 0 if m["id"] == preferred else 1)
             _MODELS_CACHE[provider.value] = models
             _MODELS_CACHE_META[provider.value] = now
             return models
@@ -249,7 +273,7 @@ def list_providers(force: bool = False) -> list[dict[str, Any]]:
     """
     out = []
     for provider, cfg in _PROVIDER_CONFIG.items():
-        has_key = bool(os.environ.get(cfg["key_env"]))
+        has_key = bool(current_config().api_key)
         models = _get_models(provider, force=force) if has_key else MODELS.get(provider.value, [])
         out.append({
             "id": provider.value,
@@ -263,7 +287,7 @@ def list_providers(force: bool = False) -> list[dict[str, Any]]:
 
 def _build_client(provider: LLMProvider) -> "OpenAI":
     cfg = _PROVIDER_CONFIG[provider]
-    api_key = os.environ.get(cfg["key_env"])
+    api_key = current_config().api_key
     if not api_key:
         raise LLMError(f"未設定 {cfg['key_label']}，無法使用 {provider.value}。")
     # The SDK takes about a third of the backend import time; only AI requests need it,
@@ -369,7 +393,7 @@ def call_llm_stream(
         "model": model,
         "messages": messages,
         "temperature": 0.3,
-        "max_tokens": _LLM_MAX_OUTPUT_TOKENS,
+        "max_tokens": current_config().max_output_tokens,
         "stream": True,
         "stream_options": {"include_usage": False},
     }

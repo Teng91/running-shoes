@@ -27,8 +27,10 @@ registerFeatureReset('run-editor', () => {
   delete select.dataset.requiresSelection;
 });
 
-function localDateISO(date = new Date()) {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+// The service's calendar date (Taiwan time, SPEC-093), whatever zone the device is in.
+function localDateISO(instant = new Date()) {
+  const { year, month, day } = appCalendarDate(instant);
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
 // SPEC-060: a run's moving time is typed as "32:15", "1:05:30" or whole minutes ("45").

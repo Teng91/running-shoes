@@ -3,7 +3,7 @@
 import os
 import warnings
 from collections.abc import Mapping
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -42,12 +42,12 @@ def _admin_usernames(values: Mapping[str, str]) -> frozenset[str]:
 @dataclass(frozen=True, slots=True)
 class Settings:
     environment: str
-    secret_key: str
+    secret_key: str = field(repr=False)
     database_dir: Path
     database_url: str
     frontend_dir: Path
     seed_data: bool
-    migration_password: str | None
+    migration_password: str | None = field(repr=False)
     fly_app_name: str | None
     max_registered_users: int
     max_shoes_per_user: int
@@ -79,9 +79,11 @@ class Settings:
     admin_usernames: frozenset[str] = frozenset()
     # SPEC-079: Gmail SMTP with an app password; email features are off without both.
     smtp_username: str | None = None
-    smtp_password: str | None = None
+    smtp_password: str | None = field(default=None, repr=False)
     smtp_host: str = "smtp.gmail.com"
     smtp_port: int = 587
+    # SPEC-093: injected into backend.llm by create_app instead of read there at import time.
+    openrouter_api_key: str | None = field(default=None, repr=False)
 
     @property
     def mail_enabled(self) -> bool:
@@ -149,6 +151,7 @@ class Settings:
             smtp_password=(env.get("SMTP_PASSWORD") or "").replace(" ", "") or None,
             smtp_host=env.get("SMTP_HOST", "smtp.gmail.com"),
             smtp_port=_positive_int(env, "SMTP_PORT", 587),
+            openrouter_api_key=(env.get("OPENROUTER_API_KEY") or "").strip() or None,
         )
 
 

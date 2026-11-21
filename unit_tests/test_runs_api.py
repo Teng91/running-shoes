@@ -321,7 +321,7 @@ def test_run_log_update_rejects_explicit_nulls(client, db, user_with_token, payl
 
 
 def test_run_log_rejects_another_users_shoe_and_record(client, db):
-    from unit_tests.token_helpers import create_access_token
+    from unit_tests.token_helpers import token_for
 
     alice = User(username="run-alice", hashed_password=get_password_hash("pass1234"))
     bob = User(username="run-bob", hashed_password=get_password_hash("pass1234"))
@@ -331,8 +331,8 @@ def test_run_log_rejects_another_users_shoe_and_record(client, db):
     bob_shoe = Shoe(user_id=bob.id, brand="Nike", model="Pegasus", date="2026-01-02")
     db.add_all([shoe, bob_shoe])
     db.commit()
-    alice_headers = _auth_header(create_access_token(data={"sub": alice.username}))
-    bob_headers = _auth_header(create_access_token(data={"sub": bob.username}))
+    alice_headers = _auth_header(token_for(alice))
+    bob_headers = _auth_header(token_for(bob))
 
     forbidden_create = client.post("/api/runs", headers=bob_headers, json={
         "date": "2026-08-12", "km": 5, "shoe_id": shoe.id,
@@ -439,7 +439,7 @@ def test_shoe_month_and_report_read_models_return_only_this_account(db, user_wit
 def test_run_totals_count_every_run_like_strava_and_stay_user_scoped(client, db, user_with_token):
     """SPEC-070: the running total counts every logged run, including runs on deleted shoes."""
     from backend.models import Run
-    from unit_tests.token_helpers import create_access_token
+    from unit_tests.token_helpers import token_for
 
     user, token = user_with_token
     other = User(username="totals-other", hashed_password=get_password_hash("pass1234"))
@@ -457,6 +457,6 @@ def test_run_totals_count_every_run_like_strava_and_stay_user_scoped(client, db,
     db.commit()
 
     assert client.get("/api/runs/totals", headers=_auth_header(token)).json() == {"run_count": 3, "total_km": 22.62}
-    other_headers = _auth_header(create_access_token(data={"sub": "totals-other"}))
+    other_headers = _auth_header(token_for(other))
     assert client.get("/api/runs/totals", headers=other_headers).json() == {"run_count": 1, "total_km": 42.2}
     assert client.get("/api/runs/totals").status_code == 401

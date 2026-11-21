@@ -6,6 +6,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from backend import models
+from backend.read_models.rounding import round_metric
 from backend.read_models.run_statistics import month_bounds
 from backend.run_metrics import pace_seconds_per_km
 
@@ -29,11 +30,11 @@ def month_run_summary(db: Session, user_id: int, year: int, month: int) -> dict:
     shoes: dict[int, dict] = {}
     for day, shoe_id, km, count in rows:
         daily = calendar.setdefault(day, {"date": day, "km": 0.0, "count": 0, "shoes": []})
-        daily["km"] = round(daily["km"] + km, 2)
+        daily["km"] = round_metric(daily["km"] + km, 2)
         daily["count"] += count
-        daily["shoes"].append({"shoe_id": shoe_id, "km": round(km, 2), "count": count})
+        daily["shoes"].append({"shoe_id": shoe_id, "km": round_metric(km, 2), "count": count})
         shoe = shoes.setdefault(shoe_id, {"shoe_id": shoe_id, "km": 0.0, "count": 0})
-        shoe["km"] = round(shoe["km"] + km, 2)
+        shoe["km"] = round_metric(shoe["km"] + km, 2)
         shoe["count"] += count
     timed_seconds, timed_km, timed_count = db.query(
         func.sum(models.Run.duration_seconds), func.sum(models.Run.km), func.count(models.Run.id)
@@ -46,7 +47,7 @@ def month_run_summary(db: Session, user_id: int, year: int, month: int) -> dict:
     return {
         "year": year,
         "month": month,
-        "total_km": round(sum(day["km"] for day in calendar.values()), 2),
+        "total_km": round_metric(sum(day["km"] for day in calendar.values()), 2),
         "run_count": sum(day["count"] for day in calendar.values()),
         "run_days": len(calendar),
         "calendar": list(calendar.values()),
@@ -72,14 +73,14 @@ def year_run_summary(db: Session, user_id: int, year: int) -> dict:
     count = 0
     for number, shoe_id, km, run_count in rows:
         index = int(number) - 1
-        matrix.setdefault(shoe_id, [0.0] * 12)[index] = round(km, 2)
+        matrix.setdefault(shoe_id, [0.0] * 12)[index] = round_metric(km, 2)
         totals[index] += km
         count += run_count
     return {
         "year": year,
-        "total_km": round(sum(totals), 2),
+        "total_km": round_metric(sum(totals), 2),
         "run_count": count,
-        "monthly_km": [round(km, 2) for km in totals],
+        "monthly_km": [round_metric(km, 2) for km in totals],
         "shoes": [{"shoe_id": shoe_id, "monthly_km": kms} for shoe_id, kms in matrix.items()],
     }
 
@@ -94,7 +95,7 @@ def run_totals(db: Session, user_id: int) -> dict:
         .filter(models.Run.user_id == user_id)
         .one()
     )
-    return {"run_count": int(count), "total_km": round(float(km), 2)}
+    return {"run_count": int(count), "total_km": round_metric(float(km), 2)}
 
 
 def list_runs(

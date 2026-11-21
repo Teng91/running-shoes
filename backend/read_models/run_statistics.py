@@ -82,7 +82,7 @@ def period_distances(db: Session, user_id: int, period: RunPeriod) -> dict[str, 
         )
         .one()
     )
-    return {key: round(float(value or 0), 2) for key, value in zip(windows, row, strict=True)}
+    return {key: round_metric(float(value or 0), 2) for key, value in zip(windows, row, strict=True)}
 
 
 def monthly_run_distances(db: Session, user_id: int, year: int, through: date) -> list[float]:

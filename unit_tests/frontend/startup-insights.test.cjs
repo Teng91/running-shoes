@@ -130,10 +130,11 @@ test('report history model labels are inserted as text, not HTML', () => {
   assert.doesNotMatch(history, /innerHTML/);
 });
 
-test('shoe default uses the local calendar date', () => {
+test('shoe default uses the service calendar date', () => {
   const context = vm.createContext({ Date });
   vm.runInContext(extract('localDateISO'), context);
-  const date = new Date(2026, 8, 6, 0, 30);
+  // 00:30 on 6 September in Taiwan (SPEC-093), whatever zone runs the test.
+  const date = new Date(Date.UTC(2026, 8, 5, 16, 30));
   assert.equal(context.localDateISO(date), '2026-09-06');
   assert.match(source, /getElementById\('f-date'\)\.value = localDateISO\(\)/);
 });

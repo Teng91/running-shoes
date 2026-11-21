@@ -18,9 +18,22 @@ USERNAME_TAKEN = "Username already registered"
 ADMIN_CANNOT_DELETE = "Admin accounts cannot be deleted"
 
 
+_ASCII_LOWER = str.maketrans("ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz")
+
+
+def username_key(username: str) -> str:
+    """The account identity of a typed name: trimmed, with ASCII letters lowered.
+
+    SPEC-093: SQLite's lower(), which backs the unique uq_users_username_lower index, only
+    folds A–Z. Python's lower() also folds letters such as "Ä", so "Ärger" could not log in
+    with the name it registered. Matching SQLite keeps lookup, uniqueness and lockouts one rule.
+    """
+    return username.strip().translate(_ASCII_LOWER)
+
+
 def find_user(db: Session, username: str) -> models.User | None:
     """Usernames are case-insensitive (SPEC-075): "Runner" and "runner" are one account."""
-    return db.query(models.User).filter(func.lower(models.User.username) == username.strip().lower()).first()
+    return db.query(models.User).filter(func.lower(models.User.username) == username_key(username)).first()
 
 
 @cache
@@ -34,10 +47,11 @@ def register(db: Session, username: str, password: str, *, max_users: int,
              mode: str = "open", invite_code: str = "", admin_names: frozenset[str] = frozenset()):
     """Create an account; ``admin_names`` are the case-folded ``ADMIN_USERNAMES``.
 
-    SPEC-085: an invite never lets anyone claim an admin name that is not registered yet
-    (or no longer is), because admin rights follow the name. The first admin registers
-    while ``REGISTRATION_MODE=open``. The answer is the same as for a taken name, so
-    sign-up does not reveal which names are admins.
+    SPEC-085/093: sign-up never lets anyone claim an admin name that is not registered yet
+    (or no longer is), because admin rights follow the name. The only exception is the very
+    first account of a new deployment, registered while ``REGISTRATION_MODE=open``; later
+    admins register an ordinary account first and are then added to ``ADMIN_USERNAMES``.
+    The answer is the same as for a taken name, so sign-up does not reveal which names are admins.
 
     SPEC-088: in invite mode the invite is checked before the name, so without a valid
     invite sign-up cannot be used to find out which names are taken.
@@ -59,9 +73,11 @@ def register(db: Session, username: str, password: str, *, max_users: int,
         if mode == "invite":
             # Same transaction: a refused registration rolls back and never spends the invite.
             invites.redeem_invite(db, invite_code)
-        if find_user(db, username) or (mode == "invite" and username.casefold() in admin_names):
+        user_count = db.query(models.User).count()
+        bootstrap = mode == "open" and user_count == 0
+        if find_user(db, username) or (username.casefold() in admin_names and not bootstrap):
             raise Invalid(USERNAME_TAKEN)
-        if db.query(models.User).count() >= max_users:
+        if user_count >= max_users:
             raise CapacityExceeded("Registration capacity has been reached")
         user = models.User(username=username, hashed_password=hashed_password)
         db.add(user)
@@ -123,6 +139,15 @@ def logout_everywhere(db: Session, user: models.User) -> dict:
     return {"ok": True}
 
 
+def account_rate_limit_keys(user_id: int) -> tuple[str, ...]:
+    """Bucket keys that name this account in `backend.rate_limits` windows (SPEC-093).
+
+    Per-account windows use the bare id; mail and code-attempt windows prefix it.
+    """
+    account = f"user:{user_id}"
+    return (str(user_id), account, f"reset:{account}", f"verify_email:{account}", f"reset_password:{account}")
+
+
 def _account_tables():
     """Every table holding per-account rows, children before parents (SPEC-075)."""
     return [table for table in reversed(Base.metadata.sorted_tables)
@@ -147,6 +172,10 @@ def delete_account(db: Session, user: models.User, password: str, *, is_admin: b
         # Deleting audited rows wrote fresh audit events and a write context; clear them last.
         db.execute(delete(models.AuditEvent).where(models.AuditEvent.user_id == user_id))
         db.execute(delete(models.WriteContext).where(models.WriteContext.user_id == user_id))
+        # SPEC-093: SQLite reuses the highest user id, so per-account throttling windows keyed
+        # by the id must go too, or the next account would inherit today's AI and upload use.
+        db.execute(delete(models.RateLimitBucket).where(
+            models.RateLimitBucket.bucket_key.in_(account_rate_limit_keys(user_id))))
         db.execute(delete(models.User).where(models.User.id == user_id))
     db.expunge_all()
     return {"ok": True}

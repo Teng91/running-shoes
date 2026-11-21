@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-2bT6CtJchO06Xn0AApmW9o5a2pDMJz9hpC08eAf5DuI=' 'sha256-03bcOQeHecByaBjKyWaE3zaVWPIlPVelCglM9pQh0BU=' 'sha256-IgIQHS5JQWyGqVRXIJS9m3tyA0JiZ2nFTbsaGJpbbDc='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'self'">
-<meta name="app-asset-version" content="4.26.1">
+<meta name="app-asset-version" content="4.27.0">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>跑鞋追蹤 Dashboard</title>
 <meta name="theme-color" content="#07090c">
@@ -42,7 +42,7 @@ body { margin: 0; opacity: 1 !important; }
 @keyframes app-boot-critical-run { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
 @media (prefers-reduced-motion: reduce) { .app-boot { transition: none; } .app-boot-spinner::after { animation: none; width: 100%; opacity: .45; } }
 </style>
-<link id="app-styles" rel="preload" href="/styles.css?v=4.26.1" as="style">
+<link id="app-styles" rel="preload" href="/styles.css?v=4.27.0" as="style">
 <script>
 // Non-blocking stylesheet: apply the preload once it arrives. A script rather
 // than an onload attribute, so the page CSP can allow it by hash (SPEC-054).
@@ -64,7 +64,7 @@ body { margin: 0; opacity: 1 !important; }
   } catch (error) {}
 })();
 </script>
-<noscript><link rel="stylesheet" href="/styles.css?v=4.26.1"></noscript>
+<noscript><link rel="stylesheet" href="/styles.css?v=4.27.0"></noscript>
 </head>
 <body>
 
@@ -925,43 +925,43 @@ window.__appBootLegacyPoll = window.setInterval(function () {
 
 <script src="/vendor/chart.umd.min.js"></script>
 <script src="/vendor/marked.min.js"></script>
-<script src="/app-boot.js?v=4.26.1"></script>
-<script src="/app-lifecycle.js?v=4.26.1"></script>
-<script src="/app-state.js?v=4.26.1"></script>
-<script src="/app-api.js?v=4.26.1"></script>
-<script src="/app-auth.js?v=4.26.1"></script>
-<script src="/app-streams.js?v=4.26.1"></script>
-<script src="/app-resources.js?v=4.26.1"></script>
-<script src="/app-inline-editors.js?v=4.26.1"></script>
-<script src="/app-local-store.js?v=4.26.1"></script>
-<script src="/app-workspace.js?v=4.26.1"></script>
-<script src="/app-account.js?v=4.26.1"></script>
-<script src="/app-account-restore.js?v=4.26.1"></script>
-<script src="/app-history.js?v=4.26.1"></script>
-<script src="/app-core.js?v=4.26.1"></script>
-<script src="/app-models.js?v=4.26.1"></script>
-<script src="/app-markdown.js?v=4.26.1"></script>
-<script src="/app-agent.js?v=4.26.1"></script>
-<script src="/app-reports.js?v=4.26.1"></script>
-<script src="/app-runs.js?v=4.26.1"></script>
-<script src="/app-dates.js?v=4.26.1"></script>
-<script src="/app-strava.js?v=4.26.1"></script>
-<script src="/app-run-insights.js?v=4.26.1"></script>
-<script src="/app-shoes.js?v=4.26.1"></script>
-<script src="/app-dashboard.js?v=4.26.1"></script>
-<script src="/app-onboarding.js?v=4.26.1"></script>
-<script src="/app-exports.js?v=4.26.1"></script>
-<script src="/app-goals.js?v=4.26.1"></script>
-<script src="/app-charts.js?v=4.26.1"></script>
-<script src="/app-shoe-charts.js?v=4.26.1"></script>
-<script src="/app-monthly-charts.js?v=4.26.1"></script>
-<script src="/app-trend-charts.js?v=4.26.1"></script>
-<script src="/app-pace-charts.js?v=4.26.1"></script>
-<script src="/app-race-goal.js?v=4.26.1"></script>
-<script src="/app-spending.js?v=4.26.1"></script>
-<script src="/app-dialogs.js?v=4.26.1"></script>
-<script src="/app-updates.js?v=4.26.1"></script>
-<script src="/app-actions.js?v=4.26.1"></script>
-<script src="/app.js?v=4.26.1"></script>
+<script src="/app-boot.js?v=4.27.0"></script>
+<script src="/app-lifecycle.js?v=4.27.0"></script>
+<script src="/app-state.js?v=4.27.0"></script>
+<script src="/app-api.js?v=4.27.0"></script>
+<script src="/app-auth.js?v=4.27.0"></script>
+<script src="/app-streams.js?v=4.27.0"></script>
+<script src="/app-resources.js?v=4.27.0"></script>
+<script src="/app-inline-editors.js?v=4.27.0"></script>
+<script src="/app-local-store.js?v=4.27.0"></script>
+<script src="/app-workspace.js?v=4.27.0"></script>
+<script src="/app-account.js?v=4.27.0"></script>
+<script src="/app-account-restore.js?v=4.27.0"></script>
+<script src="/app-history.js?v=4.27.0"></script>
+<script src="/app-core.js?v=4.27.0"></script>
+<script src="/app-models.js?v=4.27.0"></script>
+<script src="/app-markdown.js?v=4.27.0"></script>
+<script src="/app-agent.js?v=4.27.0"></script>
+<script src="/app-reports.js?v=4.27.0"></script>
+<script src="/app-runs.js?v=4.27.0"></script>
+<script src="/app-dates.js?v=4.27.0"></script>
+<script src="/app-strava.js?v=4.27.0"></script>
+<script src="/app-run-insights.js?v=4.27.0"></script>
+<script src="/app-shoes.js?v=4.27.0"></script>
+<script src="/app-dashboard.js?v=4.27.0"></script>
+<script src="/app-onboarding.js?v=4.27.0"></script>
+<script src="/app-exports.js?v=4.27.0"></script>
+<script src="/app-goals.js?v=4.27.0"></script>
+<script src="/app-charts.js?v=4.27.0"></script>
+<script src="/app-shoe-charts.js?v=4.27.0"></script>
+<script src="/app-monthly-charts.js?v=4.27.0"></script>
+<script src="/app-trend-charts.js?v=4.27.0"></script>
+<script src="/app-pace-charts.js?v=4.27.0"></script>
+<script src="/app-race-goal.js?v=4.27.0"></script>
+<script src="/app-spending.js?v=4.27.0"></script>
+<script src="/app-dialogs.js?v=4.27.0"></script>
+<script src="/app-updates.js?v=4.27.0"></script>
+<script src="/app-actions.js?v=4.27.0"></script>
+<script src="/app.js?v=4.27.0"></script>
 </body>
 </html>
