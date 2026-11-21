@@ -67,8 +67,9 @@ function refreshContext() {
     fetchRunPage: async () => { calls.push('page'); return { rows: [], hasMore: false }; },
     goalProgressCache: new Map([['retained', 1]]),
   });
-  vm.runInContext(`let shoes = [], retiredShoes = [], monthlyMileages = [], runningGoal = {}, selectedYear;
-    let spendingSummary = { retained: true }, spendingLoadRequestId = 0, spendingLoadPending = false, goalProgressRequestId = 0;
+  context.seedCoreData({ runningGoal: {}, spendingSummary: { retained: true } });
+  vm.runInContext(`let selectedYear;
+    let spendingLoadRequestId = 0, spendingLoadPending = false, goalProgressRequestId = 0;
     ${extract('loadData')}`, context);
   return { context, calls };
 }
@@ -80,10 +81,10 @@ test('SPEC-023 mutation refresh limits requests and preserves unrelated caches',
   await context.loadData({ mutation: 'monthly' });
   assert.deepEqual(calls, ['/monthly-mileage']);
   assert.equal(context.resourceStore.peek('goal-progress'), 1); assert.equal(context.resourceStore.peek('annual-summary'), 1);
-  assert.equal(vm.runInContext('spendingSummary.retained', context), true);
+  assert.equal(context.coreData.spendingSummary.retained, true);
   calls.length = 0; await context.loadData({ mutation: 'shoe' });
   assert.deepEqual(calls, ['/shoes/active', '/shoes/retired']);
-  assert.equal(vm.runInContext('spendingSummary', context), null);
+  assert.equal(context.coreData.spendingSummary, null);
   assert.equal(context.resourceStore.peek('goal-progress'), 1); assert.equal(context.resourceStore.peek('annual-summary'), 1);
   calls.length = 0; await context.loadData({ mutation: 'run' });
   assert.equal(calls.includes('/running-goal'), false); assert.equal(calls.includes('history'), false);
@@ -114,16 +115,16 @@ test('SPEC-023 overlapping full and mutation reloads reject stale resources and 
   };
   const old = context.loadData(); await Promise.resolve(); await context.loadData({ mutation: 'monthly' });
   // A successful goal write owns the newer value even if the full GET is pending.
-  context.invalidateDataResources(['goal']); vm.runInContext('runningGoal = { version: 2 }', context);
+  context.invalidateDataResources(['goal']); context.applyCoreResource('goal', { version: 2 });
   oldMonthly.resolve([{ year: 2026, km: 100 }]); await old;
-  assert.equal(vm.runInContext('monthlyMileages[0].km', context), 180);
-  assert.equal(vm.runInContext('shoes[0].id', context), 7);
-  assert.equal(vm.runInContext('runningGoal.version', context), 2);
+  assert.equal(context.coreData.monthlyMileages[0].km, 180);
+  assert.equal(context.coreData.shoes[0].id, 7);
+  assert.equal(context.coreData.runningGoal.version, 2);
   const stale = deferred(); context.apiGet = () => stale.promise;
   const session = { current: true }; context.captureAuthSession = () => session; context.isCurrentAuthSession = value => value.current;
   const pending = context.loadData({ mutation: 'monthly' }); session.current = false;
   stale.resolve([{ year: 2026, km: 999 }]); await pending;
-  assert.equal(vm.runInContext('monthlyMileages[0].km', context), 180);
+  assert.equal(context.coreData.monthlyMileages[0].km, 180);
   const failed = refreshContext().context;
   failed.console.error = () => {};
   failed.apiGet = async url => { if (url === '/monthly-mileage') throw new Error('offline'); return []; };

@@ -67,8 +67,8 @@
 - `frontend/index.html`, `styles.css`, `service-worker.js`: generated static outputs; commit with their sources, do not edit directly.
 - `frontend/runtime/form-operations.mjs`: session/epoch/operation ownership and draft snapshots/reconciliation shared by feature adapters.
 - `frontend/runtime/resource-store.mjs`: DOM-independent resource/session ownership, pending read coalescing and cache invalidation policy.
-- `frontend/app-resources.js`: native resource bridge and legacy cache adapters; `applyCoreResource()`/`resetCoreData()` are the only writers of the core data globals (SPEC-094).
-- `frontend/runtime/core-data.mjs`: DOM-independent rules for how each loaded resource becomes core data (shoes, monthly mileage, goal, Strava history, spending) and their reset defaults; `architecture-check` rejects core data writes outside `app-resources.js`.
+- `frontend/app-resources.js`: native resource bridge and legacy cache adapters; it alone installs the core data store (`useCoreDataStore`) and feeds it (`applyCoreResource`, logout reset) (SPEC-094, SPEC-095).
+- `frontend/runtime/core-data.mjs`: DOM-independent store of the core data (shoes, monthly mileage, goal, Strava history, spending): load rules, defaults and a read-only view with frozen arrays; scripts read it as `coreData.<field>`, and `architecture-check` rejects writes and reads of the removed globals.
 - `scripts/browser_runner.py`: outer browser deadlines and bounded process-tree cleanup.
 - `frontend/runtime/feature-lifecycle.mjs`: DOM-independent native module for feature lifecycle ownership.
 - `frontend/runtime/run-controller.mjs`: native run state/operation owner with injected transport, session and key factory; DOM remains in the bridge.
@@ -78,7 +78,7 @@
 - `frontend/app-dialogs.js`: modal semantics and keyboard/focus lifecycle.
 - `frontend/app-updates.js`: shell version diagnostics, open-app deployment checks (focus, visibility, reconnect, 30 min), automatic reload at safe moments (background, untouched after returning, 5 idle minutes; postponed by `appUpdateBusy()`) and the update prompt (SPEC-049, SPEC-059).
 - `frontend/app-boot.js`: startup loading, stylesheet readiness, timeout, and retry state.
-- `frontend/app-state.js`: shared browser state declarations (core data is assigned only through `applyCoreResource`), presentation constants and the guarded localStorage helpers (`readStoredValue` and friends); classic scripts never touch `localStorage` outside a try (SPEC-087).
+- `frontend/app-state.js`: shared browser state (`coreData` is the core data store's read-only view; never declare core data globals again), presentation constants and the guarded localStorage helpers (`readStoredValue` and friends); classic scripts never touch `localStorage` outside a try (SPEC-087).
 - `frontend/app-api.js`: authenticated JSON and upload transport helpers.
 - `frontend/app-auth.js`: authentication state, forms, and account transitions.
 - `frontend/app-streams.js`: shared authenticated SSE decoding, cancellation, and terminal state.

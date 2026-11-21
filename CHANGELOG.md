@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [4.27.2] - 2026-11-21
+
+### Changed
+- 前端全域狀態拆分第二階段（SPEC-095），畫面與功能不變：核心資料改存在 `runtime/core-data.mjs` 的 store，所有 script 透過唯讀的 `coreData` 讀取（例如 `coreData.shoes`），原本的 7 個全域變數移除；讀取端改寫或就地排序共享陣列會直接丟錯，architecture-check 也擋住讀取已移除的全域變數。前端測試改以真正的 store 準備資料。Asset 4.27.2／shell v104，schema 12 不變。
+
 ## [4.27.1] - 2026-11-21
 
 ### Changed

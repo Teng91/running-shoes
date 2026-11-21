@@ -144,7 +144,7 @@ test('dashboard analytics cache expires by local date and goals invalidate it', 
   assert.match(loader, /const cachePrefix = `\$\{session\.generation\}\|\$\{localDateISO\(\)\}\|`/);
   assert.match(loader, /const cacheKey = `\$\{cachePrefix\}\$\{month\}`/);
   assert.match(loader, /resourceStore\.read\('dashboard-analytics'/);
-  assert.match(saveGoal, /expected_version: Number\(runningGoal\.version \|\| 0\)/);
+  assert.match(saveGoal, /expected_version: Number\(coreData\.runningGoal\.version \|\| 0\)/);
   assert.match(saveGoal, /invalidateDataResources\(\['goal', 'goal-progress', 'dashboard-analytics'\]\)/);
 });
 

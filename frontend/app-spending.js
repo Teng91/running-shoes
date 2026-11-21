@@ -4,7 +4,7 @@ let spendingLoadPending = false;
 registerFeatureReset('spending', () => {
   spendingLoadRequestId += 1;
   spendingLoadPending = false;
-  if (coreDataRules) applyCoreResource('spending', null);
+  if (coreDataStore) applyCoreResource('spending', null);
   document.getElementById('spending-table').replaceChildren();
   document.getElementById('spending-cards').replaceChildren();
 });
@@ -29,7 +29,7 @@ async function loadSpendingData() {
 
 // Spending summaries, charts, and detail table.
 function renderSpendingCharts() {
-  if (!spendingSummary) {
+  if (!coreData.spendingSummary) {
     document.getElementById('spending-cards').innerHTML = '<div class="card"><div class="card-sub">支出載入中…</div></div>';
     loadSpendingData();
     return;
@@ -44,7 +44,7 @@ function renderSpendingCharts() {
 
 function populateSpendingYearSelect() {
   const sel = document.getElementById('spending-year-select');
-  const years = [...new Set(monthlySpending.map(m => m.year))].sort((a, b) => b - a);
+  const years = [...new Set(coreData.monthlySpending.map(m => m.year))].sort((a, b) => b - a);
   if (years.length === 0) {
     sel.innerHTML = '<option value="">無資料</option>';
     selectedSpendingYear = null;
@@ -63,7 +63,7 @@ function onSpendingYearChange() {
 }
 
 function renderSpendingCards() {
-  const summary = spendingSummary;
+  const summary = coreData.spendingSummary;
   if (!summary) return;
   const start = calendarMonthParts(summary.start_month);
   const highest = summary.highest_month;
@@ -85,7 +85,7 @@ function _spendingMonthMap(year) {
   // Build label/data arrays for all 12 months of the given year, filling 0
   const labels = Array.from({length: 12}, (_, i) => (i + 1) + ' 月');
   const paid = Array(12).fill(0);
-  monthlySpending.forEach(m => {
+  coreData.monthlySpending.forEach(m => {
     if (m.year === year) {
       paid[m.month - 1] = m.total_paid;
     }
@@ -144,13 +144,13 @@ function renderSpendingChart() {
 
 function renderSpendingYearlyChart() {
   if (chartInstances.spendingYearly) { chartInstances.spendingYearly.destroy(); delete chartInstances.spendingYearly; }
-  if (monthlySpending.length === 0) return;
+  if (coreData.monthlySpending.length === 0) return;
 
   const textColor = getThemeColor('--text-dim', '#8b8d9a');
   const gridColor = getThemeColor('--chart-grid', '#f1f5f9');
 
   const yearMap = new Map();
-  monthlySpending.forEach(m => {
+  coreData.monthlySpending.forEach(m => {
     if (!yearMap.has(m.year)) yearMap.set(m.year, { paid: 0, orig: 0 });
     yearMap.get(m.year).paid += m.total_paid;
     yearMap.get(m.year).orig += m.total_orig;
@@ -197,7 +197,7 @@ function renderSpendingYearlyChart() {
 
 function renderSpendingTable() {
   const tbody = document.getElementById('spending-table');
-  const allShoes = [...shoes, ...retiredShoes].sort(byDate);
+  const allShoes = [...coreData.shoes, ...coreData.retiredShoes].sort(byDate);
   tbody.innerHTML = allShoes.map(s => {
     const discount = s.discount_percent === null || s.discount_percent === undefined ? '—' : s.discount_percent.toFixed(1) + '%';
     const status = s.is_retired ? '已退役' : '使用中';

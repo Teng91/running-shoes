@@ -123,7 +123,7 @@ function dashboardGoalSummary(goal) {
 
 function renderStravaStatus() {
   const target = document.getElementById('strava-last');
-  const last = stravaImports[0];
+  const last = coreData.stravaImports[0];
   if (!last) { target.textContent = '尚未匯入'; return; }
   const when = new Date(last.imported_at).toLocaleString('zh-TW', { month:'numeric', day:'numeric', hour:'2-digit', minute:'2-digit' });
   target.textContent = `上次 ${when} · 新增 ${last.imported_count} 筆`;
@@ -257,7 +257,7 @@ let homeSummaryRequestId = 0;
 
 function renderShoeSuggestion(suggestion) {
   const target = document.getElementById('shoe-suggestion');
-  const pick = suggestion.find(row => shoes.some(shoe => shoe.id === row.shoe_id));
+  const pick = suggestion.find(row => coreData.shoes.some(shoe => shoe.id === row.shoe_id));
   if (!pick) { target.hidden = true; target.replaceChildren(); return; }
   const reason = pick.days_since_last_run == null ? '還沒穿過' : pick.days_since_last_run === 0 ? '今天穿過' : `已經 ${pick.days_since_last_run} 天沒穿`;
   const wear = pick.near_end ? `，已用 ${pick.usage_percent.toFixed(0)}%，快到退役里程` : '';

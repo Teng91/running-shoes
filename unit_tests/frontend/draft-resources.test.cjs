@@ -66,9 +66,9 @@ test('SPEC-024 goal drafts survive redraw and save acknowledgements', async () =
   await context.saveRunningGoal();
   assert.equal(writes[1].expected_version, 2); assert.equal(writes[1].monthly_km, 200);
   assert.equal(elements['goal-settings'].hidden, true, 'SPEC-044 a clean save collapses the editor');
-  context.runningGoal = { version: 4, start_year: 2027, monthly_km: 220 }; context.renderGoalProgress();
+  context.seedCoreData({ runningGoal: { version: 4, start_year: 2027, monthly_km: 220 } }); context.renderGoalProgress();
   assert.equal(elements['goal-monthly-km'].value, '220', 'clean form follows new server values');
-  context.getFormDraft('goal').reset(); context.runningGoal = { version: 0, start_year: 2026, monthly_km: 100 };
+  context.getFormDraft('goal').reset(); context.seedCoreData({ runningGoal: { version: 0, start_year: 2026, monthly_km: 100 } });
   elements['goal-monthly-km'].value = '999'; context.renderGoalProgress();
   assert.equal(elements['goal-monthly-km'].value, '100', 'reset cannot retain another account draft');
 });
@@ -126,13 +126,13 @@ test('SPEC-024 coalesced dashboard loads apply run rows once despite partial fai
     apiGet: async url => { calls.push(url); if (url === '/running-goal') throw Error('goal offline'); return url === '/monthly-mileage' ? [{ year: 2026 }] : []; },
     fetchRunPage: async () => { calls.push('page'); return { rows: [{ id: 42 }], hasMore: false }; },
   });
-  vm.runInContext(`let shoes=[], retiredShoes=[], monthlyMileages=[], runningGoal={}, selectedYear;
-    let spendingSummary, spendingLoadRequestId=0, spendingLoadPending=false, goalProgressRequestId=0;
+  vm.runInContext(`let selectedYear;
+    let spendingLoadRequestId=0, spendingLoadPending=false, goalProgressRequestId=0;
     ${extract('loadData')}`, context);
   await Promise.all([context.loadData(), context.loadData()]);
   assert.equal(calls.length, 6); assert.equal(calls.filter(name => name === 'page').length, 1);
   assert.equal(context.runController.state.rows[0].id, 42);
-  assert.equal(vm.runInContext('monthlyMileages[0].year', context), 2026);
+  assert.equal(context.coreData.monthlyMileages[0].year, 2026);
   assert.equal(elements['data-load-error'].hidden, false);
   context.invalidateDataResources(['goal']);
   assert.equal(elements['data-load-error'].hidden, true, 'acknowledged goal write clears its recovered read error');

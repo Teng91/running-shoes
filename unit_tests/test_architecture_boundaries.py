@@ -58,26 +58,36 @@ def test_routers_delegate_every_database_query():
     assert offenders == []
 
 
-def test_core_data_is_written_only_through_the_bridge(tmp_path):
-    """SPEC-094: every script reads the core data globals; only app-resources.js assigns them."""
+def test_core_data_is_read_through_the_view_and_written_only_by_the_bridge(tmp_path):
+    """SPEC-094/095: scripts read coreData.<field>; only app-resources.js installs and feeds the store."""
     import json
 
     frontend = check_architecture.ROOT / "frontend"
-    scripts = json.loads((frontend / "assets.json").read_text(encoding="utf-8"))["scripts"]
-    assert check_architecture.core_data_writers(frontend, scripts) == []
-    assert "runtime/core-data.mjs" in json.loads((frontend / "assets.json").read_text(encoding="utf-8"))["modules"]
+    manifest = json.loads((frontend / "assets.json").read_text(encoding="utf-8"))
+    assert check_architecture.core_data_violations(frontend, manifest["scripts"]) == []
+    assert "runtime/core-data.mjs" in manifest["modules"]
 
-    (tmp_path / "app-state.js").write_text("let shoes = [];\nlet runningGoal = {};\n", encoding="utf-8")
-    (tmp_path / "app-resources.js").write_text("function assignCoreFields(p) { shoes = p.shoes; }\n", encoding="utf-8")
+    (tmp_path / "app-state.js").write_text("let coreData = Object.freeze({ shoes: [] });\n", encoding="utf-8")
+    (tmp_path / "app-resources.js").write_text("function useCoreDataStore(store) { coreData = store.view; }\n",
+                                               encoding="utf-8")
     (tmp_path / "app-feature.js").write_text(
-        "if (ok) [shoes, retiredShoes] = value;\n"
-        "runningGoal.version = 2;\n"
-        "shoes.sort(byDate);\n"
-        "stravaImports += [];\n"
-        "const total = shoes.length; if (shoes === other) show(shoes);\n"
-        "const view = { shoes: [], runningGoal };\n"
-        "// shoes = [] in a comment is fine\n"
-        "function local() { const shoes = []; return shoes.map(shoe => shoe.id); }\n",
+        "coreData = {};\n"
+        "coreData.runningGoal.version = 2;\n"
+        "coreData.shoes.sort(byDate);\n"
+        "let shoes = [];\n"
+        "const total = coreData.shoes.length; if (coreData.shoes === other) show([...coreData.shoes]);\n"
+        "const view = { shoes: [], runningGoal: coreData.runningGoal };\n"
+        "// coreData = {} in a comment is fine\n",
         encoding="utf-8")
-    offenders = check_architecture.core_data_writers(tmp_path, ["app-state.js", "app-resources.js", "app-feature.js"])
-    assert [line.split(":")[1] for line in offenders] == ["1", "2", "3", "4"]
+    (tmp_path / "app-local.js").write_text(
+        "function draw(shoes) { return shoes.map(shoe => shoe.id); }\n"
+        "const picks = list.filter(retiredShoes => retiredShoes.id);\n",
+        encoding="utf-8")
+    offenders = check_architecture.core_data_violations(
+        tmp_path, ["app-state.js", "app-resources.js", "app-feature.js", "app-local.js"])
+    assert [line.split(":")[:2] for line in offenders] == [
+        ["app-feature.js", "1"], ["app-feature.js", "2"], ["app-feature.js", "3"], ["app-feature.js", "4"]]
+
+    (tmp_path / "app-reader.js").write_text("function count() { return shoes.length; }\n", encoding="utf-8")
+    assert check_architecture.core_data_violations(tmp_path, ["app-reader.js"]) == [
+        "app-reader.js:1: reads a removed global: function count() { return shoes.length; }"]

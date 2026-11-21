@@ -142,7 +142,7 @@ function persistWorkspaceDrafts(event = null) {
   if (!localWorkspace.runDraftId) localWorkspace.runDraftId = newOperationKey();
   if (document.getElementById('run-km').value && localWorkspace.runDraftId !== localWorkspace.consumedRunDraftId) forms.run = readForm(workspaceForms.run);
   const goal = readForm(workspaceForms.goal);
-  if (goal['goal-monthly-km'] && !formSnapshotMatches(goal, goalFormValues(runningGoal))) forms.goal = goal;
+  if (goal['goal-monthly-km'] && !formSnapshotMatches(goal, goalFormValues(coreData.runningGoal))) forms.goal = goal;
   const editor = captureWorkspaceEditor();
   if (editor) localWorkspace.editors[`${editor.kind}:${editor.base?.id || 'new'}`] = editor;
   const snapshot = { forms, runDraftId: localWorkspace.runDraftId, editors: structuredClone(localWorkspace.editors) };

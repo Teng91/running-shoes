@@ -60,7 +60,7 @@ async function inspect(browser,baseUrl,scenario){
    await page.evaluate(()=>switchTab('shoes'));
    await page.locator('#shoe-table tr:first-child .btn-edit').click();
    await page.locator('#btn-delete').click();await page.locator('#modal').waitFor({state:'hidden'});
-   await page.waitForFunction(()=>shoes.length===1);await page.evaluate(()=>switchTab('runs'));
+   await page.waitForFunction(()=>coreData.shoes.length===1);await page.evaluate(()=>switchTab('runs'));
    // Panel rendering runs in the next frame. Wait for its DOM transition,
    // then assert that a removed option did not silently choose its successor.
    await page.waitForFunction(()=>!document.querySelector('#run-shoe option[value="1"]'));

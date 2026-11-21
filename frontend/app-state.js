@@ -67,17 +67,17 @@ function appCalendarDate(instant = new Date()) {
 }
 
 const byDate = (a, b) => new Date(a.date) - new Date(b.date);
-// Core account data (SPEC-094). Every script reads these, but only applyCoreResource() and
-// resetCoreData() in app-resources.js assign them, using the rules in runtime/core-data.mjs;
-// architecture-check rejects assignments anywhere else. The initial values equal
-// coreDataDefaults(), which a frontend test keeps in step.
-let shoes = [];
-let retiredShoes = [];
-let monthlyMileages = [];
-let monthlySpending = [];
-let spendingSummary = null;
-let stravaImports = [];
-let runningGoal = { version: 0, start_year: 2026, monthly_km: 125, yearly_km: 1500 };
+// Core account data (SPEC-095): shoes, retiredShoes, monthlyMileages, runningGoal,
+// stravaImports, spendingSummary and monthlySpending live in the store of
+// runtime/core-data.mjs. Scripts read them as coreData.shoes and so on; the view is
+// read-only and its arrays are frozen. initializeDataResources() replaces this empty
+// placeholder (equal to coreDataDefaults(), which a frontend test keeps in step) with the
+// store's view before any data arrives; only app-resources.js applies data to the store.
+let coreData = Object.freeze({
+  shoes: Object.freeze([]), retiredShoes: Object.freeze([]), monthlyMileages: Object.freeze([]),
+  runningGoal: Object.freeze({ version: 0, start_year: 2026, monthly_km: 125, yearly_km: 1500 }),
+  stravaImports: Object.freeze([]), spendingSummary: null, monthlySpending: Object.freeze([]),
+});
 let selectedYear = null;
 let selectedSpendingYear = null;
 let dashboardAnalyticsRequest = 0;

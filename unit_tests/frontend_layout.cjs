@@ -380,20 +380,21 @@ async function run(engine, name) {
         document.querySelector('#auth-view').style.display = 'none';
         document.querySelector('#app-view').style.display = '';
         document.querySelector('#user-label').textContent = 'runner_with_a_very_long_username';
-        shoes = Array.from({ length: 8 }, (_, i) => ({ id: i + 1, brand: 'Mizuno',
+        // SPEC-095: fixtures enter the core data store the way loaded resources do.
+        const shoes = Array.from({ length: 8 }, (_, i) => ({ id: i + 1, brand: 'Mizuno',
           model: i === 0 ? 'Wave Rider 29 非常長的鞋款名稱' : `非常長的鞋款名稱 Very long running shoe model ${i}`,
           date: '2026-01-01', price: 4000, orig_price: 5000, mileage: 120 + i * 10,
           expected_mileage: 800, monthly_km: 80, category: 'Daily', size: 'US 9',
           discount_percent: 80, cost_per_km: 33.33, expected_cost_per_km: 5,
           usage_percent: 15 + i * 1.25, remaining_mileage_km: 680 - i * 10,
           forecast_retirement_date: '2027-06-01', forecast_source: 'recent_90_days', forecast_monthly_km: 80, actual_monthly_km_90_days: 80 - i * 5 }));
-        retiredShoes = [{ ...shoes[0], id: 20, is_retired: true }];
+        applyCoreResource('shoes', [shoes, [{ ...shoes[0], id: 20, is_retired: true }]]);
         runController.state.rows = shoes.map((shoe, i) => ({ id: i + 1, shoe_id: shoe.id, date: `2026-09-${String(i + 1).padStart(2, '0')}`, km: 18.67, source: 'manual' }));
-        monthlyMileages = Array.from({ length: 12 }, (_, i) => ({ id: i + 1, year: 2026, month: i + 1, km: 120 + i }));
-        monthlySpending = Array.from({ length: 12 }, (_, i) => ({ year: 2026, month: i + 1, total_paid: 4000, total_orig: 5000 }));
-        spendingSummary = { total_paid: 48000, total_original: 60000, savings: 12000,
+        applyCoreResource('monthly', Array.from({ length: 12 }, (_, i) => ({ id: i + 1, year: 2026, month: i + 1, km: 120 + i })));
+        applyCoreResource('spending', { total_paid: 48000, total_original: 60000, savings: 12000,
           average_discount_percent: 80, average_monthly_paid: 4000, month_span: 12,
-          start_month: '2026-01', highest_month: { year: 2026, month: 1, total_paid: 4000 }, monthly: monthlySpending };
+          start_month: '2026-01', highest_month: { year: 2026, month: 1, total_paid: 4000 },
+          monthly: Array.from({ length: 12 }, (_, i) => ({ year: 2026, month: i + 1, total_paid: 4000, total_orig: 5000 })) });
         document.querySelector('#run-month').value = '2026-09';
         document.querySelector('#agent-model').innerHTML = '<option>Very long model provider and model name</option>';
         document.querySelector('#report-model').innerHTML = '<option>Very long model provider and model name</option>';
@@ -510,7 +511,7 @@ async function run(engine, name) {
             if (screenshots && [390, 1440].includes(width)) await page.screenshot({ path: path.join(screenshots, `${name}-${theme}-${id}-${width}.png`) });
             if (id === 'modal') {
               for (const retired of [false, true]) {
-                await page.evaluate(retired => shoeModal.openForEdit(retired ? retiredShoes[0] : shoes[0], retired), retired);
+                await page.evaluate(retired => shoeModal.openForEdit(retired ? coreData.retiredShoes[0] : coreData.shoes[0], retired), retired);
                 assert.equal(await page.locator('#shoe-secondary-actions').isVisible(), true);
                 await assertLayout(page, `${name} ${theme} ${width} shoe edit ${retired}`);
                 if (screenshots && [390, 1440].includes(width)) await page.screenshot({ path: path.join(screenshots, `${name}-${theme}-shoe-edit-${retired}-${width}.png`) });
@@ -531,7 +532,7 @@ async function run(engine, name) {
             if (id === 'shoe-analysis-modal') await page.evaluate(() => closeShoeAnalytics());
           }
           await selectTab(page, 'shoes');
-          await page.evaluate(() => inlineEditRow(shoes, 0, 'mileage', document.querySelector('#shoe-table .editable')));
+          await page.evaluate(() => inlineEditRow(inlineTableRows.get('shoe-table'), 0, 'mileage', document.querySelector('#shoe-table .editable')));
           await assertLayout(page, `${name} ${theme} ${width} shoes inline edit`);
           await page.locator('.inline-input').press('Escape');
           await page.evaluate(() => { document.getElementById('app-view').style.display = 'none'; document.getElementById('auth-view').style.display = ''; });
@@ -557,7 +558,11 @@ async function run(engine, name) {
       }
       await page.evaluate(() => renderDashboardInsights(window.layoutAnalytics));
       await assertLayout(page, `${name} analytics recovery`);
-      await page.evaluate(() => { shoes = []; retiredShoes = []; runController.state.rows = []; monthlyMileages = []; monthlySpending = []; render(); });
+      await page.evaluate(() => {
+        applyCoreResource('shoes', [[], []]); applyCoreResource('monthly', []);
+        applyCoreResource('spending', { ...coreData.spendingSummary, monthly: [] });
+        runController.state.rows = []; render();
+      });
       for (const tab of ['runs', 'shoes', 'monthly', 'report']) {
         await selectTab(page, tab);
         await page.waitForTimeout(100);
