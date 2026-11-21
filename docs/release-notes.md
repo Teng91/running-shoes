@@ -4,6 +4,14 @@
 每版的摘要見 [CHANGELOG.md](../CHANGELOG.md)；目前的功能與操作方式以 [README](../README.md) 為準。
 這裡保留當時的文字，後續版本可能已調整其中的行為。
 
+### 健行與步行不出現在跑步畫面（SPEC-098，v4.29.1）
+
+- `read_models/runs.month_run_summary` 只彙總 `TRAINING_RUN`：`calendar` 與 `shoe_usage` 不再含健行與步行（總數本來就只算跑步）。`list_runs` 不變。
+- `highlights.shoe_distance_mix` 只算 `TRAINING_RUN`；`shoe_statistics` 的最近 12 筆多回 `activity_type`。
+- 前端摘要尚未回來時的暫時計算同樣只算跑步；單鞋分析標題改為「最近使用」。
+
+Schema 13 不變，可直接回滾至 v4.29.0 image。
+
 ### 步行類型與 Strava 健行／步行選擇匯入（SPEC-097，v4.29.0）
 
 - `run_metrics.ACTIVITY_TYPES` 加入 `walk`；訓練與配速類型不變，所以步行和健行一樣只計入鞋子。Strava `Walk`／步行 → `walk`。

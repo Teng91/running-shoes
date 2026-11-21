@@ -496,8 +496,11 @@ def test_hike_counts_toward_shoe_but_not_monthly_mileage(client, db, user_with_t
     assert trends["streaks"] == before[1]["streaks"]
     summary = month_run_summary(db, user.id, 2026, 10)
     assert (summary["total_km"], summary["run_count"], summary["run_days"]) == (8, 1, 1)
-    assert [day["date"] for day in summary["calendar"]] == ["2026-10-10", "2026-10-11"], "the log lists every activity"
-    assert summary["shoe_usage"] == [{"shoe_id": shoe.id, "km": 18.0, "count": 2}]
+    # SPEC-098: the run calendar and the month's shoe split show runs only; the list keeps the hike.
+    assert [day["date"] for day in summary["calendar"]] == ["2026-10-10"]
+    assert summary["shoe_usage"] == [{"shoe_id": shoe.id, "km": 8.0, "count": 1}]
+    listed = client.get("/api/runs?year=2026&month=10", headers=headers).json()
+    assert [(run["date"], run["activity_type"]) for run in listed] == [("2026-10-11", "hike"), ("2026-10-10", "road")]
     assert run_totals(db, user.id) == {"run_count": 1, "total_km": 8.0}
 
     assert client.delete(f"/api/runs/{hike.json()['id']}", headers=headers).status_code == 200

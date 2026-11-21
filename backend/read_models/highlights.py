@@ -158,11 +158,14 @@ def _records_in(runs: list) -> dict:
 
 
 def shoe_distance_mix(db: Session, user_id: int) -> dict:
-    """Run counts per distance bucket for each active shoe with logged runs."""
+    """Run counts per distance bucket for each active shoe with logged runs.
+
+    Training runs only: a hike or walk is not a running distance (SPEC-098).
+    """
     rows = (
         db.query(models.Run.shoe_id, models.Run.km)
         .join(models.Shoe, (models.Shoe.id == models.Run.shoe_id) & (models.Shoe.user_id == user_id))
-        .filter(models.Run.user_id == user_id, models.Shoe.is_deleted.is_(False),
+        .filter(models.Run.user_id == user_id, TRAINING_RUN, models.Shoe.is_deleted.is_(False),
                 models.Shoe.is_retired.is_(False))
         .all()
     )
