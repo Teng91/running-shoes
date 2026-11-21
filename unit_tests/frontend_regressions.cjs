@@ -27,3 +27,4 @@ require('./frontend/account.test.cjs');
 require('./frontend/account-email.test.cjs');
 require('./frontend/onboarding.test.cjs');
 require('./frontend/agent-thinking.test.cjs');
+require('./frontend/core-data.test.cjs');
