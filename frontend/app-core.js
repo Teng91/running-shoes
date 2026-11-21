@@ -138,13 +138,7 @@ async function loadData({ mutation = null } = {}) {
       if (accepted.error.name !== 'AbortError') console.error('載入資料失敗:', accepted.error);
       return;
     }
-    if (resource === 'shoes') [shoes, retiredShoes] = value;
-    if (resource === 'monthly') {
-      monthlyMileages = value;
-      const years = [...new Set(monthlyMileages.map(item => item.year))].sort((a, b) => b - a);
-      if (!selectedYear || !years.includes(selectedYear)) selectedYear = years[0] || appCalendarDate().year;
-    }
-    if (resource === 'goal') runningGoal = value;
+    if (resource === 'shoes' || resource === 'monthly' || resource === 'goal') applyCoreResource(resource, value);
     if (resource === 'runs' && value.requestId === runController.state.listRequest
         && requestedRunMonth === selectedRunMonth()) {
       const { page, summary } = value;

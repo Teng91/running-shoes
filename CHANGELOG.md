@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [4.27.1] - 2026-11-21
+
+### Changed
+- 前端全域狀態拆分第一階段（SPEC-094），畫面與功能不變：鞋款、月跑量、目標、Strava 匯入紀錄與支出這些核心資料改由新的 native module `runtime/core-data.mjs` 定義載入規則，只有 `app-resources.js` 的 `applyCoreResource()` 能寫入，architecture-check 擋住其他檔案直接修改；本機快取的月跑量也會挑選顯示年份。Asset 4.27.1／shell v103，schema 12 不變。
+
 ## [4.27.0] - 2026-11-21
 
 ### Fixed

@@ -94,9 +94,7 @@ function activateLocalWorkspace() {
 
 function applyLocalResource(resource, value) {
   if (localWorkspace.fresh.has(resource)) return false;
-  if (resource === 'shoes') [shoes, retiredShoes] = value;
-  if (resource === 'monthly') monthlyMileages = value;
-  if (resource === 'goal') runningGoal = value;
+  if (resource === 'shoes' || resource === 'monthly' || resource === 'goal') applyCoreResource(resource, value);
   if (resource === 'runs' && value.month === selectedRunMonth()) {
     Object.assign(runController.state, { rows: value.rows, summary: value.summary, hasMore: value.hasMore, offset: 0 });
   }

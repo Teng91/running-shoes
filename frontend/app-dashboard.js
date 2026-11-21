@@ -61,10 +61,7 @@ function shoeName(shoeId) {
 function render(resource = null) {
   const todayStr = localDateISO().replace(/-/g, '/');
   document.getElementById('today-label').textContent = '資料日期：' + todayStr;
-
-  shoes.sort(byDate);
-  retiredShoes.sort(byDate);
-
+  // Shoes arrive sorted by purchase date from applyCoreResource (SPEC-094).
   invalidatePanels(resource);
   renderActivePanel();
   noteOnboardingData(resource);

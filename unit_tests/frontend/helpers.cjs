@@ -4,15 +4,17 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-let createRunController, createFormOperations, matchesSnapshot, createFormDraft, createResourceStore;
+let createRunController, createFormOperations, matchesSnapshot, createFormDraft, createResourceStore, coreDataRules;
 require('node:test').before(async () => {
   ({ createRunController } = await import('../../frontend/runtime/run-controller.mjs'));
   ({ createFormOperations, matchesSnapshot, createFormDraft } = await import('../../frontend/runtime/form-operations.mjs'));
   ({ createResourceStore } = await import('../../frontend/runtime/resource-store.mjs'));
+  coreDataRules = await import('../../frontend/runtime/core-data.mjs');
 });
 
 function featureContext(globals = {}) {
-  const context = vm.createContext({ structuredClone, formSnapshotMatches: matchesSnapshot,
+  // SPEC-094: features write core data through the real bridge and native rules.
+  const context = vm.createContext({ structuredClone, formSnapshotMatches: matchesSnapshot, coreDataRules,
     dashboardAnalyticsCache: new Map(), dashboardAnalyticsRequest: 0, inlineEditors: new Map(), inlineTableRows: new Map(),
     captureAuthSession: () => ({}), isCurrentAuthSession: () => true,
     getSelectedCategories: () => [], monthlyMileages: [], ...globals });
@@ -31,7 +33,7 @@ function featureContext(globals = {}) {
     }));
     return owners.get(name);
   };
-  vm.runInContext(['beginInlineEdit', 'finishInlineEdit', 'preserveInlineTable', 'readForm', 'matchesForm', 'shoeLabel', 'invalidateDataResources', 'refreshCoreData', 'registerResourceCaches', 'goalFormValues', 'goalStartYearOptions', 'setGoalField', 'setGoalSettingsOpen', 'updateGoalYearlyHint', 'prepareGoalForm', 'formatRunDuration', 'formatPace'].map(extract).join('\n'), context);
+  vm.runInContext(['applyCoreResource', 'assignCoreFields', 'beginInlineEdit', 'finishInlineEdit', 'preserveInlineTable', 'readForm', 'matchesForm', 'shoeLabel', 'invalidateDataResources', 'refreshCoreData', 'registerResourceCaches', 'goalFormValues', 'goalStartYearOptions', 'setGoalField', 'setGoalSettingsOpen', 'updateGoalYearlyHint', 'prepareGoalForm', 'formatRunDuration', 'formatPace'].map(extract).join('\n'), context);
   // SPEC-060 pace helpers are shared by run creation, editing and rendering.
   vm.runInContext(source.match(/const RUN_PACE_MIN_SECONDS = \d+;\s*const RUN_PACE_MAX_SECONDS = \d+;/)[0] + '\n'
     + ['parseRunDuration', 'groupDurationDigits', 'formatDurationInput', 'plausibleRunPace', 'updateRunPacePreview', 'readRunDuration'].map(extract).join('\n'), context);
