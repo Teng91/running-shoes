@@ -14,7 +14,7 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from backend import migrations
+from backend import llm, migrations
 from backend.backup_contract import MAX_BACKUP_BYTES
 from backend.database import create_database_engine
 from backend.mailer import smtp_mailer
@@ -153,6 +153,9 @@ def create_app(
     app.state.mailer = smtp_mailer(selected_settings)
     # One Strava CSV parse per process as well (SPEC-074).
     app.state.strava_upload_slot = Lock()
+    # SPEC-093: the LLM adapter takes its key and limits from these settings, not from
+    # environment reads at import time.
+    llm.configure(llm.LLMConfig.from_settings(selected_settings))
 
     app.add_middleware(
         UploadLimitMiddleware,

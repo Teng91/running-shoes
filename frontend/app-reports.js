@@ -17,8 +17,9 @@ registerFeatureReset('monthly-reports', () => {
 });
 
 function previousMonthValue(now = new Date()) {
-  const year = now.getFullYear();
-  const month = now.getMonth(); // 0-based；當月尚未結束，預設回上個完整月
+  // 依服務的台灣日曆（SPEC-093）；當月尚未結束，預設回上個完整月
+  const { year, month: currentMonth } = appCalendarDate(now);
+  const month = currentMonth - 1; // 0-based
   const prevMonth = month === 0 ? 12 : month;
   const prevYear = month === 0 ? year - 1 : year;
   return prevYear + '-' + String(prevMonth).padStart(2, '0');

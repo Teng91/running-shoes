@@ -7,7 +7,7 @@ function populateYearSelect() {
   const years = [...new Set([
     ...monthlyMileages.map(m => m.year),
     runningGoal.start_year,
-    new Date().getFullYear(),
+    appCalendarDate().year,
   ])].sort((a, b) => b - a);
   if (years.length === 0) {
     sel.innerHTML = '<option value="">無資料</option>';

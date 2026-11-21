@@ -18,7 +18,7 @@ from backend.main import app
 from backend.models import MonthlyReport, Run, Shoe, User
 from backend.read_models import report_snapshot
 from backend.routers import reports as report_routes
-from unit_tests.token_helpers import create_access_token
+from unit_tests.token_helpers import token_for
 
 
 @pytest.fixture
@@ -371,7 +371,7 @@ def test_reports_are_isolated_per_user(client, db, user_with_token):
     db.add(other)
     db.commit()
     db.refresh(other)
-    other_token = create_access_token(data={"sub": other.username})
+    other_token = token_for(other)
 
     empty_list = client.get("/api/reports", headers=_auth_header(other_token))
     stolen = client.get("/api/reports/2026/6", headers=_auth_header(other_token))

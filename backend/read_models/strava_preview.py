@@ -6,6 +6,7 @@ from typing import cast
 from sqlalchemy.orm import Session
 
 from backend import models
+from backend.read_models.rounding import round_metric
 from backend.services.run_identity import deleted_strava_ids
 from backend.strava_import import (
     _normalize_gear,
@@ -100,7 +101,7 @@ def build_preview(
         )
         group["first_date"] = min(str(group["first_date"]), str(row["date"]))
         group["count"] = int(cast(int, group["count"])) + 1
-        group["km"] = round(float(cast(float, group["km"])) + float(cast(float, row["km"])), 2)
+        group["km"] = round_metric(float(cast(float, group["km"])) + float(cast(float, row["km"])), 2)
     # SPEC-092: a conflict the user imports needs a shoe, so its gear always gets a group;
     # conflict_count says how many of the group's activities wait for that choice.
     for conflict in conflicts:
@@ -130,7 +131,7 @@ def build_preview(
         "total_rows": len(rows) + invalid,
         "run_count": len(rows),
         "importable_count": len(rows) - duplicate_count - deleted_count - len(manual_ids),
-        "importable_km": round(importable_km, 2),
+        "importable_km": round_metric(importable_km, 2),
         "duplicate_count": duplicate_count,
         "deleted_count": deleted_count,
         "date_correction_count": len(corrections),

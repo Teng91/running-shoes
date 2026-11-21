@@ -142,7 +142,7 @@ async function loadData({ mutation = null } = {}) {
     if (resource === 'monthly') {
       monthlyMileages = value;
       const years = [...new Set(monthlyMileages.map(item => item.year))].sort((a, b) => b - a);
-      if (!selectedYear || !years.includes(selectedYear)) selectedYear = years[0] || new Date().getFullYear();
+      if (!selectedYear || !years.includes(selectedYear)) selectedYear = years[0] || appCalendarDate().year;
     }
     if (resource === 'goal') runningGoal = value;
     if (resource === 'runs' && value.requestId === runController.state.listRequest

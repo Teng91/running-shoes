@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from backend import models
 from backend.clock import local_today
+from backend.read_models.rounding import round_metric
 
 
 def spending_summary(db: Session, user_id: int, *, today: date | None = None) -> dict:
@@ -37,10 +38,10 @@ def spending_summary(db: Session, user_id: int, *, today: date | None = None) ->
         bucket["total_orig"] += shoe.orig_price or 0
     monthly = sorted(buckets.values(), key=lambda row: (row["year"], row["month"]))
     for row in monthly:
-        row["total_paid"] = round(row["total_paid"], 2)
-        row["total_orig"] = round(row["total_orig"], 2)
-    paid = round(sum(shoe.price or 0 for shoe in shoes), 2)
-    original = round(sum(shoe.orig_price or 0 for shoe in shoes), 2)
+        row["total_paid"] = round_metric(row["total_paid"], 2)
+        row["total_orig"] = round_metric(row["total_orig"], 2)
+    paid = round_metric(sum(shoe.price or 0 for shoe in shoes), 2)
+    original = round_metric(sum(shoe.orig_price or 0 for shoe in shoes), 2)
     first = monthly[0] if monthly else None
     # Future purchases retain their stored cost, but cannot create a negative divisor.
     span = (
@@ -51,9 +52,9 @@ def spending_summary(db: Session, user_id: int, *, today: date | None = None) ->
         "as_of": as_of.isoformat(),
         "total_paid": paid,
         "total_original": original,
-        "savings": round(original - paid, 2),
-        "average_discount_percent": round(paid / original * 100, 1) if original > 0 else None,
-        "average_monthly_paid": round(paid / span, 2) if span else 0.0,
+        "savings": round_metric(original - paid, 2),
+        "average_discount_percent": round_metric(paid / original * 100, 1) if original > 0 else None,
+        "average_monthly_paid": round_metric(paid / span, 2) if span else 0.0,
         "start_month": f"{first['year']:04d}-{first['month']:02d}" if first else None,
         "month_span": span,
         "highest_month": {key: highest[key] for key in ("year", "month", "total_paid")}

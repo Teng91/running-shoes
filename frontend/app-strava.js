@@ -36,13 +36,14 @@ function openStravaModal() {
   const rangeKey = `strava-import-range:${currentUser || 'anonymous'}`;
   let savedRange = null;
   try { savedRange = JSON.parse(localStorage.getItem(rangeKey)); } catch {}
-  const now = new Date();
-  const defaultStart = new Date(now.getFullYear(), now.getMonth() - 13, 1);
-  const defaultEnd = new Date(now.getFullYear(), now.getMonth(), 0);
+  // Calendar arithmetic on the service's date (SPEC-093), not the device's zone.
+  const calendar = appCalendarDate();
+  const defaultStart = new Date(calendar.year, calendar.month - 1 - 13, 1);
+  const defaultEnd = new Date(calendar.year, calendar.month - 1, 0);
   const formatDate = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
   const lastEnd = stravaImports[0]?.end_date;
   let nextStart = '';
-  const today = formatDate(now);
+  const today = localDateISO();
   if (/^\d{4}-\d{2}-\d{2}$/.test(lastEnd || '')) {
     const next = new Date(`${lastEnd}T00:00:00`);
     next.setDate(next.getDate() + 1);

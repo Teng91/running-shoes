@@ -40,6 +40,10 @@ def agent_chat_stream(
         model = llm.resolve_allowed_model(provider, payload.model)
     except llm.LLMError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    user_id = current_user.id
+    # SPEC-093: authentication left a read transaction open; the stream can last minutes,
+    # so release the connection now. Tools reconnect on demand and release it again.
+    db.close()
     return StreamingResponse(
         agent_service.run_agent_stream(
             user_message=payload.user_message,
@@ -47,7 +51,7 @@ def agent_chat_stream(
             provider=provider.value,
             model=model,
             db=db,
-            user_id=current_user.id,
+            user_id=user_id,
         ),
         media_type="text/event-stream",
     )
