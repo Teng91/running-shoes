@@ -44,7 +44,7 @@ function brandColor(brand, seq) {
 // indexed by the shoe's position among that brand's shoes in id order.
 function shoeColor(shoeId) {
   const seq = {};
-  for (const shoe of [...shoes, ...retiredShoes].sort((a, b) => a.id - b.id)) {
+  for (const shoe of [...coreData.shoes, ...coreData.retiredShoes].sort((a, b) => a.id - b.id)) {
     seq[shoe.brand] = (seq[shoe.brand] ?? -1) + 1;
     if (shoe.id === shoeId) return brandColor(shoe.brand, seq[shoe.brand]);
   }
@@ -52,7 +52,7 @@ function shoeColor(shoeId) {
 }
 
 function shoeName(shoeId) {
-  const shoe = [...shoes, ...retiredShoes].find(item => item.id === shoeId);
+  const shoe = [...coreData.shoes, ...coreData.retiredShoes].find(item => item.id === shoeId);
   if (!shoe) return '已刪除的鞋款';
   return `${shoe.brand} ${shoe.model}${shoe.nickname ? `（${shoe.nickname}）` : ''}`;
 }
@@ -68,20 +68,20 @@ function render(resource = null) {
 }
 
 function renderCards() {
-  const allShoes = [...shoes, ...retiredShoes];
+  const allShoes = [...coreData.shoes, ...coreData.retiredShoes];
   let totalMileage = 0, totalPrice = 0;
   allShoes.forEach(s => {
     totalMileage += s.mileage;
     totalPrice += s.price;
   });
   const avgCostPerKm = totalMileage > 0 ? totalPrice / totalMileage : 0;
-  const alertCount = shoes.filter(s => {
+  const alertCount = coreData.shoes.filter(s => {
     const c = calc(s);
     return c.lifeProgress * 100 >= LIFECYCLE_MONITOR_PERCENT;
   }).length;
 
   const cards = [
-    { label: '現役跑鞋', value: shoes.length + '/' + allShoes.length, sub: '雙' },
+    { label: '現役跑鞋', value: coreData.shoes.length + '/' + allShoes.length, sub: '雙' },
     { label: '跑步里程', value: '—', sub: '載入中', id: 'run-total' },
     { label: '跑鞋里程', value: formatKmTotal(totalMileage), sub: 'km · 含步行、健行' },
     { label: '總花費', value: '$' + totalPrice.toLocaleString(), sub: '花費合計' },
@@ -135,8 +135,8 @@ function shoeCategories(s) {
 function categoryCounts(categories = SHOE_CATEGORIES) {
   return categories.map(category => ({
     category,
-    active: shoes.filter(s => shoeCategories(s).includes(category)).length,
-    retired: retiredShoes.filter(s => shoeCategories(s).includes(category)).length,
+    active: coreData.shoes.filter(s => shoeCategories(s).includes(category)).length,
+    retired: coreData.retiredShoes.filter(s => shoeCategories(s).includes(category)).length,
   }));
 }
 
@@ -152,7 +152,7 @@ function renderCategorySummary() {
 
 function renderAlerts() {
   const container = document.getElementById('shoe-alerts');
-  const alerts = shoes.map(s => ({ shoe: s, calc: calc(s) }))
+  const alerts = coreData.shoes.map(s => ({ shoe: s, calc: calc(s) }))
     .filter(({ calc: c }) => c.lifeProgress * 100 >= LIFECYCLE_MONITOR_PERCENT)
     .sort((a, b) => b.calc.lifeProgress - a.calc.lifeProgress);
 
@@ -164,7 +164,7 @@ function renderAlerts() {
     const urgent = c.lifeProgress * 100 >= LIFECYCLE_REPLACE_SOON_PERCENT;
     const pct = Math.round(c.lifeProgress * 100);
     const categories = shoeCategories(s);
-    const uncovered = categories.filter(category => !shoes.some(other =>
+    const uncovered = categories.filter(category => !coreData.shoes.some(other =>
       other.id !== s.id && shoeCategories(other).includes(category)));
     const lifecycleMessage = urgent
       ? `已使用 ${pct}%，可以準備換鞋。`
@@ -183,8 +183,8 @@ function renderAlerts() {
 function renderTable() {
   if (preserveInlineTable('shoe-table')) return;
   const tbody = document.getElementById('shoe-table');
-  inlineTableRows.set('shoe-table', shoes.map(shoe => ({ ...shoe })));
-  tbody.innerHTML = shoes.map((s, i) => {
+  inlineTableRows.set('shoe-table', coreData.shoes.map(shoe => ({ ...shoe })));
+  tbody.innerHTML = coreData.shoes.map((s, i) => {
     const c = calc(s);
     const pc = progressColor(c.lifeProgress);
     const bc = shoeColor(s.id);
@@ -210,8 +210,8 @@ function renderTable() {
 function renderRetiredTable() {
   if (preserveInlineTable('retired-table')) return;
   const tbody = document.getElementById('retired-table');
-  inlineTableRows.set('retired-table', retiredShoes.map(shoe => ({ ...shoe })));
-  tbody.innerHTML = retiredShoes.map((s, i) => {
+  inlineTableRows.set('retired-table', coreData.retiredShoes.map(shoe => ({ ...shoe })));
+  tbody.innerHTML = coreData.retiredShoes.map((s, i) => {
     const c = calc(s);
     const pc = progressColor(c.lifeProgress);
     const bc = shoeColor(s.id);

@@ -245,7 +245,7 @@ class ShoeModal {
       payload.monthly_km = 0;
     } else if (!payload.monthly_km) {
       // 退役時月跑量被歸零，回到現役時用其他現役鞋的平均月跑量當起始參考。
-      const activeKm = shoes
+      const activeKm = coreData.shoes
         .filter(s => s.id !== shoe.id && !s.is_retired && s.monthly_km > 0)
         .map(s => s.monthly_km);
       payload.monthly_km = activeKm.length
@@ -270,7 +270,7 @@ registerFeatureReset('shoe-editor', () => shoeModal.close());
 
 // 給舊呼叫處用的精簡 wrapper
 function openAddModal()      { shoeModal.openForCreate(); }
-function openEditModal(i)    { shoeModal.openForEdit((inlineTableRows.get('shoe-table') || shoes)[i], false); }
-function openRetiredEditModal(i) { shoeModal.openForEdit((inlineTableRows.get('retired-table') || retiredShoes)[i], true); }
+function openEditModal(i)    { shoeModal.openForEdit((inlineTableRows.get('shoe-table') || coreData.shoes)[i], false); }
+function openRetiredEditModal(i) { shoeModal.openForEdit((inlineTableRows.get('retired-table') || coreData.retiredShoes)[i], true); }
 function closeModal()        { shoeModal.close(); }
 

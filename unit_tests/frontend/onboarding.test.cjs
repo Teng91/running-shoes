@@ -27,8 +27,8 @@ function onboardingContext({ user = 'Friend', stored = {} } = {}) {
     localStorage: { getItem: key => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value) },
     switchTab: name => calls.push(['tab', name]), toggleGoalSettings: open => calls.push(['goal', open]),
   });
-  vm.runInContext(`let shoes = [], retiredShoes = [], monthlyMileages = [], currentUser = ${JSON.stringify(user)};
-    let runningGoal = { version: 0, monthly_km: 125 };`, context);
+  context.seedCoreData({ runningGoal: { version: 0, monthly_km: 125 } });
+  vm.runInContext(`let currentUser = ${JSON.stringify(user)};`, context);
   vm.runInContext(readText('frontend/app-onboarding.js'), context);
   return { context, card, steps, elements, storage, runButtons, calls };
 }
@@ -46,29 +46,29 @@ test('SPEC-084 a new account sees the three steps only after its data loaded and
   assert.equal(runButtons.every(button => button.disabled), true, 'a run needs a shoe first');
   assert.equal(steps.run.hint.hidden, false);
 
-  vm.runInContext("shoes = [{ id: 1 }]; monthlyMileages = [{ year: 2026, month: 11, km: 0 }];", context);
+  context.seedCoreData({ shoes: [{ id: 1 }], monthlyMileages: [{ year: 2026, month: 11, km: 0 }] });
   context.renderOnboarding();
   assert.equal(steps.shoe.check.textContent, '✓');
   assert.deepEqual([...steps.run.classes], ['current']);
   assert.equal(runButtons.some(button => button.disabled), false);
   assert.equal(steps.run.hint.hidden, true);
 
-  vm.runInContext("monthlyMileages = [{ year: 2026, month: 11, km: 5.2 }];", context);
+  context.seedCoreData({ monthlyMileages: [{ year: 2026, month: 11, km: 5.2 }] });
   context.renderOnboarding();
   assert.equal(elements['onboarding-progress'].textContent, '已完成 2 / 3');
-  vm.runInContext("runningGoal = { version: 1, monthly_km: 100 };", context);
+  context.seedCoreData({ runningGoal: { version: 1, monthly_km: 100 } });
   context.renderOnboarding();
   assert.equal(card.hidden, true, 'the card disappears once every step is done');
 
   context.reset();
-  vm.runInContext("shoes = []; runningGoal = { version: 0 };", context);
+  context.seedCoreData({ shoes: [], runningGoal: { version: 0 } });
   context.renderOnboarding();
   assert.equal(card.hidden, true, 'after sign-out the next account waits for its own data');
 });
 
 test('SPEC-084 an established account never sees the card and skipping is remembered per account', () => {
   const established = onboardingContext();
-  vm.runInContext("retiredShoes = [{ id: 3 }]; monthlyMileages = [{ km: 80 }]; runningGoal = { version: 2 };", established.context);
+  established.context.seedCoreData({ retiredShoes: [{ id: 3 }], monthlyMileages: [{ km: 80 }], runningGoal: { version: 2 } });
   ['shoes', 'monthly', 'goal'].forEach(resource => established.context.noteOnboardingData(resource));
   assert.equal(established.card.hidden, true);
 

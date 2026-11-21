@@ -22,7 +22,7 @@ function formatGoalKm(value, digits = 1) {
 // Years with history, the saved start year and next year; a draft year is always kept selectable.
 function goalStartYearOptions(selected) {
   const current = appCalendarDate().year;
-  const known = [...monthlyMileages.map(item => item.year), runningGoal.start_year, current, Number(selected || NaN)]
+  const known = [...coreData.monthlyMileages.map(item => item.year), coreData.runningGoal.start_year, current, Number(selected || NaN)]
     .filter(year => Number.isInteger(year) && year >= 1900 && year <= 2100);
   const first = Math.min(...known), last = Math.max(current + 1, ...known);
   return Array.from({ length: last - first + 1 }, (_, index) => first + index);
@@ -37,14 +37,14 @@ function setGoalField(id, value) {
 }
 
 function prepareGoalForm() {
-  const fields = goalFormValues(runningGoal);
+  const fields = goalFormValues(coreData.runningGoal);
   const values = getFormDraft('goal').reconcile(fields, readForm(Object.keys(fields)));
   for (const [id, value] of Object.entries(values)) setGoalField(id, value);
   // An unsaved draft (typed earlier, restored from this device) stays visible.
   if (Object.keys(fields).some(id => values[id] !== fields[id])) setGoalSettingsOpen(true);
   updateGoalYearlyHint();
   const summary = document.getElementById('goal-target-summary');
-  summary.textContent = `每月 ${Number(runningGoal.monthly_km).toLocaleString()} km · 全年 ${Number(runningGoal.yearly_km ?? runningGoal.monthly_km * 12).toLocaleString()} km`;
+  summary.textContent = `每月 ${Number(coreData.runningGoal.monthly_km).toLocaleString()} km · 全年 ${Number(coreData.runningGoal.yearly_km ?? coreData.runningGoal.monthly_km * 12).toLocaleString()} km`;
 }
 
 function updateGoalYearlyHint() {
@@ -86,7 +86,7 @@ function renderGoalProgress() {
 async function loadGoalProgress(year) {
   const session = captureAuthSession();
   const requestId = ++goalProgressRequestId;
-  const key = `${session.generation}|${runningGoal.version}|${localDateISO()}|${year}`;
+  const key = `${session.generation}|${coreData.runningGoal.version}|${localDateISO()}|${year}`;
   const target = document.getElementById('goal-overview');
   target.innerHTML = '<div class="goal-card"><div class="card-sub">目標進度載入中…</div></div>';
   try {
@@ -176,7 +176,7 @@ async function saveRunningGoal() {
   if (goalSaveOperation) return;
   const status = document.getElementById('goal-settings-status');
   const payload = {
-    expected_version: Number(runningGoal.version || 0),
+    expected_version: Number(coreData.runningGoal.version || 0),
     start_year: Number(document.getElementById('goal-start-year').value),
     monthly_km: Number(document.getElementById('goal-monthly-km').value),
   };
@@ -185,7 +185,7 @@ async function saveRunningGoal() {
     status.textContent = '請輸入有效的年份與正數里程。';
     return;
   }
-  const operation = getFormOperations('goal').begin('save', readForm(Object.keys(goalFormValues(runningGoal))));
+  const operation = getFormOperations('goal').begin('save', readForm(Object.keys(goalFormValues(coreData.runningGoal))));
   if (!operation) return;
   goalSaveOperation = operation;
   document.getElementById('save-goal-btn').disabled = true;

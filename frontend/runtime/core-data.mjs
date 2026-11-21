@@ -1,6 +1,7 @@
-// Core account data rules (SPEC-094): how each loaded resource becomes dashboard state.
-// Pure and DOM/transport independent; the classic bridge in app-resources.js is the only
-// writer of the shared globals and applies exactly the patch returned here.
+// Core account data (SPEC-094, SPEC-095): how each loaded resource becomes dashboard state,
+// and the store that owns that state. DOM/transport independent. Classic scripts read it
+// through the store's read-only `view` (exposed as `coreData`); only app-resources.js
+// holds the store and applies resources to it.
 
 export const CORE_DATA_FIELDS = Object.freeze([
   'shoes', 'retiredShoes', 'monthlyMileages', 'runningGoal', 'stravaImports', 'spendingSummary', 'monthlySpending',
@@ -52,4 +53,41 @@ export function coreDataPatch(resource, value, { selectedYear = null, currentYea
     return { spendingSummary: value, monthlySpending: value.monthly };
   }
   throw new Error('Unknown core data resource: ' + resource);
+}
+
+// The store keeps frozen copies, so no reader can reorder or edit them in place and the
+// caller's own arrays (a response it may still cache) stay untouched.
+const frozenRows = rows => Object.freeze([...rows]);
+
+function freezeFields(fields) {
+  const frozen = { ...fields };
+  for (const field of ['shoes', 'retiredShoes', 'monthlyMileages', 'stravaImports', 'monthlySpending']) {
+    if (Array.isArray(frozen[field])) frozen[field] = frozenRows(frozen[field]);
+  }
+  return frozen;
+}
+
+// The owner of the core data (SPEC-095). `initial` hydrates known fields (a restored
+// snapshot or a test fixture); readers get `view`, whose properties are read-only.
+export function createCoreDataStore(initial = {}) {
+  const unknown = Object.keys(initial).filter(field => !CORE_DATA_FIELDS.includes(field));
+  if (unknown.length) throw new Error('Unknown core data fields: ' + unknown.join(', '));
+  let state = freezeFields({ ...coreDataDefaults(), ...initial });
+  const view = {};
+  for (const field of CORE_DATA_FIELDS) {
+    Object.defineProperty(view, field, { get: () => state[field], enumerable: true });
+  }
+  Object.freeze(view);
+  return {
+    view,
+    // Applies one loaded resource; returns the patch so the caller can follow selectedYear.
+    apply(resource, value, options) {
+      const patch = coreDataPatch(resource, value, options);
+      const fields = Object.fromEntries(Object.entries(patch).filter(([field]) => CORE_DATA_FIELDS.includes(field)));
+      // Only the resource's own fields change; every other field keeps its array.
+      state = { ...state, ...freezeFields(fields) };
+      return patch;
+    },
+    reset() { state = freezeFields(coreDataDefaults()); },
+  };
 }
