@@ -8,46 +8,41 @@ from sqlalchemy.orm import Session
 from backend import models
 from backend.read_models.rounding import round_metric
 from backend.read_models.run_statistics import PACE_RUN, TRAINING_RUN, month_bounds
-from backend.run_metrics import counts_toward_training, pace_seconds_per_km
+from backend.run_metrics import pace_seconds_per_km
 
 
 def month_run_summary(db: Session, user_id: int, year: int, month: int) -> dict:
-    """Calendar and shoe usage list every activity; totals count training runs (SPEC-096)."""
+    """The run page's month: calendar, shoe usage and totals of training runs only.
+
+    Hikes and walks wear the shoe but are not runs, so they stay off the run
+    calendar and the month's shoe split (SPEC-096, SPEC-098); the run list still
+    shows them so they can be edited.
+    """
     start, end = month_bounds(year, month)
     rows = (
         db.query(
-            models.Run.date, models.Run.shoe_id, models.Run.activity_type,
-            func.sum(models.Run.km), func.count(models.Run.id),
+            models.Run.date, models.Run.shoe_id, func.sum(models.Run.km), func.count(models.Run.id)
         )
         .filter(
             models.Run.user_id == user_id,
+            TRAINING_RUN,
             models.Run.date >= start,
             models.Run.date <= end,
         )
-        .group_by(models.Run.date, models.Run.shoe_id, models.Run.activity_type)
-        .order_by(models.Run.date, models.Run.shoe_id, models.Run.activity_type)
+        .group_by(models.Run.date, models.Run.shoe_id)
+        .order_by(models.Run.date, models.Run.shoe_id)
         .all()
     )
     calendar: dict[str, dict] = {}
     shoes: dict[int, dict] = {}
-    training_km, training_count, training_days = 0.0, 0, set()
-    for day, shoe_id, activity_type, km, count in rows:
+    for day, shoe_id, km, count in rows:
         daily = calendar.setdefault(day, {"date": day, "km": 0.0, "count": 0, "shoes": []})
         daily["km"] = round_metric(daily["km"] + km, 2)
         daily["count"] += count
-        entry = next((item for item in daily["shoes"] if item["shoe_id"] == shoe_id), None)
-        if entry is None:
-            daily["shoes"].append({"shoe_id": shoe_id, "km": round_metric(km, 2), "count": count})
-        else:
-            entry["km"] = round_metric(entry["km"] + km, 2)
-            entry["count"] += count
+        daily["shoes"].append({"shoe_id": shoe_id, "km": round_metric(km, 2), "count": count})
         shoe = shoes.setdefault(shoe_id, {"shoe_id": shoe_id, "km": 0.0, "count": 0})
         shoe["km"] = round_metric(shoe["km"] + km, 2)
         shoe["count"] += count
-        if counts_toward_training(activity_type):
-            training_km += km
-            training_count += count
-            training_days.add(day)
     timed_seconds, timed_km, timed_count = db.query(
         func.sum(models.Run.duration_seconds), func.sum(models.Run.km), func.count(models.Run.id)
     ).filter(
@@ -60,9 +55,9 @@ def month_run_summary(db: Session, user_id: int, year: int, month: int) -> dict:
     return {
         "year": year,
         "month": month,
-        "total_km": round_metric(training_km, 2),
-        "run_count": training_count,
-        "run_days": len(training_days),
+        "total_km": round_metric(sum(day["km"] for day in calendar.values()), 2),
+        "run_count": sum(day["count"] for day in calendar.values()),
+        "run_days": len(calendar),
         "calendar": list(calendar.values()),
         "shoe_usage": sorted(shoes.values(), key=lambda row: (-row["km"], row["shoe_id"])),
         # SPEC-060: time-weighted over the runs that have a moving time.

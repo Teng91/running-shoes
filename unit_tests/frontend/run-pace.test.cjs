@@ -211,3 +211,28 @@ test('SPEC-092 two conflicts cannot link the same manual run', () => {
   context.updateStravaImportButton();
   assert.equal(elements['strava-import-btn'].disabled, false);
 });
+
+test('SPEC-098 hikes and walks stay listed but off the run calendar and month cards', () => {
+  // Before the month summary arrives the page falls back to the loaded rows; they must count runs only.
+  const elements = nodes();
+  const runs = [{ id: 1, date: '2026-11-15', km: 10, shoe_id: 7, activity_type: 'road', duration_seconds: null, pace_seconds_per_km: null },
+    { id: 2, date: '2026-11-14', km: 6, shoe_id: 7, activity_type: 'trail', duration_seconds: null, pace_seconds_per_km: null },
+    { id: 3, date: '2026-11-13', km: 9, shoe_id: 8, activity_type: 'hike', duration_seconds: null, pace_seconds_per_km: null },
+    { id: 4, date: '2026-11-12', km: 3, shoe_id: 8, activity_type: 'walk', duration_seconds: null, pace_seconds_per_km: null }];
+  let calendarRows = null, shoeStats = null;
+  const context = paceContext(elements, {
+    selectedRunMonth: () => '2026-11', monthRuns: () => runs, RUN_PAGE_SIZE: 200,
+    runShoe: id => ({ id, brand: 'Mizuno', model: `Shoe ${id}` }), shoeColor: () => '#000',
+    renderStravaStatus() {}, renderRunCalendar: rows => { calendarRows = rows; },
+    renderRunShoeChart: stats => { shoeStats = stats; }, loadDashboardAnalytics() {},
+  });
+  context.runController.state.summary = null;
+  vm.runInContext(extract('renderRunLog'), context);
+  context.renderRunLog();
+  assert.deepEqual(calendarRows.map(run => run.id), [1, 2], 'the calendar gets runs only');
+  assert.deepEqual([...shoeStats.keys()], [7], 'the shoe split counts runs only');
+  assert.match(elements['run-stats'].innerHTML, /16\.00 km[\s\S]*2 次跑步[\s\S]*2 天[\s\S]*Shoe 7/);
+  const rows = elements['run-table'].innerHTML;
+  assert.match(rows, /2026\/11\/13<span class="run-activity hike">健行<\/span>/, 'the list keeps hikes for editing');
+  assert.match(rows, /2026\/11\/12<span class="run-activity walk">步行<\/span>/);
+});

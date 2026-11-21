@@ -324,3 +324,26 @@ def test_frontend_activity_types_mirror_the_backend():
     assert f"const RUN_TRAINING_ACTIVITY_TYPES = {js(TRAINING_ACTIVITY_TYPES)};" in state
     assert f"const RUN_PACE_ACTIVITY_TYPES = {js(PACE_ACTIVITY_TYPES)};" in state
     assert ActivityType.__args__ == ACTIVITY_TYPES
+
+
+def test_shoe_views_keep_hikes_and_walks_out_of_running_distances(db):
+    """SPEC-098: the distance mix counts runs; the shoe's own history lists every activity, labelled."""
+    from datetime import date
+
+    from backend.read_models.highlights import shoe_distance_mix
+    from backend.read_models.shoe_statistics import shoe_run_statistics
+
+    user, shoe = owner(db, "mix-owner")
+    db.add_all([
+        Run(user_id=user.id, shoe_id=shoe.id, date="2026-10-03", km=10),
+        Run(user_id=user.id, shoe_id=shoe.id, date="2026-10-04", km=21, activity_type="trail"),
+        Run(user_id=user.id, shoe_id=shoe.id, date="2026-10-05", km=15, activity_type="hike"),
+        Run(user_id=user.id, shoe_id=shoe.id, date="2026-10-06", km=3, activity_type="walk"),
+    ])
+    db.commit()
+    mix = shoe_distance_mix(db, user.id)["shoes"]
+    assert len(mix) == 1 and (mix[0]["runs"], mix[0]["km"], mix[0]["longest_km"]) == (2, 31, 21)
+    statistics = shoe_run_statistics(db, user.id, [shoe.id], date(2026, 10, 31))[shoe.id]
+    assert statistics["count"] == 4, "every activity is a wear of the shoe"
+    assert [(row["date"], row["activity_type"]) for row in statistics["recent"]] == [
+        ("2026-10-06", "walk"), ("2026-10-05", "hike"), ("2026-10-04", "trail"), ("2026-10-03", "road")]

@@ -99,6 +99,7 @@ def shoe_run_statistics(
             Run.date,
             Run.km,
             Run.duration_seconds,
+            Run.activity_type,
             func.row_number()
             .over(partition_by=Run.shoe_id, order_by=(Run.date.desc(), Run.id.desc()))
             .label("position"),
@@ -107,7 +108,8 @@ def shoe_run_statistics(
         .subquery()
     )
     for row in (
-        db.query(ranked.c.shoe_id, ranked.c.id, ranked.c.date, ranked.c.km, ranked.c.duration_seconds)
+        db.query(ranked.c.shoe_id, ranked.c.id, ranked.c.date, ranked.c.km, ranked.c.duration_seconds,
+                 ranked.c.activity_type)
         .filter(
             ranked.c.position <= 12,
         )
@@ -116,6 +118,8 @@ def shoe_run_statistics(
     ):
         result[row.shoe_id]["recent"].append(
             {"id": row.id, "date": row.date, "km": round_metric(float(row.km), 2),
-             "pace_seconds_per_km": pace_seconds_per_km(row.duration_seconds, float(row.km))}
+             "pace_seconds_per_km": pace_seconds_per_km(row.duration_seconds, float(row.km)),
+             # The shoe's own history lists every activity, labelled (SPEC-098).
+             "activity_type": row.activity_type}
         )
     return result
