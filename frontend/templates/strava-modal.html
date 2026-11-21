@@ -2,7 +2,7 @@
 <div class="modal-overlay" id="strava-modal">
   <div class="modal strava-modal">
     <h2>匯入 Strava 跑步紀錄</h2>
-    <p style="color:var(--text-dim);font-size:13px;line-height:1.6">請選擇 Strava 匯出資料夾中的 <code>activities.csv</code>。系統只會匯入跑步活動，並以活動 ID 避免重複。</p>
+    <p style="color:var(--text-dim);font-size:13px;line-height:1.6">請選擇 Strava 匯出資料夾中的 <code>activities.csv</code>。系統會匯入跑步與越野跑；健行與步行要勾選才匯入。以活動 ID 避免重複。</p>
     <div id="strava-history" class="strava-summary"></div>
     <div class="form-group"><label for="strava-file">activities.csv</label><input id="strava-file" type="file" accept=".csv,text/csv" data-change="preview-strava"></div>
     <div class="form-row">
@@ -10,6 +10,10 @@
       <div class="form-group"><label for="strava-end-date">到這一天結束</label><input id="strava-end-date" type="date" data-change="preview-strava"></div>
     </div>
     <p class="strava-sync"><span>匯入後會自動同步<small>只有新活動會加入跑鞋里程與對應月份的月跑量；重複活動不會再次計算。</small></span></p>
+    <div class="strava-walk-hike" id="strava-walk-hike" hidden>
+      <label class="strava-walk-hike-toggle"><input id="strava-include-walks" type="checkbox" data-change="preview-strava"> 也匯入健行與步行</label>
+      <small id="strava-walk-hike-note" role="status"></small>
+    </div>
     <div id="strava-summary"></div>
     <div id="strava-mapping" class="strava-groups"></div>
     <div id="strava-conflicts" class="strava-groups"></div>

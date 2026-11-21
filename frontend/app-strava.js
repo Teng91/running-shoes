@@ -37,6 +37,11 @@ function openStravaModal() {
   document.getElementById('strava-conflicts').innerHTML = '';
   document.getElementById('strava-error').style.display = 'none';
   document.getElementById('strava-import-btn').disabled = true;
+  // SPEC-097: hikes and walks are opt-in for every new import window.
+  const includeWalks = document.getElementById('strava-include-walks');
+  if (includeWalks) includeWalks.checked = false;
+  const walkHike = document.getElementById('strava-walk-hike');
+  if (walkHike) walkHike.hidden = true;
   renderStravaImportHistory();
   const rangeKey = `strava-import-range:${currentUser || 'anonymous'}`;
   let savedRange = null;
@@ -73,15 +78,36 @@ function closeStravaModal() {
   document.getElementById('strava-modal').classList.remove('active');
 }
 
-function stravaInputKey(file, startDate, endDate) {
+function stravaInputKey(file, startDate, endDate, includeWalks = false) {
   if (!file) return '';
-  return [file.name, file.size, file.lastModified, startDate, endDate].join('|');
+  const key = [file.name, file.size, file.lastModified, startDate, endDate].join('|');
+  return includeWalks ? `${key}|walks` : key;
+}
+
+function stravaIncludesWalks() {
+  return document.getElementById('strava-include-walks')?.checked === true;
+}
+
+// SPEC-097: before SPEC-096 hikes and walks were never imported, so their kilometres
+// may already be on the shoe by hand. They stay out unless the user ticks the box.
+function renderStravaWalkHike(preview) {
+  const box = document.getElementById('strava-walk-hike');
+  const note = document.getElementById('strava-walk-hike-note');
+  if (!box || !note) return;
+  const count = Number(preview?.walk_hike_count || 0);
+  box.hidden = !count;
+  if (!count) { note.textContent = ''; return; }
+  const km = Number(preview.walk_hike_km || 0).toFixed(2);
+  note.textContent = preview.walk_hike_included
+    ? `已包含 ${count} 筆健行／步行（${km} km），只計入鞋子里程。如果這些里程已經手動加在鞋子上，請取消勾選，避免重複計算。`
+    : `這段期間有 ${count} 筆健行／步行（${km} km）未匯入。勾選後只計入鞋子里程；如果已經手動加在鞋子上，請不要勾選，避免重複計算。`;
 }
 
 async function previewStravaFile() {
   const file = document.getElementById('strava-file').files[0];
   const startDate = document.getElementById('strava-start-date').value;
   const endDate = document.getElementById('strava-end-date').value;
+  const includeWalks = stravaIncludesWalks();
   const summary = document.getElementById('strava-summary');
   const error = document.getElementById('strava-error');
   const mapping = document.getElementById('strava-mapping');
@@ -102,12 +128,15 @@ async function previewStravaFile() {
     return;
   }
   summary.textContent = '正在分析 CSV…';
-  const inputKey = stravaInputKey(file, startDate, endDate);
+  const inputKey = stravaInputKey(file, startDate, endDate, includeWalks);
   try {
-    const preview = await stravaController.preview(operation, file, { start_date: startDate, end_date: endDate });
+    const fields = { start_date: startDate, end_date: endDate };
+    if (includeWalks) fields.include_walks_hikes = 'true';
+    const preview = await stravaController.preview(operation, file, fields);
     if (!stravaController.acceptPreview(operation, preview, inputKey)) return;
+    renderStravaWalkHike(preview);
     const unknown = stravaController.state.preview.gear_groups.filter(group => !group.suggested_shoe_id).length;
-    summary.innerHTML = `找到 <strong>${stravaController.state.preview.run_count}</strong> 筆跑步活動；` +
+    summary.innerHTML = `找到 <strong>${stravaController.state.preview.run_count}</strong> 筆${includeWalks ? '活動' : '跑步活動'}；` +
       `其中 ${stravaController.state.preview.importable_count} 筆（${Number(stravaController.state.preview.importable_km).toFixed(2)} km）可匯入，` +
       `已有 ${stravaController.state.preview.duplicate_count} 筆重複。` +
       stravaDeletedText(stravaController.state.preview) +
@@ -248,8 +277,9 @@ async function importStrava() {
   const mapping = {};
   const startDate = document.getElementById('strava-start-date').value;
   const endDate = document.getElementById('strava-end-date').value;
+  const includeWalks = stravaIncludesWalks();
   const error = document.getElementById('strava-error');
-  if (stravaController.state.key !== stravaInputKey(file, startDate, endDate)) {
+  if (stravaController.state.key !== stravaInputKey(file, startDate, endDate, includeWalks)) {
     error.textContent = '檔案或日期範圍已變更，請等待最新預覽完成。';
     error.style.display = 'block';
     await previewStravaFile();
@@ -259,21 +289,23 @@ async function importStrava() {
     const value = document.getElementById(`strava-map-${index}`).value;
     mapping[group.gear] = value ? Number(value) : null;
   });
-  const operation = stravaController.beginImport(stravaInputKey(file, startDate, endDate));
+  const operation = stravaController.beginImport(stravaInputKey(file, startDate, endDate, includeWalks));
   if (!operation) return;
   const button = document.getElementById('strava-import-btn');
   button.disabled = true;
   setStravaMappingDisabled(true);
   try {
-    const result = await stravaController.import(operation, file, {
+    const fields = {
       mapping: JSON.stringify(mapping), start_date: startDate, end_date: endDate,
       conflicts: JSON.stringify(stravaConflictChoices(stravaController.state.preview)),
-    });
+    };
+    if (includeWalks) fields.include_walks_hikes = 'true';
+    const result = await stravaController.import(operation, file, fields);
     if (!stravaController.sessionCurrent(operation)) return;
     resourceStore.invalidate(['strava-history']);
     if (stravaController.ownsImport(operation)) {
       closeStravaModal();
-      alert(`已匯入 ${result.imported} 筆跑步紀錄${result.skipped_unmapped ? `，略過 ${result.skipped_unmapped} 筆未配對鞋款` : ''}${result.skipped_deleted ? `，略過 ${result.skipped_deleted} 筆先前刪除的活動` : ''}${result.synced_mileage ? `，並同步 ${result.synced_mileage.toFixed(2)} km 至跑鞋與月跑量` : ''}${result.corrected_dates ? `，修正 ${result.corrected_dates} 筆跑步日期為台灣時間` : ''}${result.backfilled_durations ? `，補上 ${result.backfilled_durations} 筆跑步時間` : ''}${result.linked_manual ? `，連結 ${result.linked_manual} 筆手動紀錄` : ''}${result.skipped_manual_conflict ? `，略過 ${result.skipped_manual_conflict} 筆可能和手動紀錄重複的活動` : ''}。`);
+      alert(`已匯入 ${result.imported} 筆跑步紀錄${result.skipped_unmapped ? `，略過 ${result.skipped_unmapped} 筆未配對鞋款` : ''}${result.skipped_deleted ? `，略過 ${result.skipped_deleted} 筆先前刪除的活動` : ''}${result.synced_mileage ? `，並同步 ${result.synced_mileage.toFixed(2)} km 至跑鞋與月跑量` : ''}${result.corrected_dates ? `，修正 ${result.corrected_dates} 筆跑步日期為台灣時間` : ''}${result.backfilled_durations ? `，補上 ${result.backfilled_durations} 筆跑步時間` : ''}${result.linked_manual ? `，連結 ${result.linked_manual} 筆手動紀錄` : ''}${result.skipped_manual_conflict ? `，略過 ${result.skipped_manual_conflict} 筆可能和手動紀錄重複的活動` : ''}${result.skipped_walk_hike ? `，未匯入 ${result.skipped_walk_hike} 筆健行／步行` : ''}。`);
     }
     await loadData({ mutation: 'strava' });
   } catch (e) {

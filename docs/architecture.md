@@ -669,6 +669,7 @@ flowchart LR
 - **限流**：`rate_limits.consume()` 把同一請求的所有視窗放在一個交易，滿了就整筆回滾；限額來自 `app.state.settings`，不再保留記憶體桶。SPEC-071 再加上 AI 的每帳號與全站 24 小時視窗，限流桶保留 24 小時。
 - **稽核 trigger**：每次啟動依目前欄位重建，避免舊欄位清單使快照不完整或使寫入失敗。
 - **Strava**：`strava_import.parse_activity_dates()` 把 UTC 時間戳轉為 `clock.APP_TIMEZONE` 日期。`date_corrections()` 只修正仍停在舊 UTC 日期的既有活動，`services/strava_imports.py` 在匯入交易中移動日期與月跑量。
+- **v4.29.0**：步行類型與 Strava 健行／步行選擇匯入（SPEC-097）。`strava_import.split_shoe_only()` 在 router 的日期篩選之後套用，service 與 read model 不變。依賴方向不變。
 - **v4.28.0**：運動類型（SPEC-096）。Schema 13 新增 `runs.activity_type`（回滾腳本 `scripts/rollback_schema_thirteen.sql`）。`run_metrics` 是哪種類型計入哪些統計的唯一來源，`read_models/run_statistics.py` 提供共用的 `TRAINING_RUN`／`PACE_RUN` 過濾條件；`services/mileage.apply_run_mileage_deltas` 依類型決定是否寫入月跑量。依賴方向不變。
 - **v4.27.2**：核心資料搬進 native store（SPEC-095）。`runtime/core-data.mjs` 擁有狀態並提供唯讀 view，7 個核心資料全域變數移除，script 讀 `coreData.<field>`。依賴方向不變：classic feature 讀 view，bridge 寫 store。
 - **v4.27.1**：前端核心資料只有一個寫入點（SPEC-094）。新增 native module `runtime/core-data.mjs`，`app-resources.js` 是核心資料唯一的寫入 bridge，architecture-check 強制。依賴方向不變：classic feature → bridge → native rules。
