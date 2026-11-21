@@ -297,6 +297,10 @@ SPEC-032：合成資料驗證歷史筆數上限（v4.7.3 起 10,000／10,001）�
 
 [規格與具名案例](specs/061-ci-on-every-push-and-protected-main.md) 以文字解析 workflow：觸發條件是不限分支的 push、pull request、每週排程與手動執行，沒有 `paths-ignore`；部署條件仍只有 main 的 push／手動執行；main 以外的 ref 由較新的執行取消舊的，main 不取消。ruleset 由 `.github/rulesets/main.json` 描述，Python 測試確認它要求 PR、必要檢查與 workflow 的 5 個測試 job 完全一致、禁止刪除與 force push，且沒有繞過名單。
 
+## SPEC-098 健行與步行不出現在跑步畫面
+
+[規格與具名案例](specs/098-shoe-only-activities-off-run-views.md) 確認月份摘要的月曆、鞋款分布與總數只有路跑與越野跑，紀錄列表仍列出健行；距離分布不含健行與步行，單鞋最近使用列出所有活動並帶類型。Node 測試確認摘要尚未載入時，月曆、卡片與鞋款分布只算跑步，列表仍標示健行與步行。
+
 ## SPEC-097 步行類型與 Strava 健行／步行選擇匯入
 
 [規格與具名案例](specs/097-strava-walk-hike-opt-in.md) 以 API 上傳同一份含跑步、健行與步行的 CSV：不勾選時只匯入跑步、回報健行／步行的筆數與略過數、鞋子里程不重複增加；勾選後健行與步行分別記為 `hike`／`walk`，只增加鞋子里程，不合法的勾選值回 422。另確認步行只計入鞋子、回滾腳本與再次升級同樣移動步行里程，以及前端勾選框的提醒文字與預覽鍵。

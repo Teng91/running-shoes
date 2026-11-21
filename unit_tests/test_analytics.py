@@ -297,7 +297,7 @@ def test_shoe_analytics_sql_is_bounded_and_user_scoped(db, user_with_token):
             start = (as_of - timedelta(days=days - 1)).isoformat()
             assert usage[f"km_{days}_days"] == sum(run["km"] for run in rows if start <= run["date"] <= as_of.isoformat())
         assert result["recent_runs"] == [
-            {**{key: run[key] for key in ["id", "date", "km"]}, "pace_seconds_per_km": None} for run in ordered[:12]
+            {**{key: run[key] for key in ["id", "date", "km"]}, "pace_seconds_per_km": None, "activity_type": "road"} for run in ordered[:12]
         ]
         assert len(result["monthly_history"]) == 12
         assert result["monthly_history"][-1]["km"] == sum(run["km"] for run in rows if run["date"].startswith("2026-10"))
