@@ -8,8 +8,9 @@ from sqlalchemy.orm import Session
 
 from backend import models
 from backend.read_models.strava_preview import build_preview, stored_runs
+from backend.run_metrics import DEFAULT_ACTIVITY_TYPE
 from backend.services.identifiers import allocate_id
-from backend.services.mileage import apply_run_mileage_deltas
+from backend.services.mileage import RunDelta, apply_run_mileage_deltas
 from backend.services.transactions import write_transaction
 from backend.strava_import import date_corrections, duration_backfills, resolve_conflicts
 
@@ -112,7 +113,7 @@ def import_runs(
         synced_mileage = apply_run_mileage_deltas(
             db,
             user_id,
-            [(run.shoe_id, run.date, run.km) for run in runs],
+            [(run.shoe_id, run.date, run.km, run.activity_type) for run in runs],
             1,
         )
         db.add_all(runs)
@@ -192,7 +193,7 @@ def _link_manual_runs(db: Session, user_id: int, links: list[dict[str, object]])
 
 def _correct_utc_dates(db: Session, user_id: int, corrections: list[dict[str, object]]) -> int:
     """Move runs off the UTC date stored by older imports; mileage follows the month."""
-    deltas: list[tuple[int, str, float]] = []
+    deltas: list[RunDelta] = []
     for correction in corrections:
         run = db.query(models.Run).filter(
             models.Run.user_id == user_id,
@@ -201,12 +202,13 @@ def _correct_utc_dates(db: Session, user_id: int, corrections: list[dict[str, ob
         ).first()
         if run is None:
             continue
-        shoe_id, km = run.shoe_id, float(run.km)
+        shoe_id, km, activity_type = run.shoe_id, float(run.km), run.activity_type
         db.query(models.Run).filter(models.Run.id == run.id, models.Run.user_id == user_id).update(
             {models.Run.date: str(correction["to_date"]), models.Run.version: models.Run.version + 1},
             synchronize_session=False,
         )
-        deltas += [(shoe_id, str(correction["from_date"]), -km), (shoe_id, str(correction["to_date"]), km)]
+        deltas += [(shoe_id, str(correction["from_date"]), -km, activity_type),
+                   (shoe_id, str(correction["to_date"]), km, activity_type)]
     apply_run_mileage_deltas(db, user_id, deltas, 1)
     return len(deltas) // 2
 
@@ -270,6 +272,7 @@ def _prepare_runs(
                 km=float(cast(float | str, row["km"])),
                 strava_id=strava_id,
                 duration_seconds=cast(int | None, row.get("duration_seconds")),
+                activity_type=str(row.get("activity_type") or DEFAULT_ACTIVITY_TYPE),
             )
         )
     return runs, duplicate_count, unmapped_count, deleted_count

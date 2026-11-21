@@ -17,7 +17,12 @@ from backend.read_models import goal_progress
 from backend.read_models import mileage as mileage_stats
 from backend.read_models import shoes as shoe_stats
 from backend.read_models.rounding import round_metric
-from backend.read_models.run_statistics import month_bounds, period_distances, run_period
+from backend.read_models.run_statistics import (
+    TRAINING_RUN,
+    month_bounds,
+    period_distances,
+    run_period,
+)
 
 REPORT_SECTIONS = ["本月總覽", "趨勢解讀", "鞋款壽命與退役提醒", "下月建議"]
 
@@ -34,7 +39,7 @@ def _month_run_stats(
     start, end = month_bounds(year, month)
     query = (
         db.query(models.Run)
-        .filter(models.Run.user_id == user_id, models.Run.date >= start, models.Run.date <= end)
+        .filter(models.Run.user_id == user_id, TRAINING_RUN, models.Run.date >= start, models.Run.date <= end)
     )
     if through_date is not None:
         query = query.filter(models.Run.date <= through_date)

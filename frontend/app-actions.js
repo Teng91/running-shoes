@@ -76,6 +76,8 @@ const UI_ACTIONS = Object.freeze({
   }),
   change: Object.freeze({
     'run-date-warning': element => updateRunDateWarning(element.dataset.form),
+    'run-shoe': element => onRunShoeChange(element.dataset.form),
+    'run-activity-hint': element => updateRunActivityHint(element.dataset.form),
     'load-runs': () => loadRunsForSelectedMonth(),
     'year': () => onYearChange(),
     'spending-year': () => onSpendingYearChange(),

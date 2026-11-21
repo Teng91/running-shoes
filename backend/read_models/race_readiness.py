@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from backend import models
 from backend.read_models.rounding import round_metric
+from backend.read_models.run_statistics import PACE_RUN
 from backend.run_metrics import pace_seconds_per_km
 
 # Riegel's endurance model: T2 = T1 * (D2 / D1) ** 1.06.
@@ -167,7 +168,8 @@ def race_readiness(db: Session, user_id: int, as_of: date) -> dict:
     pace_goal = goal_pace(goal)
     rows = (
         db.query(models.Run.date, models.Run.km, models.Run.duration_seconds)
-        .filter(models.Run.user_id == user_id, models.Run.date <= as_of.isoformat())
+        # Road runs only: trail climbs and hikes would distort pace (SPEC-096).
+        .filter(models.Run.user_id == user_id, PACE_RUN, models.Run.date <= as_of.isoformat())
         .all()
     )
     runs = sorted((date.fromisoformat(day), float(km), seconds) for day, km, seconds in rows)

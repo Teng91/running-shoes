@@ -61,6 +61,10 @@
 .run-entry-grid .form-group { margin-bottom: 0; }
 .run-entry-grid .shoe-field { grid-column: 1 / -1; }
 .run-entry-grid .duration-field { grid-column: 1 / -1; }
+.run-entry-grid .activity-field { grid-column: 1 / -1; }
+.run-activity-hint { display: block; margin-top: 4px; color: var(--text-dim); font-size: 0.8rem; }
+.run-activity-hint:empty { display: none; }
+.run-activity { display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 999px; font-size: 0.72rem; font-weight: 600; background: rgba(100, 116, 139, 0.14); color: var(--text-dim); vertical-align: middle; }
 .run-pace-preview { display: block; margin-top: 6px; min-height: 1.2em; font-size: 12px; color: var(--text-dim); }
 .run-entry .btn { width: 100%; margin-top: 14px; }
 .run-stats { grid-template-columns: repeat(3, 1fr); }

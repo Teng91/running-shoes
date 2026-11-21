@@ -212,7 +212,7 @@ def test_schema_seven_drops_superseded_run_receipts_without_changing_business_ro
         connection.execute(text("INSERT INTO schema_metadata VALUES ('schema_version', '6')"))
     for _ in range(2):
         run_startup_migrations(engine, sessions)
-        assert schema_version(engine) == 12
+        assert schema_version(engine) == 13
     assert "run_creation_requests" not in inspect(engine).get_table_names()
     with sessions() as db:
         assert db.query(models.User).one().username == "preserved"
@@ -235,6 +235,7 @@ def test_schema_seven_rollback_restores_the_schema_six_contract_and_reupgrades(t
         db.commit()
     connection = engine.raw_connection()
     try:
+        connection.executescript(Path("scripts/rollback_schema_thirteen.sql").read_text(encoding="utf-8"))
         connection.executescript(Path("scripts/rollback_schema_twelve.sql").read_text(encoding="utf-8"))
         connection.executescript(Path("scripts/rollback_schema_eleven.sql").read_text(encoding="utf-8"))
         connection.executescript(Path("scripts/rollback_schema_ten.sql").read_text(encoding="utf-8"))
@@ -249,7 +250,7 @@ def test_schema_seven_rollback_restores_the_schema_six_contract_and_reupgrades(t
     assert schema_version(engine) == 6
     assert "run_creation_requests" in inspect(engine).get_table_names()
     run_startup_migrations(engine, sessions)
-    assert schema_version(engine) == 12
+    assert schema_version(engine) == 13
     assert "run_creation_requests" not in inspect(engine).get_table_names()
     with sessions() as db:
         assert db.query(models.Shoe).one().mileage == 42
@@ -274,6 +275,7 @@ def test_schema_eight_rollback_keeps_rows_and_reupgrades(tmp_path):
     script = Path("scripts/rollback_schema_eight.sql").read_text(encoding="utf-8")
     connection = engine.raw_connection()
     try:
+        connection.executescript(Path("scripts/rollback_schema_thirteen.sql").read_text(encoding="utf-8"))
         connection.executescript(Path("scripts/rollback_schema_twelve.sql").read_text(encoding="utf-8"))
         connection.executescript(Path("scripts/rollback_schema_eleven.sql").read_text(encoding="utf-8"))
         connection.executescript(Path("scripts/rollback_schema_ten.sql").read_text(encoding="utf-8"))
@@ -286,7 +288,7 @@ def test_schema_eight_rollback_keeps_rows_and_reupgrades(tmp_path):
         connection.close()
     assert schema_version(engine) == 7
     run_startup_migrations(engine, sessions)
-    assert schema_version(engine) == 12
+    assert schema_version(engine) == 13
     with sessions() as db:
         assert db.query(models.RunTombstone).one().strava_id == "strava-1"
         assert db.query(models.Shoe).one().mileage == 42

@@ -13,7 +13,7 @@ from backend.clock import local_today
 from backend.forecasting import retirement_forecast
 from backend.read_models import goal_progress
 from backend.read_models.rounding import round_metric
-from backend.read_models.run_statistics import month_bounds, run_period
+from backend.read_models.run_statistics import TRAINING_RUN, month_bounds, run_period
 from backend.read_models.shoe_statistics import shoe_run_statistics
 from backend.shoe_metrics import MONITOR_USAGE_PERCENT, REPLACE_SOON_USAGE_PERCENT, shoe_metrics
 
@@ -132,8 +132,9 @@ def dashboard_analytics(
     period = run_period(year, month, as_of)
     prev_year, prev_month = _shift_month(year, month, -1)
     prev_start, prev_end = month_bounds(prev_year, prev_month)
+    # Monthly summaries count training runs only; hikes stay on the shoe (SPEC-096).
     month_runs = db.query(models.Run).filter(
-        models.Run.user_id == user_id,
+        models.Run.user_id == user_id, TRAINING_RUN,
         models.Run.date >= period.month_start, models.Run.date <= period.month_end,
     ).all()
     if selected == current:
@@ -141,7 +142,7 @@ def dashboard_analytics(
     elif selected > current:
         month_runs = []
     prev_runs = db.query(models.Run).filter(
-        models.Run.user_id == user_id,
+        models.Run.user_id == user_id, TRAINING_RUN,
         models.Run.date >= prev_start, models.Run.date <= prev_end,
     ).all()
     month_metrics = _run_metrics(month_runs)
@@ -197,7 +198,7 @@ def dashboard_analytics(
         start_7 = end_7 - timedelta(days=6)
         start_prev_7 = start_7 - timedelta(days=7)
         all_recent = db.query(models.Run).filter(
-            models.Run.user_id == user_id,
+            models.Run.user_id == user_id, TRAINING_RUN,
             models.Run.date >= start_prev_7.isoformat(),
             models.Run.date <= end_7.isoformat(),
         ).all()

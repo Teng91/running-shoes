@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from backend import models
 from backend.read_models.race_readiness import goal_pace, race_goal_values, zone_bounds, zone_for
 from backend.read_models.rounding import round_metric
+from backend.read_models.run_statistics import PACE_RUN
 from backend.run_metrics import pace_seconds_per_km
 
 ROLLING_DAYS = 30
@@ -53,7 +54,8 @@ def _summary(timed: list[Run], as_of: date) -> dict:
 def pace_analysis(db: Session, user_id: int, as_of: date) -> dict:
     rows = (
         db.query(models.Run.date, models.Run.km, models.Run.duration_seconds)
-        .filter(models.Run.user_id == user_id, models.Run.date <= as_of.isoformat())
+        # Road runs only: trail climbs and hikes would distort pace (SPEC-096).
+        .filter(models.Run.user_id == user_id, PACE_RUN, models.Run.date <= as_of.isoformat())
         .order_by(models.Run.date, models.Run.id)
         .all()
     )

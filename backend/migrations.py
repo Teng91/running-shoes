@@ -13,7 +13,7 @@ from backend.audit_schema import install_audit_triggers
 from backend.credentials import get_password_hash
 from backend.database import Base
 
-CURRENT_SCHEMA_VERSION = 12
+CURRENT_SCHEMA_VERSION = 13
 
 
 def _migrate_preview_tokens(engine: Engine) -> None:
@@ -140,6 +140,36 @@ def _migrate_schema_twelve(engine: Engine) -> None:
             "CREATE UNIQUE INDEX IF NOT EXISTS uq_users_email_lower ON users (lower(email)) WHERE email IS NOT NULL"
         ))
     cast(Table, models.EmailCode.__table__).create(bind=engine, checkfirst=True)
+
+
+# Hike kilometres per stored month; the rollback script adds the same sum back.
+_HIKE_MONTH_SUM = (
+    "SELECT coalesce(sum(runs.km), 0) FROM runs "
+    "WHERE runs.user_id = monthly_mileages.user_id AND runs.activity_type = 'hike' "
+    "AND CAST(substr(runs.date, 1, 4) AS INTEGER) = monthly_mileages.year "
+    "AND CAST(substr(runs.date, 6, 2) AS INTEGER) = monthly_mileages.month"
+)
+
+
+def _migrate_schema_thirteen(engine: Engine, applied_version: int) -> None:
+    """Run activity types (SPEC-096): hikes count toward shoes, not monthly volume.
+
+    Existing runs become road runs, so a schema-12 database keeps every total.
+    A database rolled back to 12 still holds its hike labels, and the rollback
+    script added those kilometres to monthly_mileages; take them out again so
+    each month equals its adjustment plus its training runs.
+    """
+    with engine.begin() as connection:
+        columns = {column["name"] for column in inspect(connection).get_columns("runs")}
+        if "activity_type" not in columns:
+            connection.exec_driver_sql(
+                "ALTER TABLE runs ADD COLUMN activity_type VARCHAR NOT NULL DEFAULT 'road'"
+            )
+        if applied_version < 13:
+            connection.exec_driver_sql(
+                f"UPDATE monthly_mileages SET km = max(0, round(km - ({_HIKE_MONTH_SUM}), 2)), "
+                f"version = version + 1 WHERE ({_HIKE_MONTH_SUM}) > 0"
+            )
 
 
 def _ensure_lookup_indexes(engine: Engine) -> None:
@@ -395,6 +425,7 @@ def run_startup_migrations(
     _migrate_schema_ten(engine)
     _migrate_schema_eleven(engine)
     _migrate_schema_twelve(engine)
+    _migrate_schema_thirteen(engine, applied_version)
     _ensure_lookup_indexes(engine)
     with engine.begin() as connection:
         for table in ("runs", "monthly_mileages"):

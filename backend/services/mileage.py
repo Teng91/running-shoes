@@ -6,24 +6,34 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from backend import models
+from backend.run_metrics import counts_toward_training
 from backend.services.identifiers import allocate_id
+
+# (shoe_id, date, km, activity_type) of one run side; a negative km removes it.
+RunDelta = tuple[int, str, float, str]
 
 
 def apply_run_mileage_deltas(
     db: Session,
     user_id: int,
-    run_values: Sequence[tuple[int, str, float]],
+    run_values: Sequence[RunDelta],
     multiplier: int,
 ) -> float:
-    """Apply run deltas to shoe and monthly totals inside the caller's transaction."""
+    """Apply run deltas to shoe and monthly totals inside the caller's transaction.
+
+    Every activity type wears the shoe; only training types (SPEC-096) add to the
+    month, so a hike changes shoe mileage but not monthly volume. Returns the shoe
+    (all-activity) delta.
+    """
     shoe_deltas: dict[int, float] = {}
     month_deltas: dict[tuple[int, int], float] = {}
     total_delta = 0.0
-    for shoe_id, run_date, km in run_values:
+    for shoe_id, run_date, km, activity_type in run_values:
         delta = round(km * multiplier, 2)
         shoe_deltas[shoe_id] = shoe_deltas.get(shoe_id, 0.0) + delta
-        year, month = int(run_date[:4]), int(run_date[5:7])
-        month_deltas[(year, month)] = month_deltas.get((year, month), 0.0) + delta
+        if counts_toward_training(activity_type):
+            year, month = int(run_date[:4]), int(run_date[5:7])
+            month_deltas[(year, month)] = month_deltas.get((year, month), 0.0) + delta
         total_delta += delta
 
     for shoe_id, delta in shoe_deltas.items():

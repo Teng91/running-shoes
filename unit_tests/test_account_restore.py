@@ -486,7 +486,7 @@ def test_schema_six_preserves_existing_preview_and_is_idempotent(workspace):
         connection.execute(text("UPDATE schema_metadata SET value='5' WHERE key='schema_version'"))
     run_startup_migrations(workspace.engine, workspace.sessions)
     run_startup_migrations(workspace.engine, workspace.sessions)
-    assert schema_version(workspace.engine) == 12
+    assert schema_version(workspace.engine) == 13
     assert inspect(workspace.engine).get_pk_constraint('restore_previews')['constrained_columns'] == ['user_id', 'token']
     with workspace.sessions() as db:
         after = exports.build_account_export(db, db.get(models.User, 1))[0]
@@ -529,6 +529,7 @@ def test_preview_schema_rollback_preserves_business_rows(workspace):
         before = db.query(models.AuditEvent).count()
     connection = workspace.engine.raw_connection()
     try:
+        connection.executescript(Path('scripts/rollback_schema_thirteen.sql').read_text(encoding="utf-8"))
         connection.executescript(Path('scripts/rollback_schema_twelve.sql').read_text(encoding="utf-8"))
         connection.executescript(Path('scripts/rollback_schema_eleven.sql').read_text(encoding="utf-8"))
         connection.executescript(Path('scripts/rollback_schema_ten.sql').read_text(encoding="utf-8"))
@@ -545,7 +546,7 @@ def test_preview_schema_rollback_preserves_business_rows(workspace):
         assert db.query(models.AuditEvent).count() == before
         assert db.query(models.RestorePreview).count() == 0
     run_startup_migrations(workspace.engine, workspace.sessions)
-    assert schema_version(workspace.engine) == 12
+    assert schema_version(workspace.engine) == 13
 
 
 def test_export_contract_limits_and_explicit_history_omission(workspace):
@@ -805,7 +806,7 @@ def test_portable_source_recovery_aliases_roundtrip(workspace):
             history.restore_deleted(db, uid, event.id, workspace.config)
             return old_id
         original = export(1)
-        assert original['version'] == 4
+        assert original['version'] == 5
         apply(original, 'portable-first-import')
         source_old = recover(1)
         restored = export(1)
@@ -938,11 +939,13 @@ def test_legacy_archive_fingerprint_excludes_v3_defaults(workspace, version):
     for row in payload['runs']:
         row.pop('aliases', None)
         row.pop('duration_seconds', None)
+        row.pop('activity_type', None)
     parsed = parse_backup(json.dumps(payload).encode())
     original = parsed.model_dump(mode='json')
     for row in original['runs']:
         row.pop('aliases')
         row.pop('duration_seconds')
+        row.pop('activity_type')
     assert backup_fingerprint(parsed) == payload_hash(original)
 
 
@@ -1138,3 +1141,37 @@ def test_default_preview_limit_allows_a_normal_restore_session(workspace, tmp_pa
             if previous:
                 assert client.delete('/api/account-restore/preview/' + previous, headers=headers).status_code == 200
             previous = response.json()['token']
+
+
+def test_backup_v5_round_trips_activity_type(workspace):
+    """SPEC-096 AC-6: v5 keeps run types; older archives restore as road and never relabel a stored run."""
+    from backend import schemas
+    from backend.services import runs
+
+    with workspace.sessions() as db:
+        shoe = add_shoe(db, mileage=0)
+        for day, km, kind in (("2026-03-01", 10, "road"), ("2026-03-08", 12, "trail"), ("2026-03-15", 8, "hike")):
+            runs.create_run(db, 1, schemas.RunCreate(shoe_id=shoe.id, date=day, km=km, activity_type=kind),
+                            max_runs=5000)
+        payload = exports.build_account_export(db, db.get(models.User, 1))[0]
+        assert payload["version"] == 5
+        assert [run["activity_type"] for run in payload["runs"]] == ["road", "trail", "hike"]
+        assert payload["monthly_mileages"] == [{"year": 2026, "month": 3, "km": 22, "adjustment_km": 0}]
+
+        preview = account_restore.preview_restore(db, 2, json.dumps(payload).encode(), workspace.config)
+        account_restore.apply_restore(db, 2, preview["token"], "activity-v5-import", workspace.config)
+        db.expire_all()
+        restored = db.query(models.Run).filter_by(user_id=2).order_by(models.Run.date).all()
+        assert [run.activity_type for run in restored] == ["road", "trail", "hike"]
+        assert db.query(models.Shoe).filter_by(user_id=2).one().mileage == 30
+        assert db.query(models.MonthlyMileage).filter_by(user_id=2).one().km == 22
+
+        legacy = {**payload, "version": 4, "runs": [{key: value for key, value in run.items() if key != "activity_type"}
+                                                    for run in payload["runs"]],
+                  "monthly_mileages": [{"year": 2026, "month": 3, "km": 30, "adjustment_km": 0}]}
+        assert {run.activity_type for run in parse_backup(json.dumps(legacy).encode()).runs} == {"road"}
+        with pytest.raises(Invalid):
+            parse_backup(json.dumps({**payload, "version": 4}).encode())
+        # Merging an old archive into the account that already labels the runs keeps the labels.
+        merge = account_restore.preview_restore(db, 2, json.dumps(legacy).encode(), workspace.config, "update")
+        assert merge["summary"]["updated_runs"] == 0

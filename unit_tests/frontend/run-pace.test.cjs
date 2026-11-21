@@ -82,7 +82,7 @@ test('SPEC-060 adding a run sends the moving time and clears it after saving', a
   });
   vm.runInContext(extract('addRun'), context);
   await context.addRun();
-  assert.deepEqual(JSON.parse(JSON.stringify(posts)), [{ date: '2026-11-15', km: 10, shoe_id: 7, duration_seconds: 3330 }]);
+  assert.deepEqual(JSON.parse(JSON.stringify(posts)), [{ date: '2026-11-15', km: 10, shoe_id: 7, activity_type: 'road', duration_seconds: 3330 }]);
   assert.equal(elements['run-duration'].value, '');
   assert.equal(elements['run-km'].value, '');
 
@@ -136,7 +136,7 @@ test('SPEC-060 the run table, month card and shoe analysis show backend paces', 
   context.runController.state.summary = summary;
   vm.runInContext(extract('renderRunLog'), context);
   context.renderRunLog();
-  assert.match(elements['run-stats'].innerHTML, /2 次跑步 · 平均配速 5:33 \/km/);
+  assert.match(elements['run-stats'].innerHTML, /2 次跑步 · 路跑平均配速 5:33 \/km/);
   const rows = elements['run-table'].innerHTML;
   assert.match(rows, /10\.00 km<\/strong><\/td><td class="numeric">55:30<\/td><td class="numeric">5:33 \/km<\/td>/);
   assert.match(rows, /5\.00 km<\/strong><\/td><td class="numeric">—<\/td><td class="numeric">—<\/td>/);
