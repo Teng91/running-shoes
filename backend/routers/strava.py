@@ -71,12 +71,18 @@ def _parsed_mapping(raw_mapping: str) -> dict[str, Any]:
     return parsed
 
 
-def _preview_upload(db: Session, user_id: int, raw: bytes, start_date: str, end_date: str, config: Settings):
+def _preview_upload(db: Session, user_id: int, raw: bytes, start_date: str, end_date: str, config: Settings,
+                    include_walks_hikes: bool = False):
     """One sequential worker owns CSV parsing and all request-session DB work."""
     rows, invalid, warnings = _parse_strava_csv(raw, config.max_strava_csv_rows)
     rows, filtered_out = _filter_strava_rows(rows, start_date, end_date)
+    rows, walk_hike_count, walk_hike_km = strava_import.split_shoe_only(rows, include_walks_hikes)
     result = strava_imports.preview(db, user_id, rows, invalid, warnings)
     result["filtered_out"] = filtered_out
+    # SPEC-097: hikes and walks in range, and whether this preview includes them.
+    result["walk_hike_count"] = walk_hike_count
+    result["walk_hike_km"] = walk_hike_km
+    result["walk_hike_included"] = include_walks_hikes
     return result
 
 
@@ -91,11 +97,12 @@ def _conflict_choices(raw_choices: str) -> dict[str, object]:
 
 
 def _import_upload(db: Session, user_id: int, raw: bytes, mapping: str, start_date: str, end_date: str,
-                   config: Settings, conflicts: str = "{}"):
+                   config: Settings, conflicts: str = "{}", include_walks_hikes: bool = False):
     parsed_mapping = _parsed_mapping(mapping)
     choices = _conflict_choices(conflicts)
     rows, invalid, _ = _parse_strava_csv(raw, config.max_strava_csv_rows)
     rows, filtered_out = _filter_strava_rows(rows, start_date, end_date)
+    rows, walk_hike_count, _ = strava_import.split_shoe_only(rows, include_walks_hikes)
     try:
         result = strava_imports.import_runs(
             db,
@@ -126,7 +133,9 @@ def _import_upload(db: Session, user_id: int, raw: bytes, mapping: str, start_da
         raise HTTPException(
             status_code=409, detail="部分 Strava 活動已存在，請重新預覽"
         ) from exc
-    return result.as_dict()
+    response: dict[str, object] = dict(result.as_dict())
+    response["skipped_walk_hike"] = 0 if include_walks_hikes else walk_hike_count
+    return response
 
 
 @router.post("/api/runs/import/strava/preview")
@@ -135,6 +144,7 @@ async def preview_strava_import(
     file: UploadFile = File(...),
     start_date: str = Form(""),
     end_date: str = Form(""),
+    include_walks_hikes: bool = Form(False),
     config: Settings = Depends(get_settings),
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -144,7 +154,9 @@ async def preview_strava_import(
         # Inside the slot, so a busy rejection does not spend the account's budget.
         await run_in_threadpool(enforce_strava_upload_limits, request, user_id)
         raw = await _read_strava_upload(file, config.max_strava_csv_bytes)
-        return await run_in_threadpool(_preview_upload, db, user_id, raw, start_date, end_date, config)
+        return await run_in_threadpool(
+            _preview_upload, db, user_id, raw, start_date, end_date, config, include_walks_hikes
+        )
 
 
 @router.post("/api/runs/import/strava")
@@ -155,6 +167,7 @@ async def import_strava_runs(
     start_date: str = Form(""),
     end_date: str = Form(""),
     conflicts: str = Form("{}"),
+    include_walks_hikes: bool = Form(False),
     config: Settings = Depends(get_settings),
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -163,7 +176,9 @@ async def import_strava_runs(
     with strava_upload_slot(request):
         await run_in_threadpool(enforce_strava_upload_limits, request, user_id)
         raw = await _read_strava_upload(file, config.max_strava_csv_bytes)
-        return await run_in_threadpool(_import_upload, db, user_id, raw, mapping, start_date, end_date, config, conflicts)
+        return await run_in_threadpool(
+            _import_upload, db, user_id, raw, mapping, start_date, end_date, config, conflicts, include_walks_hikes
+        )
 
 
 @router.get("/api/runs/import/strava/history", response_model=list[schemas.StravaImportOut])

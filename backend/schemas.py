@@ -28,7 +28,7 @@ MAX_MONTHLY_MILEAGE_KM = 1_000_000.0
 ReasonableYear = Annotated[int, Field(ge=1900, le=2100)]
 CalendarMonth = Annotated[int, Field(ge=1, le=12)]
 # Mirrors backend.run_metrics.ACTIVITY_TYPES (SPEC-096).
-ActivityType = Literal["road", "trail", "hike"]
+ActivityType = Literal["road", "trail", "hike", "walk"]
 NonNegativeFiniteKm = Annotated[float, Field(ge=0, allow_inf_nan=False)]
 PositiveFiniteKm = Annotated[float, Field(gt=0, le=1000, allow_inf_nan=False)]
 RunDurationSeconds = Annotated[int, Field(ge=1, le=MAX_RUN_DURATION_SECONDS, strict=True)]

@@ -615,7 +615,10 @@ def test_deleted_strava_activity_is_not_reimported_and_preview_counts_it(client,
 
 
 def test_strava_activity_types_map_to_run_types(client, db, user_with_token):
-    """SPEC-096 AC-5: runs, trail runs, hikes and walks are imported with their type; rides are skipped."""
+    """SPEC-096 AC-5: runs, trail runs, hikes and walks are imported with their type; rides are skipped.
+
+    Hikes and walks are opt-in since SPEC-097, so this import ticks the box.
+    """
     from backend.strava_import import parse_csv
 
     csv_content = (
@@ -630,19 +633,64 @@ def test_strava_activity_types_map_to_run_types(client, db, user_with_token):
     rows, invalid, _ = parse_csv(csv_content.encode(), max_rows=100)
     assert invalid == 0
     assert {row["strava_id"]: row["activity_type"] for row in rows} == {
-        "t1": "road", "t2": "trail", "t3": "hike", "t4": "hike", "t6": "hike"}
+        "t1": "road", "t2": "trail", "t3": "hike", "t4": "walk", "t6": "hike"}
 
     user, token = user_with_token
     shoe = Shoe(user_id=user.id, brand="HOKA", model="Speedgoat", date="2026-01-01")
     db.add(shoe)
     db.commit()
-    preview = upload(client, "/api/runs/import/strava/preview", token, csv_content=csv_content).json()
+    preview = _post_strava(client, "/api/runs/import/strava/preview", token, csv_content,
+                           include_walks_hikes="true").json()
     assert preview["importable_count"] == 5
-    result = upload(client, "/api/runs/import/strava", token, json.dumps({"Speedgoat": shoe.id}),
-                    csv_content=csv_content).json()
+    result = _post_strava(client, "/api/runs/import/strava", token, csv_content,
+                          mapping=json.dumps({"Speedgoat": shoe.id}), include_walks_hikes="true").json()
     assert result["imported"] == 5 and result["synced_mileage"] == 42
     db.expire_all()
     stored = {run.strava_id: run.activity_type for run in db.query(Run).filter_by(user_id=user.id)}
-    assert stored == {"t1": "road", "t2": "trail", "t3": "hike", "t4": "hike", "t6": "hike"}
+    assert stored == {"t1": "road", "t2": "trail", "t3": "hike", "t4": "walk", "t6": "hike"}
     assert db.get(Shoe, shoe.id).mileage == 42
     assert db.query(MonthlyMileage).filter_by(user_id=user.id, year=2026, month=10).one().km == 25
+
+
+def _post_strava(client, path, token, csv_content, **fields):
+    return client.post(path, headers=_auth_header(token), data=fields, files={
+        "file": ("activities.csv", io.BytesIO(csv_content.encode("utf-8-sig")), "text/csv")})
+
+
+def test_strava_walks_and_hikes_are_opt_in(client, db, user_with_token):
+    """SPEC-097 AC-1/AC-2: hikes and walks stay out unless the import ticks the box, and are counted."""
+    csv_content = (
+        "活動 ID,活動日期,活動類型,活動裝備,距離\n"
+        "o1,2026年10月1日,Run,Speedgoat,10000\n"
+        "o2,2026年10月2日,Hike,Speedgoat,8000\n"
+        "o3,2026年10月3日,Walk,Speedgoat,2500\n"
+    )
+    user, token = user_with_token
+    shoe = Shoe(user_id=user.id, brand="HOKA", model="Speedgoat", date="2026-01-01", mileage=10.5)
+    db.add(shoe)
+    db.commit()
+    mapping = json.dumps({"Speedgoat": shoe.id})
+
+    preview = _post_strava(client, "/api/runs/import/strava/preview", token, csv_content).json()
+    assert (preview["importable_count"], preview["importable_km"]) == (1, 10)
+    assert (preview["walk_hike_count"], preview["walk_hike_km"], preview["walk_hike_included"]) == (2, 10.5, False)
+    assert [group["km"] for group in preview["gear_groups"]] == [10]
+    result = _post_strava(client, "/api/runs/import/strava", token, csv_content, mapping=mapping).json()
+    assert (result["imported"], result["skipped_walk_hike"], result["synced_mileage"]) == (1, 2, 10)
+    db.expire_all()
+    assert db.get(Shoe, shoe.id).mileage == 20.5, "hand-entered walk kilometres are not counted twice"
+    assert [run.strava_id for run in db.query(Run).filter_by(user_id=user.id)] == ["o1"]
+
+    included = _post_strava(client, "/api/runs/import/strava/preview", token, csv_content,
+                            include_walks_hikes="true").json()
+    assert (included["importable_count"], included["duplicate_count"], included["walk_hike_included"]) == (2, 1, True)
+    result = _post_strava(client, "/api/runs/import/strava", token, csv_content, mapping=mapping,
+                          include_walks_hikes="true").json()
+    assert (result["imported"], result["skipped_walk_hike"], result["synced_mileage"]) == (2, 0, 10.5)
+    db.expire_all()
+    assert db.get(Shoe, shoe.id).mileage == 31
+    assert db.query(MonthlyMileage).filter_by(user_id=user.id, year=2026, month=10).one().km == 10
+    stored = {run.strava_id: run.activity_type for run in db.query(Run).filter_by(user_id=user.id)}
+    assert stored == {"o1": "road", "o2": "hike", "o3": "walk"}
+    assert _post_strava(client, "/api/runs/import/strava/preview", token, csv_content,
+                        include_walks_hikes="maybe").status_code == 422
