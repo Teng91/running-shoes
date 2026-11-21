@@ -3,7 +3,7 @@
 from sqlalchemy.orm import Session
 
 from backend import models, schemas
-from backend.run_metrics import is_plausible_duration
+from backend.run_metrics import DEFAULT_ACTIVITY_TYPE, is_plausible_duration
 from backend.services.errors import Conflict, Invalid, NotFound
 from backend.services.identifiers import allocate_id
 from backend.services.mileage import apply_run_mileage_deltas
@@ -42,7 +42,9 @@ def create_run(
             raise Conflict("跑步紀錄已達上限")
         run = models.Run(**payload.model_dump(), user_id=user_id, id=allocate_id(db, "runs"))
         db.add(run)
-        apply_run_mileage_deltas(db, user_id, [(payload.shoe_id, payload.date, payload.km)], 1)
+        apply_run_mileage_deltas(
+            db, user_id, [(payload.shoe_id, payload.date, payload.km, payload.activity_type)], 1
+        )
         return run
 
 
@@ -68,11 +70,13 @@ def update_run(db: Session, user_id: int, run_id: int, payload: schemas.RunUpdat
         if ("km" in update_data and "duration_seconds" not in update_data and stored_duration is not None
                 and not is_plausible_duration(stored_duration, float(update_data["km"]))):
             raise Invalid("新距離與已記錄的跑步時間換算的配速不合理（每公里 1:00–60:00），請一併修改或清除跑步時間")
-        old_values = (run.shoe_id, run.date, run.km)
+        stored_type = getattr(run, "activity_type", DEFAULT_ACTIVITY_TYPE)
+        old_values = (run.shoe_id, run.date, run.km, stored_type)
         new_values = (
             int(update_data.get("shoe_id", run.shoe_id)),
             str(update_data.get("date", run.date)),
             float(update_data.get("km", run.km)),
+            str(update_data.get("activity_type", stored_type)),
         )
         changed = (
             db.query(models.Run)
@@ -92,7 +96,7 @@ def update_run(db: Session, user_id: int, run_id: int, payload: schemas.RunUpdat
         if not changed:
             raise Conflict("跑步紀錄已被更新，請重新載入後再編輯")
         apply_run_mileage_deltas(
-            db, user_id, [(old_values[0], old_values[1], -old_values[2]), new_values], 1
+            db, user_id, [(old_values[0], old_values[1], -old_values[2], old_values[3]), new_values], 1
         )
         return run
 
@@ -106,7 +110,7 @@ def delete_run(db: Session, user_id: int, run_id: int, expected_version: int | N
         )
         if not run:
             raise NotFound("Run not found")
-        run_values = (run.shoe_id, run.date, run.km)
+        run_values = (run.shoe_id, run.date, run.km, getattr(run, "activity_type", DEFAULT_ACTIVITY_TYPE))
         strava_id = getattr(run, "strava_id", None)
         version = getattr(run, "version", 0) if expected_version is None else expected_version
         changed = (

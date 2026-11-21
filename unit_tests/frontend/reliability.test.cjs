@@ -90,7 +90,7 @@ test('SPEC-019 request cancellation does not retry and SSE remains outside the J
 
 test('SPEC-019 creation retries retain a key, but changed input or success starts a new operation', async () => {
   const nodes = { 'run-date': { value: '2026-01-05' }, 'run-km': { value: '5' }, 'run-duration': { value: '' }, 'run-shoe': { value: '1' },
-    'run-error': {}, 'run-month': {}, 'add-run-btn': {} };
+    'run-activity': { value: 'road' }, 'run-error': {}, 'run-month': {}, 'add-run-btn': {} };
   const keys = []; let fail = true;
   const context = runContext({ document: { getElementById: id => nodes[id] },
     localDateISO: () => '2026-10-22', refreshDateLimits() {},

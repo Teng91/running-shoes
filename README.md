@@ -55,10 +55,10 @@ Python 3.11 · FastAPI · SQLAlchemy · SQLite · 原生 JavaScript（不需要�
 | 項目 | 數量 |
 | --- | --- |
 | 正式版本 | 125 個 tag，2026-06 開始，目前 v4.26 |
-| 自動化測試 | Python 766 項、前端 Node 回歸 243 項、40 組版面設定（WebKit／Chromium × 亮暗 × 10 種尺寸）、真實 CRUD E2E 與 PWA 升級／離線測試 |
+| 自動化測試 | Python 778 項、前端 Node 回歸 244 項、40 組版面設定（WebKit／Chromium × 亮暗 × 10 種尺寸）、真實 CRUD E2E 與 PWA 升級／離線測試 |
 | 功能規格 | 91 份 SPEC，每份含 Goals、帳號隔離、migration／rollback 與 AC 追蹤 |
 | API | 66 個端點，與 `unit_tests/api_contract.json` 及下方 API 表自動比對 |
-| 資料庫 | SQLite schema 12，每一版都有守衛的回滾腳本 |
+| 資料庫 | SQLite schema 13，每一版都有守衛的回滾腳本 |
 | 部署 | Fly.io 1 台 256MB 機器＋加密 volume，閒置自動休眠 |
 
 ---
@@ -67,7 +67,7 @@ Python 3.11 · FastAPI · SQLAlchemy · SQLite · 原生 JavaScript（不需要�
 
 | 分頁 | 用途 | 重點功能 |
 | --- | --- | --- |
-| **跑步日誌** | 記錄與快速查看當月 | 新增距離、跑步時間（自動算配速）與鞋款；當月月曆、總里程、平均配速、上月同期比較、月底預測；「今天穿哪雙」選鞋建議；Strava 歷史匯入 |
+| **跑步日誌** | 記錄與快速查看當月 | 新增距離、跑步時間（自動算配速）、鞋款與運動類型（路跑／越野跑／健行）；當月月曆、總里程、平均配速、上月同期比較、月底預測；「今天穿哪雙」選鞋建議；Strava 歷史匯入 |
 | **跑鞋** | 裝備管理 | 跑步里程（和 Strava 跑步總計一致）與跑鞋里程（含步行、健行）、現役／退役鞋款、里程與壽命進度、每 km 成本、依近 90 天實際使用預估退役日、用途類別覆蓋（Daily／Speed／Tempo／Race）、支出明細、輪替時間軸、距離分布、單鞋分析 |
 | **訓練分析** | 長期資料 | 年度目標與每月達標、年度回顧（與前一年同期比較）、熱力圖與連續天數、每週跑量與暴增提醒、每週最長一次、星期幾跑量與配速、年度月跑量對比；**比賽準備**：設定目標賽事後顯示倒數、目標配速、依參考成績預估完賽、長距離是否足夠、近 8 週強度分布，以及依強度上色的配速趨勢 |
 | **AI 教練** | 對話與月報 | 依你的實際資料回答問題與推薦跑鞋（12 個工具、可上網搜尋並附來源）；一鍵產生並保存月度跑步報告 |
@@ -102,7 +102,7 @@ flowchart LR
   subgraph Fly["Fly.io · 1 台機器"]
     R["routers<br/>只做 HTTP 轉換"] --> S["services<br/>交易、版本、冪等"]
     R --> RM["read_models<br/>里程・目標・趨勢・配速"]
-    S --> DB[("SQLite /data<br/>schema 12＋稽核 trigger")]
+    S --> DB[("SQLite /data<br/>schema 13＋稽核 trigger")]
     RM --> DB
     A["agent<br/>規劃・工具・SSE"] --> RM
   end
@@ -195,8 +195,8 @@ flowchart LR
 
 ## 品質：測試與規格
 
-- **Python 766 項**：API、交易與並行、migration 與回滾、備份往返、帳號隔離、Agent 規劃與工具（外部 LLM 與搜尋一律 mock），一律使用暫存或記憶體資料庫，不碰正式 `shoes.db`。
-- **前端 Node 回歸 243 項**：以 `vm` 載入實際前端程式，驗證狀態、競態、草稿、串流與圖表資料。
+- **Python 778 項**：API、交易與並行、migration 與回滾、備份往返、帳號隔離、Agent 規劃與工具（外部 LLM 與搜尋一律 mock），一律使用暫存或記憶體資料庫，不碰正式 `shoes.db`。
+- **前端 Node 回歸 244 項**：以 `vm` 載入實際前端程式，驗證狀態、競態、草稿、串流與圖表資料。
 - **瀏覽器**：Playwright 在 WebKit 與 Chromium 跑 40 組版面設定（含幾何對齊與無溢出）、真實 FastAPI＋暫存 SQLite 的 CRUD E2E、Service Worker 升級與離線；失敗時保存截圖與 trace。
 - **修 bug 先寫重現測試**：例如 v4.17.0 的 CI 抓到新圖表檔案重複宣告全域常數，修正時同時加上掃描所有 script 的測試。
 - **文件也被測**：`docs-check` 比對 README 的測試數、工具數、API 表、目錄樹與規格的 AC 追蹤，數字對不上 CI 就失敗。
@@ -339,7 +339,7 @@ running-shoes/
 │   │   ├── strava_imports.py # Strava 匯入 transaction 與配對驗證
 │   │   └── mileage.py    # 跑步、鞋款、月份彙總的交易式里程同步
 │   ├── audit_schema.py   # 同交易異動事件及資料 revision triggers
-│   ├── backup_contract.py # 有界 v1～v4 備份格式與參照驗證
+│   ├── backup_contract.py # 有界 v1～v5 備份格式與參照驗證
 │   ├── migrations.py     # 有版本的 SQLite schema upgrade
 │   ├── observability.py  # Request ID 與不含敏感內容的結構化 HTTP log
 │   ├── rate_limits.py    # Auth／AI／備份預覽／Strava 上傳 SQLite 固定視窗限流（獨立交易、注入設定）
@@ -470,6 +470,7 @@ running-shoes/
 │   ├── diagnostics_drill.cjs # 產生合成瀏覽器失敗，演練診斷落檔
 │   ├── verify_diagnostics.py # 只用標準函式庫驗證下載的合成診斷
 │   ├── render_icons.cjs  # 本機由 icons/app-icon.svg 產生 PNG 圖示（不在 CI 執行）
+│   ├── rollback_schema_thirteen.sql # Schema 13 → 12 的文件化回滾（健行里程加回月跑量）
 │   ├── rollback_schema_twelve.sql # Schema 12 → 11 的文件化回滾
 │   ├── rollback_schema_eleven.sql # Schema 11 → 10 的文件化回滾
 │   ├── rollback_schema_ten.sql # Schema 10 → 9 的文件化回滾
@@ -679,15 +680,17 @@ LLM_MAX_OUTPUT_TOKENS=4096
 
 「跑步日誌」位於第一個分頁，也是固定首頁。每次登入、重新整理、重新開啟網站／PWA，或由瀏覽器 back-forward cache 還原文件時，都會回到此頁，不再記憶上次停留的分頁；登入狀態與主題偏好照常保留。單純切換 App／瀏覽器分頁後回到原畫面不會強制切頁。從此處新增的距離會同步累加到所選跑鞋的總里程，以及該年月的月跑量；如果該月份尚無紀錄，系統會自動建立。編輯距離、日期或鞋款時只套用前後差額，刪除時則同步扣回。既有歷史資料不會在升級時重新計算。
 
+每筆紀錄可以選擇運動類型：路跑（預設）、越野跑或健行（SPEC-096）。三種都計入鞋子里程、壽命提醒與退役預估；越野跑另外計入月跑量、目標、熱力圖、連續天數與每週跑量，但不進入配速分析；健行只計入鞋子里程。配速趨勢、平均配速與比賽準備度只看路跑，避免爬升與健行拉慢配速。新增紀錄時，類型預設為所選鞋款在目前載入紀錄中最近一次的類型；表單會提示這個類型計入哪些統計。把紀錄改成健行或改回跑步時，月跑量會跟著移動，鞋子里程不變。
+
 跑步日誌會即時計算：
 
-- 總里程、跑步次數與跑步天數，以及有填時間的跑步的平均配速
+- 總里程（路跑＋越野跑）、跑步次數與跑步天數，以及有填時間的路跑的平均配速
 - 平均每個跑步日的里程
 - 當月使用里程最高的主力鞋
 - 1 日到月底的完整互動月曆；顯示每日里程與鞋款名稱，不顯示次數。空白日期可帶入新增表單，鞋款活動可篩選當日明細再編輯
 - 跑步明細每頁 200 筆，月曆、總里程、跑步次數與鞋款分布不受目前明細頁影響
 - 依鞋款匯總的里程分布圓環圖，以及各鞋實際里程與使用比例明細
-- 每筆紀錄的跑步時間、配速與來源標籤（手動或 Strava）
+- 每筆紀錄的跑步時間、配速、運動類型（越野跑、健行會標示）與來源標籤（手動或 Strava）
 - 當月截至今天與上月同期、前 7 天的趨勢比較，以及月目標與鞋款壽命提醒；已結束月份維持整月比較，未來月份不會混入前一月資料
 - 依目前節奏預測月底總里程，並顯示達標所需的每日里程
 - 每雙鞋在所選月份的里程、穿著次數及占比
@@ -697,14 +700,14 @@ LLM_MAX_OUTPUT_TOKENS=4096
 | API | 用途 |
 | --- | --- |
 | `GET /api/runs` | 取得目前帳號的跑步紀錄；可用 `year`、`month`、`limit`（最多 500）與 `offset` 篩選／分頁，不帶參數時維持完整列表相容性 |
-| `GET /api/runs/summary` | 指定 `year`、`month` 的完整月曆與鞋款／日誌彙總，以及平均配速，不受明細分頁影響 |
-| `GET /api/runs/totals` | 帳號所有跑步的筆數與總距離（和 Strava 的跑步總計相同口徑） |
+| `GET /api/runs/summary` | 指定 `year`、`month` 的完整月曆與鞋款／日誌彙總（月曆與鞋款列出所有類型；總里程、次數與天數只算路跑與越野跑），以及路跑平均配速，不受明細分頁影響 |
+| `GET /api/runs/totals` | 帳號所有跑步（路跑與越野跑，不含健行）的筆數與總距離（和 Strava 的跑步總計相同口徑） |
 | `GET /api/runs/year-summary` | 指定 `year` 的完整年度每月／每鞋里程矩陣；一次聚合查詢，不下載逐筆日誌 |
 | `GET /api/running-goal/progress` | 指定 `year`、`month` 的日誌目標進度，與首頁／月報共用後端規則 |
 | `GET /api/running-goal/year?year=` | 年度目標總覽：12 個月日誌里程與達標狀態、年度進度、今天應達里程與每週需求 |
 | `GET /api/spending/summary` | 後端計算的總支出、折數、平均月支出與月份明細 |
-| `POST /api/runs` | 新增日期、公里數、鞋款與選填的 `duration_seconds`（跑步時間，秒） |
-| `PUT /api/runs/{run_id}` | 編輯指定跑步紀錄；`duration_seconds: null` 會清除時間 |
+| `POST /api/runs` | 新增日期、公里數、鞋款與選填的 `duration_seconds`（跑步時間，秒）、`activity_type`（`road`／`trail`／`hike`，預設 `road`） |
+| `PUT /api/runs/{run_id}` | 編輯指定跑步紀錄（含 `activity_type`）；`duration_seconds: null` 會清除時間 |
 | `DELETE /api/runs/{run_id}` | 刪除指定跑步紀錄 |
 | `GET /api/runs/import/strava/history` | 取得最近 10 次 Strava 匯入摘要 |
 | `POST /api/runs/import/strava/preview` | 預覽 Strava CSV 中的跑步活動與鞋款配對 |
@@ -722,7 +725,7 @@ LLM_MAX_OUTPUT_TOKENS=4096
 
 ### Strava 歷史資料匯入
 
-在「跑步日誌」右上角按「匯入 Strava」，選擇 Strava 匯出資料夾中的 `activities.csv`（Strava 官方匯出方式請參考[說明](https://support.strava.com/hc/en-us/articles/216918437-Exporting-your-Data-and-Bulk-Export)）。系統支援繁體中文與英文 Strava 匯出欄位及日期格式，只會保留活動類型為跑步且落在所選起訖日期內的資料（包含開始與結束當天），將 Strava 的公尺距離轉換為公里，並先顯示真正待匯入的鞋款筆數與里程；已存在或同檔重複的活動會另外計數，不會混入鞋款配對合計。日期預設為前 13 個完整月份、不包含本月，調整後會依登入帳號保存在目前瀏覽器。
+在「跑步日誌」右上角按「匯入 Strava」，選擇 Strava 匯出資料夾中的 `activities.csv`（Strava 官方匯出方式請參考[說明](https://support.strava.com/hc/en-us/articles/216918437-Exporting-your-Data-and-Bulk-Export)）。系統支援繁體中文與英文 Strava 匯出欄位及日期格式，只會保留活動類型為跑步（`Run`、`VirtualRun`→路跑；`TrailRun`→越野跑）或健行／步行（`Hike`、`Walk`→健行，SPEC-096）且落在所選起訖日期內的資料（包含開始與結束當天），騎車等其他活動略過，將 Strava 的公尺距離轉換為公里，並先顯示真正待匯入的鞋款筆數與里程；已存在或同檔重複的活動會另外計數，不會混入鞋款配對合計。日期預設為前 13 個完整月份、不包含本月，調整後會依登入帳號保存在目前瀏覽器。
 
 匯入前可逐組選擇現有鞋款；名稱只有一個相符候選時會自動配對，也可以把多個 Strava 裝備配到同一雙 Dashboard 跑鞋。如果同品牌型號有多雙，系統不會猜測，請依購買日期手動選擇。沒有鞋款或無法辨識的裝備可以選擇略過。
 
@@ -741,7 +744,7 @@ App 的主要資料來源是 Strava 匯入，所以鞋子里程刻意採用和 S
 | 項目 | Strava | Running Shoes |
 | --- | --- | --- |
 | 每筆距離 | 以公尺記錄（到 0.1 m） | 讀匯出檔的公尺欄位，換算公里後四捨五入到 0.01 km |
-| 鞋子里程 | 掛在這雙鞋的所有活動合計（跑步、步行、健行…） | 跑步日誌合計＋「步行與暖身」（記在鞋上、但不是跑步的里程） |
+| 鞋子里程 | 掛在這雙鞋的所有活動合計（跑步、步行、健行…） | 紀錄合計（路跑、越野跑與健行）＋「步行與暖身」（記在鞋上、但不在紀錄裡的里程） |
 | 畫面顯示 | 無條件捨去到小數點第一位（512.352 → 512.3） | 同樣無條件捨去到小數點第一位；儲存值與行內編輯保留完整數字 |
 
 - `activities.csv` 有兩個「距離」欄位：第一個是公里，Strava 已**無條件捨去**到小數點第二位（7285.7 m 寫成 7.28）；第二個是公尺。匯入只讀公尺欄位，避免每筆少算幾公尺、累積下來每雙鞋差到 0.2～0.5 km。
@@ -936,7 +939,7 @@ Playwright／Chromium／WebKit 齊全時，也會執行版面測試。
 避免每次停止都重跑。Hook 不會呼叫其他模型、外部 API，或傳送提示、diff、原始碼與測試輸出。
 GitHub Actions 仍會在 push／pull request 執行 `verify`，並以三個可獨立重跑的 browser jobs 執行完整版面矩陣、真實 CRUD E2E 與 PWA 升級／離線測試；push 到 main 時再依序快照、部署、檢查並發版（見「日常開發流程、自動部署與發版」）；Dependabot 每月以單一 PR 合併 GitHub Actions 更新；Python 只接收安全性更新 PR，例行升級依下方 `uv pip compile --universal` 步驟手動重編鎖定檔（Dependabot 產生的鎖定檔會遺失 Windows 條件）。
 
-本次驗證基線為 Python **766 passed**、前端回歸測試 **243 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
+本次驗證基線為 Python **778 passed**、前端回歸測試 **244 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
 版面檢查涵蓋 WebKit／Chromium、亮／暗模式與 10 組直橫向尺寸，共 40 組設定，檢查四個功能分頁與月報、三個認證表單、圖表、全部彈窗、行內編輯、停用／錯誤及空資料狀態。
 
 主要表單、工具列與彈窗操作統一為 44px 控制項；桌面表格內的緊湊操作為 36px，手機至少 44px。
@@ -1342,8 +1345,8 @@ venv/bin/python -m backend.run
 | 跑步日誌 | `GET /api/runs/summary` | 指定月份的月曆、鞋款彙總與平均配速 |
 | 跑步日誌 | `GET /api/runs/totals` | 所有跑步的筆數與總距離 |
 | 跑步日誌 | `GET /api/runs/year-summary` | 指定年份的每月／每鞋里程矩陣 |
-| 跑步日誌 | `POST /api/runs` | 新增跑步，可帶跑步時間（可帶 `Idempotency-Key`） |
-| 跑步日誌 | `PUT /api/runs/{run_id}` | 編輯跑步或跑步時間 |
+| 跑步日誌 | `POST /api/runs` | 新增跑步，可帶跑步時間與運動類型（可帶 `Idempotency-Key`） |
+| 跑步日誌 | `PUT /api/runs/{run_id}` | 編輯跑步、跑步時間或運動類型 |
 | 跑步日誌 | `DELETE /api/runs/{run_id}` | 刪除跑步；Strava 活動會記住，重新匯入不會回來 |
 | Strava | `POST /api/runs/import/strava/preview` | 預覽 CSV 的跑步活動、重複／已刪除／待補時間筆數與鞋款配對 |
 | Strava | `POST /api/runs/import/strava` | 依鞋款配對匯入，並補上既有紀錄的跑步時間；`conflicts` 選擇重複活動的處理方式（過期回 409） |

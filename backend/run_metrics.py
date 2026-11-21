@@ -4,7 +4,23 @@ A run stores its moving time in whole seconds; pace is always derived from
 duration and distance here, never stored and never computed by the LLM.
 Average pace is time-weighted (total seconds / total km of timed runs), not
 a mean of per-run paces.
+
+Activity types (SPEC-096): every type counts toward shoe mileage; only
+training types count toward monthly volume, goals, streaks and weekly load;
+only pace types feed pace trends and race readiness. Mirrored in
+frontend/app-state.js.
 """
+
+ACTIVITY_TYPES = ("road", "trail", "hike")
+DEFAULT_ACTIVITY_TYPE = "road"
+TRAINING_ACTIVITY_TYPES = ("road", "trail")
+PACE_ACTIVITY_TYPES = ("road",)
+
+
+def counts_toward_training(activity_type: str | None) -> bool:
+    """Whether a run's distance belongs in monthly volume, goals and streaks."""
+    return (activity_type or DEFAULT_ACTIVITY_TYPE) in TRAINING_ACTIVITY_TYPES
+
 
 MAX_RUN_DURATION_SECONDS = 7 * 24 * 60 * 60
 # Plausible running pace, in seconds per km: faster than 1:00/km or slower

@@ -23,7 +23,7 @@ from unit_tests.test_api import _auth_header
 
 CSV = "活動 ID,活動日期,活動類型,活動裝備,距離\n" \
     "1001,2026年8月30日 上午11:40:36,跑步,Mizuno Wave Sky 7,5250\n" \
-    "1002,2026年8月29日,步行,Mizuno Wave Sky 7,3000\n" \
+    "1002,2026年8月29日,騎車,Mizuno Wave Sky 7,3000\n" \
     "1003,2026年8月28日,跑步,,6100\n"
 
 
@@ -612,3 +612,37 @@ def test_deleted_strava_activity_is_not_reimported_and_preview_counts_it(client,
     other_token = token_for(other)
     other_mapping = f'{{"Mizuno Wave Sky 7": {other_shoe.id}, "": null}}'
     assert upload(client, "/api/runs/import/strava", other_token, other_mapping).json()["imported"] == 1
+
+
+def test_strava_activity_types_map_to_run_types(client, db, user_with_token):
+    """SPEC-096 AC-5: runs, trail runs, hikes and walks are imported with their type; rides are skipped."""
+    from backend.strava_import import parse_csv
+
+    csv_content = (
+        "活動 ID,活動日期,活動類型,活動裝備,距離\n"
+        "t1,2026年10月1日,Run,Speedgoat,10000\n"
+        "t2,2026年10月2日,TrailRun,Speedgoat,15000\n"
+        "t3,2026年10月3日,Hike,Speedgoat,8000\n"
+        "t4,2026年10月4日,Walk,Speedgoat,3000\n"
+        "t5,2026年10月5日,Ride,Speedgoat,40000\n"
+        "t6,2026年10月6日,健行,Speedgoat,6000\n"
+    )
+    rows, invalid, _ = parse_csv(csv_content.encode(), max_rows=100)
+    assert invalid == 0
+    assert {row["strava_id"]: row["activity_type"] for row in rows} == {
+        "t1": "road", "t2": "trail", "t3": "hike", "t4": "hike", "t6": "hike"}
+
+    user, token = user_with_token
+    shoe = Shoe(user_id=user.id, brand="HOKA", model="Speedgoat", date="2026-01-01")
+    db.add(shoe)
+    db.commit()
+    preview = upload(client, "/api/runs/import/strava/preview", token, csv_content=csv_content).json()
+    assert preview["importable_count"] == 5
+    result = upload(client, "/api/runs/import/strava", token, json.dumps({"Speedgoat": shoe.id}),
+                    csv_content=csv_content).json()
+    assert result["imported"] == 5 and result["synced_mileage"] == 42
+    db.expire_all()
+    stored = {run.strava_id: run.activity_type for run in db.query(Run).filter_by(user_id=user.id)}
+    assert stored == {"t1": "road", "t2": "trail", "t3": "hike", "t4": "hike", "t6": "hike"}
+    assert db.get(Shoe, shoe.id).mileage == 42
+    assert db.query(MonthlyMileage).filter_by(user_id=user.id, year=2026, month=10).one().km == 25

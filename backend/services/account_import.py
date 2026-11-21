@@ -10,7 +10,7 @@ from backend.services.account_import_plan import ImportPlan
 from backend.services.errors import Conflict
 from backend.services.fingerprints import payload_hash
 from backend.services.identifiers import allocate_id
-from backend.services.mileage import apply_run_mileage_deltas
+from backend.services.mileage import RunDelta, apply_run_mileage_deltas
 from backend.settings import Settings
 
 
@@ -52,7 +52,7 @@ def execute_import(db: Session, uid: int, backup: AccountBackup, config: Setting
                 raise Conflict("來源鞋款已不存在，無法更新")
         shoes[shoe_item.id] = target
         _remember(db, plan, "shoe", shoe_item.id, target)
-    deltas = []
+    deltas: list[RunDelta] = []
     db.flush()
     available_shoes = {identifier for (identifier,) in db.query(models.Shoe.id).filter_by(user_id=uid).all()}
     for run_item in backup.runs:
@@ -62,11 +62,11 @@ def execute_import(db: Session, uid: int, backup: AccountBackup, config: Setting
             if shoe_id not in available_shoes:
                 raise Conflict("來源鞋款已有後續刪除，無法合併跑步紀錄")
             run_row = models.Run(id=allocate_id(db, "runs"), user_id=uid, shoe_id=shoe_id, date=run_item.date, km=run_item.km, strava_id=run_item.strava_id,
-                                 duration_seconds=run_item.duration_seconds)
+                                 duration_seconds=run_item.duration_seconds, activity_type=run_item.activity_type)
             db.add(run_row)
             db.flush()
             target = run_row.id
-            deltas.append((shoe_id, run_item.date, run_item.km))
+            deltas.append((shoe_id, run_item.date, run_item.km, run_item.activity_type))
         elif update_existing and target in plan.runs:
             values = dict(plan.changes.runs.get(target, {}))
             if "shoe_id" in values:

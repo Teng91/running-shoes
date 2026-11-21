@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from backend import models
 from backend.read_models import goal_progress
 from backend.read_models.rounding import round_metric
+from backend.read_models.run_statistics import PACE_RUN, TRAINING_RUN
 from backend.run_metrics import pace_seconds_per_km
 
 WEEKS = 16
@@ -33,14 +34,18 @@ NO_RUNS: DailyRuns = (0.0, 0.0, 0, 0.0, 0.0)
 
 
 def _daily_km(db: Session, user_id: int, start: date, end: date) -> dict[date, DailyRuns]:
-    """Per day: (total distance, longest single run, number of runs, timed seconds, timed distance)."""
-    timed = models.Run.duration_seconds.isnot(None)
+    """Per day: (total distance, longest single run, number of runs, timed seconds, timed distance).
+
+    Training runs only (SPEC-096); the timed totals come from road runs alone.
+    """
+    timed = models.Run.duration_seconds.isnot(None) & PACE_RUN
     rows = (
         db.query(models.Run.date, func.sum(models.Run.km), func.max(models.Run.km), func.count(models.Run.id),
                  func.sum(case((timed, models.Run.duration_seconds), else_=0)),
                  func.sum(case((timed, models.Run.km), else_=0)))
         .filter(
             models.Run.user_id == user_id,
+            TRAINING_RUN,
             models.Run.date >= start.isoformat(),
             models.Run.date <= end.isoformat(),
         )
@@ -199,14 +204,17 @@ def shoe_timeline(db: Session, user_id: int, as_of: date) -> dict:
     """First/last logged run per owned active shoe, oldest rotation first.
 
     Retired and deleted shoes are no longer in rotation, so they are omitted.
-    ``shoe_km`` is the shoe's total mileage; ``other_km`` is the part outside the
-    run log (warm-ups and walks recorded on the shoe, SPEC-067).
+    ``shoe_km`` is the shoe's total mileage; ``other_km`` is the part that is not a
+    training run (hikes, and warm-ups and walks recorded on the shoe; SPEC-067, SPEC-096).
     """
     rows = (
         db.query(
             models.Shoe,
             func.min(models.Run.date), func.max(models.Run.date),
-            func.sum(models.Run.km), func.count(models.Run.id),
+            # Rotation dates follow every activity; the run part counts training runs, so
+            # hikes join walks and warm-ups in other_km (SPEC-096).
+            func.sum(case((TRAINING_RUN, models.Run.km), else_=0)),
+            func.sum(case((TRAINING_RUN, 1), else_=0)),
         )
         .join(models.Run, (models.Run.shoe_id == models.Shoe.id) & (models.Run.user_id == user_id))
         .filter(
@@ -228,7 +236,7 @@ def shoe_timeline(db: Session, user_id: int, as_of: date) -> dict:
             "km": round_metric(km),
             "shoe_km": round_metric(shoe.mileage),
             "other_km": round_metric(shoe.mileage - (km or 0)),
-            "run_count": int(count),
+            "run_count": int(count or 0),
             "days_since_last_run": max(0, idle),
             "idle": idle > IDLE_DAYS,
         })

@@ -282,7 +282,7 @@ def test_startup_drops_only_empty_legacy_tables():
         assert connection.execute(text("SELECT value FROM app_settings")).scalar_one() == "row"
         assert connection.execute(text(
             "SELECT value FROM schema_metadata WHERE key = 'schema_version'"
-        )).scalar_one() == "12"
+        )).scalar_one() == "13"
 
 
 def test_startup_adds_the_shoe_owner_index_to_older_databases():
@@ -296,3 +296,110 @@ def test_startup_adds_the_shoe_owner_index_to_older_databases():
             text("EXPLAIN QUERY PLAN SELECT id FROM shoes WHERE user_id = 1 AND is_deleted = 0")))
     assert "idx_shoes_user_id" in plan, plan
     run_startup_migrations(engine, sessionmaker(bind=engine))  # idempotent
+
+
+def _file_engine(tmp_path, name):
+    from sqlalchemy import event
+
+    from backend.database import configure_sqlite_connection
+
+    engine = create_engine(f"sqlite:///{tmp_path / name}", connect_args={"check_same_thread": False})
+    event.listen(engine, "connect", lambda connection, _: configure_sqlite_connection(connection))
+    return engine, sessionmaker(bind=engine, autoflush=False)
+
+
+def _log_run(sessions, user_id, shoe_id, day, km, activity_type="road"):
+    from backend import schemas
+    from backend.services.runs import create_run
+
+    with sessions() as db:
+        create_run(db, user_id, schemas.RunCreate(date=day, km=km, shoe_id=shoe_id, activity_type=activity_type),
+                   max_runs=100)
+
+
+def _account(sessions, name):
+    with sessions() as db:
+        user = User(username=name, hashed_password="synthetic")
+        db.add(user)
+        db.flush()
+        shoe = Shoe(user_id=user.id, brand="Salomon", model="Speedcross", date="2026-01-01")
+        db.add(shoe)
+        db.commit()
+        return user.id, shoe.id
+
+
+def _month_km(engine, user_id, month):
+    with engine.connect() as connection:
+        return connection.execute(text(
+            "SELECT km FROM monthly_mileages WHERE user_id = :u AND year = 2026 AND month = :m"
+        ), {"u": user_id, "m": month}).scalar()
+
+
+def test_schema_thirteen_defaults_runs_to_road(tmp_path):
+    """SPEC-096 AC-1: upgrading a schema-12 database keeps every total and labels runs road."""
+    from backend.migrations import schema_version
+
+    engine, sessions = _file_engine(tmp_path, "schema12.sqlite")
+    run_startup_migrations(engine, sessions)
+    user_id, shoe_id = _account(sessions, "schema12-owner")
+    _log_run(sessions, user_id, shoe_id, "2026-10-04", 10)
+    _log_run(sessions, user_id, shoe_id, "2026-10-05", 6.5)
+    with engine.begin() as connection:
+        # Recreate the schema-12 runs table: no activity column, version marker 12.
+        for action in ("insert", "update", "delete"):
+            connection.execute(text(f"DROP TRIGGER audit_runs_{action}"))
+        connection.execute(text("ALTER TABLE runs DROP COLUMN activity_type"))
+        connection.execute(text("UPDATE schema_metadata SET value = '12' WHERE key = 'schema_version'"))
+        shoe_before = connection.execute(text("SELECT mileage FROM shoes")).scalar()
+    run_startup_migrations(engine, sessions)
+    run_startup_migrations(engine, sessions)  # idempotent
+    assert schema_version(engine) == 13
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT DISTINCT activity_type FROM runs")).scalars().all() == ["road"]
+        assert connection.execute(text("SELECT mileage FROM shoes")).scalar() == shoe_before == 16.5
+    assert _month_km(engine, user_id, 10) == 16.5
+    _log_run(sessions, user_id, shoe_id, "2026-10-06", 4, "hike")
+    assert _month_km(engine, user_id, 10) == 16.5, "new writes follow the schema-13 rule"
+    engine.dispose()
+
+
+def test_rollback_schema_thirteen_restores_hike_mileage(tmp_path):
+    """SPEC-096 AC-9: the rollback adds hikes back to months; re-upgrading takes them out again."""
+    from pathlib import Path
+
+    from backend.migrations import schema_version
+
+    engine, sessions = _file_engine(tmp_path, "rollback13.sqlite")
+    run_startup_migrations(engine, sessions)
+    user_id, shoe_id = _account(sessions, "rollback13-owner")
+    other_id, other_shoe = _account(sessions, "rollback13-other")
+    _log_run(sessions, user_id, shoe_id, "2026-10-04", 10)
+    _log_run(sessions, user_id, shoe_id, "2026-10-11", 7.25, "hike")
+    _log_run(sessions, user_id, shoe_id, "2026-11-01", 5, "hike")  # a month with hikes only
+    _log_run(sessions, other_id, other_shoe, "2026-10-04", 3, "trail")
+    assert (_month_km(engine, user_id, 10), _month_km(engine, user_id, 11)) == (10, None)
+
+    script = Path("scripts/rollback_schema_thirteen.sql").read_text(encoding="utf-8")
+    connection = engine.raw_connection()
+    try:
+        connection.executescript(script)
+        with pytest.raises(Exception, match="CHECK constraint failed"):
+            connection.executescript(script)
+        connection.rollback()
+    finally:
+        connection.close()
+    assert schema_version(engine) == 12
+    assert (_month_km(engine, user_id, 10), _month_km(engine, user_id, 11)) == (17.25, 5)
+    assert _month_km(engine, other_id, 10) == 3, "other accounts are untouched"
+    with engine.connect() as connection:
+        assert connection.execute(text(
+            "SELECT next_id > (SELECT max(id) FROM monthly_mileages) FROM entity_sequences WHERE name = 'monthly_mileages'"
+        )).scalar() == 1
+
+    run_startup_migrations(engine, sessions)
+    assert schema_version(engine) == 13
+    assert (_month_km(engine, user_id, 10), _month_km(engine, user_id, 11)) == (10, 0)
+    assert _month_km(engine, other_id, 10) == 3
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT mileage FROM shoes WHERE id = :s"), {"s": shoe_id}).scalar() == 22.25
+    engine.dispose()

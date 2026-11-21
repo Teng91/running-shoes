@@ -17,6 +17,8 @@ registerFeatureReset('run-editor', () => {
   document.getElementById('add-run-btn').disabled = false;
   document.getElementById('run-km').value = '';
   document.getElementById('run-duration').value = '';
+  document.getElementById('run-activity').value = 'road';
+  updateRunActivityHint('run');
   updateRunPacePreview('run');
   document.getElementById('run-error').textContent = '';
   document.getElementById('run-load-error').hidden = true;
@@ -129,6 +131,36 @@ function updateRunDateWarning(prefix) {
   const shoe = runShoe(parseInt(document.getElementById(`${prefix}-shoe`).value, 10));
   target.textContent = prePurchaseWarning(document.getElementById(`${prefix}-date`).value, shoe);
   target.hidden = !target.textContent;
+}
+
+// SPEC-096: a new run starts with the type the chosen shoe was last used for among the
+// loaded runs (a trail pair is usually worn on trails), and road when it has none.
+function lastActivityTypeForShoe(shoeId, rows) {
+  const latest = (rows || []).filter(run => run.shoe_id === shoeId && RUN_ACTIVITY_TYPES.includes(run.activity_type))
+    .reduce((best, run) => (!best || run.date > best.date || (run.date === best.date && run.id > best.id) ? run : best), null);
+  return latest ? latest.activity_type : 'road';
+}
+
+function runActivityLabel(type) {
+  return RUN_ACTIVITY_LABELS[type] || RUN_ACTIVITY_LABELS.road;
+}
+
+function updateRunActivityHint(prefix) {
+  const target = document.getElementById(`${prefix}-activity-hint`);
+  if (!target) return;
+  const type = document.getElementById(`${prefix}-activity`)?.value || 'road';
+  if (!RUN_TRAINING_ACTIVITY_TYPES.includes(type)) target.textContent = '只計入鞋子里程，不計入跑量、目標與配速';
+  else if (!RUN_PACE_ACTIVITY_TYPES.includes(type)) target.textContent = '計入鞋子里程與跑量，不計入配速分析';
+  else target.textContent = '';
+}
+
+function onRunShoeChange(prefix) {
+  updateRunDateWarning(prefix);
+  if (prefix !== 'run') return;
+  const shoeId = parseInt(document.getElementById('run-shoe').value, 10);
+  if (!shoeId) return;
+  document.getElementById('run-activity').value = lastActivityTypeForShoe(shoeId, runController.state.rows);
+  updateRunActivityHint('run');
 }
 
 function populateRunShoeSelects(selectedId = null) {
@@ -244,11 +276,13 @@ async function addRun() {
     error.textContent = duration.error;
     return;
   }
-  const payload = { date, km, shoe_id: shoeId };
+  const activityType = document.getElementById('run-activity').value || 'road';
+  const payload = { date, km, shoe_id: shoeId, activity_type: activityType };
   if (duration.seconds !== null) payload.duration_seconds = duration.seconds;
   const form = {
     date: document.getElementById('run-date').value,
     km: document.getElementById('run-km').value,
+    activity: document.getElementById('run-activity').value,
     duration: document.getElementById('run-duration').value,
     shoe: document.getElementById('run-shoe').value,
     month: document.getElementById('run-month').value,
@@ -259,7 +293,7 @@ async function addRun() {
     document.getElementById('add-run-btn').disabled = true;
     if (!await runController.submitCreate(operation, payload)) return;
     const unchanged = matchesForm(Object.fromEntries(
-      ['date', 'km', 'duration', 'shoe'].map(key => ['run-' + key, form[key]])));
+      ['date', 'km', 'activity', 'duration', 'shoe'].map(key => ['run-' + key, form[key]])));
     if (unchanged) {
       document.getElementById('run-km').value = '';
       document.getElementById('run-duration').value = '';
@@ -288,6 +322,8 @@ function openRunModal(runId) {
   document.getElementById('edit-run-date').value = run.date;
   document.getElementById('edit-run-km').value = run.km;
   document.getElementById('edit-run-duration').value = formatRunDuration(run.duration_seconds);
+  document.getElementById('edit-run-activity').value = run.activity_type || 'road';
+  updateRunActivityHint('edit-run');
   updateRunPacePreview('edit-run');
   populateRunShoeSelects(run.shoe_id);
   document.getElementById('edit-run-error').style.display = 'none';
@@ -304,11 +340,12 @@ async function saveRun() {
   const snapshot = runController.editor;
   const error = document.getElementById('edit-run-error');
   if (!isCurrentAuthSession(snapshot.session)) return;
-  const draft = readForm(['edit-run-date', 'edit-run-km', 'edit-run-duration', 'edit-run-shoe']);
+  const draft = readForm(['edit-run-date', 'edit-run-km', 'edit-run-activity', 'edit-run-duration', 'edit-run-shoe']);
   const payload = {
     date: document.getElementById('edit-run-date').value,
     km: parseFloat(document.getElementById('edit-run-km').value),
     shoe_id: parseInt(document.getElementById('edit-run-shoe').value, 10),
+    activity_type: document.getElementById('edit-run-activity').value || 'road',
     expected_version: snapshot.version || 0,
   };
   if (!payload.date || !Number.isFinite(payload.km) || payload.km <= 0 || !payload.shoe_id) {

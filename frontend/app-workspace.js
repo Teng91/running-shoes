@@ -2,7 +2,7 @@
 const localWorkspace = { controller: null, session: null, account: null, activating: null,
   runDraftId: null, consumedRunDraftId: null, fresh: new Set(), edited: new Set(), editors: {}, restoring: false, error: '', ready: false, syncing: null, syncRefreshRequested: false, channel: null };
 const workspaceForms = {
-  run: ['run-date', 'run-km', 'run-duration', 'run-shoe'],
+  run: ['run-date', 'run-km', 'run-activity', 'run-duration', 'run-shoe'],
   goal: ['goal-start-year', 'goal-monthly-km'],
 };
 
@@ -81,6 +81,7 @@ function activateLocalWorkspace() {
         }
         const select = document.getElementById('run-shoe');
         if (draft.forms?.run?.['run-shoe'] && !select.value) select.dataset.requiresSelection = 'true';
+        if (draft.forms?.run && typeof updateRunActivityHint === 'function') updateRunActivityHint('run');
         // Monthly record editing was removed in SPEC-039; drafts saved by older versions are dropped.
         const editors = Object.entries(draft.editors || {}).filter(([, editor]) => editor.kind !== 'monthly');
         localWorkspace.editors = { ...Object.fromEntries(editors), ...localWorkspace.editors };
@@ -121,9 +122,9 @@ function captureWorkspaceEditor() {
       values: readForm(Object.values(shoeModal.formIds)), categories: getSelectedCategories() };
   }
   if (active('run-modal') && runController.editor) {
-    const { id, version, date, km, shoe_id, duration_seconds = null } = runController.editor;
-    return { kind: 'run', base: { id, version, date, km, shoe_id, duration_seconds },
-      values: readForm(['edit-run-date', 'edit-run-km', 'edit-run-duration', 'edit-run-shoe']) };
+    const { id, version, date, km, shoe_id, duration_seconds = null, activity_type = 'road' } = runController.editor;
+    return { kind: 'run', base: { id, version, date, km, shoe_id, duration_seconds, activity_type },
+      values: readForm(['edit-run-date', 'edit-run-km', 'edit-run-activity', 'edit-run-duration', 'edit-run-shoe']) };
   }
   for (const editor of inlineEditors.values()) {
     if (editor.draft) return { kind: editor.draft.kind, base: editor.draft.base,
@@ -166,10 +167,12 @@ function resumeWorkspaceEditor(key) {
     document.getElementById('edit-run-date').value = draft.base.date;
     document.getElementById('edit-run-km').value = draft.base.km;
     document.getElementById('edit-run-duration').value = formatRunDuration(draft.base.duration_seconds);
+    document.getElementById('edit-run-activity').value = draft.base.activity_type || 'road';
     populateRunShoeSelects(draft.base.shoe_id);
     document.getElementById('run-modal').classList.add('active');
   } else return;
   for (const [id, value] of Object.entries(draft.values || {})) document.getElementById(id).value = value;
+  if (draft.kind === 'run' && typeof updateRunActivityHint === 'function') updateRunActivityHint('edit-run');
   if (draft.inline) {
     const fields = { mileage: 'f-mileage', expected_mileage: 'f-expected', monthly_km: 'f-monthly' };
     document.getElementById(fields[draft.inline.field]).value = draft.inline.value;
