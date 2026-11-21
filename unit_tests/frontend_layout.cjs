@@ -170,8 +170,8 @@ function alignmentIssues() {
     if (!visible(grid) || getComputedStyle(grid).gridTemplateColumns.split(' ').length !== 2) continue;
     const fields = [...grid.children].filter(node => visible(node) && node.classList.contains('form-group'));
     for (let i = 0; i + 1 < fields.length; i += 2) {
-      // Full-width fields (shoe, category, run duration) have no partner on their row.
-      if (['shoe-field', 'category-field', 'duration-field'].some(name => fields[i].classList.contains(name))) continue;
+      // Full-width fields (shoe, category, run duration, activity type) have no partner on their row.
+      if (['shoe-field', 'category-field', 'duration-field', 'activity-field'].some(name => fields[i].classList.contains(name))) continue;
       const [a, b] = [fields[i], fields[i + 1]].map(field => field.querySelector('input:not([type="checkbox"]), select'));
       if (!a || !b) continue;
       if (!near(box(a).top, box(b).top) || !near(box(a).bottom, box(b).bottom) || !near(box(a).width, box(b).width)) issues.push(`paired controls: ${a.id}/${b.id}`);
