@@ -29,7 +29,8 @@ function renderRunLog() {
   const monthLabel = `${parseInt(month.slice(5), 10)} 月`;
   // SPEC-060: time-weighted average over runs that have a moving time, from the backend.
   const averagePace = summary?.average_pace_seconds_per_km;
-  const paceText = averagePace ? ` · 平均配速 ${formatPace(averagePace)}` : '';
+  // SPEC-096: totals count road and trail runs; the average pace counts road runs only.
+  const paceText = averagePace ? ` · 路跑平均配速 ${formatPace(averagePace)}` : '';
   document.getElementById('run-stats').innerHTML = [
     { label: `${monthLabel}總里程`, value: `${total.toFixed(2)} km`, sub: `${summary ? summary.run_count : filtered.length} 次跑步${paceText}` },
     { label: '跑步天數', value: `${days} 天`, sub: days ? `平均每天 ${(total / days).toFixed(2)} km` : '還沒有紀錄' },
@@ -51,7 +52,9 @@ function renderRunLog() {
     const shoeName = shoe ? `${esc(shoe.brand)} ${esc(shoe.model)}` : '鞋款已刪除';
     const source = run.strava_id ? '<span class="run-source strava">Strava</span>' : '<span class="run-source">手動</span>';
     const time = run.duration_seconds ? formatRunDuration(run.duration_seconds) : '—';
-    return `<tr><td>${esc(run.date.replace(/-/g, '/'))}</td><td class="numeric"><strong>${run.km.toFixed(2)} km</strong></td><td class="numeric">${time}</td><td class="numeric">${formatPace(run.pace_seconds_per_km)}</td><td><span class="run-shoe-label"><span class="brand-dot" style="background:${color}"></span>${shoeName}</span></td><td>${source}</td><td><button class="btn btn-sm btn-edit" data-click="open-run" data-run-id="${run.id}">編輯</button></td></tr>`;
+    const activity = run.activity_type && run.activity_type !== 'road'
+      ? `<span class="run-activity ${esc(run.activity_type)}">${esc(runActivityLabel(run.activity_type))}</span>` : '';
+    return `<tr><td>${esc(run.date.replace(/-/g, '/'))}${activity}</td><td class="numeric"><strong>${run.km.toFixed(2)} km</strong></td><td class="numeric">${time}</td><td class="numeric">${formatPace(run.pace_seconds_per_km)}</td><td><span class="run-shoe-label"><span class="brand-dot" style="background:${color}"></span>${shoeName}</span></td><td>${source}</td><td><button class="btn btn-sm btn-edit" data-click="open-run" data-run-id="${run.id}">編輯</button></td></tr>`;
   }).join('') : '<tr><td colspan="7" class="empty-state">這個月還沒有跑步紀錄。點月曆日期或從右上角記下第一跑吧！</td></tr>';
   renderRunCalendar(summary ? summary.calendar : filtered, month);
   renderRunShoeChart(shoeStats);

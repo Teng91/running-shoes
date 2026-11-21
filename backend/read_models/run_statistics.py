@@ -9,6 +9,12 @@ from sqlalchemy.orm import Session
 
 from backend.models import Run
 from backend.read_models.rounding import round_metric
+from backend.run_metrics import PACE_ACTIVITY_TYPES, TRAINING_ACTIVITY_TYPES
+
+# SPEC-096: shared filters. Volume, goals and streaks read training runs; pace
+# and race readiness read pace runs; shoe statistics read every run.
+TRAINING_RUN = Run.activity_type.in_(TRAINING_ACTIVITY_TYPES)
+PACE_RUN = Run.activity_type.in_(PACE_ACTIVITY_TYPES)
 
 
 @dataclass(frozen=True)
@@ -53,6 +59,7 @@ def sum_run_distance(db: Session, user_id: int, start: str, end: str) -> float:
         db.query(func.sum(Run.km))
         .filter(
             Run.user_id == user_id,
+            TRAINING_RUN,
             Run.date >= start,
             Run.date <= end,
         )
@@ -77,6 +84,7 @@ def period_distances(db: Session, user_id: int, period: RunPeriod) -> dict[str, 
         )
         .filter(
             Run.user_id == user_id,
+            TRAINING_RUN,
             Run.date >= min(start for start, _ in windows.values()),
             Run.date <= max(end for _, end in windows.values()),
         )
@@ -95,6 +103,7 @@ def monthly_run_distances(db: Session, user_id: int, year: int, through: date) -
         db.query(month, func.sum(Run.km))
         .filter(
             Run.user_id == user_id,
+            TRAINING_RUN,
             Run.date >= f"{year:04d}-01-01",
             Run.date <= end.isoformat(),
         )
