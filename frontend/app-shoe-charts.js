@@ -56,9 +56,9 @@ function renderCharts() {
   const gridColor = getThemeColor('--chart-grid', '#2a2d3e');
   const mainTextColor = getThemeColor('--text', '#e4e4e7');
 
-  const labels = shoes.map(s => s.brand + ' ' + s.model);
-  const colors = shoes.map(s => shoeColor(s.id));
-  const calcs = shoes.map(s => calc(s));
+  const labels = coreData.shoes.map(s => s.brand + ' ' + s.model);
+  const colors = coreData.shoes.map(s => shoeColor(s.id));
+  const calcs = coreData.shoes.map(s => calc(s));
 
   chartInstances.progress = new Chart(document.getElementById('chart-progress'), {
     type: 'bar',
@@ -66,7 +66,7 @@ function renderCharts() {
       labels,
       datasets: [{
         label: '已跑里程',
-        data: shoes.map(s => s.mileage),
+        data: coreData.shoes.map(s => s.mileage),
         backgroundColor: calcs.map(c => progressColor(c.lifeProgress)),
         borderRadius: 4,
       }, {
@@ -86,7 +86,7 @@ function renderCharts() {
         tooltip: {
           callbacks: {
             label: ctx => {
-              const shoe = shoes[ctx.dataIndex];
+              const shoe = coreData.shoes[ctx.dataIndex];
               const c = calcs[ctx.dataIndex];
               if (ctx.datasetIndex === 0) {
                 return `已跑 ${formatShoeMileage(shoe.mileage)} km (${(c.lifeProgress * 100).toFixed(1)}%)`;
@@ -175,7 +175,7 @@ function renderCharts() {
         },
         y: {
           min: -1,
-          max: shoes.length,
+          max: coreData.shoes.length,
           reverse: true,
           grid: { display: false },
           ticks: {
@@ -193,7 +193,7 @@ function renderCharts() {
 
   // SPEC-050: each active shoe's actual monthly average over the last 90 days, from the
   // backend forecast (the analysis window's 實際月均), not the planned monthly km.
-  const recentMonthlyKm = shoes.map(s => Number(s.actual_monthly_km_90_days) || 0);
+  const recentMonthlyKm = coreData.shoes.map(s => Number(s.actual_monthly_km_90_days) || 0);
   const totalRecentKm = recentMonthlyKm.reduce((sum, km) => sum + km, 0);
   chartInstances.value = new Chart(document.getElementById('chart-value'), {
     type: 'doughnut',
@@ -283,7 +283,7 @@ async function renderShoeTimeline() {
     note.textContent = '現役鞋還沒有跑步紀錄，記錄跑步後會顯示每雙鞋的使用期間。';
     return;
   }
-  const known = new Map(shoes.map(shoe => [shoe.id, shoe]));
+  const known = new Map(coreData.shoes.map(shoe => [shoe.id, shoe]));
   const names = rows.map(row => {
     const shoe = known.get(row.shoe_id);
     if (!shoe) return `鞋款 #${row.shoe_id}`;

@@ -113,8 +113,9 @@ def router_cross_imports(routers: Path) -> list[str]:
     return offenders
 
 
-# SPEC-094: shared core data is read everywhere but written only by the native-rule bridge.
-CORE_DATA_GLOBALS = (
+# SPEC-094/095: core account data lives in the runtime/core-data.mjs store. Scripts read it
+# through the read-only `coreData` view; only app-resources.js installs the store.
+CORE_DATA_FIELDS = (
     "shoes", "retiredShoes", "monthlyMileages", "runningGoal", "stravaImports", "spendingSummary", "monthlySpending",
 )
 CORE_DATA_WRITER = "app-resources.js"
@@ -122,29 +123,44 @@ CORE_DATA_DECLARATIONS = "app-state.js"
 _MUTATING_METHODS = "push|pop|shift|unshift|splice|sort|reverse|fill|copyWithin"
 
 
-def core_data_writers(frontend: Path, scripts: list[str]) -> list[str]:
-    """Lines outside app-resources.js that assign or mutate a core data global (SPEC-094)."""
-    names = "|".join(CORE_DATA_GLOBALS)
-    patterns = (
-        # Plain or compound assignment, not a comparison, arrow or a local declaration.
-        re.compile(rf"(?<![\w.$])(?<!let )(?<!const )(?<!var )(?:{names})\s*(?:[-+*/]?=)(?![=>])"),
-        # Destructuring into a global: [shoes, retiredShoes] = value
-        re.compile(rf"\[[^\]\n]*(?<![\w.$])(?:{names})\b[^\]\n]*\]\s*=(?![=>])"),
-        # Writes to an element or property: runningGoal.version = 2, shoes[0] = x
-        re.compile(rf"(?<![\w.$])(?:{names})(?:\[[^\]\n]+\]|\.\w+)+\s*(?:[-+*/]?=)(?![=>])"),
-        # In-place array mutation: shoes.sort(...)
-        re.compile(rf"(?<![\w.$])(?:{names})\.(?:{_MUTATING_METHODS})\("),
+def _code_lines(path: Path) -> list[tuple[int, str, str]]:
+    """(number, code without a trailing // comment, original line) for each line."""
+    lines = []
+    for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+        cut = re.search(r"(?:^|\s)//", line)
+        code = line[:cut.start()] if cut and line[:cut.start()].count("'") % 2 == 0 else line
+        lines.append((number, code, line))
+    return lines
+
+
+def core_data_violations(frontend: Path, scripts: list[str]) -> list[str]:
+    """Writes to core data, or reads of the removed globals, outside their owners (SPEC-095)."""
+    names = "|".join(CORE_DATA_FIELDS)
+    writes = (
+        # Replacing the view itself.
+        (re.compile(r"(?<![\w.$])coreData\s*=(?![=>])"), {CORE_DATA_WRITER, CORE_DATA_DECLARATIONS}),
+        # Writing a field or an element: coreData.shoes = x, coreData.runningGoal.version = 2
+        (re.compile(r"(?<![\w.$])coreData(?:\.\w+|\[[^\]\n]+\])+\s*(?:[-+*/]?=)(?![=>])"), set()),
+        # In-place array mutation: coreData.shoes.sort(...)
+        (re.compile(rf"(?<![\w.$])coreData\.\w+\.(?:{_MUTATING_METHODS})\("), set()),
+        # Re-creating a global of the old name.
+        (re.compile(rf"^(?:let|var|const)\s+(?:{names})\b"), set()),
     )
+    bare = re.compile(rf"(?:(?<=\.\.\.)|(?<![\w$'\"/.\-]))({names})\b(?!\s*:(?!:))")
     offenders = []
     for filename in scripts:
-        if filename == CORE_DATA_WRITER:
-            continue
-        for number, line in enumerate((frontend / filename).read_text(encoding="utf-8").splitlines(), 1):
-            code = line.split("//", 1)[0]
-            if filename == CORE_DATA_DECLARATIONS and re.match(rf"\s*let (?:{names}) = ", code):
-                continue
-            if any(pattern.search(code) for pattern in patterns):
+        lines = _code_lines(frontend / filename)
+        source = "\n".join(code for _number, code, _line in lines)
+        # A name a script declares itself (local variable or parameter) is not the old global.
+        local = {name for name in CORE_DATA_FIELDS if re.search(
+            rf"(?:\b(?:let|const|var)\s+(?:\[[^\]]*)?\b{name}\b|\([^()]*\b{name}\b[^()]*\)\s*(?:=>|\{{)|\b{name}\s*=>)",
+            source)}
+        for number, code, line in lines:
+            if any(pattern.search(code) and filename not in allowed for pattern, allowed in writes):
                 offenders.append(f"{filename}:{number}: {line.strip()}")
+                continue
+            if any(match.group(1) not in local for match in bare.finditer(code)):
+                offenders.append(f"{filename}:{number}: reads a removed global: {line.strip()}")
     return offenders
 
 
@@ -182,8 +198,9 @@ def check_feature_boundaries() -> None:
         source = (frontend / filename).read_text(encoding="utf-8")
         if re.search(r"\b(?:document|window|localStorage|fetch)\b", source):
             fail(f"native runtime module must remain DOM/transport independent: {filename}")
-    for offender in core_data_writers(frontend, manifest["scripts"]):
-        fail(f"core data must be written through applyCoreResource() in {CORE_DATA_WRITER}: {offender}")
+    for offender in core_data_violations(frontend, manifest["scripts"]):
+        fail(f"core data is read through coreData and written only by applyCoreResource() in {CORE_DATA_WRITER}: "
+             f"{offender}")
 
 
 def iter_routes(routes):

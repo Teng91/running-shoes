@@ -1,41 +1,34 @@
 // Compatibility bridge: native ownership/policy, legacy feature cache adapters.
 let resourceStore = null;
-// Native core-data rules (SPEC-094); loaded before any data arrives.
-let coreDataRules = null;
+// Native owner of the core account data (SPEC-095); created before any data arrives.
+let coreDataStore = null;
 
 async function initializeDataResources() {
   const version = document.querySelector('meta[name="app-asset-version"]').content;
   const { createResourceStore } = await import('./runtime/resource-store.mjs?v=' + encodeURIComponent(version));
-  coreDataRules = await import('./runtime/core-data.mjs?v=' + encodeURIComponent(version));
+  const { createCoreDataStore } = await import('./runtime/core-data.mjs?v=' + encodeURIComponent(version));
+  useCoreDataStore(createCoreDataStore());
   resourceStore = createResourceStore({ session: { capture: captureAuthSession, current: isCurrentAuthSession } });
   registerResourceCaches();
 }
 
-// The only writer of the core data globals declared in app-state.js (SPEC-094): a loaded
-// resource becomes exactly the fields runtime/core-data.mjs returns for it.
+// Installs the store whose read-only view every script reads as `coreData`.
+function useCoreDataStore(store) {
+  coreDataStore = store;
+  coreData = store.view;
+}
+
+// The only way data enters the core store (SPEC-094/095): a loaded resource becomes
+// exactly the fields runtime/core-data.mjs returns for it.
 function applyCoreResource(resource, value) {
   // Only monthly history chooses the shown year.
   const options = resource === 'monthly' ? { selectedYear, currentYear: appCalendarDate().year } : {};
-  const patch = coreDataRules.coreDataPatch(resource, value, options);
-  assignCoreFields(patch);
+  const patch = coreDataStore.apply(resource, value, options);
+  if ('selectedYear' in patch) selectedYear = patch.selectedYear;
   return patch;
 }
 
-function assignCoreFields(patch) {
-  if ('shoes' in patch) shoes = patch.shoes;
-  if ('retiredShoes' in patch) retiredShoes = patch.retiredShoes;
-  if ('monthlyMileages' in patch) monthlyMileages = patch.monthlyMileages;
-  if ('runningGoal' in patch) runningGoal = patch.runningGoal;
-  if ('stravaImports' in patch) stravaImports = patch.stravaImports;
-  if ('spendingSummary' in patch) spendingSummary = patch.spendingSummary;
-  if ('monthlySpending' in patch) monthlySpending = patch.monthlySpending;
-  if ('selectedYear' in patch) selectedYear = patch.selectedYear;
-}
-
-function resetCoreData() {
-  assignCoreFields(coreDataRules.coreDataDefaults());
-}
-registerFeatureReset('dashboard-data', () => { if (coreDataRules) resetCoreData(); });
+registerFeatureReset('dashboard-data', () => coreDataStore?.reset());
 
 function registerResourceCaches() {
   resourceStore.registerCache('spending', () => {

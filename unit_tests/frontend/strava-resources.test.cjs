@@ -48,12 +48,12 @@ test('SPEC-025 Strava history invalidation rejects older reads', async () => {
   const context = vm.createContext({ document: { getElementById: id => elements[id] },
     apiGet: () => ++calls === 1 ? old.promise : Promise.resolve([{ end_date: '2026-10-20' }]),
     renderStravaStatus() {}, renderStravaImportHistory() {}, console: { warn: assert.fail } });
-  vm.runInContext('let stravaImports = [];\n' + extract('loadStravaHistory'), context);
+  vm.runInContext(extract('loadStravaHistory'), context);
   const stale = context.loadStravaHistory(); await flush();
   context.resourceStore.invalidate(['strava-history']);
   await Promise.all([context.loadStravaHistory(), context.loadStravaHistory()]);
   old.resolve([]); await stale;
-  assert.equal(calls, 2); assert.equal(vm.runInContext('stravaImports[0].end_date', context), '2026-10-20');
+  assert.equal(calls, 2); assert.equal(context.coreData.stravaImports[0].end_date, '2026-10-20');
 });
 
 test('SPEC-025 retirement preserves edits made before the command', async () => {
@@ -91,13 +91,13 @@ test('SPEC-025 dashboard renders fast resources while a peer remains pending', a
   const context = runContext({ document: { getElementById: id => elements[id] }, selectedRunMonth: () => '2026-10',
     goalProgressCache: new Map(), render: () => renders++, hideAppBoot: () => boots++, loadStravaHistory() {},
     apiGet: async url => url === '/running-goal' ? slow.promise : [], fetchRunPage: async () => ({ rows: [{ id: 42 }], hasMore: false }) });
-  vm.runInContext(`let shoes=[], retiredShoes=[], monthlyMileages=[], runningGoal={}, selectedYear;
-    let spendingSummary, spendingLoadRequestId=0, spendingLoadPending=false, goalProgressRequestId=0;
+  vm.runInContext(`let selectedYear;
+    let spendingLoadRequestId=0, spendingLoadPending=false, goalProgressRequestId=0;
     ${extract('loadData')}`, context);
   const loading = context.loadData(); await flush();
   assert.equal(context.runController.state.rows[0].id, 42); assert.ok(renders > 0); assert.ok(boots > 0);
   slow.resolve({ monthly_km: 180 }); await loading;
-  assert.equal(vm.runInContext('runningGoal.monthly_km', context), 180);
+  assert.equal(context.coreData.runningGoal.monthly_km, 180);
 });
 
 test('SPEC-025 worker observer handles an already installing candidate', async () => {

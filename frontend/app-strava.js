@@ -46,7 +46,7 @@ function openStravaModal() {
   const defaultStart = new Date(calendar.year, calendar.month - 1 - 13, 1);
   const defaultEnd = new Date(calendar.year, calendar.month - 1, 0);
   const formatDate = date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-  const lastEnd = stravaImports[0]?.end_date;
+  const lastEnd = coreData.stravaImports[0]?.end_date;
   let nextStart = '';
   const today = localDateISO();
   if (/^\d{4}-\d{2}-\d{2}$/.test(lastEnd || '')) {
@@ -61,7 +61,7 @@ function openStravaModal() {
 
 function renderStravaImportHistory() {
   const target = document.getElementById('strava-history');
-  const last = stravaImports[0];
+  const last = coreData.stravaImports[0];
   if (!last) { target.textContent = '目前沒有 Strava 匯入紀錄。'; return; }
   const when = new Date(last.imported_at).toLocaleString('zh-TW');
   const range = last.start_date || last.end_date ? `${last.start_date || '不限'} ～ ${last.end_date || '不限'}` : '未限制日期';

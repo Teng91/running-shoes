@@ -58,5 +58,5 @@
 | --- | --- |
 | AC-1 | `unit_tests/frontend/core-data.test.cjs::SPEC-094 shoes arrive as sorted copies and monthly history keeps or picks the shown year` |
 | AC-2 | `unit_tests/frontend/core-data.test.cjs::SPEC-094 each resource owns its fields and malformed payloads are refused` |
-| AC-3 | `unit_tests/frontend/core-data.test.cjs::SPEC-094 the bridge writes only the patched globals and resets to the module defaults` |
-| AC-4 | `unit_tests/test_architecture_boundaries.py::test_core_data_is_written_only_through_the_bridge`、`python3 scripts/task.py architecture-check` |
+| AC-3 | `unit_tests/frontend/core-data.test.cjs::SPEC-095 scripts read core data through the store view, which only the bridge changes`（SPEC-095 起資料在 store 裡，改由這個測試涵蓋） |
+| AC-4 | `unit_tests/test_architecture_boundaries.py::test_core_data_is_read_through_the_view_and_written_only_by_the_bridge`、`python3 scripts/task.py architecture-check` |

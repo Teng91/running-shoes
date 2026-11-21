@@ -240,11 +240,11 @@ test('SPEC-017 spending failures retry locally and late account responses are di
   vm.runInContext(fs.readFileSync('frontend/app-spending.js', 'utf8'), context);
   await context.loadSpendingData(); assert.match(nodes['spending-cards'].innerHTML, /offline/);
   context.apiGet = async () => ({ monthly: [], total_paid: 10 });
-  await context.loadSpendingData(); assert.equal(context.spendingSummary.total_paid, 10);
+  await context.loadSpendingData(); assert.equal(context.coreData.spendingSummary.total_paid, 10);
   context.apiGet = () => new Promise(resolve => finish = resolve);
-  const old = context.loadSpendingData(); session = {}; context.spendingSummary = null;
+  const old = context.loadSpendingData(); session = {}; context.seedCoreData({ spendingSummary: null });
   finish({ monthly: [], total_paid: 999 }); await old;
-  assert.equal(context.spendingSummary, null);
+  assert.equal(context.coreData.spendingSummary, null);
 });
 
 test('SPEC-017 old run creation cannot overwrite or unlock a replacement account operation', async () => {

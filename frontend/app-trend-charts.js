@@ -394,7 +394,7 @@ function renderCumulativeChart(trends) {
   });
   const ongoing = trends.end_date < `${year}-12-31`;
   if (!cumulative.goal_active) {
-    note.textContent = `累計 ${cumulative.ytd_km.toFixed(1)} km；跑步目標從 ${runningGoal.start_year} 年開始計算。`;
+    note.textContent = `累計 ${cumulative.ytd_km.toFixed(1)} km；跑步目標從 ${coreData.runningGoal.start_year} 年開始計算。`;
   } else if (ongoing) {
     const delta = cumulative.delta_km;
     const pace = delta >= 0 ? `超前目標進度 ${delta.toFixed(1)} km` : `落後目標進度 ${Math.abs(delta).toFixed(1)} km`;

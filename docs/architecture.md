@@ -216,7 +216,7 @@ flowchart LR
     AuthUI --> Streams[app-streams.js<br/>JSON SSE lifecycle]
     Streams --> Resources[app-resources.js<br/>cache adapters]
     Resources --> Store[runtime/resource-store.mjs<br/>tickets / per-resource completion]
-    Resources --> CoreData[runtime/core-data.mjs<br/>core data rules / single writer]
+    Resources --> CoreData[runtime/core-data.mjs<br/>core data store / read-only view]
     Resources --> Core[app-core.js<br/>shell / theme / loadData]
     Resources --> Workspace[app-workspace.js<br/>drafts / durable run queue bridge]
     Workspace --> WorkspaceNative[runtime/workspace-controller.mjs<br/>injected storage / session]
@@ -549,9 +549,10 @@ flowchart LR
 Goal 以 baseline 比較 draft，reconcile 處理背景重繪，acknowledge 處理儲存回應，session reset 清理狀態。
 `resource-store.mjs` 管理 resource/key、session/epoch、pending read 合併、成功值與獨立錯誤；失效後拒絕舊回應，接受結果只消費一次。
 `app-resources.js` 注入 session 並註冊快取 hooks，core 保留 readers 與 render；不同來源成功／失敗各自處理。
-核心資料（鞋款、退役鞋、月跑量、目標、Strava 匯入紀錄、支出）由 `runtime/core-data.mjs` 的 `coreDataPatch()` 決定每種資源寫入哪些欄位，
-`app-resources.js::applyCoreResource()` 是這些全域變數唯一的寫入點，`architecture-check` 的 `core_data_writers()` 擋住其他 script 指定或就地修改（SPEC-094）。
-讀取端仍讀全域變數；把狀態本身搬進 module、改成注入式讀取是後續階段。
+核心資料（鞋款、退役鞋、月跑量、目標、Strava 匯入紀錄、支出）存在 `runtime/core-data.mjs` 的 `createCoreDataStore()`：
+`coreDataPatch()` 決定每種資源寫入哪些欄位，script 透過唯讀、陣列凍結的 view `coreData` 讀取（`coreData.shoes`）。
+`app-resources.js` 是唯一建立與更新 store 的地方（`useCoreDataStore()`、`applyCoreResource()`、登出重設），
+`architecture-check` 的 `core_data_violations()` 擋住替換 view、寫入欄位、就地修改與讀取已移除的全域變數（SPEC-094、SPEC-095）。
 Native module 不讀 DOM、認證 storage 或 HTTP，architecture-check 同樣限制新 module。
 
 Browser capture 的錯誤文字先保存，截圖／trace 及 teardown 分別限時。Python watchdog 處理 IPC 完全卡住的程序樹，
@@ -668,6 +669,7 @@ flowchart LR
 - **限流**：`rate_limits.consume()` 把同一請求的所有視窗放在一個交易，滿了就整筆回滾；限額來自 `app.state.settings`，不再保留記憶體桶。SPEC-071 再加上 AI 的每帳號與全站 24 小時視窗，限流桶保留 24 小時。
 - **稽核 trigger**：每次啟動依目前欄位重建，避免舊欄位清單使快照不完整或使寫入失敗。
 - **Strava**：`strava_import.parse_activity_dates()` 把 UTC 時間戳轉為 `clock.APP_TIMEZONE` 日期。`date_corrections()` 只修正仍停在舊 UTC 日期的既有活動，`services/strava_imports.py` 在匯入交易中移動日期與月跑量。
+- **v4.27.2**：核心資料搬進 native store（SPEC-095）。`runtime/core-data.mjs` 擁有狀態並提供唯讀 view，7 個核心資料全域變數移除，script 讀 `coreData.<field>`。依賴方向不變：classic feature 讀 view，bridge 寫 store。
 - **v4.27.1**：前端核心資料只有一個寫入點（SPEC-094）。新增 native module `runtime/core-data.mjs`，`app-resources.js` 是核心資料唯一的寫入 bridge，architecture-check 強制。依賴方向不變：classic feature → bridge → native rules。
 - **v4.27.0**：整體審查修正（SPEC-093）。`llm.LLMConfig` 由 composition root 注入，不再於 import 時讀設定；`agent.py` 直接使用 `agent_planner`／`agent_protocol`；read model 的捨入集中在 `rounding.round_metric`。前端 `app-state.js` 鏡像 `clock.py` 的時區偏移。依賴方向不變。
 - **v4.26.1**：程式碼審查修正（SPEC-092）。`routers/errors.CodedHTTPException` 讓 transport 錯誤帶自己的 `error.code`；Strava 預覽為衝突裝備建立配對群組。依賴方向不變。

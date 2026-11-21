@@ -12,10 +12,10 @@ test('replacement alerts require backup for every purpose and handle unclassifie
   vm.runInContext(extract('renderAlerts'), context);
   context.renderAlerts();
   assert.match(container.innerHTML, /Tempo 沒有其他現役鞋/);
-  context.shoes[1].categories.push('Tempo');
+  context.coreData.shoes[1].categories.push('Tempo');
   context.renderAlerts();
   assert.match(container.innerHTML, /所有用途類別都有其他現役鞋/);
-  context.shoes[0].categories = [];
+  context.coreData.shoes[0].categories = [];
   context.renderAlerts();
   assert.match(container.innerHTML, /尚未設定用途類別/);
 });
@@ -83,18 +83,18 @@ test('failed reload retains previous data and exposes a retry; recovery hides er
     goalProgressCache: new Map(), loadStravaHistory() {},
     yearlyRunsCache: new Map(),
   });
+  context.seedCoreData({ shoes: [{ id: 1 }] });
   vm.runInContext(`let authToken = 'test', selectedYear;
-    let shoes = [{id: 1}], retiredShoes = [], monthlyMileages = [],
-    monthlySpending = [], runs = [], stravaImports = [], spendingSummary, spendingLoadRequestId = 0,
+    let runs = [], spendingLoadRequestId = 0,
     spendingLoadPending = false, goalProgressRequestId = 0, runSummary, runPageOffset, runPageHasMore, runDayFilter, runListRequestId = 0;
     ${extract('loadData')}`, context);
   await context.loadData();
-  assert.equal(vm.runInContext('shoes[0].id', context), 1);
+  assert.equal(context.coreData.shoes[0].id, 1);
   assert.equal(error.hidden, false);
   context.apiGet = async () => [];
   context.fetchRunPage = async () => ({ rows: [], hasMore: false });
   await context.loadData();
-  assert.equal(vm.runInContext('shoes.length', context), 0);
+  assert.equal(context.coreData.shoes.length, 0);
   assert.equal(error.hidden, true);
 });
 

@@ -4,20 +4,40 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-let createRunController, createFormOperations, matchesSnapshot, createFormDraft, createResourceStore, coreDataRules;
+let createRunController, createFormOperations, matchesSnapshot, createFormDraft, createResourceStore, createCoreDataStore;
 require('node:test').before(async () => {
   ({ createRunController } = await import('../../frontend/runtime/run-controller.mjs'));
   ({ createFormOperations, matchesSnapshot, createFormDraft } = await import('../../frontend/runtime/form-operations.mjs'));
   ({ createResourceStore } = await import('../../frontend/runtime/resource-store.mjs'));
-  coreDataRules = await import('../../frontend/runtime/core-data.mjs');
+  ({ createCoreDataStore } = await import('../../frontend/runtime/core-data.mjs'));
 });
 
+const CORE_FIELDS = ['shoes', 'retiredShoes', 'monthlyMileages', 'runningGoal', 'stravaImports', 'spendingSummary', 'monthlySpending'];
+
+// SPEC-095: core data fixtures (passed like globals, e.g. { shoes: [...] }) seed a real store;
+// code reads them through context.coreData and writes through the real bridge.
+function splitCoreFixtures(globals) {
+  const core = {}, rest = {};
+  for (const [name, value] of Object.entries(globals)) (CORE_FIELDS.includes(name) ? core : rest)[name] = value;
+  return { core, rest };
+}
+
+// Replaces the given fields and keeps the rest, like a test fixture changing one resource.
+function seedCoreData(context, fields) {
+  const store = createCoreDataStore({ ...(context.coreData || {}), ...fields });
+  context.coreDataStore = store;
+  context.coreData = store.view;
+  return store.view;
+}
+
 function featureContext(globals = {}) {
-  // SPEC-094: features write core data through the real bridge and native rules.
-  const context = vm.createContext({ structuredClone, formSnapshotMatches: matchesSnapshot, coreDataRules,
+  const { core, rest } = splitCoreFixtures(globals);
+  const context = vm.createContext({ structuredClone, formSnapshotMatches: matchesSnapshot,
     dashboardAnalyticsCache: new Map(), dashboardAnalyticsRequest: 0, inlineEditors: new Map(), inlineTableRows: new Map(),
     captureAuthSession: () => ({}), isCurrentAuthSession: () => true,
-    getSelectedCategories: () => [], monthlyMileages: [], ...globals });
+    getSelectedCategories: () => [], ...rest });
+  seedCoreData(context, core);
+  context.seedCoreData = fields => seedCoreData(context, fields);
   const drafts = new Map();
   context.getFormDraft = name => {
     if (!drafts.has(name)) drafts.set(name, createFormDraft());
@@ -33,7 +53,7 @@ function featureContext(globals = {}) {
     }));
     return owners.get(name);
   };
-  vm.runInContext(['applyCoreResource', 'assignCoreFields', 'beginInlineEdit', 'finishInlineEdit', 'preserveInlineTable', 'readForm', 'matchesForm', 'shoeLabel', 'invalidateDataResources', 'refreshCoreData', 'registerResourceCaches', 'goalFormValues', 'goalStartYearOptions', 'setGoalField', 'setGoalSettingsOpen', 'updateGoalYearlyHint', 'prepareGoalForm', 'formatRunDuration', 'formatPace'].map(extract).join('\n'), context);
+  vm.runInContext(['applyCoreResource', 'beginInlineEdit', 'finishInlineEdit', 'preserveInlineTable', 'readForm', 'matchesForm', 'shoeLabel', 'invalidateDataResources', 'refreshCoreData', 'registerResourceCaches', 'goalFormValues', 'goalStartYearOptions', 'setGoalField', 'setGoalSettingsOpen', 'updateGoalYearlyHint', 'prepareGoalForm', 'formatRunDuration', 'formatPace'].map(extract).join('\n'), context);
   // SPEC-060 pace helpers are shared by run creation, editing and rendering.
   vm.runInContext(source.match(/const RUN_PACE_MIN_SECONDS = \d+;\s*const RUN_PACE_MAX_SECONDS = \d+;/)[0] + '\n'
     + ['parseRunDuration', 'groupDurationDigits', 'formatDurationInput', 'plausibleRunPace', 'updateRunPacePreview', 'readRunDuration'].map(extract).join('\n'), context);
