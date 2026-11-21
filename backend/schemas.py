@@ -27,6 +27,8 @@ MAX_SHOE_MONTHLY_KM = 100_000.0
 MAX_MONTHLY_MILEAGE_KM = 1_000_000.0
 ReasonableYear = Annotated[int, Field(ge=1900, le=2100)]
 CalendarMonth = Annotated[int, Field(ge=1, le=12)]
+# Mirrors backend.run_metrics.ACTIVITY_TYPES (SPEC-096).
+ActivityType = Literal["road", "trail", "hike"]
 NonNegativeFiniteKm = Annotated[float, Field(ge=0, allow_inf_nan=False)]
 PositiveFiniteKm = Annotated[float, Field(gt=0, le=1000, allow_inf_nan=False)]
 RunDurationSeconds = Annotated[int, Field(ge=1, le=MAX_RUN_DURATION_SECONDS, strict=True)]
@@ -460,6 +462,8 @@ class RunBase(BaseModel):
     shoe_id: int = Field(gt=0)
     # Optional moving time (SPEC-060); pace is derived, never accepted from clients.
     duration_seconds: RunDurationSeconds | None = None
+    # SPEC-096: which statistics the run counts toward; shoes always count it.
+    activity_type: ActivityType = "road"
 
     @field_validator("date")
     @classmethod
@@ -494,6 +498,7 @@ class RunUpdate(BaseModel):
     shoe_id: int | None = Field(default=None, gt=0)
     # Unlike the other fields, an explicit null clears the stored moving time.
     duration_seconds: RunDurationSeconds | None = None
+    activity_type: ActivityType | None = None
 
     @field_validator("date")
     @classmethod

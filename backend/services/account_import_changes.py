@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from backend.backup_contract import AccountBackup
+from backend.run_metrics import counts_toward_training
 
 if TYPE_CHECKING:
     from backend.services.account_import_plan import ImportPlan
@@ -31,33 +32,39 @@ def changed_fields(row: Any, values: dict[str, Any]) -> dict[str, Any]:
 def build_changes(plan: 'ImportPlan', backup: AccountBackup) -> ImportChanges:
     changes = ImportChanges()
     # New source shoe IDs occupy a separate namespace until execution allocates IDs.
-    final_runs = {('existing', row.id): (('existing', row.shoe_id), row.date, row.km) for row in plan.runs.values()}
+    final_runs = {('existing', row.id): (('existing', row.shoe_id), row.date, row.km, row.activity_type)
+                  for row in plan.runs.values()}
     for run_item in backup.runs:
         target = plan.run_targets[run_item.id]
         shoe_target = plan.existing('shoe', run_item.shoe_id)
         shoe_key = ('existing', shoe_target) if shoe_target is not None else ('source', run_item.shoe_id)
         if target is None:
-            final_runs[('source', run_item.id)] = (shoe_key, run_item.date, run_item.km)
+            final_runs[('source', run_item.id)] = (shoe_key, run_item.date, run_item.km, run_item.activity_type)
         elif target in plan.runs:
             run_row = plan.runs[target]
             values = run_item.model_dump(exclude={'id', 'shoe_id', 'aliases'})
             if values.get('duration_seconds') is None:
                 # A merge never clears a stored moving time (older archives have none).
                 values.pop('duration_seconds', None)
+            if backup.version < 5:
+                # Older archives have no activity type; a merge keeps the stored one.
+                values.pop('activity_type', None)
             patch = changed_fields(run_row, values)
             if run_row.shoe_id != shoe_target:
                 # This field contains a source ID; execution resolves it after shoe creation.
                 patch['shoe_id'] = run_item.shoe_id
             if patch:
                 changes.runs[target] = patch
-            final_runs[('existing', target)] = (shoe_key, run_item.date, run_item.km)
+            activity_type = run_item.activity_type if backup.version >= 5 else run_row.activity_type
+            final_runs[('existing', target)] = (shoe_key, run_item.date, run_item.km, activity_type)
         # Missing mapped runs are deletion tombstones and remain absent.
     by_shoe: dict[tuple[str, int], float] = {}
     by_month: dict[tuple[int, int], float] = {}
-    for shoe_key, date, km in final_runs.values():
+    for shoe_key, date, km, activity_type in final_runs.values():
         by_shoe[shoe_key] = by_shoe.get(shoe_key, 0) + km
-        period = (int(date[:4]), int(date[5:7]))
-        by_month[period] = by_month.get(period, 0) + km
+        if counts_toward_training(activity_type):
+            period = (int(date[:4]), int(date[5:7]))
+            by_month[period] = by_month.get(period, 0) + km
     baselines = {row.id: row.baseline_mileage for row in plan.shoes.values()}
     for shoe_item in backup.shoes:
         target = plan.existing('shoe', shoe_item.id)

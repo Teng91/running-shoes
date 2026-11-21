@@ -191,7 +191,7 @@ def test_backup_v4_round_trips_duration_and_merges_never_clear_it(client, db):
     client.post("/api/runs", headers=headers(user), json={
         "date": "2026-11-15", "km": 10, "shoe_id": shoe.id, "duration_seconds": 3330})
     archive = client.get("/api/export/account", headers=headers(user)).json()
-    assert archive["version"] == 4 and archive["runs"][0]["duration_seconds"] == 3330
+    assert archive["version"] == 5 and archive["runs"][0]["duration_seconds"] == 3330
     assert parse_backup(json.dumps(archive).encode()).runs[0].duration_seconds == 3330
     from backend.services.errors import Invalid
     with pytest.raises(Invalid):
@@ -235,6 +235,7 @@ def test_schema_nine_rollback_keeps_times_and_reupgrades(tmp_path):
     script = Path("scripts/rollback_schema_nine.sql").read_text(encoding="utf-8")
     connection = engine.raw_connection()
     try:
+        connection.executescript(Path("scripts/rollback_schema_thirteen.sql").read_text(encoding="utf-8"))
         connection.executescript(Path("scripts/rollback_schema_twelve.sql").read_text(encoding="utf-8"))
         connection.executescript(Path("scripts/rollback_schema_eleven.sql").read_text(encoding="utf-8"))
         connection.executescript(Path("scripts/rollback_schema_ten.sql").read_text(encoding="utf-8"))
@@ -246,7 +247,7 @@ def test_schema_nine_rollback_keeps_times_and_reupgrades(tmp_path):
         connection.close()
     assert schema_version(engine) == 8
     run_startup_migrations(engine, sessions)
-    assert schema_version(engine) == 12
+    assert schema_version(engine) == 13
     with sessions() as db:
         assert db.query(Run).one().duration_seconds == 3330
     engine.dispose()
@@ -265,3 +266,61 @@ def test_stored_moving_time_still_serializes_after_a_distance_edit():
     # responses must still serialize it rather than fail the whole run list.
     row = RunOut(id=1, user_id=1, date="2026-11-15", km=100, shoe_id=1, duration_seconds=1500)
     assert row.model_dump()["pace_seconds_per_km"] == 15
+
+
+def test_trail_runs_count_toward_volume_but_not_pace(db):
+    """SPEC-096 AC-3: a timed trail run is volume, not pace; road runs alone feed pace and readiness."""
+    from datetime import date
+
+    from backend.models import RaceGoal
+    from backend.read_models.pace import pace_analysis
+    from backend.read_models.race_readiness import race_readiness
+    from backend.read_models.run_statistics import RunPeriod, period_distances
+    from backend.read_models.runs import month_run_summary
+    from backend.read_models.shoe_statistics import shoe_run_statistics
+    from backend.read_models.trends import training_trends
+
+    user, shoe = owner(db, "trail-owner")
+    db.add(RaceGoal(user_id=user.id, race_name="示範半馬", race_date="2026-12-13", distance_km=21.0975,
+                    target_seconds=7200))
+    db.add_all([
+        Run(user_id=user.id, shoe_id=shoe.id, date="2026-10-03", km=10, duration_seconds=3300),
+        # 20 km in 3 hours: far slower than road pace, and long enough to be a long run.
+        Run(user_id=user.id, shoe_id=shoe.id, date="2026-10-17", km=20, duration_seconds=10800,
+            activity_type="trail"),
+        Run(user_id=user.id, shoe_id=shoe.id, date="2026-10-18", km=6, duration_seconds=7200,
+            activity_type="hike"),
+    ])
+    db.commit()
+    as_of = date(2026, 10, 31)
+
+    period = RunPeriod("2026-10-01", "2026-10-31", "2026-09-01", "2026-09-30", "2026-01-01", "2026-10-31", 31, "")
+    assert period_distances(db, user.id, period)["month_km"] == 30, "trail counts, the hike does not"
+    trends = training_trends(db, user.id, 2026, as_of)
+    assert [day["date"] for day in trends["daily"]] == ["2026-10-03", "2026-10-17"]
+    summary = month_run_summary(db, user.id, 2026, 10)
+    assert (summary["total_km"], summary["timed_run_count"], summary["average_pace_seconds_per_km"]) == (30, 1, 330)
+
+    pace = pace_analysis(db, user.id, as_of)
+    assert (pace["timed_run_count"], pace["untimed_run_count"]) == (1, 0)
+    assert [point["date"] for point in pace["runs"]] == ["2026-10-03"]
+    readiness = race_readiness(db, user.id, as_of)
+    assert sum(zone["runs"] for zone in readiness["intensity"]["zones"]) == 1
+    assert readiness["long_runs"]["count"] == 0, "the trail long run is not road readiness"
+    statistics = shoe_run_statistics(db, user.id, [shoe.id], as_of)[shoe.id]
+    assert (statistics["km"], statistics["count"], statistics["average_pace"]) == (36, 3, 330)
+
+
+def test_frontend_activity_types_mirror_the_backend():
+    from backend.run_metrics import ACTIVITY_TYPES, PACE_ACTIVITY_TYPES, TRAINING_ACTIVITY_TYPES
+    from backend.schemas import ActivityType
+
+    state = Path("frontend/app-state.js").read_text(encoding="utf-8")
+
+    def js(values):
+        return "[" + ", ".join(f"'{value}'" for value in values) + "]"
+
+    assert f"const RUN_ACTIVITY_TYPES = {js(ACTIVITY_TYPES)};" in state
+    assert f"const RUN_TRAINING_ACTIVITY_TYPES = {js(TRAINING_ACTIVITY_TYPES)};" in state
+    assert f"const RUN_PACE_ACTIVITY_TYPES = {js(PACE_ACTIVITY_TYPES)};" in state
+    assert ActivityType.__args__ == ACTIVITY_TYPES

@@ -4,6 +4,16 @@
 每版的摘要見 [CHANGELOG.md](../CHANGELOG.md)；目前的功能與操作方式以 [README](../README.md) 為準。
 這裡保留當時的文字，後續版本可能已調整其中的行為。
 
+### 運動類型（SPEC-096，v4.28.0）
+
+- Schema 13：`runs.activity_type VARCHAR NOT NULL DEFAULT 'road'`，值為 `road`／`trail`／`hike`（Pydantic 驗證）。既有紀錄為 `road`，所有統計不變。
+- `run_metrics.TRAINING_ACTIVITY_TYPES`（road、trail）決定月跑量、目標、熱力圖、連續天數、每週負荷、年度回顧、月報與跑步總計；`PACE_ACTIVITY_TYPES`（road）決定配速趨勢、月平均配速、比賽準備度與單鞋平均配速；鞋子里程、退役預估、輪替時間軸日期與選鞋建議看所有類型。輪替時間軸的 `km`／`run_count` 只算跑步，健行併入 `other_km`。
+- `monthly_mileages.km` 改為 `adjustment_km` 加上該月路跑與越野跑；健行只寫入鞋子里程。改類型時以「舊值扣回、新值加上」調整月份。
+- 帳號備份 v5 的 run 多了 `activity_type`；v1–v4 不得帶非路跑類型，fingerprint 不含此欄位以維持舊預覽相容；以舊備份合併時不覆寫既有類型。
+- Strava：`TrailRun`／越野跑 → trail，`Hike`、`Walk`、健行、步行 → hike；其他活動照舊略過。
+
+回滾：停止寫入並驗證 schema-13 備份後執行 `scripts/rollback_schema_thirteen.sql`（把健行里程加回 `monthly_mileages`，保留欄位，版本標記回 12），再回到 v4.27.2 image；再次升級時 migration 會把健行里程扣回。v5 備份無法匯入 v4.27.2。
+
 ### 核心資料搬進 native store（SPEC-095，v4.27.2）
 
 - `runtime/core-data.mjs` 新增 `createCoreDataStore()`：唯讀 `view`（getter、凍結），`apply()` 只替換該資源的欄位並凍結其複本，`reset()` 回到預設值。

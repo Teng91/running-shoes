@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from backend.models import Run
 from backend.read_models.rounding import round_metric
+from backend.read_models.run_statistics import PACE_RUN
 from backend.run_metrics import pace_seconds_per_km
 
 
@@ -43,8 +44,9 @@ def shoe_run_statistics(
                     else_=0,
                 )
             ),
-            func.sum(Run.duration_seconds),
-            func.sum(case((Run.duration_seconds.isnot(None), Run.km), else_=0)),
+            # Average pace over the shoe's timed road runs (SPEC-096).
+            func.sum(case((Run.duration_seconds.isnot(None) & PACE_RUN, Run.duration_seconds), else_=0)),
+            func.sum(case((Run.duration_seconds.isnot(None) & PACE_RUN, Run.km), else_=0)),
         )
         .filter(*scope)
         .group_by(Run.shoe_id)

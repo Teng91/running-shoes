@@ -228,6 +228,10 @@ class Run(Base):
     strava_id: Mapped[str | None] = mapped_column(String, nullable=True)
     # Moving time in whole seconds (SPEC-060); pace is derived in backend.run_metrics.
     duration_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # road / trail / hike (SPEC-096); backend.run_metrics owns which types count where.
+    activity_type: Mapped[str] = mapped_column(
+        String, nullable=False, default="road", server_default="road"
+    )
 
     owner: Mapped["User"] = relationship(back_populates="runs")
     shoe: Mapped["Shoe"] = relationship()

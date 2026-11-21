@@ -1,4 +1,4 @@
-"""Bounded, credential-free account archive contract (v1, v2, v3 and v4)."""
+"""Bounded, credential-free account archive contract (v1 through v5)."""
 
 import json
 import math
@@ -8,6 +8,7 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from backend import schemas
+from backend.run_metrics import DEFAULT_ACTIVITY_TYPE, counts_toward_training
 from backend.services.errors import Invalid
 from backend.services.fingerprints import payload_hash
 from backend.services.retention import AUDIT_EVENTS_PER_USER, IMPORTED_AUDIT_EVENTS_PER_USER
@@ -99,7 +100,7 @@ class BackupHistory(BaseModel):
 class AccountBackup(BaseModel):
     model_config = ConfigDict(extra="forbid")
     format: Literal["running-shoes-account-backup"]
-    version: Literal[1, 2, 3, 4]
+    version: Literal[1, 2, 3, 4, 5]
     source_id: str | None = Field(default=None, min_length=16, max_length=80, pattern=r"^[A-Za-z0-9._:-]+$")
     exported_at: datetime
     username: str = Field(max_length=50)
@@ -114,7 +115,7 @@ class AccountBackup(BaseModel):
     @model_validator(mode="after")
     def validate_graph(self):
         if self.version >= 2 and not self.source_id:
-            raise ValueError("備份 v2/v3/v4 缺少 source_id")
+            raise ValueError("備份 v2–v5 缺少 source_id")
         collections: list[tuple[list[Any], Any]] = [(self.shoes, lambda row: row.id), (self.runs, lambda row: row.id),
                             (self.monthly_mileages, lambda row: (row.year, row.month)),
                             (self.monthly_reports, lambda row: (row.year, row.month)),
@@ -128,7 +129,9 @@ class AccountBackup(BaseModel):
         if alias_count > MAX_RUN_ALIASES or (self.version < 3 and alias_count):
             raise ValueError("跑步來源別名版本或容量不正確")
         if self.version < 4 and any(row.duration_seconds is not None for row in self.runs):
-            raise ValueError("跑步時間只能出現在 v4 備份")
+            raise ValueError("跑步時間只能出現在 v4 以上備份")
+        if self.version < 5 and any(row.activity_type != DEFAULT_ACTIVITY_TYPE for row in self.runs):
+            raise ValueError("運動類型只能出現在 v5 備份")
         for row in self.runs:
             for alias in row.aliases:
                 if alias in identities:
@@ -142,8 +145,10 @@ class AccountBackup(BaseModel):
         by_month: dict[tuple[int, int], float] = {}
         for run in self.runs:
             by_shoe[run.shoe_id] = by_shoe.get(run.shoe_id, 0) + run.km
-            period = (int(run.date[:4]), int(run.date[5:7]))
-            by_month[period] = by_month.get(period, 0) + run.km
+            if counts_toward_training(run.activity_type):
+                # SPEC-096: hikes wear the shoe but are not monthly volume.
+                period = (int(run.date[:4]), int(run.date[5:7]))
+                by_month[period] = by_month.get(period, 0) + run.km
         for shoe in self.shoes:
             logged = round(by_shoe.get(shoe.id, 0), 2)
             baseline = shoe.mileage - logged if shoe.baseline_mileage is None else shoe.baseline_mileage
@@ -196,6 +201,9 @@ def backup_fingerprint(backup: AccountBackup) -> str:
         if backup.version < 4:
             # Keep pre-SPEC-060 fingerprints stable for previews and receipts.
             run.pop("duration_seconds", None)
+        if backup.version < 5:
+            # Every pre-SPEC-096 run is a road run; keep those fingerprints stable.
+            run.pop("activity_type", None)
     return payload_hash(payload)
 
 

@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from backend import models
 from backend.read_models import goal_progress
 from backend.read_models.rounding import round_metric
+from backend.read_models.run_statistics import TRAINING_RUN
 from backend.read_models.trends import run_streaks, trends_end
 from backend.shoe_metrics import REPLACE_SOON_USAGE_PERCENT, shoe_metrics
 
@@ -32,7 +33,7 @@ def _active_shoes(db: Session, user_id: int) -> list[models.Shoe]:
 def _km_between(db: Session, user_id: int, start: date, end: date) -> tuple[float, int]:
     km, count = (
         db.query(func.coalesce(func.sum(models.Run.km), 0.0), func.count(models.Run.id))
-        .filter(models.Run.user_id == user_id, models.Run.date >= start.isoformat(),
+        .filter(models.Run.user_id == user_id, TRAINING_RUN, models.Run.date >= start.isoformat(),
                 models.Run.date <= end.isoformat())
         .one()
     )
@@ -84,7 +85,7 @@ def year_review(db: Session, user_id: int, year: int, as_of: date) -> dict:
         return {**base, "has_runs": False}
     runs = (
         db.query(models.Run.date, models.Run.km, models.Run.shoe_id)
-        .filter(models.Run.user_id == user_id, models.Run.date >= start.isoformat(),
+        .filter(models.Run.user_id == user_id, TRAINING_RUN, models.Run.date >= start.isoformat(),
                 models.Run.date <= end.isoformat())
         .all()
     )

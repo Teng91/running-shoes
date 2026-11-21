@@ -460,3 +460,102 @@ def test_run_totals_count_every_run_like_strava_and_stay_user_scoped(client, db,
     other_headers = _auth_header(token_for(other))
     assert client.get("/api/runs/totals", headers=other_headers).json() == {"run_count": 1, "total_km": 42.2}
     assert client.get("/api/runs/totals").status_code == 401
+
+
+# ── SPEC-096 activity types ─────────────────────────────
+
+def test_hike_counts_toward_shoe_but_not_monthly_mileage(client, db, user_with_token):
+    """SPEC-096 AC-2: a hike wears the shoe but leaves volume, goals, heatmap and streaks alone."""
+    from datetime import date
+
+    from backend.read_models.goal_progress import goal_progress
+    from backend.read_models.runs import month_run_summary, run_totals
+    from backend.read_models.trends import training_trends
+
+    user, token = user_with_token
+    shoe = Shoe(user_id=user.id, brand="Salomon", model="Speedcross 6", date="2026-01-01")
+    db.add(shoe)
+    db.commit()
+    headers = _auth_header(token)
+    road = client.post("/api/runs", headers=headers, json={"date": "2026-10-10", "km": 8, "shoe_id": shoe.id})
+    assert road.status_code == 200 and road.json()["activity_type"] == "road"
+    as_of = date(2026, 10, 31)
+    before = (goal_progress(db, user.id, 2026, 10, as_of=as_of), training_trends(db, user.id, 2026, as_of))
+
+    hike = client.post("/api/runs", headers=headers, json={
+        "date": "2026-10-11", "km": 10, "shoe_id": shoe.id, "activity_type": "hike", "duration_seconds": 10800})
+    assert hike.status_code == 200 and hike.json()["activity_type"] == "hike"
+    assert hike.json()["pace_seconds_per_km"] == 1080, "a single hike still shows its own pace"
+    db.expire_all()
+    assert db.get(Shoe, shoe.id).mileage == 18
+    assert db.query(MonthlyMileage).filter_by(user_id=user.id, year=2026, month=10).one().km == 8
+    progress, trends = goal_progress(db, user.id, 2026, 10, as_of=as_of), training_trends(db, user.id, 2026, as_of)
+    assert progress["month_km"] == before[0]["month_km"] == 8
+    assert progress["ytd_km"] == before[0]["ytd_km"]
+    assert trends["daily"] == before[1]["daily"] == [{"date": "2026-10-10", "km": 8.0}]
+    assert trends["streaks"] == before[1]["streaks"]
+    summary = month_run_summary(db, user.id, 2026, 10)
+    assert (summary["total_km"], summary["run_count"], summary["run_days"]) == (8, 1, 1)
+    assert [day["date"] for day in summary["calendar"]] == ["2026-10-10", "2026-10-11"], "the log lists every activity"
+    assert summary["shoe_usage"] == [{"shoe_id": shoe.id, "km": 18.0, "count": 2}]
+    assert run_totals(db, user.id) == {"run_count": 1, "total_km": 8.0}
+
+    assert client.delete(f"/api/runs/{hike.json()['id']}", headers=headers).status_code == 200
+    db.expire_all()
+    assert db.get(Shoe, shoe.id).mileage == 8
+    assert db.query(MonthlyMileage).filter_by(user_id=user.id, year=2026, month=10).one().km == 8
+
+
+def test_changing_activity_type_moves_monthly_mileage(client, db, user_with_token):
+    """SPEC-096 AC-4: switching road -> hike -> road moves the month, never the shoe."""
+    user, token = user_with_token
+    shoe = Shoe(user_id=user.id, brand="HOKA", model="Speedgoat 6", date="2026-01-01")
+    db.add(shoe)
+    db.commit()
+    headers = _auth_header(token)
+    run = client.post("/api/runs", headers=headers, json={"date": "2026-09-05", "km": 12.5, "shoe_id": shoe.id}).json()
+
+    def totals():
+        db.expire_all()
+        month = db.query(MonthlyMileage).filter_by(user_id=user.id, year=2026, month=9).one()
+        return db.get(Shoe, shoe.id).mileage, month.km
+
+    assert totals() == (12.5, 12.5)
+    hiked = client.put(f"/api/runs/{run['id']}", headers=headers,
+                       json={"activity_type": "hike", "expected_version": run["version"]})
+    assert hiked.status_code == 200 and hiked.json()["activity_type"] == "hike"
+    assert hiked.json()["version"] == run["version"] + 1
+    assert totals() == (12.5, 0)
+    trail = client.put(f"/api/runs/{run['id']}", headers=headers,
+                       json={"activity_type": "trail", "km": 13, "expected_version": hiked.json()["version"]})
+    assert trail.status_code == 200 and trail.json()["activity_type"] == "trail"
+    assert totals() == (13, 13)
+    road = client.put(f"/api/runs/{run['id']}", headers=headers,
+                      json={"activity_type": "road", "expected_version": trail.json()["version"]})
+    assert road.json()["version"] == run["version"] + 3
+    assert totals() == (13, 13)
+    stale = client.put(f"/api/runs/{run['id']}", headers=headers,
+                       json={"activity_type": "hike", "expected_version": run["version"]})
+    assert stale.status_code == 409
+    assert totals() == (13, 13), "a rejected edit moves nothing"
+
+
+@pytest.mark.parametrize("payload", [{"activity_type": "swim"}, {"activity_type": ""}, {"activity_type": None},
+                                     {"activity_type": 1}])
+def test_invalid_activity_type_is_rejected(client, db, user_with_token, payload):
+    """SPEC-096 AC-7: only road, trail and hike are accepted on create and update."""
+    from backend.models import Run
+
+    user, token = user_with_token
+    shoe = Shoe(user_id=user.id, brand="Mizuno", model="Wave Daichi", date="2026-01-01")
+    db.add(shoe)
+    db.commit()
+    headers = _auth_header(token)
+    created = client.post("/api/runs", headers=headers, json={"date": "2026-10-01", "km": 5, "shoe_id": shoe.id, **payload})
+    assert created.status_code == 422
+    run = client.post("/api/runs", headers=headers, json={"date": "2026-10-01", "km": 5, "shoe_id": shoe.id}).json()
+    updated = client.put(f"/api/runs/{run['id']}", headers=headers, json={**payload, "expected_version": run["version"]})
+    assert updated.status_code == 422
+    db.expire_all()
+    stored = db.get(Run, run["id"])
+    assert (stored.activity_type, stored.version, db.get(Shoe, shoe.id).mileage) == ("road", 0, 5)

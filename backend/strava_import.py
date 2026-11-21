@@ -33,7 +33,13 @@ STRAVA_HEADERS = {
     "elapsed_time": ("經過時間", "Elapsed Time"),
 }
 STRAVA_REQUIRED_FIELDS = {"id", "date", "type", "gear", "distance"}
-STRAVA_RUN_TYPES = {"跑步", "Run", "TrailRun", "Trail Run", "VirtualRun", "Virtual Run"}
+# Strava activity type -> run activity type (SPEC-096); other activities are skipped.
+STRAVA_ACTIVITY_TYPES = {
+    "跑步": "road", "Run": "road", "VirtualRun": "road", "Virtual Run": "road",
+    "虛擬跑步": "road",
+    "TrailRun": "trail", "Trail Run": "trail", "越野跑": "trail", "越野跑步": "trail",
+    "Hike": "hike", "Walk": "hike", "健行": "hike", "步行": "hike",
+}
 
 
 def _field(headers: Sequence[str], key: str) -> str | None:
@@ -152,7 +158,8 @@ def parse_csv(
         for row_number, row in enumerate(reader, start=1):
             if row_number > max_rows:
                 raise InvalidCSVError(f"CSV 資料列不可超過 {max_rows:,} 筆", row_limit=max_rows)
-            if (row.get(fields["type"] or "") or "").strip() not in STRAVA_RUN_TYPES:
+            activity_type = STRAVA_ACTIVITY_TYPES.get((row.get(fields["type"] or "") or "").strip())
+            if activity_type is None:
                 continue
             try:
                 activity_id = (row.get(fields["id"] or "") or "").strip()
@@ -181,7 +188,7 @@ def parse_csv(
                 "utc_date": utc_date,
                 "km": km,
                 "gear": (row.get(fields["gear"] or "") or "").strip(),
-                "activity_type": (row.get(fields["type"] or "") or "").strip(),
+                "activity_type": activity_type,
             })
     except csv.Error as exc:
         raise InvalidCSVError("CSV 格式錯誤") from exc
