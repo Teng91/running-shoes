@@ -559,3 +559,27 @@ def test_invalid_activity_type_is_rejected(client, db, user_with_token, payload)
     db.expire_all()
     stored = db.get(Run, run["id"])
     assert (stored.activity_type, stored.version, db.get(Shoe, shoe.id).mileage) == ("road", 0, 5)
+
+
+def test_walk_counts_only_toward_the_shoe(client, db, user_with_token):
+    """SPEC-097 AC-3: a walk is its own type and, like a hike, only wears the shoe."""
+    from backend.read_models.runs import month_run_summary, run_totals
+
+    user, token = user_with_token
+    shoe = Shoe(user_id=user.id, brand="Mizuno", model="Wave Rider", date="2026-01-01")
+    db.add(shoe)
+    db.commit()
+    headers = _auth_header(token)
+    walk = client.post("/api/runs", headers=headers, json={
+        "date": "2026-10-12", "km": 3.2, "shoe_id": shoe.id, "activity_type": "walk"})
+    assert walk.status_code == 200 and walk.json()["activity_type"] == "walk"
+    db.expire_all()
+    assert db.get(Shoe, shoe.id).mileage == 3.2
+    assert db.query(MonthlyMileage).filter_by(user_id=user.id, year=2026, month=10).count() == 0
+    assert month_run_summary(db, user.id, 2026, 10)["total_km"] == 0
+    assert run_totals(db, user.id) == {"run_count": 0, "total_km": 0.0}
+    road = client.put(f"/api/runs/{walk.json()['id']}", headers=headers,
+                      json={"activity_type": "road", "expected_version": walk.json()["version"]})
+    assert road.status_code == 200
+    db.expire_all()
+    assert db.query(MonthlyMileage).filter_by(user_id=user.id, year=2026, month=10).one().km == 3.2

@@ -10,7 +10,7 @@ from typing import cast
 
 from backend import schemas
 from backend.clock import APP_TIMEZONE
-from backend.run_metrics import is_plausible_duration
+from backend.run_metrics import counts_toward_training, is_plausible_duration
 
 
 class InvalidCSVError(ValueError):
@@ -38,8 +38,24 @@ STRAVA_ACTIVITY_TYPES = {
     "跑步": "road", "Run": "road", "VirtualRun": "road", "Virtual Run": "road",
     "虛擬跑步": "road",
     "TrailRun": "trail", "Trail Run": "trail", "越野跑": "trail", "越野跑步": "trail",
-    "Hike": "hike", "Walk": "hike", "健行": "hike", "步行": "hike",
+    "Hike": "hike", "健行": "hike", "Walk": "walk", "步行": "walk",
 }
+
+
+def split_shoe_only(
+    rows: list[dict[str, object]], include: bool
+) -> tuple[list[dict[str, object]], int, float]:
+    """Hikes and walks are imported only when the user opts in (SPEC-097).
+
+    Before SPEC-096 they were skipped, so an account may already have added their
+    kilometres to a shoe by hand; importing them silently would count them twice.
+    Returns the rows to import, plus the count and distance of shoe-only rows.
+    """
+    shoe_only = [row for row in rows if not counts_toward_training(str(row.get("activity_type") or ""))]
+    km = round(sum(float(cast(float, row["km"])) for row in shoe_only), 2)
+    if include:
+        return rows, len(shoe_only), km
+    return [row for row in rows if counts_toward_training(str(row.get("activity_type") or ""))], len(shoe_only), km
 
 
 def _field(headers: Sequence[str], key: str) -> str | None:

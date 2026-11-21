@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-2bT6CtJchO06Xn0AApmW9o5a2pDMJz9hpC08eAf5DuI=' 'sha256-03bcOQeHecByaBjKyWaE3zaVWPIlPVelCglM9pQh0BU=' 'sha256-IgIQHS5JQWyGqVRXIJS9m3tyA0JiZ2nFTbsaGJpbbDc='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'self'">
-<meta name="app-asset-version" content="4.28.0">
+<meta name="app-asset-version" content="4.29.0">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>跑鞋追蹤 Dashboard</title>
 <meta name="theme-color" content="#07090c">
@@ -42,7 +42,7 @@ body { margin: 0; opacity: 1 !important; }
 @keyframes app-boot-critical-run { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
 @media (prefers-reduced-motion: reduce) { .app-boot { transition: none; } .app-boot-spinner::after { animation: none; width: 100%; opacity: .45; } }
 </style>
-<link id="app-styles" rel="preload" href="/styles.css?v=4.28.0" as="style">
+<link id="app-styles" rel="preload" href="/styles.css?v=4.29.0" as="style">
 <script>
 // Non-blocking stylesheet: apply the preload once it arrives. A script rather
 // than an onload attribute, so the page CSP can allow it by hash (SPEC-054).
@@ -64,7 +64,7 @@ body { margin: 0; opacity: 1 !important; }
   } catch (error) {}
 })();
 </script>
-<noscript><link rel="stylesheet" href="/styles.css?v=4.28.0"></noscript>
+<noscript><link rel="stylesheet" href="/styles.css?v=4.29.0"></noscript>
 </head>
 <body>
 
@@ -403,7 +403,7 @@ window.__appBootLegacyPoll = window.setInterval(function () {
         <div class="run-entry-grid">
           <div class="form-group"><label for="run-date">日期</label><input id="run-date" type="date" required data-change="run-date-warning" data-form="run"></div>
           <div class="form-group"><label for="run-km">距離 (km)</label><input id="run-km" type="number" min="0.01" max="1000" step="0.01" placeholder="5.00" required data-input="run-pace-preview" data-form="run"></div>
-          <div class="form-group activity-field"><label for="run-activity">運動類型</label><select id="run-activity" aria-describedby="run-activity-hint" data-change="run-activity-hint" data-form="run"><option value="road">路跑</option><option value="trail">越野跑</option><option value="hike">健行</option></select><small class="run-activity-hint" id="run-activity-hint" role="status"></small></div>
+          <div class="form-group activity-field"><label for="run-activity">運動類型</label><select id="run-activity" aria-describedby="run-activity-hint" data-change="run-activity-hint" data-form="run"><option value="road">路跑</option><option value="trail">越野跑</option><option value="hike">健行</option><option value="walk">步行</option></select><small class="run-activity-hint" id="run-activity-hint" role="status"></small></div>
           <div class="form-group duration-field"><label for="run-duration">跑步時間（選填）</label><input id="run-duration" type="text" inputmode="numeric" placeholder="直接打數字，例如 3215 → 32:15" aria-describedby="run-pace-preview" data-input="run-pace-preview" data-form="run"><small class="run-pace-preview" id="run-pace-preview" role="status"></small></div>
           <div class="form-group shoe-field"><label for="run-shoe">穿哪雙鞋</label><select id="run-shoe" required data-change="run-shoe" data-form="run"></select></div>
         </div>
@@ -732,7 +732,7 @@ window.__appBootLegacyPoll = window.setInterval(function () {
       <div class="form-group"><label for="edit-run-date">日期</label><input id="edit-run-date" type="date" required data-change="run-date-warning" data-form="edit-run"></div>
       <div class="form-group"><label for="edit-run-km">距離 (km)</label><input id="edit-run-km" type="number" min="0.01" max="1000" step="0.01" required data-input="run-pace-preview" data-form="edit-run"></div>
     </div>
-    <div class="form-group"><label for="edit-run-activity">運動類型</label><select id="edit-run-activity" aria-describedby="edit-run-activity-hint" data-change="run-activity-hint" data-form="edit-run"><option value="road">路跑</option><option value="trail">越野跑</option><option value="hike">健行</option></select><small class="run-activity-hint" id="edit-run-activity-hint" role="status"></small></div>
+    <div class="form-group"><label for="edit-run-activity">運動類型</label><select id="edit-run-activity" aria-describedby="edit-run-activity-hint" data-change="run-activity-hint" data-form="edit-run"><option value="road">路跑</option><option value="trail">越野跑</option><option value="hike">健行</option><option value="walk">步行</option></select><small class="run-activity-hint" id="edit-run-activity-hint" role="status"></small></div>
     <div class="form-group duration-field"><label for="edit-run-duration">跑步時間（選填）</label><input id="edit-run-duration" type="text" inputmode="numeric" placeholder="直接打數字，例如 3215 → 32:15" aria-describedby="edit-run-pace-preview" data-input="run-pace-preview" data-form="edit-run"><small class="run-pace-preview" id="edit-run-pace-preview" role="status"></small></div>
     <div class="form-group"><label for="edit-run-shoe">穿哪雙鞋</label><select id="edit-run-shoe" required data-change="run-date-warning" data-form="edit-run"></select></div>
     <p class="run-date-warning" id="edit-run-date-warning" role="status" hidden></p>
@@ -750,7 +750,7 @@ window.__appBootLegacyPoll = window.setInterval(function () {
 <div class="modal-overlay" id="strava-modal">
   <div class="modal strava-modal">
     <h2>匯入 Strava 跑步紀錄</h2>
-    <p style="color:var(--text-dim);font-size:13px;line-height:1.6">請選擇 Strava 匯出資料夾中的 <code>activities.csv</code>。系統只會匯入跑步活動，並以活動 ID 避免重複。</p>
+    <p style="color:var(--text-dim);font-size:13px;line-height:1.6">請選擇 Strava 匯出資料夾中的 <code>activities.csv</code>。系統會匯入跑步與越野跑；健行與步行要勾選才匯入。以活動 ID 避免重複。</p>
     <div id="strava-history" class="strava-summary"></div>
     <div class="form-group"><label for="strava-file">activities.csv</label><input id="strava-file" type="file" accept=".csv,text/csv" data-change="preview-strava"></div>
     <div class="form-row">
@@ -758,6 +758,10 @@ window.__appBootLegacyPoll = window.setInterval(function () {
       <div class="form-group"><label for="strava-end-date">到這一天結束</label><input id="strava-end-date" type="date" data-change="preview-strava"></div>
     </div>
     <p class="strava-sync"><span>匯入後會自動同步<small>只有新活動會加入跑鞋里程與對應月份的月跑量；重複活動不會再次計算。</small></span></p>
+    <div class="strava-walk-hike" id="strava-walk-hike" hidden>
+      <label class="strava-walk-hike-toggle"><input id="strava-include-walks" type="checkbox" data-change="preview-strava"> 也匯入健行與步行</label>
+      <small id="strava-walk-hike-note" role="status"></small>
+    </div>
     <div id="strava-summary"></div>
     <div id="strava-mapping" class="strava-groups"></div>
     <div id="strava-conflicts" class="strava-groups"></div>
@@ -927,43 +931,43 @@ window.__appBootLegacyPoll = window.setInterval(function () {
 
 <script src="/vendor/chart.umd.min.js"></script>
 <script src="/vendor/marked.min.js"></script>
-<script src="/app-boot.js?v=4.28.0"></script>
-<script src="/app-lifecycle.js?v=4.28.0"></script>
-<script src="/app-state.js?v=4.28.0"></script>
-<script src="/app-api.js?v=4.28.0"></script>
-<script src="/app-auth.js?v=4.28.0"></script>
-<script src="/app-streams.js?v=4.28.0"></script>
-<script src="/app-resources.js?v=4.28.0"></script>
-<script src="/app-inline-editors.js?v=4.28.0"></script>
-<script src="/app-local-store.js?v=4.28.0"></script>
-<script src="/app-workspace.js?v=4.28.0"></script>
-<script src="/app-account.js?v=4.28.0"></script>
-<script src="/app-account-restore.js?v=4.28.0"></script>
-<script src="/app-history.js?v=4.28.0"></script>
-<script src="/app-core.js?v=4.28.0"></script>
-<script src="/app-models.js?v=4.28.0"></script>
-<script src="/app-markdown.js?v=4.28.0"></script>
-<script src="/app-agent.js?v=4.28.0"></script>
-<script src="/app-reports.js?v=4.28.0"></script>
-<script src="/app-runs.js?v=4.28.0"></script>
-<script src="/app-dates.js?v=4.28.0"></script>
-<script src="/app-strava.js?v=4.28.0"></script>
-<script src="/app-run-insights.js?v=4.28.0"></script>
-<script src="/app-shoes.js?v=4.28.0"></script>
-<script src="/app-dashboard.js?v=4.28.0"></script>
-<script src="/app-onboarding.js?v=4.28.0"></script>
-<script src="/app-exports.js?v=4.28.0"></script>
-<script src="/app-goals.js?v=4.28.0"></script>
-<script src="/app-charts.js?v=4.28.0"></script>
-<script src="/app-shoe-charts.js?v=4.28.0"></script>
-<script src="/app-monthly-charts.js?v=4.28.0"></script>
-<script src="/app-trend-charts.js?v=4.28.0"></script>
-<script src="/app-pace-charts.js?v=4.28.0"></script>
-<script src="/app-race-goal.js?v=4.28.0"></script>
-<script src="/app-spending.js?v=4.28.0"></script>
-<script src="/app-dialogs.js?v=4.28.0"></script>
-<script src="/app-updates.js?v=4.28.0"></script>
-<script src="/app-actions.js?v=4.28.0"></script>
-<script src="/app.js?v=4.28.0"></script>
+<script src="/app-boot.js?v=4.29.0"></script>
+<script src="/app-lifecycle.js?v=4.29.0"></script>
+<script src="/app-state.js?v=4.29.0"></script>
+<script src="/app-api.js?v=4.29.0"></script>
+<script src="/app-auth.js?v=4.29.0"></script>
+<script src="/app-streams.js?v=4.29.0"></script>
+<script src="/app-resources.js?v=4.29.0"></script>
+<script src="/app-inline-editors.js?v=4.29.0"></script>
+<script src="/app-local-store.js?v=4.29.0"></script>
+<script src="/app-workspace.js?v=4.29.0"></script>
+<script src="/app-account.js?v=4.29.0"></script>
+<script src="/app-account-restore.js?v=4.29.0"></script>
+<script src="/app-history.js?v=4.29.0"></script>
+<script src="/app-core.js?v=4.29.0"></script>
+<script src="/app-models.js?v=4.29.0"></script>
+<script src="/app-markdown.js?v=4.29.0"></script>
+<script src="/app-agent.js?v=4.29.0"></script>
+<script src="/app-reports.js?v=4.29.0"></script>
+<script src="/app-runs.js?v=4.29.0"></script>
+<script src="/app-dates.js?v=4.29.0"></script>
+<script src="/app-strava.js?v=4.29.0"></script>
+<script src="/app-run-insights.js?v=4.29.0"></script>
+<script src="/app-shoes.js?v=4.29.0"></script>
+<script src="/app-dashboard.js?v=4.29.0"></script>
+<script src="/app-onboarding.js?v=4.29.0"></script>
+<script src="/app-exports.js?v=4.29.0"></script>
+<script src="/app-goals.js?v=4.29.0"></script>
+<script src="/app-charts.js?v=4.29.0"></script>
+<script src="/app-shoe-charts.js?v=4.29.0"></script>
+<script src="/app-monthly-charts.js?v=4.29.0"></script>
+<script src="/app-trend-charts.js?v=4.29.0"></script>
+<script src="/app-pace-charts.js?v=4.29.0"></script>
+<script src="/app-race-goal.js?v=4.29.0"></script>
+<script src="/app-spending.js?v=4.29.0"></script>
+<script src="/app-dialogs.js?v=4.29.0"></script>
+<script src="/app-updates.js?v=4.29.0"></script>
+<script src="/app-actions.js?v=4.29.0"></script>
+<script src="/app.js?v=4.29.0"></script>
 </body>
 </html>

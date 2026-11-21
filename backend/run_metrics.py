@@ -5,13 +5,13 @@ duration and distance here, never stored and never computed by the LLM.
 Average pace is time-weighted (total seconds / total km of timed runs), not
 a mean of per-run paces.
 
-Activity types (SPEC-096): every type counts toward shoe mileage; only
-training types count toward monthly volume, goals, streaks and weekly load;
-only pace types feed pace trends and race readiness. Mirrored in
-frontend/app-state.js.
+Activity types (SPEC-096, SPEC-097): every type counts toward shoe mileage;
+only training types count toward monthly volume, goals, streaks and weekly
+load; only pace types feed pace trends and race readiness. Hikes and walks
+are shoe-only. Mirrored in frontend/app-state.js.
 """
 
-ACTIVITY_TYPES = ("road", "trail", "hike")
+ACTIVITY_TYPES = ("road", "trail", "hike", "walk")
 DEFAULT_ACTIVITY_TYPE = "road"
 TRAINING_ACTIVITY_TYPES = ("road", "trail")
 PACE_ACTIVITY_TYPES = ("road",)

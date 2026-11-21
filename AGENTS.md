@@ -7,7 +7,7 @@
 - `backend/settings.py`: immutable typed runtime configuration.
 - `backend/clock.py`: the single application timezone, `local_now()` and `local_today()`; never hard-code UTC offsets or use the server zone elsewhere (the frontend mirrors it as `APP_UTC_OFFSET_MINUTES` in `app-state.js` and never takes calendar days from the device zone, SPEC-093).
 - `backend/forecasting.py`: shared retirement policy and batched user-scoped forecasts.
-- `backend/run_metrics.py`: canonical run duration bounds and pace (seconds per km, time-weighted averages); pace is derived, never stored (SPEC-060), and the bounds are mirrored in `frontend/app-state.js`. It also owns the activity types (SPEC-096): every type counts toward shoes, `TRAINING_ACTIVITY_TYPES` toward volume/goals/streaks and `PACE_ACTIVITY_TYPES` toward pace and race readiness; read models filter with `run_statistics.TRAINING_RUN`/`PACE_RUN`.
+- `backend/run_metrics.py`: canonical run duration bounds and pace (seconds per km, time-weighted averages); pace is derived, never stored (SPEC-060), and the bounds are mirrored in `frontend/app-state.js`. It also owns the activity types (SPEC-096): every type (road, trail, hike, walk) counts toward shoes, `TRAINING_ACTIVITY_TYPES` toward volume/goals/streaks and `PACE_ACTIVITY_TYPES` toward pace and race readiness; read models filter with `run_statistics.TRAINING_RUN`/`PACE_RUN`.
 - `backend/read_models/race_readiness.py`: target race, Riegel prediction, intensity zones relative to goal race pace and long-run readiness (SPEC-065); `routers/race_goal.py` and `services/race_goals.py` own the race goal reads and writes.
 - `backend/shoe_metrics.py`: canonical shoe cost, discount and lifecycle arithmetic, plus the single 80%/90% lifespan alert thresholds (mirrored in `frontend/app-state.js`).
 - `backend/read_models/`: user-scoped native statistics shared by HTTP, reports and AI adapters; never import tools or HTTP frameworks.
@@ -17,7 +17,7 @@
 - `backend/auth.py`: HTTP bearer adapter; always decodes with the app's injected key (tests sign through `unit_tests/token_helpers.token_for`) and rejects a token whose `aid` is missing or not the account's `backup_id` (SPEC-087, SPEC-093).
 - `backend/models.py`, `schemas.py`: ORM tables and Pydantic request/response contracts with input validation.
 - `backend/read_models/insights.py`, `goal_progress.py`, `report_snapshot.py`: read-only home insights, goal progress and monthly-report snapshots (moved from `backend/` in SPEC-090); their writes live in `backend/services/`.
-- `backend/exporting.py`, `strava_import.py`: pure CSV/XLSX export rows and Strava CSV parsing; `backend/services/exports.py`, `strava_imports.py` own the use cases.
+- `backend/exporting.py`, `strava_import.py`: pure CSV/XLSX export rows and Strava CSV parsing (hikes and walks are imported only with `include_walks_hikes`, SPEC-097); `backend/services/exports.py`, `strava_imports.py` own the use cases.
 - `backend/services/mileage.py`: transactional shoe/month mileage deltas shared by run and import writes; hikes change the shoe but not the month (SPEC-096).
 - `backend/routers/`: feature-oriented HTTP routes; routers must never import `backend.main` or another route module (shared helpers such as `errors.py` and `password_notices.py` define no router; SPEC-090) and never build database queries (read models, services or `migrations.ready_schema_version` own them).
 - `backend/services/`: framework-independent application services; services must not import FastAPI or routers.
