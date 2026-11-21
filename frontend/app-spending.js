@@ -4,7 +4,7 @@ let spendingLoadPending = false;
 registerFeatureReset('spending', () => {
   spendingLoadRequestId += 1;
   spendingLoadPending = false;
-  spendingSummary = null;
+  if (coreDataRules) applyCoreResource('spending', null);
   document.getElementById('spending-table').replaceChildren();
   document.getElementById('spending-cards').replaceChildren();
 });
@@ -17,9 +17,7 @@ async function loadSpendingData() {
   try {
     const summary = await apiGet('/spending/summary');
     if (!isCurrentAuthSession(session) || requestId !== spendingLoadRequestId) return;
-    if (!summary || !Array.isArray(summary.monthly)) throw new Error('支出資料格式不正確');
-    spendingSummary = summary;
-    monthlySpending = summary.monthly;
+    applyCoreResource('spending', summary);  // rejects a malformed summary (SPEC-094)
     if (document.querySelector('.tab-panel.active')?.dataset.panel === 'shoes') renderSpendingCharts();
   } catch (error) {
     if (error.name === 'AbortError' || !isCurrentAuthSession(session) || requestId !== spendingLoadRequestId) return;

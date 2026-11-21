@@ -67,6 +67,10 @@ function appCalendarDate(instant = new Date()) {
 }
 
 const byDate = (a, b) => new Date(a.date) - new Date(b.date);
+// Core account data (SPEC-094). Every script reads these, but only applyCoreResource() and
+// resetCoreData() in app-resources.js assign them, using the rules in runtime/core-data.mjs;
+// architecture-check rejects assignments anywhere else. The initial values equal
+// coreDataDefaults(), which a frontend test keeps in step.
 let shoes = [];
 let retiredShoes = [];
 let monthlyMileages = [];
@@ -87,10 +91,6 @@ const THEME_PREFERENCES = ['light', 'dark', 'system'];
 let themePreference = THEME_PREFERENCES.includes(readStoredValue('theme')) ? readStoredValue('theme') : 'system';
 let currentTheme = 'dark';
 
-registerFeatureReset('dashboard-data', () => {
-  shoes = []; retiredShoes = []; monthlyMileages = [];
-  monthlySpending = []; spendingSummary = null;
-  stravaImports = [];
+registerFeatureReset('dashboard-selection', () => {
   selectedYear = null; selectedSpendingYear = null;
-  runningGoal = { version: 0, start_year: 2026, monthly_km: 125, yearly_km: 1500 };
 });

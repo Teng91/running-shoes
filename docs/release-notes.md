@@ -4,6 +4,14 @@
 每版的摘要見 [CHANGELOG.md](../CHANGELOG.md)；目前的功能與操作方式以 [README](../README.md) 為準。
 這裡保留當時的文字，後續版本可能已調整其中的行為。
 
+### 前端核心資料只有一個寫入點（SPEC-094，v4.27.1）
+
+- 新 native module `frontend/runtime/core-data.mjs`：`coreDataPatch()` 定義鞋款（排序成新陣列）、月跑量（挑選顯示年份）、目標、Strava 匯入紀錄與支出（格式檢查）各自寫入哪些欄位，`coreDataDefaults()` 是登出重設的預設值。
+- `app-resources.js` 的 `applyCoreResource()`／`resetCoreData()` 是唯一寫入點；`app-core`、`app-workspace`、`app-goals`、`app-spending`、`app-strava` 改呼叫它，`render()` 不再就地排序。`dashboard-data` 重設移到 `app-resources.js`，年份選擇的重設改名為 `dashboard-selection`。
+- `check_architecture.core_data_writers()` 讓其他 script 寫入這些全域變數時 `architecture-check` 失敗。
+
+Asset 4.27.1／shell v103（多一個 native module）、schema 12 不變，可直接回滾至 v4.27.0 image。
+
 ### 整體審查修正（SPEC-093，v4.27.0）
 
 - 前端 `appCalendarDate()`／`localDateISO()` 依 `APP_UTC_OFFSET_MINUTES`（台灣 UTC+8，與 `backend/clock.py` 相同）計算日期，不再用裝置時區。
