@@ -8,9 +8,9 @@ registerFeatureReset('onboarding', () => onboardingLoaded.clear());
 
 function onboardingSteps() {
   return {
-    shoe: shoes.length + retiredShoes.length > 0,
-    run: monthlyMileages.some(item => Number(item.km) > 0),
-    goal: Number(runningGoal.version) > 0,
+    shoe: coreData.shoes.length + coreData.retiredShoes.length > 0,
+    run: coreData.monthlyMileages.some(item => Number(item.km) > 0),
+    goal: Number(coreData.runningGoal.version) > 0,
   };
 }
 

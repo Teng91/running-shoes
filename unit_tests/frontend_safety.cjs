@@ -114,10 +114,10 @@ module.exports = async function checkFrontendSafety(browser, baseUrl) {
         if (String(url).includes('/analytics/home')) return json({ as_of: '2026-01-31', suggestion: [] });
         return json({});
       };
-      shoes = [{ id: 1, brand: 'Test', model: 'Safety', date: '2026-01-01', size: 'US 9',
+      applyCoreResource('shoes', [[{ id: 1, brand: 'Test', model: 'Safety', date: '2026-01-01', size: 'US 9',
         price: 3000, orig_price: 5000, mileage: 300, expected_mileage: 900, monthly_km: 60,
-        categories: ['Daily'], forecast_retirement_date: '2027-04-17', forecast_source: 'recent_90_days', forecast_monthly_km: 101.46 }];
-      monthlyMileages = [{ id: 10, year: 2026, month: 1, km: 100, version: 0, adjustment_km: 100 }];
+        categories: ['Daily'], forecast_retirement_date: '2027-04-17', forecast_source: 'recent_90_days', forecast_monthly_km: 101.46 }], []]);
+      applyCoreResource('monthly', [{ id: 10, year: 2026, month: 1, km: 100, version: 0, adjustment_km: 100 }]);
       showAppView();
       await frame();
       check(!created.includes('chart-progress') && !created.includes('chart-monthly-year'), 'initial runs must not build hidden charts');

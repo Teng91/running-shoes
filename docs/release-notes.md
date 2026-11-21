@@ -4,6 +4,15 @@
 每版的摘要見 [CHANGELOG.md](../CHANGELOG.md)；目前的功能與操作方式以 [README](../README.md) 為準。
 這裡保留當時的文字，後續版本可能已調整其中的行為。
 
+### 核心資料搬進 native store（SPEC-095，v4.27.2）
+
+- `runtime/core-data.mjs` 新增 `createCoreDataStore()`：唯讀 `view`（getter、凍結），`apply()` 只替換該資源的欄位並凍結其複本，`reset()` 回到預設值。
+- `app-state.js` 的 7 個核心資料全域變數改為 `let coreData`（凍結佔位物件）；`app-resources.js` 以 `useCoreDataStore()` 安裝 store，`applyCoreResource()` 是唯一的寫入點。12 個 script 改讀 `coreData.<field>`。
+- `check_architecture.core_data_violations()` 取代 `core_data_writers()`，另外找出讀取已移除全域變數的行。
+- 前端測試 helper 以 `seedCoreData()` 把 fixture 放進真正的 store。
+
+Asset 4.27.2／shell v104、schema 12 不變，可直接回滾至 v4.27.1 image。
+
 ### 前端核心資料只有一個寫入點（SPEC-094，v4.27.1）
 
 - 新 native module `frontend/runtime/core-data.mjs`：`coreDataPatch()` 定義鞋款（排序成新陣列）、月跑量（挑選顯示年份）、目標、Strava 匯入紀錄與支出（格式檢查）各自寫入哪些欄位，`coreDataDefaults()` 是登出重設的預設值。

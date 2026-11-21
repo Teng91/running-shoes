@@ -119,8 +119,7 @@ test('spending details retain active and retired purchases, escape sizes and han
   assert.match(rows[1], /\$2,400[\s\S]*\$4,000[\s\S]*60\.0%[\s\S]*使用中/);
   assert.doesNotMatch(tbody.innerHTML, /<img|—%|NaN|Infinity/);
   assert.equal(shoes[0].size, shoe.size, 'rendering must not modify purchase data');
-  shoes.length = 0;
-  retiredShoes.length = 0;
+  context.seedCoreData({ shoes: [], retiredShoes: [] });
   context.renderSpendingTable();
   assert.equal(tbody.innerHTML, '');
 });

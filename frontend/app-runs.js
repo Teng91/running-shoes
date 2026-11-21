@@ -113,7 +113,7 @@ function readRunDuration(prefix, km) {
   return { seconds };
 }
 
-function allRunShoes() { return [...shoes, ...retiredShoes]; }
+function allRunShoes() { return [...coreData.shoes, ...coreData.retiredShoes]; }
 function runShoe(shoeId) { return allRunShoes().find(shoe => shoe.id === shoeId); }
 
 // A run dated before the shoe's purchase date is usually the wrong shoe (SPEC-046).

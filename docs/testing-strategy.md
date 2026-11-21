@@ -297,6 +297,10 @@ SPEC-032：合成資料驗證歷史筆數上限（v4.7.3 起 10,000／10,001）�
 
 [規格與具名案例](specs/061-ci-on-every-push-and-protected-main.md) 以文字解析 workflow：觸發條件是不限分支的 push、pull request、每週排程與手動執行，沒有 `paths-ignore`；部署條件仍只有 main 的 push／手動執行；main 以外的 ref 由較新的執行取消舊的，main 不取消。ruleset 由 `.github/rulesets/main.json` 描述，Python 測試確認它要求 PR、必要檢查與 workflow 的 5 個測試 job 完全一致、禁止刪除與 force push，且沒有繞過名單。
 
+## SPEC-095 核心資料搬進 native store
+
+[規格與具名案例](specs/095-core-data-store.md) 以 Node import store，確認 view 的欄位不能指定、陣列不能 `push` 或排序、未知初始欄位被拒絕、套用其他資源時保留原陣列、呼叫端的回應不會被凍結、`reset()` 回到預設值；再於 VM 實際載入 `app-lifecycle.js`、`app-state.js`、`app-resources.js`，確認舊的 7 個全域名稱不存在、bridge 只更新該資源的欄位、登出重設。架構測試以暫存檔確認替換 view、寫入欄位、就地排序、重新宣告舊名稱與讀取已移除的全域變數會被指出，區域變數、參數與物件 key 不會。其餘前端回歸測試以 `seedCoreData()` 把 fixture 放進真正的 store。
+
 ## SPEC-094 前端核心資料只有一個寫入點
 
 [規格與具名案例](specs/094-core-data-single-writer.md) 以 Node 直接 import `runtime/core-data.mjs`，確認鞋款排序成新陣列、月跑量年份的保留與挑選、每種資源只傳回自己的欄位且格式錯誤被拒絕；再於 VM 實際載入 `app-lifecycle.js`、`app-state.js`、`app-resources.js`，確認初始值等於模組預設、bridge 只寫入傳回的欄位、登出重設回到預設。架構測試確認目前的前端沒有其他寫入點，並以暫存檔確認指定、解構、屬性寫入與就地排序會被逐行指出，讀取、比較、物件屬性、註解與區域宣告不會。其餘前端回歸測試透過共用 context 使用真正的 bridge 與規則。

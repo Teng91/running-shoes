@@ -5,8 +5,8 @@
 function populateYearSelect() {
   const sel = document.getElementById('year-select');
   const years = [...new Set([
-    ...monthlyMileages.map(m => m.year),
-    runningGoal.start_year,
+    ...coreData.monthlyMileages.map(m => m.year),
+    coreData.runningGoal.start_year,
     appCalendarDate().year,
   ])].sort((a, b) => b - a);
   if (years.length === 0) {
@@ -77,7 +77,7 @@ async function renderShoeStackedChart() {
   }
 
   const labels = Array.from({length: 12}, (_, i) => (i + 1) + '月');
-  const allShoes = [...shoes, ...retiredShoes];
+  const allShoes = [...coreData.shoes, ...coreData.retiredShoes];
 
   // Backend owns the aggregation; the browser only builds chart datasets.
   const shoeMonthlyMap = new Map(yearRuns.shoes.map(row => [row.shoe_id, row.monthly_km]));
@@ -129,14 +129,14 @@ async function renderShoeStackedChart() {
 
 function renderYearlyTotalChart() {
   if (chartInstances.yearlyTotal) { chartInstances.yearlyTotal.destroy(); delete chartInstances.yearlyTotal; }
-  if (monthlyMileages.length === 0) return;
+  if (coreData.monthlyMileages.length === 0) return;
 
   const textColor = getThemeColor('--text-dim', '#8b8d9a');
   const gridColor = getThemeColor('--chart-grid', '#f1f5f9');
   const mainTextColor = getThemeColor('--text', '#1e293b');
 
   const yearMap = new Map();
-  monthlyMileages.forEach(m => {
+  coreData.monthlyMileages.forEach(m => {
     yearMap.set(m.year, (yearMap.get(m.year) || 0) + m.km);
   });
   const years = [...yearMap.keys()].sort((a, b) => a - b);
@@ -193,7 +193,7 @@ function renderMonthlyYearChart() {
   const textColor = getThemeColor('--text-dim', '#8b8d9a');
   const gridColor = getThemeColor('--chart-grid', '#f1f5f9');
 
-  const yearData = monthlyMileages.filter(m => m.year === year);
+  const yearData = coreData.monthlyMileages.filter(m => m.year === year);
   const monthMap = new Map(yearData.map(m => [m.month, m.km]));
   const labels = Array.from({length: 12}, (_, i) => (i + 1) + '月');
   const values = Array.from({length: 12}, (_, i) => monthMap.get(i + 1) ?? 0);
@@ -269,7 +269,7 @@ function renderYearOverYearChart() {
   if (chartInstances.yearOverYear) { chartInstances.yearOverYear.destroy(); delete chartInstances.yearOverYear; }
   const note = document.getElementById('yoy-note');
   const byYear = new Map();
-  monthlyMileages.forEach(m => {
+  coreData.monthlyMileages.forEach(m => {
     if (!byYear.has(m.year)) byYear.set(m.year, Array(12).fill(null));
     byYear.get(m.year)[m.month - 1] = m.km;
   });
