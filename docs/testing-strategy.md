@@ -297,6 +297,10 @@ SPEC-032：合成資料驗證歷史筆數上限（v4.7.3 起 10,000／10,001）�
 
 [規格與具名案例](specs/061-ci-on-every-push-and-protected-main.md) 以文字解析 workflow：觸發條件是不限分支的 push、pull request、每週排程與手動執行，沒有 `paths-ignore`；部署條件仍只有 main 的 push／手動執行；main 以外的 ref 由較新的執行取消舊的，main 不取消。ruleset 由 `.github/rulesets/main.json` 描述，Python 測試確認它要求 PR、必要檢查與 workflow 的 5 個測試 job 完全一致、禁止刪除與 force push，且沒有繞過名單。
 
+## SPEC-097 步行類型與 Strava 健行／步行選擇匯入
+
+[規格與具名案例](specs/097-strava-walk-hike-opt-in.md) 以 API 上傳同一份含跑步、健行與步行的 CSV：不勾選時只匯入跑步、回報健行／步行的筆數與略過數、鞋子里程不重複增加；勾選後健行與步行分別記為 `hike`／`walk`，只增加鞋子里程，不合法的勾選值回 422。另確認步行只計入鞋子、回滾腳本與再次升級同樣移動步行里程，以及前端勾選框的提醒文字與預覽鍵。
+
 ## SPEC-096 運動類型
 
 [規格與具名案例](specs/096-activity-types.md) 以暫存 SQLite 驗證 schema 12 → 13 升級後紀錄為路跑、總數不變，以及回滾腳本把健行里程加回月份、再次升級又扣回。API 測試確認健行只增加鞋子里程、不改月跑量、目標、熱力圖與連續天數；改類型時月份移動、鞋子不動、版本遞增，過期版本與不合法的類型都不改資料。Read model 測試確認越野跑計入跑量但不進配速趨勢、比賽準備度與單鞋平均配速。Strava 測試確認類型對照與略過騎車；備份測試確認 v5 保留類型、v4 一律為路跑且合併不覆寫。前端 Node 測試確認新增表單依鞋款最近一次的類型預設、提示文字與送出的 `activity_type`，Python 測試確認前後端類型常數一致。

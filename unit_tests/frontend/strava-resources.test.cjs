@@ -165,3 +165,24 @@ test('SPEC-025 goal baseline exists before the first deferred panel render', () 
   context.runningGoal = { start_year: 2027, monthly_km: 200 }; context.prepareGoalForm();
   assert.equal(elements['goal-monthly-km'].value, '180', 'late server goal preserves typed draft');
 });
+
+test('Strava keeps hikes and walks out until the box is ticked', () => {
+  // SPEC-097 AC-5: the opt-in changes the preview key and the request, and the note warns about double counting.
+  const elements = { 'strava-include-walks': { checked: false }, 'strava-walk-hike': { hidden: true },
+    'strava-walk-hike-note': { textContent: '' } };
+  const context = vm.createContext({ document: { getElementById: id => elements[id] } });
+  vm.runInContext(['stravaInputKey', 'stravaIncludesWalks', 'renderStravaWalkHike'].map(extract).join('\n'), context);
+  const file = { name: 'activities.csv', size: 10, lastModified: 1 };
+  assert.equal(context.stravaInputKey(file, '2026-01-01', ''), 'activities.csv|10|1|2026-01-01|', 'unchanged without the box');
+  assert.equal(context.stravaInputKey(file, '2026-01-01', '', true), 'activities.csv|10|1|2026-01-01||walks');
+  assert.equal(context.stravaIncludesWalks(), false);
+  context.renderStravaWalkHike({ walk_hike_count: 0 });
+  assert.equal(elements['strava-walk-hike'].hidden, true, 'nothing to offer, nothing shown');
+  context.renderStravaWalkHike({ walk_hike_count: 3, walk_hike_km: 12.5, walk_hike_included: false });
+  assert.equal(elements['strava-walk-hike'].hidden, false);
+  assert.match(elements['strava-walk-hike-note'].textContent, /3 筆健行／步行（12\.50 km）未匯入[\s\S]*避免重複計算/);
+  elements['strava-include-walks'].checked = true;
+  assert.equal(context.stravaIncludesWalks(), true);
+  context.renderStravaWalkHike({ walk_hike_count: 3, walk_hike_km: 12.5, walk_hike_included: true });
+  assert.match(elements['strava-walk-hike-note'].textContent, /已包含 3 筆健行／步行/);
+});

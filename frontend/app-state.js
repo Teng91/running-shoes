@@ -58,10 +58,10 @@ const RUN_PACE_MAX_SECONDS = 3600;
 // Run activity types, mirrored from backend/run_metrics.py (SPEC-096). Every type counts
 // toward shoe mileage; training types count toward volume and goals; only pace types feed
 // pace analysis. A Python test keeps both sides equal; the backend owns every statistic.
-const RUN_ACTIVITY_TYPES = ['road', 'trail', 'hike'];
+const RUN_ACTIVITY_TYPES = ['road', 'trail', 'hike', 'walk'];
 const RUN_TRAINING_ACTIVITY_TYPES = ['road', 'trail'];
 const RUN_PACE_ACTIVITY_TYPES = ['road'];
-const RUN_ACTIVITY_LABELS = Object.freeze({ road: '路跑', trail: '越野跑', hike: '健行' });
+const RUN_ACTIVITY_LABELS = Object.freeze({ road: '路跑', trail: '越野跑', hike: '健行', walk: '步行' });
 
 // The service keeps one calendar: Taiwan time, a fixed UTC+8 without daylight saving,
 // mirrored from backend/clock.py (SPEC-093). "Today" comes from it, not from the device's

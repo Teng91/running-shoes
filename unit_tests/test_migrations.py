@@ -403,3 +403,28 @@ def test_rollback_schema_thirteen_restores_hike_mileage(tmp_path):
     with engine.connect() as connection:
         assert connection.execute(text("SELECT mileage FROM shoes WHERE id = :s"), {"s": shoe_id}).scalar() == 22.25
     engine.dispose()
+
+
+def test_rollback_schema_thirteen_restores_walk_mileage(tmp_path):
+    """SPEC-097 AC-4: walks are shoe-only too, so the rollback and re-upgrade move them like hikes."""
+    from pathlib import Path
+
+    from backend.migrations import schema_version
+
+    engine, sessions = _file_engine(tmp_path, "rollback13-walk.sqlite")
+    run_startup_migrations(engine, sessions)
+    user_id, shoe_id = _account(sessions, "rollback13-walker")
+    _log_run(sessions, user_id, shoe_id, "2026-10-04", 10)
+    _log_run(sessions, user_id, shoe_id, "2026-10-05", 2.5, "walk")
+    _log_run(sessions, user_id, shoe_id, "2026-10-06", 4, "hike")
+    assert _month_km(engine, user_id, 10) == 10
+    connection = engine.raw_connection()
+    try:
+        connection.executescript(Path("scripts/rollback_schema_thirteen.sql").read_text(encoding="utf-8"))
+    finally:
+        connection.close()
+    assert schema_version(engine) == 12
+    assert _month_km(engine, user_id, 10) == 16.5
+    run_startup_migrations(engine, sessions)
+    assert _month_km(engine, user_id, 10) == 10
+    engine.dispose()

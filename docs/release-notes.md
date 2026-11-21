@@ -4,6 +4,14 @@
 每版的摘要見 [CHANGELOG.md](../CHANGELOG.md)；目前的功能與操作方式以 [README](../README.md) 為準。
 這裡保留當時的文字，後續版本可能已調整其中的行為。
 
+### 步行類型與 Strava 健行／步行選擇匯入（SPEC-097，v4.29.0）
+
+- `run_metrics.ACTIVITY_TYPES` 加入 `walk`；訓練與配速類型不變，所以步行和健行一樣只計入鞋子。Strava `Walk`／步行 → `walk`。
+- `POST /api/runs/import/strava/preview` 與 `/api/runs/import/strava` 新增 `include_walks_hikes`（預設 false）。預覽多回 `walk_hike_count`、`walk_hike_km`、`walk_hike_included`，匯入多回 `skipped_walk_hike`。
+- `_migrate_schema_thirteen` 與 `scripts/rollback_schema_thirteen.sql` 改以 `activity_type NOT IN ('road', 'trail')` 移動里程，涵蓋步行。
+
+Schema 13 不變。回滾到 v4.28.0 前先執行 `UPDATE runs SET activity_type = 'hike' WHERE activity_type = 'walk';`（v4.28.0 不認得 `walk`，兩者統計規則相同）。
+
 ### 運動類型（SPEC-096，v4.28.0）
 
 - Schema 13：`runs.activity_type VARCHAR NOT NULL DEFAULT 'road'`，值為 `road`／`trail`／`hike`（Pydantic 驗證）。既有紀錄為 `road`，所有統計不變。

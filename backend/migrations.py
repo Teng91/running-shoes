@@ -142,10 +142,11 @@ def _migrate_schema_twelve(engine: Engine) -> None:
     cast(Table, models.EmailCode.__table__).create(bind=engine, checkfirst=True)
 
 
-# Hike kilometres per stored month; the rollback script adds the same sum back.
+# Shoe-only (hike and walk, SPEC-097) kilometres per stored month; the rollback
+# script adds the same sum back.
 _HIKE_MONTH_SUM = (
     "SELECT coalesce(sum(runs.km), 0) FROM runs "
-    "WHERE runs.user_id = monthly_mileages.user_id AND runs.activity_type = 'hike' "
+    "WHERE runs.user_id = monthly_mileages.user_id AND runs.activity_type NOT IN ('road', 'trail') "
     "AND CAST(substr(runs.date, 1, 4) AS INTEGER) = monthly_mileages.year "
     "AND CAST(substr(runs.date, 6, 2) AS INTEGER) = monthly_mileages.month"
 )
