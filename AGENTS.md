@@ -134,7 +134,7 @@
 - A new or changed API route must update `unit_tests/api_contract.json` and the README「API 一覽」table; `docs-check` fails otherwise (SPEC-058). Version-specific notes go to `CHANGELOG.md` and `docs/release-notes.md`, not README.
 - Keep the page CSP strict: no inline event handlers, `eval`, external scripts or `javascript:` URLs. A new inline `<script>` in `frontend/templates/` is allowed only through the hash that `build_frontend.py --write` regenerates (SPEC-054).
 - Start user-visible, data-model, deployment, or architecture work from `docs/specs/template.md`.
-- Coupling and complexity only shrink (SPEC-100): never add a top-level name another classic script uses, a mutually dependent script pair or a `# noqa: C901` in `backend/`; when a refactor lowers them, lower the numbers in `scripts/architecture_ratchet.json` (`architecture-check` fails on either drift).
+- Coupling and complexity only shrink (SPEC-100, SPEC-111): never add a top-level name another classic script uses, a mutually dependent script pair, a `# noqa: C901` anywhere, or a frontend function over 80 lines; when a refactor lowers them, lower the numbers in `scripts/architecture_ratchet.json` (`architecture-check` fails on either drift).
 - Before a production migration, create and verify a database backup and document rollback.
 - `main` is protected by a GitHub ruleset (SPEC-061): changes land only through a pull request whose five test jobs pass on a branch that is up to date with `main`; direct and force pushes are rejected, with no bypass. Merging deploys to production, and a new `package.json` version is tagged and released. Work on a branch, push it (every push runs CI), and merge only when the user asks for a release or deploy.
 

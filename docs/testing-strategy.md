@@ -297,6 +297,10 @@ SPEC-032：合成資料驗證歷史筆數上限（v4.7.3 起 10,000／10,001）�
 
 [規格與具名案例](specs/061-ci-on-every-push-and-protected-main.md) 以文字解析 workflow：觸發條件是不限分支的 push、pull request、每週排程與手動執行，沒有 `paths-ignore`；部署條件仍只有 main 的 push／手動執行；main 以外的 ref 由較新的執行取消舊的，main 不取消。ruleset 由 `.github/rulesets/main.json` 描述，Python 測試確認它要求 PR、必要檢查與 workflow 的 5 個測試 job 完全一致、禁止刪除與 force push，且沒有繞過名單。
 
+## SPEC-111 前端函式長度上限
+
+[規格與具名案例](specs/111-frontend-function-length.md) 的架構測試確認目前的前端沒有未記錄的長函式、兩個拆完的函式都在 80 行以內，並以暫存 script 確認新的長函式、記錄的函式變長、變短或刪除都會被指出；AI 對話與鞋款圖表的既有 Node 測試在拆解後原封不動通過。
+
 ## SPEC-110 開發工具與測試的複雜度上限
 
 [規格與具名案例](specs/110-tooling-complexity.md) 的架構測試確認 C901 沒有任何資料夾被排除；任務測試確認任務表恰好涵蓋公開任務；release-check、文件契約、診斷與單鞋分析的既有測試在拆解後原封不動通過。

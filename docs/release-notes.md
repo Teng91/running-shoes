@@ -4,6 +4,14 @@
 每版的摘要見 [CHANGELOG.md](../CHANGELOG.md)；目前的功能與操作方式以 [README](../README.md) 為準。
 這裡保留當時的文字，後續版本可能已調整其中的行為。
 
+### 前端函式長度上限（SPEC-111，v4.29.8）
+
+- `check_architecture.frontend_function_lengths()` 與 `function_length_violations()`：前端頂層函式上限 80 行，`scripts/architecture_ratchet.json` 的 `long_functions` 記錄仍超過的 4 個函式與行數。
+- `app-agent.js` 的 `sendAgentMessage` 拆出 `showAgentRequest`、`createAgentTurn`、`handleAgentEvent` 與各事件處理、`finishAgentAnswer`、`showAgentFailure`；`app-shoe-charts.js` 的 `renderCharts` 拆出四張圖的函式。
+- 同版也包含 SPEC-110（`scripts/`、`unit_tests/` 套用 C901）。
+
+Asset 4.29.8／shell v114、schema 13 不變，可直接回滾至 v4.29.7 image。
+
 ### 登入身分單一寫入點（SPEC-109，v4.29.7）
 
 - `app-session.js` 新增 `startAuthSession()`、`endAuthSession()`；`app-auth.js` 不再直接改寫身分，登入操作的世代改以 `captureAuthSession()` 讀取。

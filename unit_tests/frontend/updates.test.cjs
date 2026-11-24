@@ -175,7 +175,8 @@ test('SPEC-059 completed AI turns survive a reload for the same account only', (
   assert.equal(storage.has('agent-chat'), false, 'resetting the conversation removes it');
 
   assert.match(extract('resetAgentChat'), /agentHistory = \[\];[\s\S]*saveAgentChat\(\);/);
-  assert.match(extract('sendAgentMessage'), /if \(result\.completed\) \{\s*agentHistory = [^\n]+\n\s*saveAgentChat\(\);/);
+  // SPEC-111: the completed answer is saved by the turn's finishing step.
+  assert.match(extract('finishAgentAnswer'), /if \(turn\.fullText && result\.completed\) \{\s*agentHistory = [^\n]+\n\s*saveAgentChat\(\);/);
   assert.equal(extract('init').match(/showAppView\(\{ keepBoot: true \}\);\s*restoreAgentChat\(\);/g).length, 2);
   assert.doesNotMatch(extract('saveAgentChat') + extract('restoreAgentChat'), /localStorage|indexedDB/);
 });

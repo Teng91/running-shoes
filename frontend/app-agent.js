@@ -221,85 +221,13 @@ async function sendAgentMessage(retryText) {
   const controller = new AbortController();
   agentController = controller;
   const isCurrentRequest = () => requestId === agentRequestId && isCurrentAuthSession(session) && !controller.signal.aborted;
-  const isRetry = !!retryText;
-  const requestHistory = isRetry ? agentRetryHistory.slice() : agentHistory.slice();
+  const requestHistory = (retryText ? agentRetryHistory : agentHistory).slice();
   agentRetryHistory = requestHistory.slice();
-
   // Store for retry
   lastUserText = text;
-
-  // Clear retry buttons from previous failed attempts
-  document.querySelectorAll('.agent-retry-btn').forEach(el => el.remove());
-
-  if (!isRetry) {
-    // Normal send: add user message, clear input
-    addAgentMessage('user', text);
-    input.value = '';
-  } else {
-    // Retry: remove everything after the last user message
-    const container = document.getElementById('agent-messages');
-    const userMsgs = container.querySelectorAll('.agent-message.user');
-    const lastUser = userMsgs[userMsgs.length - 1];
-    if (lastUser) {
-      while (lastUser.nextElementSibling) {
-        lastUser.nextElementSibling.remove();
-      }
-    }
-    // A retry replaces the last attempt without duplicating its user turn.
-    agentHistory = requestHistory.slice();
-  }
-
-  const container = document.getElementById('agent-messages');
-
-  // Create tool status container (hidden until first tool event)
-  let toolStatusDiv = null;
-  let thinkingDiv = null;
-  let webSearchAttempted = false;
-  let webSearchSucceeded = false;
-  let sourceSummary = null;
-
-  // Create bot message placeholder
-  const botDiv = document.createElement('div');
-  botDiv.className = 'agent-message bot agent-typing';
-  const botContent = document.createElement('div');
-  botContent.className = 'agent-msg-content';
-  botContent.innerHTML = '';
-  botDiv.appendChild(botContent);
-  container.appendChild(botDiv);
-
+  showAgentRequest(text, Boolean(retryText), requestHistory, input);
+  const turn = createAgentTurn(document.getElementById('agent-messages'));
   setAgentLoading(true);
-
-  const provider = 'openrouter';
-  const model = document.getElementById('agent-model').value;
-  let fullText = '';
-
-  // SPEC-086: one reasoning block per model round, and a waiting label in the
-  // still-empty answer bubble whenever no live reasoning shows the time.
-  let reasoning = null;
-  let waitStartedAt = Date.now();
-  const waitLabel = document.createElement('span');
-  waitLabel.className = 'agent-wait';
-  const refreshWait = () => {
-    reasoning?.tick();
-    if (fullText || reasoning?.live) {
-      waitLabel.remove();
-      return;
-    }
-    if (waitLabel.parentNode !== botContent) {
-      botContent.textContent = '';
-      botContent.appendChild(waitLabel);
-    }
-    waitLabel.textContent = agentThinkingLabel(waitStartedAt);
-  };
-  let waitTimer = setInterval(refreshWait, 1000);
-  const stopWaiting = () => {
-    if (waitTimer !== null) clearInterval(waitTimer);
-    waitTimer = null;
-    reasoning?.finish();
-    waitLabel.remove();
-  };
-  refreshWait();
-
   try {
     const res = await authenticatedFetch(API_BASE + '/agent/chat/stream', {
       method: 'POST',
@@ -310,148 +238,215 @@ async function sendAgentMessage(retryText) {
       body: JSON.stringify({
         user_message: text,
         history: agentHistoryForRequest(requestHistory),
-        provider: provider,
-        model: model,
+        provider: 'openrouter',
+        model: document.getElementById('agent-model').value,
       }),
       signal: controller.signal,
     });
     if (!isCurrentRequest()) return;
     const result = await readJsonEventStream(res, {
       signal: controller.signal, isCurrent: isCurrentRequest,
-      onEvent: event => {
-        if (event.type === 'thinking') {
-          if (typeof event.text !== 'string' || !event.text) return;
-          if (!reasoning) {
-            reasoning = createAgentReasoning(container, botDiv, waitStartedAt);
-            // Later tools belong after this block, not in the group above it.
-            toolStatusDiv = null;
-          }
-          reasoning.append(event.text);
-          refreshWait();
-          container.scrollTop = container.scrollHeight;
-        } else if (event.type === 'tool') {
-          reasoning?.finish();
-          reasoning = null;
-          if (event.name === 'web_search') webSearchAttempted = true;
-          // Finalize current thinking bubble
-          thinkingDiv = null;
-          // Create a new tool group if needed (inserted after the thinking bubble)
-          if (!toolStatusDiv) {
-            toolStatusDiv = document.createElement('div');
-            toolStatusDiv.className = 'agent-tools';
-            container.insertBefore(toolStatusDiv, botDiv);
-          }
-          // Use a sequence counter so each tool item has a unique ID
-          const seq = toolStatusDiv.children.length;
-          const toolItem = document.createElement('div');
-          toolItem.className = 'tool-item';
-          toolItem.dataset.toolSeq = seq;
-          const query = event.name === 'web_search' && event.args && event.args.query
-            ? '：' + event.args.query
-            : '';
-          toolItem.innerHTML = '<span class="tool-icon">🔍</span> <span class="tool-name">' + esc((event.name || '查詢中') + query) + '</span>';
-          toolStatusDiv.appendChild(toolItem);
-          container.scrollTop = container.scrollHeight;
-        } else if (event.type === 'tool_done') {
-          waitStartedAt = Date.now();
-          if (event.name === 'web_search' && event.ok !== false) webSearchSucceeded = true;
-          // 個別工具完成；執行完成不等於成功，搜尋失敗需明確顯示。
-          const group = toolStatusDiv;
-          if (group) {
-            const pending = group.querySelector('.tool-item:not(.done):not(.failed)');
-            if (pending) {
-              const failed = event.ok === false;
-              pending.classList.add(failed ? 'failed' : 'done');
-              pending.querySelector('.tool-icon').textContent = failed ? '⚠️' : '✅';
-              if (failed) {
-                const detail = document.createElement('span');
-                detail.className = 'tool-detail';
-                detail.textContent = '（' + (event.message || '執行失敗') + '）';
-                pending.appendChild(detail);
-                if (event.error) pending.title = event.error;
-              }
-            }
-          }
-        } else if (event.type === 'reasoning_start') {
-          reasoning?.finish();
-          reasoning = null;
-          waitStartedAt = Date.now();
-          // 串流過程中發現 LLM 要呼叫工具 → 把已顯示的文字移到思考氣泡
-          const reasoningText = typeof event.text === 'string' ? event.text : fullText;
-          if (reasoningText) {
-            thinkingDiv = document.createElement('div');
-            thinkingDiv.className = 'agent-thinking';
-            thinkingDiv.textContent = '💭 ' + reasoningText;
-            container.insertBefore(thinkingDiv, botDiv);
-            toolStatusDiv = null;
-          }
-          fullText = '';
-          botContent.textContent = '';
-          refreshWait();
-        } else if (event.type === 'token') {
-          // First token — allow next reasoning round
-          thinkingDiv = null;
-          reasoning?.finish();
-          fullText += event.text;
-          // During streaming, use textContent to avoid broken partial markdown rendering
-          botContent.textContent = fullText;
-          container.scrollTop = container.scrollHeight;
-        } else if (event.type === 'error') {
-          reasoning?.finish();
-          fullText += '\n\n⚠️ ' + event.text;
-          botContent.textContent = fullText;
-        } else if (event.type === 'source_summary') {
-          sourceSummary = event;
-        }
-      },
+      onEvent: event => handleAgentEvent(turn, event),
     });
-
     if (!isCurrentRequest()) return;
-    stopWaiting();
-    botDiv.classList.remove('agent-typing');
-    if (fullText) {
-      botContent.innerHTML = renderMarkdown(fullText);
-      appendAgentSourceStatus(
-        botContent,
-        sourceSummary,
-        webSearchAttempted,
-        webSearchSucceeded,
-      );
-      if (result.completed) {
-        agentHistory = [...requestHistory, { role: 'user', content: text }, { role: 'assistant', content: fullText }];
-        saveAgentChat();
-      }
-    } else {
-      botContent.textContent = '（模型沒有回應，請再試一次或更換模型。）';
-      appendAgentSourceStatus(
-        botContent,
-        sourceSummary,
-        webSearchAttempted,
-        webSearchSucceeded,
-      );
-    }
-    if (!result.completed && !result.receivedError) {
-      const warning = document.createElement('p');
-      warning.textContent = '⚠️ 連線中斷，內容不完整，請重新產生。';
-      botContent.appendChild(warning);
-    }
-    addRetryButton(); // 不管成功失敗都顯示重試
+    finishAgentAnswer(turn, result, requestHistory, text);
   } catch (e) {
     if (e.name === 'AbortError' || !isCurrentRequest()) return;
-    stopWaiting();
-    const message = e instanceof TypeError
-      ? '連線失敗，請確認後端服務已啟動。'
-      : (e.message || 'Agent 請求失敗，請稍後再試。');
-    botContent.textContent = (fullText ? fullText + '\n\n' : '') + '⚠️ ' + message + (fullText ? '（內容不完整，請重試）' : '');
-    botDiv.classList.remove('agent-typing');
-    console.error('Agent 請求失敗:', e);
-    addRetryButton();
+    showAgentFailure(turn, e);
   } finally {
-    stopWaiting();
+    turn.stopWaiting();
     if (isCurrentRequest()) {
       agentController = null;
       setAgentLoading(false);
     }
   }
+}
+
+// SPEC-111: the steps of one chat answer. A turn holds the answer bubble and what the stream
+// has shown so far; each event handler below updates it.
+function showAgentRequest(text, isRetry, requestHistory, input) {
+  // Clear retry buttons from previous failed attempts
+  document.querySelectorAll('.agent-retry-btn').forEach(el => el.remove());
+  if (!isRetry) {
+    // Normal send: add user message, clear input
+    addAgentMessage('user', text);
+    input.value = '';
+    return;
+  }
+  // Retry: remove everything after the last user message
+  const userMsgs = document.getElementById('agent-messages').querySelectorAll('.agent-message.user');
+  const lastUser = userMsgs[userMsgs.length - 1];
+  if (lastUser) {
+    while (lastUser.nextElementSibling) lastUser.nextElementSibling.remove();
+  }
+  // A retry replaces the last attempt without duplicating its user turn.
+  agentHistory = requestHistory.slice();
+}
+
+function createAgentTurn(container) {
+  // Bot message placeholder; the tool status group is created at the first tool event.
+  const botDiv = document.createElement('div');
+  botDiv.className = 'agent-message bot agent-typing';
+  const botContent = document.createElement('div');
+  botContent.className = 'agent-msg-content';
+  botContent.innerHTML = '';
+  botDiv.appendChild(botContent);
+  container.appendChild(botDiv);
+  const turn = { container, botDiv, botContent, toolStatusDiv: null, thinkingDiv: null, fullText: '',
+    webSearchAttempted: false, webSearchSucceeded: false, sourceSummary: null,
+    // SPEC-086: one reasoning block per model round, and a waiting label in the
+    // still-empty answer bubble whenever no live reasoning shows the time.
+    reasoning: null, waitStartedAt: Date.now(), waitLabel: document.createElement('span'), waitTimer: null };
+  turn.waitLabel.className = 'agent-wait';
+  turn.refreshWait = () => refreshAgentWait(turn);
+  turn.stopWaiting = () => {
+    if (turn.waitTimer !== null) clearInterval(turn.waitTimer);
+    turn.waitTimer = null;
+    turn.reasoning?.finish();
+    turn.waitLabel.remove();
+  };
+  turn.waitTimer = setInterval(turn.refreshWait, 1000);
+  turn.refreshWait();
+  return turn;
+}
+
+function refreshAgentWait(turn) {
+  turn.reasoning?.tick();
+  if (turn.fullText || turn.reasoning?.live) {
+    turn.waitLabel.remove();
+    return;
+  }
+  if (turn.waitLabel.parentNode !== turn.botContent) {
+    turn.botContent.textContent = '';
+    turn.botContent.appendChild(turn.waitLabel);
+  }
+  turn.waitLabel.textContent = agentThinkingLabel(turn.waitStartedAt);
+}
+
+function handleAgentEvent(turn, event) {
+  if (event.type === 'thinking') showAgentThinking(turn, event);
+  else if (event.type === 'tool') showAgentTool(turn, event);
+  else if (event.type === 'tool_done') finishAgentTool(turn, event);
+  else if (event.type === 'reasoning_start') moveAnswerToReasoning(turn, event);
+  else if (event.type === 'token') appendAgentToken(turn, event);
+  else if (event.type === 'error') {
+    turn.reasoning?.finish();
+    turn.fullText += '\n\n⚠️ ' + event.text;
+    turn.botContent.textContent = turn.fullText;
+  } else if (event.type === 'source_summary') turn.sourceSummary = event;
+}
+
+function showAgentThinking(turn, event) {
+  if (typeof event.text !== 'string' || !event.text) return;
+  if (!turn.reasoning) {
+    turn.reasoning = createAgentReasoning(turn.container, turn.botDiv, turn.waitStartedAt);
+    // Later tools belong after this block, not in the group above it.
+    turn.toolStatusDiv = null;
+  }
+  turn.reasoning.append(event.text);
+  turn.refreshWait();
+  turn.container.scrollTop = turn.container.scrollHeight;
+}
+
+function showAgentTool(turn, event) {
+  turn.reasoning?.finish();
+  turn.reasoning = null;
+  if (event.name === 'web_search') turn.webSearchAttempted = true;
+  // Finalize current thinking bubble
+  turn.thinkingDiv = null;
+  // Create a new tool group if needed (inserted after the thinking bubble)
+  if (!turn.toolStatusDiv) {
+    turn.toolStatusDiv = document.createElement('div');
+    turn.toolStatusDiv.className = 'agent-tools';
+    turn.container.insertBefore(turn.toolStatusDiv, turn.botDiv);
+  }
+  // Use a sequence counter so each tool item has a unique ID
+  const toolItem = document.createElement('div');
+  toolItem.className = 'tool-item';
+  toolItem.dataset.toolSeq = turn.toolStatusDiv.children.length;
+  const query = event.name === 'web_search' && event.args && event.args.query
+    ? '：' + event.args.query
+    : '';
+  toolItem.innerHTML = '<span class="tool-icon">🔍</span> <span class="tool-name">' + esc((event.name || '查詢中') + query) + '</span>';
+  turn.toolStatusDiv.appendChild(toolItem);
+  turn.container.scrollTop = turn.container.scrollHeight;
+}
+
+function finishAgentTool(turn, event) {
+  turn.waitStartedAt = Date.now();
+  if (event.name === 'web_search' && event.ok !== false) turn.webSearchSucceeded = true;
+  // 個別工具完成；執行完成不等於成功，搜尋失敗需明確顯示。
+  const pending = turn.toolStatusDiv?.querySelector('.tool-item:not(.done):not(.failed)');
+  if (!pending) return;
+  const failed = event.ok === false;
+  pending.classList.add(failed ? 'failed' : 'done');
+  pending.querySelector('.tool-icon').textContent = failed ? '⚠️' : '✅';
+  if (!failed) return;
+  const detail = document.createElement('span');
+  detail.className = 'tool-detail';
+  detail.textContent = '（' + (event.message || '執行失敗') + '）';
+  pending.appendChild(detail);
+  if (event.error) pending.title = event.error;
+}
+
+function moveAnswerToReasoning(turn, event) {
+  turn.reasoning?.finish();
+  turn.reasoning = null;
+  turn.waitStartedAt = Date.now();
+  // 串流過程中發現 LLM 要呼叫工具 → 把已顯示的文字移到思考氣泡
+  const reasoningText = typeof event.text === 'string' ? event.text : turn.fullText;
+  if (reasoningText) {
+    turn.thinkingDiv = document.createElement('div');
+    turn.thinkingDiv.className = 'agent-thinking';
+    turn.thinkingDiv.textContent = '💭 ' + reasoningText;
+    turn.container.insertBefore(turn.thinkingDiv, turn.botDiv);
+    turn.toolStatusDiv = null;
+  }
+  turn.fullText = '';
+  turn.botContent.textContent = '';
+  turn.refreshWait();
+}
+
+function appendAgentToken(turn, event) {
+  // First token — allow next reasoning round
+  turn.thinkingDiv = null;
+  turn.reasoning?.finish();
+  turn.fullText += event.text;
+  // During streaming, use textContent to avoid broken partial markdown rendering
+  turn.botContent.textContent = turn.fullText;
+  turn.container.scrollTop = turn.container.scrollHeight;
+}
+
+function finishAgentAnswer(turn, result, requestHistory, text) {
+  turn.stopWaiting();
+  turn.botDiv.classList.remove('agent-typing');
+  if (turn.fullText) {
+    turn.botContent.innerHTML = renderMarkdown(turn.fullText);
+  } else {
+    turn.botContent.textContent = '（模型沒有回應，請再試一次或更換模型。）';
+  }
+  appendAgentSourceStatus(turn.botContent, turn.sourceSummary, turn.webSearchAttempted, turn.webSearchSucceeded);
+  if (turn.fullText && result.completed) {
+    agentHistory = [...requestHistory, { role: 'user', content: text }, { role: 'assistant', content: turn.fullText }];
+    saveAgentChat();
+  }
+  if (!result.completed && !result.receivedError) {
+    const warning = document.createElement('p');
+    warning.textContent = '⚠️ 連線中斷，內容不完整，請重新產生。';
+    turn.botContent.appendChild(warning);
+  }
+  addRetryButton(); // 不管成功失敗都顯示重試
+}
+
+function showAgentFailure(turn, e) {
+  turn.stopWaiting();
+  const message = e instanceof TypeError
+    ? '連線失敗，請確認後端服務已啟動。'
+    : (e.message || 'Agent 請求失敗，請稍後再試。');
+  const { fullText } = turn;
+  turn.botContent.textContent = (fullText ? fullText + '\n\n' : '') + '⚠️ ' + message + (fullText ? '（內容不完整，請重試）' : '');
+  turn.botDiv.classList.remove('agent-typing');
+  console.error('Agent 請求失敗:', e);
+  addRetryButton();
 }
 
