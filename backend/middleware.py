@@ -136,7 +136,7 @@ class UploadLimitMiddleware:
         self.max_bytes = max_bytes
         self.max_backup_bytes = max_backup_bytes
 
-    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:  # noqa: C901
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if (
             scope["type"] != "http"
             or scope.get("method") != "POST"
@@ -144,38 +144,22 @@ class UploadLimitMiddleware:
         ):
             await self.app(scope, receive, send)
             return
-        headers = dict(scope.get("headers", []))
         is_backup = scope.get("path") == "/api/account-restore/preview"
         max_bytes = self.max_backup_bytes if is_backup else self.max_bytes
         detail = (
             f"備份不可超過 {megabytes_label(max_bytes)}" if is_backup
             else f"Strava 上傳請求不可超過 {megabytes_label(max_bytes)}"
         )
-        content_length = headers.get(b"content-length", b"")
-        try:
-            declared_size = int(content_length) if content_length else None
-        except ValueError:
-            declared_size = None
+        declared_size = _declared_size(dict(scope.get("headers", [])))
         if declared_size is not None and declared_size > max_bytes:
-            await JSONResponse(
-                {"detail": detail, "error": {"code": "too_large", "message": detail}}, status_code=413
-            )(scope, receive, send)
+            await _too_large(detail)(scope, receive, send)
             return
-        body = bytearray()
-        while True:
-            message = await receive()
-            if message["type"] == "http.disconnect":
-                return
-            if message["type"] != "http.request":
-                continue
-            body.extend(message.get("body", b""))
-            if len(body) > max_bytes:
-                await JSONResponse(
-                    {"detail": detail, "error": {"code": "too_large", "message": detail}}, status_code=413
-                )(scope, receive, send)
-                return
-            if not message.get("more_body", False):
-                break
+        status, body = await _read_limited_body(receive, max_bytes)
+        if status == "disconnected":
+            return
+        if status == "too_large":
+            await _too_large(detail)(scope, receive, send)
+            return
         # Hand the body over once and drop this reference, so the request does not keep
         # an extra copy of an upload of up to max_bytes while it is being processed.
         pending = [bytes(body)]
@@ -187,3 +171,31 @@ class UploadLimitMiddleware:
             return {"type": "http.disconnect"}
 
         await self.app(scope, replay_receive, send)
+
+
+def _declared_size(headers: dict) -> int | None:
+    content_length = headers.get(b"content-length", b"")
+    try:
+        return int(content_length) if content_length else None
+    except ValueError:
+        return None
+
+
+def _too_large(detail: str) -> JSONResponse:
+    return JSONResponse({"detail": detail, "error": {"code": "too_large", "message": detail}}, status_code=413)
+
+
+async def _read_limited_body(receive: Receive, max_bytes: int) -> tuple[str, bytearray]:
+    """("ok", body), or ("too_large" / "disconnected", what arrived) as soon as either happens."""
+    body = bytearray()
+    while True:
+        message = await receive()
+        if message["type"] == "http.disconnect":
+            return "disconnected", body
+        if message["type"] != "http.request":
+            continue
+        body.extend(message.get("body", b""))
+        if len(body) > max_bytes:
+            return "too_large", body
+        if not message.get("more_body", False):
+            return "ok", body

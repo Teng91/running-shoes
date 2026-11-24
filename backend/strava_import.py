@@ -152,7 +152,7 @@ def _normalize_gear(value: str) -> str:
     return "".join(character for character in value.casefold() if character.isalnum())
 
 
-def parse_csv(  # noqa: C901
+def parse_csv(
     raw: bytes,
     *,
     max_rows: int,
@@ -177,40 +177,48 @@ def parse_csv(  # noqa: C901
             activity_type = STRAVA_ACTIVITY_TYPES.get((row.get(fields["type"] or "") or "").strip())
             if activity_type is None:
                 continue
-            try:
-                activity_id = (row.get(fields["id"] or "") or "").strip()
-                date_value, utc_date = parse_activity_dates(row.get(fields["date"] or "") or "")
-                schemas._validate_completed_run_date(date_value)
-                distance_m = float((row.get(fields["distance"] or "") or "").replace(",", "").strip())
-                km = round(distance_m / 1000, 2)
-                if (
-                    not activity_id
-                    or not math.isfinite(distance_m)
-                    or distance_m <= 0
-                    or distance_m > 1_000_000
-                    or km <= 0
-                ):
-                    raise ValueError("invalid activity")
-            except (TypeError, ValueError):
+            parsed = _activity_row(row, fields, activity_type)
+            if parsed is None:
                 invalid += 1
-                continue
-            duration = parse_duration_seconds(row.get(fields["moving_time"] or ""), km)
-            if duration is None:
-                duration = parse_duration_seconds(row.get(fields["elapsed_time"] or ""), km)
-            rows.append({
-                "strava_id": activity_id[:100],
-                "duration_seconds": duration,
-                "date": date_value,
-                "utc_date": utc_date,
-                "km": km,
-                "gear": (row.get(fields["gear"] or "") or "").strip(),
-                "activity_type": activity_type,
-            })
+            else:
+                rows.append(parsed)
     except csv.Error as exc:
         raise InvalidCSVError("CSV 格式錯誤") from exc
     if invalid:
         warnings.append(f"已略過 {invalid} 筆格式不完整的跑步活動")
     return rows, invalid, warnings
+
+
+def _activity_row(row: dict, fields: dict[str, str | None], activity_type: str) -> dict[str, object] | None:
+    """One supported activity as a run row, or None when its ID, date or distance is unusable."""
+    try:
+        activity_id = (row.get(fields["id"] or "") or "").strip()
+        date_value, utc_date = parse_activity_dates(row.get(fields["date"] or "") or "")
+        schemas._validate_completed_run_date(date_value)
+        distance_m = float((row.get(fields["distance"] or "") or "").replace(",", "").strip())
+        km = round(distance_m / 1000, 2)
+        if (
+            not activity_id
+            or not math.isfinite(distance_m)
+            or distance_m <= 0
+            or distance_m > 1_000_000
+            or km <= 0
+        ):
+            raise ValueError("invalid activity")
+    except (TypeError, ValueError):
+        return None
+    duration = parse_duration_seconds(row.get(fields["moving_time"] or ""), km)
+    if duration is None:
+        duration = parse_duration_seconds(row.get(fields["elapsed_time"] or ""), km)
+    return {
+        "strava_id": activity_id[:100],
+        "duration_seconds": duration,
+        "date": date_value,
+        "utc_date": utc_date,
+        "km": km,
+        "gear": (row.get(fields["gear"] or "") or "").strip(),
+        "activity_type": activity_type,
+    }
 
 
 def filter_rows(

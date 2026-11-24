@@ -2,6 +2,7 @@
 
 import re
 from dataclasses import dataclass
+from typing import Any
 
 _TOOL_INTENT_TERMS = (
     "跑鞋", "鞋", "鞋款", "鞋況", "鞋櫃", "跑量", "里程", "壽命", "退役",
@@ -101,50 +102,61 @@ def search_subject(user_message: str) -> str:
     return " ".join(token for token in tokens if token not in {"的", "與", "和"}) or user_message.strip()
 
 
-def build_query_plan(user_message: str, history: list[dict] | None = None) -> QueryPlan:  # noqa: C901
-    effective_message = user_message
-    normalized = " ".join(user_message.casefold().split()).strip("？?!！。,.， ")
-    if normalized in AFFIRMATIVE_REPLIES:
-        recent_user = next((
-            str(turn.get("content", "")) for turn in reversed(history or [])
-            if turn.get("role") == "user" and turn.get("content")
-        ), "")
-        recent_assistant = next((
-            str(turn.get("content", "")).casefold() for turn in reversed(history or [])
-            if turn.get("role") == "assistant"
-        ), "")
-        if recent_user and any(term in recent_assistant for term in _CONTEXT_TOOL_TERMS):
-            effective_message = recent_user
+# Personal data tools in the order a plan lists them. A usage-analytics question gets the
+# per-shoe analytics instead of the plain shoe list.
+_PERSONAL_TOOL_TERMS: tuple[tuple[Any, str], ...] = (
+    (_SHOE_DATA_TERMS, "list_my_shoes"),
+    (_MONTHLY_DATA_TERMS, "monthly_mileage_stats"),
+    (_LIFECYCLE_TERMS, "nearing_end_of_life"),
+    (_CATEGORY_TERMS, "shoe_category_status"),
+    (_USAGE_ANALYTICS_TERMS, "shoe_usage_analytics"),
+    (_GOAL_TERMS, "running_goal_progress"),
+    (_TREND_TERMS, "training_trends"),
+    (_REVIEW_TERMS, "year_review"),
+    (_SPENDING_TERMS, "spending_summary"),
+)
+
+
+def build_query_plan(user_message: str, history: list[dict] | None = None) -> QueryPlan:
+    effective_message = _effective_message(user_message, history)
     lowered = effective_message.casefold()
     web_queries: tuple[str, ...] = ()
     if requires_web_search(effective_message):
         subject = search_subject(effective_message)
         web_queries = (f"{subject} 官方 規格", f"{subject} 評價 價格 台灣")
-    database_tool_list: list[str] = []
-    has_personal_marker = any(marker in lowered for marker in _PERSONAL_MARKERS)
-    if has_personal_marker:
-        needs_usage = any(term in lowered for term in _USAGE_ANALYTICS_TERMS)
-        if any(term in lowered for term in _SHOE_DATA_TERMS) and not needs_usage:
-            database_tool_list.append("list_my_shoes")
-        if any(term in lowered for term in _MONTHLY_DATA_TERMS):
-            database_tool_list.append("monthly_mileage_stats")
-        if any(term in lowered for term in _LIFECYCLE_TERMS):
-            database_tool_list.append("nearing_end_of_life")
-        if any(term in lowered for term in _CATEGORY_TERMS):
-            database_tool_list.append("shoe_category_status")
-        if needs_usage:
-            database_tool_list.append("shoe_usage_analytics")
-        if any(term in lowered for term in _GOAL_TERMS):
-            database_tool_list.append("running_goal_progress")
-        if any(term in lowered for term in _TREND_TERMS):
-            database_tool_list.append("training_trends")
-        if any(term in lowered for term in _REVIEW_TERMS):
-            database_tool_list.append("year_review")
-        if any(term in lowered for term in _SPENDING_TERMS):
-            database_tool_list.append("spending_summary")
-    if any(term in lowered for term in _PERSONAL_FIT_TERMS):
+    database_tool_list = _personal_tools(lowered) if _mentions(lowered, _PERSONAL_MARKERS) else []
+    if _mentions(lowered, _PERSONAL_FIT_TERMS):
         database_tool_list.extend(("list_my_shoes", "monthly_mileage_stats"))
     return QueryPlan(
         web_queries=web_queries,
         database_tools=tuple(dict.fromkeys(database_tool_list)),
     )
+
+
+def _mentions(lowered: str, terms: Any) -> bool:
+    return any(term in lowered for term in terms)
+
+
+def _personal_tools(lowered: str) -> list[str]:
+    tools = [tool for terms, tool in _PERSONAL_TOOL_TERMS if _mentions(lowered, terms)]
+    if "shoe_usage_analytics" in tools and "list_my_shoes" in tools:
+        tools.remove("list_my_shoes")
+    return tools
+
+
+def _effective_message(user_message: str, history: list[dict] | None) -> str:
+    """A bare "yes" to an offer to look something up repeats the user's previous request."""
+    normalized = " ".join(user_message.casefold().split()).strip("？?!！。,.， ")
+    if normalized not in AFFIRMATIVE_REPLIES:
+        return user_message
+    recent_user = next((
+        str(turn.get("content", "")) for turn in reversed(history or [])
+        if turn.get("role") == "user" and turn.get("content")
+    ), "")
+    recent_assistant = next((
+        str(turn.get("content", "")).casefold() for turn in reversed(history or [])
+        if turn.get("role") == "assistant"
+    ), "")
+    if recent_user and any(term in recent_assistant for term in _CONTEXT_TOOL_TERMS):
+        return recent_user
+    return user_message

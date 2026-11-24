@@ -113,9 +113,20 @@ class AccountBackup(BaseModel):
     history: list[BackupHistory] = Field(default_factory=list, max_length=ARCHIVE_LIMITS["history"])
 
     @model_validator(mode="after")
-    def validate_graph(self):  # noqa: C901
+    def validate_graph(self):
+        """Identities, version features, references and totals must agree before anything is merged."""
         if self.version >= 2 and not self.source_id:
             raise ValueError("備份 v2–v5 缺少 source_id")
+        self._check_unique_keys()
+        self._check_run_features()
+        self._check_run_aliases()
+        self._check_run_references()
+        by_shoe, by_month = self._logged_totals()
+        self._reconcile_shoes(by_shoe)
+        self._reconcile_months(by_month)
+        return self
+
+    def _check_unique_keys(self) -> None:
         collections: list[tuple[list[Any], Any]] = [(self.shoes, lambda row: row.id), (self.runs, lambda row: row.id),
                             (self.monthly_mileages, lambda row: (row.year, row.month)),
                             (self.monthly_reports, lambda row: (row.year, row.month)),
@@ -124,7 +135,9 @@ class AccountBackup(BaseModel):
             values = [keys(row) for row in items]
             if len(values) != len(set(values)):
                 raise ValueError("備份含有重複識別碼或月份")
-        identities = {row.id for row in self.runs}
+
+    def _check_run_features(self) -> None:
+        """Aliases need v3, moving time v4 and activity types v5."""
         alias_count = sum(len(row.aliases) for row in self.runs)
         if alias_count > MAX_RUN_ALIASES or (self.version < 3 and alias_count):
             raise ValueError("跑步來源別名版本或容量不正確")
@@ -132,15 +145,22 @@ class AccountBackup(BaseModel):
             raise ValueError("跑步時間只能出現在 v4 以上備份")
         if self.version < 5 and any(row.activity_type != DEFAULT_ACTIVITY_TYPE for row in self.runs):
             raise ValueError("運動類型只能出現在 v5 備份")
+
+    def _check_run_aliases(self) -> None:
+        identities = {row.id for row in self.runs}
         for row in self.runs:
             for alias in row.aliases:
                 if alias in identities:
                     raise ValueError("跑步來源別名重複或指向不同紀錄")
                 identities.add(alias)
+
+    def _check_run_references(self) -> None:
         shoe_ids = {row.id for row in self.shoes}
         strava_ids = [row.strava_id for row in self.runs if row.strava_id]
         if len(strava_ids) != len(set(strava_ids)) or any(row.shoe_id not in shoe_ids for row in self.runs):
             raise ValueError("跑步鞋款參照或 Strava 識別碼不正確")
+
+    def _logged_totals(self) -> tuple[dict[int, float], dict[tuple[int, int], float]]:
         by_shoe: dict[int, float] = {}
         by_month: dict[tuple[int, int], float] = {}
         for run in self.runs:
@@ -149,19 +169,23 @@ class AccountBackup(BaseModel):
                 # SPEC-096: hikes wear the shoe but are not monthly volume.
                 period = (int(run.date[:4]), int(run.date[5:7]))
                 by_month[period] = by_month.get(period, 0) + run.km
+        return by_shoe, by_month
+
+    def _reconcile_shoes(self, by_shoe: dict[int, float]) -> None:
         for shoe in self.shoes:
             logged = round(by_shoe.get(shoe.id, 0), 2)
             baseline = shoe.mileage - logged if shoe.baseline_mileage is None else shoe.baseline_mileage
             if baseline < -0.005 or abs(baseline + logged - shoe.mileage) > 0.011:
                 raise ValueError("鞋款總里程與歷史調整／日誌不一致")
             shoe.baseline_mileage = round(max(0, baseline), 2)
+
+    def _reconcile_months(self, by_month: dict[tuple[int, int], float]) -> None:
         for month in self.monthly_mileages:
             logged = round(by_month.get((month.year, month.month), 0), 2)
             adjustment = month.km - logged if month.adjustment_km is None else month.adjustment_km
             if adjustment < -0.005 or abs(adjustment + logged - month.km) > 0.011:
                 raise ValueError("月跑量與歷史調整／日誌不一致")
             month.adjustment_km = round(max(0, adjustment), 2)
-        return self
 
 
 def parse_backup(raw: bytes) -> AccountBackup:

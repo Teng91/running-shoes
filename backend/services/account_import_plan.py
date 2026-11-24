@@ -1,7 +1,7 @@
 """User-scoped source matching shared by import previews and execution."""
 
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Any, Literal
 
 from sqlalchemy.orm import Session
 
@@ -34,22 +34,39 @@ class ImportPlan:
         return self.mappings.get((entity, str(key)))
 
 
-def build_import_plan(db: Session, uid: int, backup: AccountBackup, mode: RestoreMode) -> ImportPlan:  # noqa: C901
+def build_import_plan(db: Session, uid: int, backup: AccountBackup, mode: RestoreMode) -> ImportPlan:
     source = backup.source_id or "legacy:" + backup_fingerprint(backup)
     shoes = {row.id: row for row in db.query(models.Shoe).filter_by(user_id=uid).all()}
     runs = {row.id: row for row in db.query(models.Run).filter_by(user_id=uid).all()}
     imports = db.query(models.StravaImport).filter_by(user_id=uid).all()
     mappings = {(row.entity, row.source_key): row.target_id for row in db.query(models.RestoreMapping).filter_by(user_id=uid, source_id=source).all()}
     if source == db.query(models.User.backup_id).filter_by(id=uid).scalar():
-        add_local_tombstones(db, uid, mappings)
-        for name, identifiers in (("shoe", shoes), ("run", runs)):
-            for identifier in identifiers:
-                mappings.setdefault((name, str(identifier)), identifier)
-        for (identifier,) in db.query(models.AuditEvent.id).filter_by(user_id=uid).all():
-            mappings.setdefault(("history", str(identifier)), identifier)
-        for row in imports:
-            import_item = BackupImport.model_validate({name: getattr(row, name) for name in BackupImport.model_fields})
-            mappings.setdefault(("import", payload_hash(import_item.model_dump(mode="json"))), row.id)
+        _map_own_archive(db, uid, mappings, shoes, runs, imports)
+    targets = _run_targets(backup, mappings, runs, mode)
+    plan = ImportPlan(uid, source, mappings, shoes, runs,
+                      {(row.year, row.month): row for row in db.query(models.MonthlyMileage).filter_by(user_id=uid).all()},
+                      {(row.year, row.month): row for row in db.query(models.MonthlyReport).filter_by(user_id=uid).all()},
+                      db.query(models.RunningGoal).filter_by(user_id=uid).first(), len(imports), targets)
+    if mode == "update":
+        plan.changes = build_changes(plan, backup)
+    return plan
+
+
+def _map_own_archive(db: Session, uid: int, mappings: dict, shoes: dict, runs: dict, imports: list) -> None:
+    """The account's own archive maps every row to itself and keeps local deletions deleted."""
+    add_local_tombstones(db, uid, mappings)
+    for name, identifiers in (("shoe", shoes), ("run", runs)):
+        for identifier in identifiers:
+            mappings.setdefault((name, str(identifier)), identifier)
+    for (identifier,) in db.query(models.AuditEvent.id).filter_by(user_id=uid).all():
+        mappings.setdefault(("history", str(identifier)), identifier)
+    for row in imports:
+        import_item = BackupImport.model_validate({name: getattr(row, name) for name in BackupImport.model_fields})
+        mappings.setdefault(("import", payload_hash(import_item.model_dump(mode="json"))), row.id)
+
+
+def _run_targets(backup: AccountBackup, mappings: dict, runs: dict, mode: RestoreMode) -> dict[int, int | None]:
+    """The stored run each source run (or one of its aliases, or its Strava activity) maps to."""
     strava = {row.strava_id: row.id for row in runs.values() if row.strava_id}
     targets = {}
     claimed: set[int] = set()
@@ -62,19 +79,18 @@ def build_import_plan(db: Session, uid: int, backup: AccountBackup, mode: Restor
         if target is None and item.strava_id:
             target = strava.get(item.strava_id)
         if mode == "update" and target is not None and target in runs:
-            if target in claimed:
-                raise Conflict("多筆來源跑步對應同一筆 Strava 活動，請先核對資料")
-            if item.strava_id and strava.get(item.strava_id, target) != target:
-                raise Conflict("Strava 活動已對應其他跑步，請先核對資料")
-            claimed.add(target)
+            _claim_update_target(item, target, strava, claimed)
         targets[item.id] = target
-    plan = ImportPlan(uid, source, mappings, shoes, runs,
-                      {(row.year, row.month): row for row in db.query(models.MonthlyMileage).filter_by(user_id=uid).all()},
-                      {(row.year, row.month): row for row in db.query(models.MonthlyReport).filter_by(user_id=uid).all()},
-                      db.query(models.RunningGoal).filter_by(user_id=uid).first(), len(imports), targets)
-    if mode == "update":
-        plan.changes = build_changes(plan, backup)
-    return plan
+    return targets
+
+
+def _claim_update_target(item: Any, target: int, strava: dict, claimed: set[int]) -> None:
+    """An update writes each stored run from one source run, and never across Strava activities."""
+    if target in claimed:
+        raise Conflict("多筆來源跑步對應同一筆 Strava 活動，請先核對資料")
+    if item.strava_id and strava.get(item.strava_id, target) != target:
+        raise Conflict("Strava 活動已對應其他跑步，請先核對資料")
+    claimed.add(target)
 
 
 def summarize_import(plan: ImportPlan, backup: AccountBackup, config: Settings, mode: RestoreMode) -> dict:
