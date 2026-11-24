@@ -6,6 +6,7 @@ import re
 import sys
 from collections import Counter
 from pathlib import Path
+from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 ROUTERS = ROOT / "backend" / "routers"
@@ -164,6 +165,92 @@ def core_data_violations(frontend: Path, scripts: list[str]) -> list[str]:
     return offenders
 
 
+# SPEC-100: the classic scripts share one global scope, so a dependency between two of them is
+# only a bare name. The ratchet records how many top-level names another script uses and which
+# script pairs use each other; both may shrink, neither may grow.
+RATCHET_BASELINE = ROOT / "scripts" / "architecture_ratchet.json"
+COMPLEXITY_EXEMPTION = re.compile(r"#\s*noqa:[^#\n]*\bC901\b")
+_TOP_LEVEL_DECLARATION = re.compile(
+    r"^(?:async\s+)?function\s*\*?\s*([A-Za-z_$][\w$]*)|^(?:let|const|var|class)\s+([A-Za-z_$][\w$]*)", re.M)
+_ANY_DECLARATION = re.compile(r"\b(?:function\s*\*?\s*|let\s+|const\s+|var\s+|class\s+)([A-Za-z_$][\w$]*)")
+_IDENTIFIER = re.compile(r"(?<![\w$])[A-Za-z_$][\w$]*")
+
+
+def _script_code(path: Path) -> str:
+    """A script without its comments, so a name mentioned in prose is not a dependency."""
+    code = "\n".join(code for _number, code, _line in _code_lines(path))
+    return re.sub(r"/\*.*?\*/", " ", code, flags=re.S)
+
+
+def frontend_script_dependencies(frontend: Path, scripts: list[str]) -> dict[tuple[str, str], set[str]]:
+    """{(user, owner): names} for each top-level name a script uses from another script.
+
+    A script that declares a name itself, at any depth, uses its own binding.
+    """
+    code = {filename: _script_code(frontend / filename) for filename in scripts}
+    owners: dict[str, str] = {}
+    for filename in scripts:
+        for match in _TOP_LEVEL_DECLARATION.finditer(code[filename]):
+            owners.setdefault(match.group(1) or match.group(2), filename)
+    dependencies: dict[tuple[str, str], set[str]] = {}
+    for filename in scripts:
+        own = set(_ANY_DECLARATION.findall(code[filename]))
+        for name in set(_IDENTIFIER.findall(code[filename])) - own:
+            owner = owners.get(name)
+            if owner is not None and owner != filename:
+                dependencies.setdefault((filename, owner), set()).add(name)
+    return dependencies
+
+
+def frontend_coupling(frontend: Path, scripts: list[str]) -> dict[str, Any]:
+    """The two ratcheted numbers: cross-script names and mutually dependent script pairs."""
+    dependencies = frontend_script_dependencies(frontend, scripts)
+    names: set[str] = set().union(*dependencies.values())
+    mutual = sorted({tuple(sorted(pair)) for pair in dependencies if (pair[1], pair[0]) in dependencies})
+    return {"cross_script_names": len(names), "mutual_pairs": [list(pair) for pair in mutual]}
+
+
+def coupling_violations(measured: dict[str, Any], baseline: dict[str, Any]) -> list[str]:
+    """Growth fails; so does an improvement the baseline has not recorded yet."""
+    problems = []
+    count, budget = measured["cross_script_names"], baseline["cross_script_names"]
+    if count > budget:
+        problems.append(f"{count} top-level names are used from another script; the budget is {budget}. "
+                        "Pass the value in, or move the shared code into a runtime module.")
+    elif count < budget:
+        problems.append(f"only {count} top-level names are used from another script now; lower "
+                        f"cross_script_names in {RATCHET_BASELINE.name} from {budget} to {count}.")
+    allowed = {tuple(pair) for pair in baseline["mutual_pairs"]}
+    current = {tuple(pair) for pair in measured["mutual_pairs"]}
+    for first, second in sorted(current - allowed):
+        problems.append(f"{first} and {second} now use each other; one of them must stop.")
+    for first, second in sorted(allowed - current):
+        problems.append(f"{first} and {second} no longer use each other; remove the pair from "
+                        f"{RATCHET_BASELINE.name}.")
+    return problems
+
+
+def complexity_exemptions(backend: Path) -> list[str]:
+    """Backend lines that silence ruff's C901, i.e. functions still above complexity 10."""
+    return [
+        f"{path.relative_to(backend.parent).as_posix()}:{number}"
+        for path in sorted(backend.rglob("*.py"))
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1)
+        if COMPLEXITY_EXEMPTION.search(line)
+    ]
+
+
+def complexity_exemption_violations(exemptions: list[str], budget: int) -> list[str]:
+    """New `# noqa: C901` lines fail; a split function lowers the recorded budget."""
+    if len(exemptions) > budget:
+        return [f"{len(exemptions)} backend functions silence C901 (budget {budget}): split the new one "
+                f"instead of adding `# noqa: C901` ({', '.join(exemptions)})."]
+    if len(exemptions) < budget:
+        return [f"only {len(exemptions)} backend functions silence C901 now; lower complexity_exemptions in "
+                f"{RATCHET_BASELINE.name} from {budget} to {len(exemptions)}."]
+    return []
+
+
 def check_feature_boundaries() -> None:
     for filename in ("runs.py", "shoes.py", "monthly.py", "auth.py", "goals.py", "reports.py", "workspace.py"):
         path = ROUTERS / filename
@@ -201,6 +288,12 @@ def check_feature_boundaries() -> None:
     for offender in core_data_violations(frontend, manifest["scripts"]):
         fail(f"core data is read through coreData and written only by applyCoreResource() in {CORE_DATA_WRITER}: "
              f"{offender}")
+    baseline = json.loads(RATCHET_BASELINE.read_text(encoding="utf-8"))
+    problems = coupling_violations(frontend_coupling(frontend, manifest["scripts"]), baseline)
+    problems += complexity_exemption_violations(complexity_exemptions(ROOT / "backend"),
+                                                baseline["complexity_exemptions"])
+    if problems:
+        fail("architecture ratchet (SPEC-100): " + " ".join(problems))
 
 
 def iter_routes(routes):

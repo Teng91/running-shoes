@@ -3,7 +3,7 @@ target-version = "py311"
 line-length = 100
 
 [tool.ruff.lint]
-select = ["B", "BLE", "DTZ", "E4", "E7", "E9", "F", "I", "LOG", "PIE", "PYI", "RUF", "UP"]
+select = ["B", "BLE", "C901", "DTZ", "E4", "E7", "E9", "F", "I", "LOG", "PIE", "PYI", "RUF", "UP"]
 # FastAPI resolves dependencies from calls in parameter defaults by design.
 ignore = [
     "B008",
@@ -12,6 +12,15 @@ ignore = [
     "RUF002",
     "RUF003",
 ]
+
+# SPEC-100: backend functions stay below complexity 10. The functions that were already above it
+# carry a `# noqa: C901` until they are split; a new one fails the lint. Scripts and tests are exempt.
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.ruff.lint.per-file-ignores]
+"scripts/**" = ["C901"]
+"unit_tests/**" = ["C901"]
 
 [tool.mypy]
 python_version = "3.11"

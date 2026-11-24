@@ -91,3 +91,62 @@ def test_core_data_is_read_through_the_view_and_written_only_by_the_bridge(tmp_p
     (tmp_path / "app-reader.js").write_text("function count() { return shoes.length; }\n", encoding="utf-8")
     assert check_architecture.core_data_violations(tmp_path, ["app-reader.js"]) == [
         "app-reader.js:1: reads a removed global: function count() { return shoes.length; }"]
+
+
+def test_frontend_coupling_matches_the_recorded_ratchet():
+    """SPEC-100: the recorded baseline is exactly today's cross-script coupling."""
+    import json
+
+    frontend = check_architecture.ROOT / "frontend"
+    manifest = json.loads((frontend / "assets.json").read_text(encoding="utf-8"))
+    baseline = json.loads(check_architecture.RATCHET_BASELINE.read_text(encoding="utf-8"))
+    measured = check_architecture.frontend_coupling(frontend, manifest["scripts"])
+    assert measured == {key: baseline[key] for key in ("cross_script_names", "mutual_pairs")}
+    assert check_architecture.coupling_violations(measured, baseline) == []
+
+
+def test_coupling_ratchet_rejects_growth_and_unrecorded_improvement(tmp_path):
+    """SPEC-100: a new shared name or mutual pair fails, and so does a stale baseline."""
+    (tmp_path / "a.js").write_text(
+        "function alpha() { return beta(); }\n"
+        "// gamma is only mentioned in a comment\n"
+        "/* delta too */\n", encoding="utf-8")
+    (tmp_path / "b.js").write_text("let beta = () => alpha();\n", encoding="utf-8")
+    (tmp_path / "c.js").write_text(
+        "function gamma() { const alpha = 1; return alpha; }\nconst delta = 2;\n", encoding="utf-8")
+    scripts = ["a.js", "b.js", "c.js"]
+    assert check_architecture.frontend_script_dependencies(tmp_path, scripts) == {
+        ("a.js", "b.js"): {"beta"}, ("b.js", "a.js"): {"alpha"}}
+    measured = check_architecture.frontend_coupling(tmp_path, scripts)
+    assert measured == {"cross_script_names": 2, "mutual_pairs": [["a.js", "b.js"]]}
+
+    assert check_architecture.coupling_violations(measured, measured) == []
+    grown = check_architecture.coupling_violations(measured, {"cross_script_names": 1, "mutual_pairs": []})
+    assert len(grown) == 2 and "budget is 1" in grown[0] and "a.js and b.js now use each other" in grown[1]
+    stale = check_architecture.coupling_violations(
+        measured, {"cross_script_names": 3, "mutual_pairs": [["a.js", "b.js"], ["b.js", "c.js"]]})
+    assert len(stale) == 2 and "from 3 to 2" in stale[0] and "remove the pair" in stale[1]
+
+
+def test_backend_complexity_is_linted_and_exemptions_only_shrink(tmp_path):
+    """SPEC-100: ruff enforces C901 at 10 on backend code; `# noqa: C901` lines are budgeted."""
+    import json
+    import tomllib
+
+    lint = tomllib.loads((check_architecture.ROOT / "pyproject.toml").read_text(encoding="utf-8"))["tool"]["ruff"]["lint"]
+    assert "C901" in lint["select"] and lint["mccabe"]["max-complexity"] == 10
+    assert not any(path.startswith("backend") for path in lint.get("per-file-ignores", {}))
+
+    baseline = json.loads(check_architecture.RATCHET_BASELINE.read_text(encoding="utf-8"))
+    exemptions = check_architecture.complexity_exemptions(check_architecture.ROOT / "backend")
+    assert len(exemptions) == baseline["complexity_exemptions"]
+
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    (backend / "big.py").write_text(
+        "def big():  # noqa: C901\n    pass\n\n\ndef other():  # noqa: E501, C901\n    pass\n"
+        "# C901 mentioned without noqa\n", encoding="utf-8")
+    assert check_architecture.complexity_exemptions(backend) == ["backend/big.py:1", "backend/big.py:5"]
+    assert check_architecture.complexity_exemption_violations(["x", "y"], 2) == []
+    assert "split the new one" in check_architecture.complexity_exemption_violations(["x", "y"], 1)[0]
+    assert "from 3 to 2" in check_architecture.complexity_exemption_violations(["x", "y"], 3)[0]

@@ -34,7 +34,7 @@ class ImportPlan:
         return self.mappings.get((entity, str(key)))
 
 
-def build_import_plan(db: Session, uid: int, backup: AccountBackup, mode: RestoreMode) -> ImportPlan:
+def build_import_plan(db: Session, uid: int, backup: AccountBackup, mode: RestoreMode) -> ImportPlan:  # noqa: C901
     source = backup.source_id or "legacy:" + backup_fingerprint(backup)
     shoes = {row.id: row for row in db.query(models.Shoe).filter_by(user_id=uid).all()}
     runs = {row.id: row for row in db.query(models.Run).filter_by(user_id=uid).all()}
