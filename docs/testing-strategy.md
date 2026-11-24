@@ -297,6 +297,10 @@ SPEC-032：合成資料驗證歷史筆數上限（v4.7.3 起 10,000／10,001）�
 
 [規格與具名案例](specs/061-ci-on-every-push-and-protected-main.md) 以文字解析 workflow：觸發條件是不限分支的 push、pull request、每週排程與手動執行，沒有 `paths-ignore`；部署條件仍只有 main 的 push／手動執行；main 以外的 ref 由較新的執行取消舊的，main 不取消。ruleset 由 `.github/rulesets/main.json` 描述，Python 測試確認它要求 PR、必要檢查與 workflow 的 5 個測試 job 完全一致、禁止刪除與 force push，且沒有繞過名單。
 
+## SPEC-099 閒置機器改用 suspend
+
+[規格與具名案例](specs/099-fly-suspend-idle-machine.md) 以 `tomllib` 解析 `fly.toml`：閒置時 `auto_stop_machines = "suspend"`、有請求時自動啟動、最少執行台數為 0，且機器記憶體不超過 2 GB、沒有 swap 與 schedule，符合 Fly suspend 的條件。
+
 ## SPEC-098 健行與步行不出現在跑步畫面
 
 [規格與具名案例](specs/098-shoe-only-activities-off-run-views.md) 確認月份摘要的月曆、鞋款分布與總數只有路跑與越野跑，紀錄列表仍列出健行；距離分布不含健行與步行，單鞋最近使用列出所有活動並帶類型。Node 測試確認摘要尚未載入時，月曆、卡片與鞋款分布只算跑步，列表仍標示健行與步行。

@@ -252,6 +252,20 @@ def test_fly_caps_concurrent_requests_on_the_single_small_machine():
     assert 0 < concurrency["soft_limit"] <= concurrency["hard_limit"] <= 100
 
 
+def test_fly_suspends_the_idle_machine_within_suspend_requirements():
+    """SPEC-099: an idle machine is suspended (fast resume) and still starts on demand."""
+    config = tomllib.loads((PROJECT_ROOT / "fly.toml").read_text(encoding="utf-8"))
+    service = config["http_service"]
+    assert service["auto_stop_machines"] == "suspend"
+    assert service["auto_start_machines"] is True
+    assert service["min_machines_running"] == 0
+    # Fly only suspends machines with at most 2 GB of memory, no swap and no schedule.
+    vm = config["vm"][0]
+    assert int(vm["memory"].removesuffix("mb")) <= 2048
+    assert "swap_size_mb" not in config
+    assert "schedule" not in vm
+
+
 def test_api_request_limiter_resets_each_minute_and_stays_bounded():
     from backend.middleware import ApiRequestLimiter
 
