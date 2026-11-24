@@ -165,36 +165,10 @@ async function generateReport() {
     setReportStatus('目前沒有可用的本日免費模型，請稍後刷新再試。');
     return;
   }
-  const btn = document.getElementById('generate-report-btn');
-  const content = document.getElementById('report-content');
-  const requestedMonth = selectedReportMonth();
-  const requestId = ++reportGenerationRequestId;
-  reportLoadRequestId += 1;
-  reportLoadController?.abort();
-  reportLoadController = null;
-  const controller = new AbortController();
-  reportGenerationController = controller;
-  btn.disabled = true;
-  btn.textContent = '產生中...';
-  setReportControlsDisabled(true);
-  setReportStatus('');
-  document.getElementById('report-title').textContent = '報告內容 — ' + reportMonthLabel(requestedMonth);
-  let fullText = '';
-  let receivedDone = false;
-  let receivedError = false;
-  let markdownFrame = null;
-
-  const scheduleMarkdownRender = () => {
-    if (markdownFrame !== null) return;
-    markdownFrame = requestAnimationFrame(() => {
-      markdownFrame = null;
-      if (requestId !== reportGenerationRequestId || !isCurrentAuthSession(session)) return;
-      content.innerHTML = renderMarkdown(fullText);
-    });
-  };
-
+  const report = startReportGeneration(session);
+  const { controller } = report;
   try {
-    content.classList.add('is-streaming');
+    report.content.classList.add('is-streaming');
     const res = await authenticatedFetch(API_BASE + '/reports/generate', {
       method: 'POST',
       headers: {
@@ -208,54 +182,100 @@ async function generateReport() {
       }),
       signal: controller.signal,
     });
-    if (requestId !== reportGenerationRequestId || !isCurrentAuthSession(session)) return;
+    if (!isCurrentReport(report)) return;
     const result = await readJsonEventStream(res, {
       signal: controller.signal,
-      isCurrent: () => requestId === reportGenerationRequestId && isCurrentAuthSession(session),
-      onEvent: event => {
-        if (event.type === 'token') {
-          fullText += event.text;
-          // marked 可以處理尚未完成的 Markdown；每個畫面幀最多重繪一次，
-          // 讓標題、清單與表格在串流期間逐步成形而不造成過度重排。
-          scheduleMarkdownRender();
-        } else if (event.type === 'error') {
-          receivedError = true;
-          fullText += '\n\n⚠️ ' + event.text;
-          scheduleMarkdownRender();
-          setReportStatus('報告未儲存：' + event.text);
-        } else if (event.type === 'done' && !receivedError) {
-          receivedDone = true;
-          content.innerHTML = renderMarkdown(fullText);
-          setReportStatus('報告已儲存 · 模型 ' + (event.model || '—') +
-            ' · ' + formatLocalTimestamp(event.updated_at), 'success');
-        }
-      },
+      isCurrent: () => isCurrentReport(report),
+      onEvent: event => handleReportEvent(report, event),
     });
-    if (fullText) {
-      // 連線中斷時保留已收到的內容，但要明確告知使用者並未儲存。
-      content.innerHTML = renderMarkdown(fullText);
-    }
-    if (!receivedDone && !receivedError) {
-      setReportStatus('連線在報告儲存前中斷，目前內容不完整且未儲存，請重新產生。');
-    }
-    if (result.completed) await loadReportHistory();
+    await finishReportStream(report, result);
   } catch (e) {
-    if (e.name === 'AbortError' || requestId !== reportGenerationRequestId) return;
-    const message = e instanceof TypeError
-      ? '連線失敗，請確認後端服務已啟動。'
-      : (e.message || '報告請求失敗，請稍後再試。');
-    content.textContent = (fullText ? fullText + '\n\n' : '') + '⚠️ ' + message;
-    setReportStatus('內容不完整且未確認儲存，請重新載入或產生報告。');
-    console.error('報告請求失敗:', e);
+    if (e.name === 'AbortError' || report.requestId !== reportGenerationRequestId) return;
+    showReportFailure(report, e);
   } finally {
-    if (markdownFrame !== null) cancelAnimationFrame(markdownFrame);
-    if (requestId !== reportGenerationRequestId) return;
-    reportGenerationController = null;
-    content.classList.remove('is-streaming');
-    btn.disabled = false;
-    btn.textContent = '產生報告';
-    setReportControlsDisabled(false);
+    endReportGeneration(report);
   }
+}
+
+// SPEC-114: one report generation's state and steps. A newer generation, a saved-report load or
+// another account makes it stale.
+function startReportGeneration(session) {
+  const requestId = ++reportGenerationRequestId;
+  reportLoadRequestId += 1;
+  reportLoadController?.abort();
+  reportLoadController = null;
+  const controller = new AbortController();
+  reportGenerationController = controller;
+  const btn = document.getElementById('generate-report-btn');
+  btn.disabled = true;
+  btn.textContent = '產生中...';
+  setReportControlsDisabled(true);
+  setReportStatus('');
+  document.getElementById('report-title').textContent = '報告內容 — ' + reportMonthLabel(selectedReportMonth());
+  return { session, requestId, controller, btn, content: document.getElementById('report-content'),
+    fullText: '', receivedDone: false, receivedError: false, markdownFrame: null };
+}
+
+function isCurrentReport(report) {
+  return report.requestId === reportGenerationRequestId && isCurrentAuthSession(report.session);
+}
+
+function scheduleReportMarkdown(report) {
+  if (report.markdownFrame !== null) return;
+  report.markdownFrame = requestAnimationFrame(() => {
+    report.markdownFrame = null;
+    if (!isCurrentReport(report)) return;
+    report.content.innerHTML = renderMarkdown(report.fullText);
+  });
+}
+
+function handleReportEvent(report, event) {
+  if (event.type === 'token') {
+    report.fullText += event.text;
+    // marked 可以處理尚未完成的 Markdown；每個畫面幀最多重繪一次，
+    // 讓標題、清單與表格在串流期間逐步成形而不造成過度重排。
+    scheduleReportMarkdown(report);
+  } else if (event.type === 'error') {
+    report.receivedError = true;
+    report.fullText += '\n\n⚠️ ' + event.text;
+    scheduleReportMarkdown(report);
+    setReportStatus('報告未儲存：' + event.text);
+  } else if (event.type === 'done' && !report.receivedError) {
+    report.receivedDone = true;
+    report.content.innerHTML = renderMarkdown(report.fullText);
+    setReportStatus('報告已儲存 · 模型 ' + (event.model || '—') +
+      ' · ' + formatLocalTimestamp(event.updated_at), 'success');
+  }
+}
+
+async function finishReportStream(report, result) {
+  if (report.fullText) {
+    // 連線中斷時保留已收到的內容，但要明確告知使用者並未儲存。
+    report.content.innerHTML = renderMarkdown(report.fullText);
+  }
+  if (!report.receivedDone && !report.receivedError) {
+    setReportStatus('連線在報告儲存前中斷，目前內容不完整且未儲存，請重新產生。');
+  }
+  if (result.completed) await loadReportHistory();
+}
+
+function showReportFailure(report, e) {
+  const message = e instanceof TypeError
+    ? '連線失敗，請確認後端服務已啟動。'
+    : (e.message || '報告請求失敗，請稍後再試。');
+  report.content.textContent = (report.fullText ? report.fullText + '\n\n' : '') + '⚠️ ' + message;
+  setReportStatus('內容不完整且未確認儲存，請重新載入或產生報告。');
+  console.error('報告請求失敗:', e);
+}
+
+function endReportGeneration(report) {
+  if (report.markdownFrame !== null) cancelAnimationFrame(report.markdownFrame);
+  if (report.requestId !== reportGenerationRequestId) return;
+  reportGenerationController = null;
+  report.content.classList.remove('is-streaming');
+  report.btn.disabled = false;
+  report.btn.textContent = '產生報告';
+  setReportControlsDisabled(false);
 }
 
 // SPEC-101: opening the report tab loads the saved reports, only when signed in.

@@ -1,4 +1,6 @@
 const { runContext, test, assert, vm, extract, panelWiring, htmlSource, source, readText } = require('./helpers.cjs');
+// SPEC-114: the rotation timeline is drawn by these named steps.
+const TIMELINE_STEPS = ['renderShoeTimeline', 'loadShoeTimeline', 'shoeTimelineView', 'shoeTimelineChart', 'timelineTodayPlugin'];
 
 function elements() {
   return new Proxy({}, { get: (target, id) => target[id] ||= {
@@ -91,7 +93,7 @@ test('SPEC-038 rotation timeline names active shoes and calls out idle ones with
       { shoe_id: 3, first_run_date: '2025-06-01', last_run_date: '2026-03-01', km: 16, run_count: 2, days_since_last_run: 61, idle: true },
       { shoe_id: 2, first_run_date: '2026-02-01', last_run_date: '2026-04-30', km: 30, run_count: 3, days_since_last_run: 1, idle: false },
     ] }) });
-  vm.runInContext(`const DAY_MS = 86400000; let shoeTimelineRequestId = 0;\n${extract('renderShoeTimeline')}`, context);
+  vm.runInContext(`const DAY_MS = 86400000; let shoeTimelineRequestId = 0;\n${TIMELINE_STEPS.map(extract).join('\n')}`, context);
   await context.renderShoeTimeline();
   const { config } = context.chartInstances.timeline;
   assert.deepEqual(config.data.labels, ['PUMA Nitro', 'Mizuno Rider（日常）']);
@@ -152,7 +154,7 @@ function shoesPanelContext() {
     const DISTANCE_COLORS = ['#ef4444'];
     function renderCharts() { renderShoeTimeline(); renderDistanceMix(); }
     ${panelWiring()}
-    ${['invalidatePanels', 'renderActivePanel', 'renderShoeTimeline', 'renderDistanceMix'].map(extract).join('\n')}`, context);
+    ${['invalidatePanels', 'renderActivePanel', ...TIMELINE_STEPS, 'renderDistanceMix'].map(extract).join('\n')}`, context);
   const settle = () => new Promise(resolve => setImmediate(resolve));
   // Mirrors loadData's applyResource: accept (cache hooks run), then render(resource).
   context.arrive = async (resource, value) => {

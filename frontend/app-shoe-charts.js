@@ -258,24 +258,8 @@ function timelineMileageLines(row) {
 async function renderShoeTimeline() {
   if (chartInstances.timeline) { chartInstances.timeline.destroy(); delete chartInstances.timeline; }
   const requestId = ++shoeTimelineRequestId;
-  let timeline;
-  try {
-    const result = await resourceStore.read('shoe-timeline', {
-      refresh: false,
-      loader: async () => {
-        const value = await apiGet('/analytics/shoe-timeline');
-        if (!Array.isArray(value.shoes)) throw new Error('跑鞋時間軸資料格式錯誤');
-        return value;
-      },
-    });
-    if (!resourceStore.current(result) || requestId !== shoeTimelineRequestId) return;
-    if (result.status === 'rejected') throw result.error;
-    timeline = result.value;
-  } catch (error) {
-    console.error('載入跑鞋時間軸失敗:', error);
-    if (requestId === shoeTimelineRequestId) renderedPanels.delete('shoes');
-    return;
-  }
+  const timeline = await loadShoeTimeline(requestId);
+  if (!timeline) return;
   // The chart was already cleared; draw it again when the tab returns.
   if (document.querySelector('.tab-panel.active')?.dataset.panel !== 'shoes') { renderedPanels.delete('shoes'); return; }
   if (chartInstances.timeline) { chartInstances.timeline.destroy(); delete chartInstances.timeline; }
@@ -288,22 +272,58 @@ async function renderShoeTimeline() {
     note.textContent = '現役鞋還沒有跑步紀錄，記錄跑步後會顯示每雙鞋的使用期間。';
     return;
   }
+  const view = shoeTimelineView(timeline);
+  box.style.height = `${Math.max(140, rows.length * 34 + 48)}px`;
+  chartInstances.timeline = new Chart(document.getElementById('chart-shoe-timeline'), shoeTimelineChart(view));
+  const idle = rows.filter(row => row.idle).map(row => view.names[rows.indexOf(row)]);
+  note.textContent = idle.length
+    ? `橘色：超過 ${timeline.idle_days} 天沒穿的現役鞋（${idle.join('、')}）。已退役的鞋不列出。`
+    : `所有現役鞋近 ${timeline.idle_days} 天內都有穿；已退役的鞋不列出。`;
+}
+
+// SPEC-114: the rotation timeline's read, its view of the rows and the chart configuration.
+// Returns the timeline, or null when the read failed or a newer read replaced it.
+async function loadShoeTimeline(requestId) {
+  try {
+    const result = await resourceStore.read('shoe-timeline', {
+      refresh: false,
+      loader: async () => {
+        const value = await apiGet('/analytics/shoe-timeline');
+        if (!Array.isArray(value.shoes)) throw new Error('跑鞋時間軸資料格式錯誤');
+        return value;
+      },
+    });
+    if (!resourceStore.current(result) || requestId !== shoeTimelineRequestId) return null;
+    if (result.status === 'rejected') throw result.error;
+    return result.value;
+  } catch (error) {
+    console.error('載入跑鞋時間軸失敗:', error);
+    if (requestId === shoeTimelineRequestId) renderedPanels.delete('shoes');
+    return null;
+  }
+}
+
+function shoeTimelineView(timeline) {
+  const rows = timeline.shoes;
   const known = new Map(coreData.shoes.map(shoe => [shoe.id, shoe]));
   const names = rows.map(row => {
     const shoe = known.get(row.shoe_id);
     if (!shoe) return `鞋款 #${row.shoe_id}`;
     return `${shoe.brand} ${shoe.model}${shoe.nickname ? `（${shoe.nickname}）` : ''}`;
   });
-  const colors = rows.map(row => (row.idle ? getThemeColor('--chart-warn', '#ff8a1f') : shoeColor(row.shoe_id)));
   const toTime = iso => { const [y, m, d] = iso.split('-').map(Number); return new Date(y, m - 1, d).getTime(); };
-  const today = toTime(timeline.as_of);
-  // A single-day bar still needs visible width, so each bar ends after its last day.
-  const data = rows.map(row => [toTime(row.first_run_date), toTime(row.last_run_date) + DAY_MS]);
-  const textColor = getThemeColor('--text-dim', '#8b8d9a');
-  const gridColor = getThemeColor('--chart-grid', '#2a2d3e');
-  box.style.height = `${Math.max(140, rows.length * 34 + 48)}px`;
+  return {
+    rows, names, today: toTime(timeline.as_of),
+    colors: rows.map(row => (row.idle ? getThemeColor('--chart-warn', '#ff8a1f') : shoeColor(row.shoe_id))),
+    // A single-day bar still needs visible width, so each bar ends after its last day.
+    data: rows.map(row => [toTime(row.first_run_date), toTime(row.last_run_date) + DAY_MS]),
+    textColor: getThemeColor('--text-dim', '#8b8d9a'),
+    gridColor: getThemeColor('--chart-grid', '#2a2d3e'),
+  };
+}
 
-  chartInstances.timeline = new Chart(document.getElementById('chart-shoe-timeline'), {
+function shoeTimelineChart({ rows, names, colors, data, today, textColor, gridColor }) {
+  return {
     type: 'bar',
     data: { labels: names, datasets: [{ data, backgroundColor: colors, borderRadius: 4, borderSkipped: false, barPercentage: .7 }] },
     options: {
@@ -343,30 +363,30 @@ async function renderShoeTimeline() {
         },
       },
     },
-    plugins: [{
-      id: 'timelineToday',
-      afterDatasetsDraw(chart) {
-        const { ctx, chartArea, scales: { x } } = chart;
-        const position = x.getPixelForValue(today);
-        if (position < chartArea.left || position > chartArea.right) return;
-        const todayColor = getThemeColor('--chart-2', '#2fd8f0');
-        ctx.save();
-        ctx.strokeStyle = todayColor;
-        ctx.setLineDash([4, 4]);
-        ctx.beginPath(); ctx.moveTo(position, chartArea.top); ctx.lineTo(position, chartArea.bottom); ctx.stroke();
-        ctx.fillStyle = todayColor;
-        ctx.font = '10px "DIN Alternate", Bahnschrift, "Segoe UI", system-ui, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'bottom';
-        ctx.fillText('今天', position, chartArea.top - 3);
-        ctx.restore();
-      },
-    }],
-  });
-  const idle = rows.filter(row => row.idle).map(row => names[rows.indexOf(row)]);
-  note.textContent = idle.length
-    ? `橘色：超過 ${timeline.idle_days} 天沒穿的現役鞋（${idle.join('、')}）。已退役的鞋不列出。`
-    : `所有現役鞋近 ${timeline.idle_days} 天內都有穿；已退役的鞋不列出。`;
+    plugins: [timelineTodayPlugin(today)],
+  };
+}
+
+function timelineTodayPlugin(today) {
+  return {
+    id: 'timelineToday',
+    afterDatasetsDraw(chart) {
+      const { ctx, chartArea, scales: { x } } = chart;
+      const position = x.getPixelForValue(today);
+      if (position < chartArea.left || position > chartArea.right) return;
+      const todayColor = getThemeColor('--chart-2', '#2fd8f0');
+      ctx.save();
+      ctx.strokeStyle = todayColor;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath(); ctx.moveTo(position, chartArea.top); ctx.lineTo(position, chartArea.bottom); ctx.stroke();
+      ctx.fillStyle = todayColor;
+      ctx.font = '10px "DIN Alternate", Bahnschrift, "Segoe UI", system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+      ctx.fillText('今天', position, chartArea.top - 3);
+      ctx.restore();
+    },
+  };
 }
 
 // ====== Distance mix per active shoe ======

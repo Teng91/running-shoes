@@ -1,4 +1,4 @@
-const { test, assert, fs, path, vm, htmlSource, scriptPaths, scriptSource, styleSource, source, authOperationContext, streamContext, editContext, tableHeaders, extract, transportContext } = require('./helpers.cjs');
+const { test, assert, fs, path, vm, htmlSource, scriptPaths, scriptSource, styleSource, source, authOperationContext, streamContext, editContext, tableHeaders, extract, reportGenerationSource, transportContext } = require('./helpers.cjs');
 
 test('login locks duplicates and ignores a late body or failure after a new account starts', async () => {
   const { context, elements, controls, state } = authOperationContext();
@@ -89,7 +89,7 @@ test('report status separates saved confirmations from errors and clears stale e
   context.setReportStatus('未儲存'); context.setReportStatus('');
   assert.equal(status.textContent, ''); assert.equal(classes.size, 0);
   assert.match(extract('renderReport'), /formatLocalTimestamp\(report\.updated_at\), 'success'/);
-  assert.match(extract('generateReport'), /formatLocalTimestamp\(event\.updated_at\), 'success'/);
+  assert.match(reportGenerationSource(), /formatLocalTimestamp\(event\.updated_at\), 'success'/);
 });
 
 test('saved and streamed report timestamps share local formatting', () => {
@@ -99,7 +99,7 @@ test('saved and streamed report timestamps share local formatting', () => {
   const timestamp = '2026-10-20T00:30:00+00:00';
   context.renderReport({ year: 2026, month: 9, updated_at: timestamp, model: 'mock', content_md: 'mock' });
   assert.ok(elements['report-status'].textContent.endsWith(context.formatLocalTimestamp(timestamp)));
-  assert.ok(extract('generateReport').includes('formatLocalTimestamp(event.updated_at)'));
+  assert.ok(reportGenerationSource().includes('formatLocalTimestamp(event.updated_at)'));
 });
 
 test('exports, goals and chart modules retain single responsibilities and startup order', () => {

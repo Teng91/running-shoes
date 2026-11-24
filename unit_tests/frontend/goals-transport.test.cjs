@@ -1,11 +1,11 @@
-const { test, assert, fs, path, vm, htmlSource, scriptPaths, scriptSource, styleSource, source, authOperationContext, streamContext, editContext, tableHeaders, extract, transportContext } = require('./helpers.cjs');
+const { test, assert, fs, path, vm, htmlSource, scriptPaths, scriptSource, styleSource, source, authOperationContext, streamContext, editContext, tableHeaders, extract, reportGenerationSource, transportContext } = require('./helpers.cjs');
 
 test('report streaming distinguishes saved completion from an interrupted response', () => {
-  const generateReport = extract('generateReport');
+  const generateReport = reportGenerationSource();
   assert.match(generateReport, /readJsonEventStream\(res/);
   assert.match(generateReport, /receivedDone = true/);
   assert.match(generateReport, /receivedError = true/);
-  assert.match(generateReport, /!receivedDone && !receivedError/);
+  assert.match(generateReport, /!report\.receivedDone && !report\.receivedError/);
   assert.match(generateReport, /內容不完整且未儲存/);
 });
 

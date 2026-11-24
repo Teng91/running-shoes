@@ -164,6 +164,12 @@ function extract(name) {
   return source.slice(start, source.indexOf('\n}', start) + 2);
 }
 
+// SPEC-114: report generation is split into named steps; source checks read all of them.
+function reportGenerationSource() {
+  return ['generateReport', 'startReportGeneration', 'isCurrentReport', 'scheduleReportMarkdown', 'handleReportEvent',
+    'finishReportStream', 'showReportFailure', 'endReportGeneration'].map(extract).join('\n');
+}
+
 // SPEC-101: the top-level register*() statements of every script, in assets.json order.
 function featureRegistrations(pattern = /^register(?:Panel|ResourceReader|DataHooks)\(/gm) {
   const statements = [];
@@ -209,4 +215,4 @@ function transportContext() {
   return context;
 }
 
-module.exports = { runContext, test, assert, fs, path, readText, vm: { ...vm, createContext: featureContext }, htmlSource, scriptPaths, scriptSource, styleSource, source, authOperationContext, streamContext, editContext, tableHeaders, extract, panelWiring, featureRegistrations, transportContext };
+module.exports = { runContext, test, assert, fs, path, readText, vm: { ...vm, createContext: featureContext }, htmlSource, scriptPaths, scriptSource, styleSource, source, authOperationContext, streamContext, editContext, tableHeaders, extract, panelWiring, featureRegistrations, reportGenerationSource, transportContext };

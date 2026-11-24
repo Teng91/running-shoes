@@ -1,4 +1,4 @@
-const { test, assert, fs, path, vm, htmlSource, scriptPaths, scriptSource, styleSource, source, authOperationContext, streamContext, editContext, tableHeaders, extract, panelWiring, transportContext } = require('./helpers.cjs');
+const { test, assert, fs, path, vm, htmlSource, scriptPaths, scriptSource, styleSource, source, authOperationContext, streamContext, editContext, tableHeaders, extract, reportGenerationSource, panelWiring, transportContext } = require('./helpers.cjs');
 
 test('the external application script parses', () => {
   scriptPaths.forEach(path => {
@@ -28,8 +28,8 @@ test('report completion timestamps are localized by the browser', () => {
   vm.runInContext(extract('formatLocalTimestamp'), context);
   const formatted = context.formatLocalTimestamp('2026-10-15T01:30:00+00:00');
   assert.ok(formatted.length > 0);
-  assert.doesNotMatch(extract('generateReport'), /replace\('T', ' '\)\.slice/);
-  assert.match(extract('generateReport'), /formatLocalTimestamp\(event\.updated_at\)/);
+  assert.doesNotMatch(reportGenerationSource(), /replace\('T', ' '\)\.slice/);
+  assert.match(reportGenerationSource(), /formatLocalTimestamp\(event\.updated_at\)/);
 });
 
 test('inline edits send only the changed field and guard duplicate commits', async () => {
@@ -79,7 +79,7 @@ test('the report tab wires its panel and only loads data after login', () => {
 });
 
 test('the report tab talks to the monthly report endpoints', () => {
-  assert.match(extract('generateReport'), /authenticatedFetch\(API_BASE \+ '\/reports\/generate'/);
+  assert.match(reportGenerationSource(), /authenticatedFetch\(API_BASE \+ '\/reports\/generate'/);
   assert.match(extract('loadReportHistory'), /authenticatedFetch\(API_BASE \+ '\/reports', \{ headers: authHeaders\(\) \}\)/);
   assert.match(extract('loadSavedReport'), /authenticatedFetch\(API_BASE \+ '\/reports\/' \+ parts\[0\] \+ '\/' \+ parts\[1\]/);
 });
@@ -87,7 +87,7 @@ test('the report tab talks to the monthly report endpoints', () => {
 test('monthly reports have their own selector backed by the daily model list', () => {
   assert.match(source, /<select id="report-model"><\/select>/);
   const loadModels = extract('loadAgentModels');
-  const generateReport = extract('generateReport');
+  const generateReport = reportGenerationSource();
   assert.match(loadModels, /\['agent-model', 'report-model'\]/);
   assert.match(loadModels, /'#' \+ \(index \+ 1\) \+ ' ' \+ model\.display/);
   assert.match(generateReport, /getElementById\('report-model'\)\.value/);
@@ -96,7 +96,7 @@ test('monthly reports have their own selector backed by the daily model list', (
 
 test('monthly report requests abort stale loads and lock selectors while streaming', () => {
   const load = extract('loadSavedReport');
-  const generate = extract('generateReport');
+  const generate = reportGenerationSource();
   assert.match(source, /let reportLoadRequestId = 0/);
   assert.match(source, /let reportLoadController = null/);
   assert.match(load, /const requestId = \+\+reportLoadRequestId/);
