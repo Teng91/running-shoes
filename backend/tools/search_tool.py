@@ -12,6 +12,7 @@ import time
 from datetime import UTC, datetime
 from hashlib import sha256
 from threading import Lock
+from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
 MAX_RESULTS = 5
@@ -195,17 +196,14 @@ def _cache_ttl(query: str) -> int:
     return SEARCH_CACHE_TTL_SECONDS
 
 
-def web_search(query: str, max_results: int = MAX_RESULTS) -> str:  # noqa: C901
+def web_search(query: str, max_results: int = MAX_RESULTS) -> str:
     """搜尋網路，回傳已驗證、排序且帶穩定來源 ID 的 JSON。"""
     normalized_query = " ".join(query.split())
     cache_key = (normalized_query.casefold(), max_results)
     now = time.monotonic()
-    with _search_cache_lock:
-        cached_entry = _search_cache.get(cache_key)
-        if cached_entry and now - cached_entry[0] < _cache_ttl(normalized_query):
-            payload = json.loads(cached_entry[1])
-            payload["cached"] = True
-            return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+    cached = _cached_result(cache_key, normalized_query, now)
+    if cached is not None:
+        return cached
 
     try:
         from ddgs import DDGS
@@ -215,23 +213,7 @@ def web_search(query: str, max_results: int = MAX_RESULTS) -> str:  # noqa: C901
             error="ddgs package is not installed",
         )
 
-    results = []
-    last_error = None
-    attempts = 0
-    for attempt in range(1, SEARCH_ATTEMPTS + 1):
-        attempts = attempt
-        try:
-            with DDGS() as ddgs:
-                results = ddgs.text(normalized_query, max_results=max_results)
-        # Search providers can intermittently reject or time out a request.
-        # Retry once inside the tool so weak models do not need to invent a
-        # second query merely to recover from a transient provider failure.
-        except Exception as exc:  # noqa: BLE001
-            last_error = str(exc)
-            continue
-        if results:
-            break
-
+    results, last_error, attempts = _search_with_retry(DDGS, normalized_query, max_results)
     if not results:
         if last_error is not None:
             return _result(
@@ -263,6 +245,44 @@ def web_search(query: str, max_results: int = MAX_RESULTS) -> str:  # noqa: C901
         results=normalized,
         attempts=attempts,
     )
+    _remember_result(cache_key, now, output)
+    return output
+
+
+def _cached_result(cache_key: tuple[str, int], normalized_query: str, now: float) -> str | None:
+    """A fresh cached answer for the same query, marked as cached."""
+    with _search_cache_lock:
+        cached_entry = _search_cache.get(cache_key)
+        if cached_entry and now - cached_entry[0] < _cache_ttl(normalized_query):
+            payload = json.loads(cached_entry[1])
+            payload["cached"] = True
+            return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+    return None
+
+
+def _search_with_retry(ddgs_class: Any, normalized_query: str, max_results: int) -> tuple[list, str | None, int]:
+    """Results, the last provider error and the attempts made, stopping at the first results."""
+    results: list = []
+    last_error = None
+    attempts = 0
+    for attempt in range(1, SEARCH_ATTEMPTS + 1):
+        attempts = attempt
+        try:
+            with ddgs_class() as ddgs:
+                results = ddgs.text(normalized_query, max_results=max_results)
+        # Search providers can intermittently reject or time out a request.
+        # Retry once inside the tool so weak models do not need to invent a
+        # second query merely to recover from a transient provider failure.
+        except Exception as exc:  # noqa: BLE001
+            last_error = str(exc)
+            continue
+        if results:
+            break
+    return results, last_error, attempts
+
+
+def _remember_result(cache_key: tuple[str, int], now: float, output: str) -> None:
+    """Cache a successful answer, dropping expired entries and the oldest one when full."""
     with _search_cache_lock:
         expired = [
             key for key, (saved_at, _) in _search_cache.items()
@@ -274,4 +294,3 @@ def web_search(query: str, max_results: int = MAX_RESULTS) -> str:  # noqa: C901
             oldest_key = min(_search_cache, key=lambda key: _search_cache[key][0])
             _search_cache.pop(oldest_key, None)
         _search_cache[cache_key] = (now, output)
-    return output
