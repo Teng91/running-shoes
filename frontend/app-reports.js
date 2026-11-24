@@ -254,3 +254,9 @@ async function generateReport() {
   }
 }
 
+// SPEC-101: opening the report tab loads the saved reports, only when signed in.
+registerPanel('report', { enter: () => {
+  if (!authToken) return;
+  loadReportHistory();
+  loadSavedReport();
+} });

@@ -35,6 +35,8 @@ function featureContext(globals = {}) {
   const context = vm.createContext({ structuredClone, formSnapshotMatches: matchesSnapshot,
     dashboardAnalyticsCache: new Map(), dashboardAnalyticsRequest: 0, inlineEditors: new Map(), inlineTableRows: new Map(),
     captureAuthSession: () => ({}), isCurrentAuthSession: () => true,
+    // SPEC-101: a whole feature script registers its panel hooks on load; panelWiring() replaces these.
+    registerPanel() {}, registerResourceReader() {}, registerDataHooks() {},
     getSelectedCategories: () => [], ...rest });
   seedCoreData(context, core);
   context.seedCoreData = fields => seedCoreData(context, fields);
@@ -151,6 +153,31 @@ function extract(name) {
   return source.slice(start, source.indexOf('\n}', start) + 2);
 }
 
+// SPEC-101: the top-level register*() statements of every script, in assets.json order.
+function featureRegistrations() {
+  const statements = [];
+  for (const file of scriptPaths) {
+    const text = readText(file);
+    for (const match of text.matchAll(/^register(?:Panel|ResourceReader|DataHooks)\(/gm)) {
+      let depth = 0, end = match.index;
+      for (; end < text.length; end++) {
+        if (text[end] === '(') depth++;
+        else if (text[end] === ')' && --depth === 0) break;
+      }
+      statements.push(text.slice(match.index, end + 1) + ';');
+    }
+  }
+  return statements.join('\n');
+}
+
+// The shell's panel registry plus the hooks the feature scripts register when they load, so a
+// test drives renderActivePanel/switchTab/loadData through the real wiring.
+function panelWiring() {
+  return `const panelHooks = new Map(), resourceReaders = new Map(), dataHooks = [];
+    ${['registerPanel', 'registerResourceReader', 'registerDataHooks', 'runsResourceReader'].map(extract).join('\n')}
+    ${featureRegistrations()}`;
+}
+
 function transportContext() {
   const context = vm.createContext({
     window: { location: { origin: 'http://test.local' } },
@@ -169,4 +196,4 @@ function transportContext() {
   return context;
 }
 
-module.exports = { runContext, test, assert, fs, path, readText, vm: { ...vm, createContext: featureContext }, htmlSource, scriptPaths, scriptSource, styleSource, source, authOperationContext, streamContext, editContext, tableHeaders, extract, transportContext };
+module.exports = { runContext, test, assert, fs, path, readText, vm: { ...vm, createContext: featureContext }, htmlSource, scriptPaths, scriptSource, styleSource, source, authOperationContext, streamContext, editContext, tableHeaders, extract, panelWiring, transportContext };

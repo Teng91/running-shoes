@@ -62,3 +62,6 @@ function onboardingSetGoal() {
   switchTab('monthly');
   toggleGoalSettings(true);
 }
+
+// SPEC-101: the getting-started card sits on the runs tab, after the home summary.
+registerPanel('runs', { render: () => renderOnboarding() });

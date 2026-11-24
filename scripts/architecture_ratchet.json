@@ -1,5 +1,5 @@
 {
-  "cross_script_names": 255,
+  "cross_script_names": 244,
   "complexity_exemptions": 14,
   "mutual_pairs": [
     [
@@ -32,47 +32,11 @@
     ],
     [
       "app-core.js",
-      "app-dashboard.js"
-    ],
-    [
-      "app-core.js",
-      "app-goals.js"
-    ],
-    [
-      "app-core.js",
-      "app-monthly-charts.js"
-    ],
-    [
-      "app-core.js",
-      "app-onboarding.js"
-    ],
-    [
-      "app-core.js",
       "app-resources.js"
-    ],
-    [
-      "app-core.js",
-      "app-run-insights.js"
-    ],
-    [
-      "app-core.js",
-      "app-runs.js"
-    ],
-    [
-      "app-core.js",
-      "app-shoe-charts.js"
-    ],
-    [
-      "app-core.js",
-      "app-strava.js"
     ],
     [
       "app-dashboard.js",
       "app-run-insights.js"
-    ],
-    [
-      "app-dates.js",
-      "app-runs.js"
     ],
     [
       "app-goals.js",

@@ -29,12 +29,6 @@ registerFeatureReset('run-editor', () => {
   delete select.dataset.requiresSelection;
 });
 
-// The service's calendar date (Taiwan time, SPEC-093), whatever zone the device is in.
-function localDateISO(instant = new Date()) {
-  const { year, month, day } = appCalendarDate(instant);
-  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-}
-
 // SPEC-060: a run's moving time is typed as "32:15", "1:05:30" or whole minutes ("45").
 // Returns seconds, null for an empty field, or NaN for text that is not a duration.
 function parseRunDuration(text) {
@@ -194,6 +188,32 @@ function selectedRunMonth() {
   const value = document.getElementById('run-month').value;
   return /^\d{4}-\d{2}$/.test(value) ? value : localDateISO().slice(0, 7);
 }
+
+// SPEC-101: the shown month's runs are one of the dashboard resources that loadData() reads.
+// A page loaded for a month the user has since left is not applied, nor one an older request loaded.
+function runsResourceReader() {
+  return {
+    scope: () => selectedRunMonth(),
+    read(month) {
+      const [year, monthNumber] = month.split('-').map(Number);
+      const requestId = ++runController.state.listRequest;
+      return Promise.all([fetchRunPage({ year, month: monthNumber }),
+        apiGet(`/runs/summary?year=${year}&month=${monthNumber}`)])
+        .then(([page, summary]) => ({ page, summary, requestId }));
+    },
+    current: month => month === selectedRunMonth(),
+    apply({ page, summary, requestId }) {
+      if (requestId !== runController.state.listRequest) return;
+      Object.assign(runController.state, { rows: page.rows, summary, offset: 0, hasMore: page.hasMore, day: null });
+      document.getElementById('run-load-error').hidden = true;
+    },
+  };
+}
+
+registerResourceReader('runs', runsResourceReader());
+registerPanel('runs', { key: () => selectedRunMonth(), render: () => populateRunShoeSelects() });
+// A full redraw also drops an in-flight read of the annual run totals.
+registerDataHooks({ invalidated: () => { runController.state.annualRequest += 1; } });
 
 const RUN_PAGE_SIZE = 200;
 

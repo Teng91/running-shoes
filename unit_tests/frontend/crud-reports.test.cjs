@@ -1,4 +1,4 @@
-const { test, assert, fs, path, vm, htmlSource, scriptPaths, scriptSource, styleSource, source, authOperationContext, streamContext, editContext, tableHeaders, extract, transportContext } = require('./helpers.cjs');
+const { test, assert, fs, path, vm, htmlSource, scriptPaths, scriptSource, styleSource, source, authOperationContext, streamContext, editContext, tableHeaders, extract, panelWiring, transportContext } = require('./helpers.cjs');
 
 test('the external application script parses', () => {
   scriptPaths.forEach(path => {
@@ -61,8 +61,21 @@ test('the report tab wires its panel and only loads data after login', () => {
   assert.match(source, /<span>AI 教練<\/span><\/button>/);
   assert.match(extract('switchTab'), /const destination = name === 'report' \? 'agent' : name;/);
   assert.match(source, /data-change="load-saved-report"/);
-  const switchTab = extract('switchTab');
-  assert.match(switchTab, /name === 'report' && authToken/);
+  // SPEC-101: opening the report tab runs the hook app-reports.js registers; it loads only after login.
+  const calls = [];
+  const context = vm.createContext({ authToken: null, document: { querySelectorAll: () => [],
+    querySelector: () => ({ setAttribute() {}, textContent: '' }),
+    getElementById: () => ({ classList: { toggle() {}, contains: () => false }, textContent: '' }) },
+    setMobileMenu() {}, requestAnimationFrame() {}, window: { matchMedia: () => ({ matches: false }) },
+    loadReportHistory: () => calls.push('history'), loadSavedReport: () => calls.push('saved'), prepareGoalForm() {} });
+  vm.runInContext(panelWiring() + extract('switchTab'), context);
+  context.switchTab('report');
+  assert.deepEqual(calls, []);
+  context.authToken = 'synthetic';
+  context.switchTab('report');
+  assert.deepEqual(calls, ['history', 'saved']);
+  context.switchTab('agent');
+  assert.equal(calls.length, 2);
 });
 
 test('the report tab talks to the monthly report endpoints', () => {

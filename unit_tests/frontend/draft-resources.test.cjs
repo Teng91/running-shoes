@@ -1,4 +1,4 @@
-const { test, assert, vm, extract, source, runContext } = require('./helpers.cjs');
+const { test, assert, vm, extract, panelWiring, source, runContext } = require('./helpers.cjs');
 function deferred() { let resolve; const promise = new Promise(r => { resolve = r; }); return { promise, resolve }; }
 function nodes() {
   const primary = {};
@@ -128,6 +128,7 @@ test('SPEC-024 coalesced dashboard loads apply run rows once despite partial fai
   });
   vm.runInContext(`let selectedYear;
     let spendingLoadRequestId=0, spendingLoadPending=false, goalProgressRequestId=0;
+    ${panelWiring()}
     ${extract('loadData')}`, context);
   await Promise.all([context.loadData(), context.loadData()]);
   assert.equal(calls.length, 6); assert.equal(calls.filter(name => name === 'page').length, 1);
