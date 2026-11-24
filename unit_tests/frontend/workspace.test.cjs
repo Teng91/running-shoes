@@ -1,4 +1,4 @@
-const { test, assert, transportContext, vm, fs, path, featureRegistrations } = require('./helpers.cjs');
+const { test, assert, transportContext, vm, fs, path, featureRegistrations, extract } = require('./helpers.cjs');
 const deferred = () => { let resolve; const promise = new Promise(r => { resolve = r; }); return { promise, resolve }; };
 async function bindRestoreController(context) {
   const { createAccountRestoreController } = await import('../../frontend/runtime/account-restore-controller.mjs');
@@ -725,15 +725,14 @@ test('SPEC-107 the goal form, shoe editor and account view register their worksp
     readForm: ids => Object.fromEntries(ids.map(id => [id, elements[id].value])),
     formSnapshotMatches: (a, b) => JSON.stringify(a) === JSON.stringify(b), coreData: { runningGoal: { start_year: 2026, monthly_km: 100 } },
     goalFormValues: goal => ({ 'goal-start-year': String(goal.start_year), 'goal-monthly-km': String(goal.monthly_km) }),
+    prepareGoalForm: () => calls.push('prepare'), setGoalField: (id, value) => calls.push(`${id}=${value}`),
+    getFormDraft: () => ({ reset: () => calls.push('reset') }),
     getSelectedCategories: () => ['Daily'],
     shoeModal: { context: { shoe: { id: 7 } }, mode: 'edit', formIds: { model: 'f-model' },
       openForEdit: shoe => calls.push(`edit ${shoe.id}`), openForCreate: () => calls.push('create') },
     renderEmailSection: async () => { calls.push('email'); }, loadWorkspaceHistory: async () => {},
     inlineEditors: new Map(), structuredClone,
   });
-  // The shared feature context installs the real goal helpers; observe these instead.
-  Object.assign(context, { prepareGoalForm: () => calls.push('prepare'), setGoalField: (id, value) => calls.push(`${id}=${value}`),
-    getFormDraft: () => ({ reset: () => calls.push('reset') }) });
   vm.runInContext(fs.readFileSync('frontend/app-workspace.js', 'utf8'), context);
   vm.runInContext(featureRegistrations(/^(?:registerWorkspaceForm|registerWorkspaceEditor|onWorkspaceModalOpen)\(/gm), context);
   assert.deepEqual([...vm.runInContext('Object.keys(workspaceForms)', context)], ['run', 'goal']);
@@ -772,9 +771,6 @@ test('SPEC-108 runs and sign-in hooks reach the workspace only through registrat
     applyCoreResource() {}, inlineEditors: new Map(), activateLocalWorkspace: async () => calls.push('activate'),
     refreshAdminEntry: async () => calls.push('admin'), loadRegistrationMode: async () => calls.push('mode'),
   });
-  // The shared feature context installs the real run helpers; observe these instead.
-  Object.assign(context, { updateRunActivityHint: prefix => calls.push(`hint ${prefix}`),
-    formatRunDuration: seconds => `${seconds}s` });
   vm.runInContext(fs.readFileSync('frontend/app-workspace.js', 'utf8'), context);
   context.persistWorkspaceDrafts = () => calls.push('persist');
   context.activateLocalWorkspace = async () => { calls.push('activate'); };
@@ -791,13 +787,8 @@ test('SPEC-108 runs and sign-in hooks reach the workspace only through registrat
   assert.equal(context.applyLocalResource('runs', { month: '2026-11', rows: [1], summary: {}, hasMore: false }), true);
   assert.deepEqual(JSON.parse(JSON.stringify(context.runController.state)), { rows: [1], summary: {}, hasMore: false, offset: 0 });
   // Sign-in hooks: drafts are saved before a session ends; workspace then account react to the app view.
-  const authSource = fs.readFileSync('frontend/app-auth.js', 'utf8').replace(/\r\n/g, '\n');
-  const authFunction = name => {
-    const start = authSource.indexOf(`function ${name}(`);
-    return authSource.slice(start, authSource.indexOf('\n}', start) + 2);
-  };
   vm.runInContext(`const authViewHooks = { sessionEnding: [], appShown: [], registerShown: [] };
-    ${['onAuthView', 'runAuthViewHooks'].map(authFunction).join('\n')}
+    ${['onAuthView', 'runAuthViewHooks'].map(extract).join('\n')}
     ${featureRegistrations(/^onAuthView\(/gm)}
     runAuthViewHooks('sessionEnding'); runAuthViewHooks('appShown'); runAuthViewHooks('registerShown');`, context);
   assert.deepEqual(calls, ['persist', 'activate', 'admin', 'mode']);
