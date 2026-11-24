@@ -188,3 +188,11 @@ def test_browser_checks_require_browsers_that_launch(monkeypatch):
         task.run_frontend_layout(optional=True)  # warns and skips
     finally:
         task.browser_probe.cache_clear()
+
+
+def test_every_public_task_has_exactly_one_runner():
+    """SPEC-110: run_task dispatches through a table that covers the public task list exactly."""
+    from scripts import task
+
+    assert set(task._TASK_RUNNERS) == set(task.PUBLIC_TASKS)
+    assert all(callable(getattr(task, name)) for name in task._TASK_RUNNERS.values())

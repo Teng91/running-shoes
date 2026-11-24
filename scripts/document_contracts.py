@@ -103,11 +103,24 @@ def named_test_exists(root: Path, reference: str) -> bool:
 
 
 def spec_errors(root: Path, path: Path, source: str) -> list[str]:
-    errors = []
     label = path.relative_to(root)
-    for section in SPEC_SECTIONS:
-        if not re.search(r"(?m)^## " + re.escape(section) + r"\s*$", source):
-            errors.append(f"{label}: missing section {section}")
+    sections = re.split(r"(?m)^## ", source)
+    acceptance = next((part for part in sections if part.startswith("Acceptance criteria\n")), "")
+    trace = next((part for part in sections if part.startswith("Test traceability\n")), "")
+    number = int(path.name[:3])
+    errors = _spec_header_errors(label, source, acceptance)
+    errors += _traceability_file_errors(root, label, trace)
+    if number >= 20:
+        errors += _traced_criteria_errors(label, acceptance, trace)
+    if number >= 23:
+        errors += _named_test_errors(root, label, trace)
+    return errors
+
+
+def _spec_header_errors(label: Path, source: str, acceptance: str) -> list[str]:
+    """Required sections, a valid status and Owner, checkbox criteria and a traceability table."""
+    errors = [f"{label}: missing section {section}" for section in SPEC_SECTIONS
+              if not re.search(r"(?m)^## " + re.escape(section) + r"\s*$", source)]
     status = re.search(
         r"(?m)^- 狀態：(Draft|Accepted|Implemented|Superseded)(?:（[^\n]*）)?\s*$", source
     )
@@ -115,13 +128,16 @@ def spec_errors(root: Path, path: Path, source: str) -> list[str]:
         errors.append(f"{label}: missing or invalid status")
     if not re.search(r"(?m)^- Owner：\S.*$", source):
         errors.append(f"{label}: missing Owner")
-    sections = re.split(r"(?m)^## ", source)
-    acceptance = next((part for part in sections if part.startswith("Acceptance criteria\n")), "")
-    trace = next((part for part in sections if part.startswith("Test traceability\n")), "")
     if not re.search(r"(?m)^- \[[ x]\] .+", acceptance):
         errors.append(f"{label}: acceptance criteria must contain checkboxes")
     if status and status[1] == "Implemented" and re.search(r"(?m)^- \[ \]", acceptance):
         errors.append(f"{label}: Implemented spec has unchecked acceptance criteria")
+    return errors
+
+
+def _traceability_file_errors(root: Path, label: Path, trace: str) -> list[str]:
+    """Every file the traceability table names exists (bare names are searched in the usual folders)."""
+    errors = []
     if not re.search(r"(?m)^\|.+\|.+\|", trace):
         errors.append(f"{label}: missing test traceability table")
     references = re.findall(r"(?<![\w/])(?:[\w.*-]+/)*[\w.*-]+\.(?:py|cjs|mjs|json|md)\b", trace)
@@ -136,31 +152,38 @@ def spec_errors(root: Path, path: Path, source: str) -> list[str]:
         )
         if not any(any(candidate.parent.glob(candidate.name)) for candidate in candidates):
             errors.append(f"{label}: missing traceability file {reference}")
-    # New specifications use explicit, verifiable paths rather than prose-only traceability.
-    if int(path.name[:3]) >= 20:
-        ids = set(re.findall(r"(?m)^- \[[ x]\] (AC-\d+)：", acceptance))
-        traced = set(re.findall(r"AC-\d+", trace))
-        for criterion in sorted(ids - traced):
-            errors.append(f"{label}: {criterion} has no traceability row")
-        for row in trace.splitlines()[2:]:
-            if (
-                row.startswith("|")
-                and "AC-" in row
-                and not re.search(r"`(?:unit_tests/|(?:python3 )?scripts/)", row)
-            ):
-                errors.append(
-                    f"{label}: traceability row needs a test path or repository command: {row}"
-                )
-    if int(path.name[:3]) >= 23:
-        for row in trace.splitlines():
-            if not row.startswith("|") or "AC-" not in row:
-                continue
-            named = re.findall(r"`(unit_tests/[^`]+::[^`]+)`", row)
-            if not named:
-                errors.append(f"{label}: acceptance row needs a named test: {row}")
-            for reference in named:
-                if not named_test_exists(root, reference):
-                    errors.append(f"{label}: missing named test {reference}")
+    return errors
+
+
+def _traced_criteria_errors(label: Path, acceptance: str, trace: str) -> list[str]:
+    """SPEC-020 on: every criterion has a row, and each row names a test path or repository command."""
+    ids = set(re.findall(r"(?m)^- \[[ x]\] (AC-\d+)：", acceptance))
+    traced = set(re.findall(r"AC-\d+", trace))
+    errors = [f"{label}: {criterion} has no traceability row" for criterion in sorted(ids - traced)]
+    for row in trace.splitlines()[2:]:
+        if (
+            row.startswith("|")
+            and "AC-" in row
+            and not re.search(r"`(?:unit_tests/|(?:python3 )?scripts/)", row)
+        ):
+            errors.append(
+                f"{label}: traceability row needs a test path or repository command: {row}"
+            )
+    return errors
+
+
+def _named_test_errors(root: Path, label: Path, trace: str) -> list[str]:
+    """SPEC-023 on: each acceptance row names at least one existing test."""
+    errors = []
+    for row in trace.splitlines():
+        if not row.startswith("|") or "AC-" not in row:
+            continue
+        named = re.findall(r"`(unit_tests/[^`]+::[^`]+)`", row)
+        if not named:
+            errors.append(f"{label}: acceptance row needs a named test: {row}")
+        for reference in named:
+            if not named_test_exists(root, reference):
+                errors.append(f"{label}: missing named test {reference}")
     return errors
 
 

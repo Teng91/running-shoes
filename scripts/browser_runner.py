@@ -20,42 +20,53 @@ def stop_process_tree(process: subprocess.Popen, *, grace_seconds: float = 3) ->
     if process.poll() is not None:
         return
     if os.name == 'nt':
-        if process.poll() is None:
-            subprocess.run(['taskkill', '/PID', str(process.pid), '/T', '/F'],
-                           check=False, capture_output=True, timeout=10)
+        subprocess.run(['taskkill', '/PID', str(process.pid), '/T', '/F'],
+                       check=False, capture_output=True, timeout=10)
     else:
-        # Playwright browsers may start their own process group. Follow ancestry,
-        # rather than assuming every descendant shares Node's group.
-        snapshot = process_snapshot()
-        owned = {process.pid: snapshot.get(process.pid)}
-        while True:
-            children = {pid: identity for pid, identity in snapshot.items()
-                        if identity[0] in owned and pid not in owned}
-            if not children:
-                break
-            owned.update(children)
-        for pid in reversed(owned):
-            if owned[pid] is not None:
-                try:
-                    os.kill(pid, signal.SIGTERM)
-                except ProcessLookupError:
-                    pass
+        owned = _owned_processes(process.pid)
+        _signal_owned(owned, signal.SIGTERM)
         try:
             process.wait(timeout=grace_seconds)
         except subprocess.TimeoutExpired:
             pass
-        current = process_snapshot()
-        for pid, identity in owned.items():
-            # Do not signal an unrelated process if a PID was reused.
-            observed = current.get(pid)
-            if identity is not None and observed is not None and observed[1] == identity[1]:
-                try:
-                    os.kill(pid, signal.SIGKILL)
-                except ProcessLookupError:
-                    pass
+        _kill_survivors(owned)
     if process.poll() is None:
         process.kill()
     process.wait(timeout=10)
+
+
+def _owned_processes(root_pid: int) -> dict:
+    """The process and every descendant, followed by ancestry: Playwright browsers may start their
+    own process group, so a shared group cannot be assumed."""
+    snapshot = process_snapshot()
+    owned = {root_pid: snapshot.get(root_pid)}
+    while True:
+        children = {pid: identity for pid, identity in snapshot.items()
+                    if identity[0] in owned and pid not in owned}
+        if not children:
+            return owned
+        owned.update(children)
+
+
+def _signal_owned(owned: dict, signum: int) -> None:
+    for pid in reversed(owned):
+        if owned[pid] is not None:
+            try:
+                os.kill(pid, signum)
+            except ProcessLookupError:
+                pass
+
+
+def _kill_survivors(owned: dict) -> None:
+    """SIGKILL what is still running, but never an unrelated process that reused a PID."""
+    current = process_snapshot()
+    for pid, identity in owned.items():
+        observed = current.get(pid)
+        if identity is not None and observed is not None and observed[1] == identity[1]:
+            try:
+                os.kill(pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
 
 
 def run_browser_command(arguments: list[str], *, timeout_seconds: float, label: str,

@@ -137,7 +137,8 @@ def test_backend_complexity_is_linted_and_exemptions_only_shrink(tmp_path):
 
     lint = tomllib.loads((check_architecture.ROOT / "pyproject.toml").read_text(encoding="utf-8"))["tool"]["ruff"]["lint"]
     assert "C901" in lint["select"] and lint["mccabe"]["max-complexity"] == 10
-    assert not any(path.startswith("backend") for path in lint.get("per-file-ignores", {}))
+    # SPEC-110: no folder is exempt any more (scripts/ and unit_tests/ included).
+    assert not any("C901" in rules for rules in lint.get("per-file-ignores", {}).values())
 
     baseline = json.loads(check_architecture.RATCHET_BASELINE.read_text(encoding="utf-8"))
     exemptions = check_architecture.complexity_exemptions(check_architecture.ROOT / "backend")
