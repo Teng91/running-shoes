@@ -15,7 +15,10 @@ primary_region = "sin"
 [http_service]
   internal_port = 8000
   force_https = true
-  auto_stop_machines = "stop"
+  # SPEC-099: suspend keeps a memory snapshot, so an idle machine resumes in a few
+  # hundred ms instead of cold-booting. The volume is unaffected; a deploy or host
+  # move discards the snapshot and the next request cold-starts as before.
+  auto_stop_machines = "suspend"
   auto_start_machines = true
   min_machines_running = 0
 
