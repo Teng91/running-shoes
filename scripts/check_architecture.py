@@ -173,13 +173,16 @@ COMPLEXITY_EXEMPTION = re.compile(r"#\s*noqa:[^#\n]*\bC901\b")
 _TOP_LEVEL_DECLARATION = re.compile(
     r"^(?:async\s+)?function\s*\*?\s*([A-Za-z_$][\w$]*)|^(?:let|const|var|class)\s+([A-Za-z_$][\w$]*)", re.M)
 _ANY_DECLARATION = re.compile(r"\b(?:function\s*\*?\s*|let\s+|const\s+|var\s+|class\s+)([A-Za-z_$][\w$]*)")
-_IDENTIFIER = re.compile(r"(?<![\w$])[A-Za-z_$][\w$]*")
+# A bare name or a spread (...name); a property access (hooks.render) is not a use of a global.
+_IDENTIFIER = re.compile(r"(?:(?<=\.\.\.)|(?<![\w$.]))[A-Za-z_$][\w$]*")
+# An object-literal key ({ render: ... }, , key: ...) names a property, not a global.
+_OBJECT_KEY = re.compile(r"([{,]\s*)[A-Za-z_$][\w$]*(?=\s*:(?!:))")
 
 
 def _script_code(path: Path) -> str:
-    """A script without its comments, so a name mentioned in prose is not a dependency."""
+    """A script without comments or object keys, so a name in prose or a property is not a dependency."""
     code = "\n".join(code for _number, code, _line in _code_lines(path))
-    return re.sub(r"/\*.*?\*/", " ", code, flags=re.S)
+    return _OBJECT_KEY.sub(r"\1", re.sub(r"/\*.*?\*/", " ", code, flags=re.S))
 
 
 def frontend_script_dependencies(frontend: Path, scripts: list[str]) -> dict[tuple[str, str], set[str]]:

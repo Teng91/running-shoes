@@ -110,22 +110,24 @@ def test_coupling_ratchet_rejects_growth_and_unrecorded_improvement(tmp_path):
     (tmp_path / "a.js").write_text(
         "function alpha() { return beta(); }\n"
         "// gamma is only mentioned in a comment\n"
-        "/* delta too */\n", encoding="utf-8")
-    (tmp_path / "b.js").write_text("let beta = () => alpha();\n", encoding="utf-8")
+        "/* delta too */\n"
+        "const hooks = { gamma: 1, delta: () => hooks.gamma };\n"
+        "const pick = ok ? hooks : other;\n", encoding="utf-8")
+    (tmp_path / "b.js").write_text("let beta = () => alpha([...delta]);\n", encoding="utf-8")
     (tmp_path / "c.js").write_text(
-        "function gamma() { const alpha = 1; return alpha; }\nconst delta = 2;\n", encoding="utf-8")
+        "function gamma() { const alpha = 1; return alpha; }\nconst delta = [2];\n", encoding="utf-8")
     scripts = ["a.js", "b.js", "c.js"]
     assert check_architecture.frontend_script_dependencies(tmp_path, scripts) == {
-        ("a.js", "b.js"): {"beta"}, ("b.js", "a.js"): {"alpha"}}
+        ("a.js", "b.js"): {"beta"}, ("b.js", "a.js"): {"alpha"}, ("b.js", "c.js"): {"delta"}}
     measured = check_architecture.frontend_coupling(tmp_path, scripts)
-    assert measured == {"cross_script_names": 2, "mutual_pairs": [["a.js", "b.js"]]}
+    assert measured == {"cross_script_names": 3, "mutual_pairs": [["a.js", "b.js"]]}
 
     assert check_architecture.coupling_violations(measured, measured) == []
     grown = check_architecture.coupling_violations(measured, {"cross_script_names": 1, "mutual_pairs": []})
     assert len(grown) == 2 and "budget is 1" in grown[0] and "a.js and b.js now use each other" in grown[1]
     stale = check_architecture.coupling_violations(
-        measured, {"cross_script_names": 3, "mutual_pairs": [["a.js", "b.js"], ["b.js", "c.js"]]})
-    assert len(stale) == 2 and "from 3 to 2" in stale[0] and "remove the pair" in stale[1]
+        measured, {"cross_script_names": 4, "mutual_pairs": [["a.js", "b.js"], ["b.js", "c.js"]]})
+    assert len(stale) == 2 and "from 4 to 3" in stale[0] and "remove the pair" in stale[1]
 
 
 def test_backend_complexity_is_linted_and_exemptions_only_shrink(tmp_path):
