@@ -406,6 +406,8 @@ app 共用同一份模型目錄（刻意的取捨，模型目錄是外部的全�
 依賴方向由入口往內：`main → app factory → router → domain/service → persistence/adapters`。CI 的
 `architecture-check` 會阻止 router 反向 import `backend.main`、service 穿透 HTTP layer，並檢查
 API method/path 重複、OpenAPI path contract、`main.py` route 數與最小 entry-point imports。
+SPEC-100 加上只准變少的基準 `scripts/architecture_ratchet.json`：前端 classic script 之間共用的頂層名稱數、
+互相使用的 script 對，以及後端暫時以 `# noqa: C901` 豁免複雜度（ruff 上限 10）的函式數；增加會失敗，減少後必須同步降低基準。
 SPEC-017 同時追蹤 transitive/relative imports，禁止 service/read model 間接穿透 HTTP 或 tool adapters，
 檢查 native runtime 不直接存取 DOM／fetch 與 lifecycle ownership 不重複；run controller 的 transport 由 adapter 注入；來源生成漂移由 verify／docs-check 阻擋。
 

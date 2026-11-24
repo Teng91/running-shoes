@@ -118,7 +118,7 @@ def _shoe_analytics(shoe: models.Shoe, statistics: dict, as_of: date) -> dict:
     }
 
 
-def dashboard_analytics(
+def dashboard_analytics(  # noqa: C901
     db: Session,
     user_id: int,
     year: int,

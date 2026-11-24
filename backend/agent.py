@@ -179,7 +179,7 @@ def _prefetch_plan(
     return search_fails, search_calls, executed_calls, search_payloads
 
 
-def run_agent_stream(
+def run_agent_stream(  # noqa: C901
     user_message: str,
     history: list[dict] | None = None,
     provider: str = "openrouter",

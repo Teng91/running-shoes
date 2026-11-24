@@ -113,7 +113,7 @@ class AccountBackup(BaseModel):
     history: list[BackupHistory] = Field(default_factory=list, max_length=ARCHIVE_LIMITS["history"])
 
     @model_validator(mode="after")
-    def validate_graph(self):
+    def validate_graph(self):  # noqa: C901
         if self.version >= 2 and not self.source_id:
             raise ValueError("備份 v2–v5 缺少 source_id")
         collections: list[tuple[list[Any], Any]] = [(self.shoes, lambda row: row.id), (self.runs, lambda row: row.id),
