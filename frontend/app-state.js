@@ -69,6 +69,11 @@ const RUN_ACTIVITY_LABELS = Object.freeze({ road: '路跑', trail: '越野跑', 
 // the future. A Python test keeps both sides equal.
 const APP_UTC_OFFSET_MINUTES = 480;
 
+// A colour token of the shown theme, for charts and wear bars (SPEC-105: shared, so it lives here).
+function getThemeColor(varName, fallback) {
+  return getComputedStyle(document.body).getPropertyValue(varName).trim() || fallback;
+}
+
 function appCalendarDate(instant = new Date()) {
   const shifted = new Date(instant.getTime() + APP_UTC_OFFSET_MINUTES * 60000);
   return { year: shifted.getUTCFullYear(), month: shifted.getUTCMonth() + 1, day: shifted.getUTCDate() };

@@ -175,10 +175,6 @@ function renderRunCalendar(filtered, month) {
   target.innerHTML = [...weekdays, ...blanks, ...cells].join('');
 }
 
-function getThemeColor(varName, fallback) {
-  return getComputedStyle(document.body).getPropertyValue(varName).trim() || fallback;
-}
-
 function renderRunShoeChart(shoeStats) {
   const entries = [...shoeStats.entries()].sort((a, b) => b[1].km - a[1].km);
   const shoeList = entries.map(([id]) => runShoe(id));

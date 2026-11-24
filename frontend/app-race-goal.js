@@ -114,3 +114,6 @@ async function deleteRaceGoal() {
     raceGoalSaving = false;
   }
 }
+
+// SPEC-105: the form takes the loaded race goal unless the user is editing it.
+onRaceGoalShown(() => prepareRaceForm());
