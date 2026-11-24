@@ -211,7 +211,8 @@ flowchart LR
     Bootstrap --> Native[runtime/feature-lifecycle.mjs<br/>native module, no DOM / I/O]
     Lifecycle --> Native
     HTML --> State[app-state.js<br/>共享 state]
-    State --> API[app-api.js<br/>HTTP adapters]
+    State --> Session[app-session.js<br/>session 身分]
+    Session --> API[app-api.js<br/>HTTP adapters]
     API --> AuthUI[app-auth.js<br/>session lifecycle]
     AuthUI --> Streams[app-streams.js<br/>JSON SSE lifecycle]
     Streams --> Resources[app-resources.js<br/>cache adapters]
@@ -674,6 +675,7 @@ flowchart LR
 - **限流**：`rate_limits.consume()` 把同一請求的所有視窗放在一個交易，滿了就整筆回滾；限額來自 `app.state.settings`，不再保留記憶體桶。SPEC-071 再加上 AI 的每帳號與全站 24 小時視窗，限流桶保留 24 小時。
 - **稽核 trigger**：每次啟動依目前欄位重建，避免舊欄位清單使快照不完整或使寫入失敗。
 - **Strava**：`strava_import.parse_activity_dates()` 把 UTC 時間戳轉為 `clock.APP_TIMEZONE` 日期。`date_corrections()` 只修正仍停在舊 UTC 日期的既有活動，`services/strava_imports.py` 在匯入交易中移動日期與月跑量。
+- **v4.29.6**：前端沒有互相引用的 script（SPEC-108）。新增 `app-session.js` 擁有登入身分；401 以 `auth-session-expired` 事件交給 `app-auth.js`；工作區與帳號以 `onAuthView` 登記，跑步以 `registerWorkspaceRuns` 與 `registerWorkspaceEditor` 登記。依賴方向：feature → session／auth／workspace，不再反向。
 - **v4.29.5**：草稿由功能向工作區登記（SPEC-107）。`app-workspace.js` 提供 `registerWorkspaceForm`／`registerWorkspaceEditor`／`onWorkspaceModalOpen`，目標、鞋款與帳號自行登記；依賴方向改為 feature → workspace。
 - **v4.29.4**：資料快取重設由功能登記（SPEC-106）。`app-resources.js` 提供 `registerResourceCache`，支出與目標自行登記；`refreshCoreData` 移到 `app-core.js`，工作區以資料 hook 接收資料。依賴方向改為 feature → bridge、feature → shell。
 - **v4.29.3**：後端複雜度歸零與前端共用工具（SPEC-102～105）。後端函式全部低於複雜度 10；`getThemeColor` 移到 `app-state.js`、`reviewCard` 移到 `app-charts.js`，比賽準備以 `registerPanel` 登記、表單以 `onRaceGoalShown` 接收目標。依賴方向不變。

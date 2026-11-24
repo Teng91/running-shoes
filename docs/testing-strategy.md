@@ -297,6 +297,10 @@ SPEC-032：合成資料驗證歷史筆數上限（v4.7.3 起 10,000／10,001）�
 
 [規格與具名案例](specs/061-ci-on-every-push-and-protected-main.md) 以文字解析 workflow：觸發條件是不限分支的 push、pull request、每週排程與手動執行，沒有 `paths-ignore`；部署條件仍只有 main 的 push／手動執行；main 以外的 ref 由較新的執行取消舊的，main 不取消。ruleset 由 `.github/rulesets/main.json` 描述，Python 測試確認它要求 PR、必要檢查與 workflow 的 5 個測試 job 完全一致、禁止刪除與 force push，且沒有繞過名單。
 
+## SPEC-108 登入身分獨立與跑步草稿登記
+
+[規格與具名案例](specs/108-session-module-and-run-drafts.md) 的 transport 測試以真正的 `EventTarget` 當 window，401 經 `auth-session-expired` 事件觸發登出；Node 測試載入整個工作區與跑步、工作區、帳號實際的登記敘述，確認跑步編輯草稿的擷取與繼續編輯、月份快取只套用到目前月份，以及 session 結束、畫面打開與註冊表單打開的 hook 順序；並確認 auth、工作區與 transport 原始碼不再提到彼此的函式。封鎖 storage 的測試另外載入 `app-session.js`。
+
 ## SPEC-107 草稿由功能向工作區登記
 
 [規格與具名案例](specs/107-workspace-form-adapters.md) 的 Node 測試載入整個 `app-workspace.js` 與各功能實際的登記敘述：與已儲存目標相同的目標表單不存成草稿、不同時才存；開啟中的鞋款表單存成含分類的 `shoe:<id>` 草稿，繼續編輯時由鞋款登記重新打開並填回草稿值；打開帳號設定會顯示 Email 區塊；工作區原始碼不再提到這些功能的函式。瀏覽器 E2E 在 CI 驗證實際頁面的草稿流程。

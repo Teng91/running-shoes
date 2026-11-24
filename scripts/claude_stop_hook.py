@@ -26,6 +26,7 @@ LAYOUT_FILES = {
     "frontend/app.js",
     "frontend/app-boot.js",
     "frontend/app-state.js",
+    "frontend/app-session.js",
     "frontend/app-api.js",
     "frontend/app-auth.js",
     "frontend/app-core.js",

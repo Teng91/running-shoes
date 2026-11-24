@@ -416,3 +416,33 @@ async function deleteEditingRun() {
     if (runController.editor === run && isCurrentAuthSession(run.session) && error.name !== 'AbortError') alert(error.message || '刪除失敗');
   } finally { run.saving = false; }
 }
+
+// SPEC-108: the workspace reaches run state only through what this feature registers.
+registerWorkspaceRuns({
+  month: () => selectedRunMonth(),
+  applyCachedPage: value => {
+    Object.assign(runController.state, { rows: value.rows, summary: value.summary, hasMore: value.hasMore, offset: 0 });
+  },
+  shoes: () => allRunShoes(),
+  formRestored: () => updateRunActivityHint('run'),
+});
+
+// SPEC-108: an open run editor is a workspace draft and can be resumed later.
+registerWorkspaceEditor('run', {
+  capture: () => {
+    if (!document.getElementById('run-modal').classList.contains('active') || !runController.editor) return null;
+    const { id, version, date, km, shoe_id, duration_seconds = null, activity_type = 'road' } = runController.editor;
+    return { kind: 'run', base: { id, version, date, km, shoe_id, duration_seconds, activity_type },
+      values: readForm(['edit-run-date', 'edit-run-km', 'edit-run-activity', 'edit-run-duration', 'edit-run-shoe']) };
+  },
+  resume: draft => {
+    runController.openEditor(draft.base);
+    document.getElementById('edit-run-date').value = draft.base.date;
+    document.getElementById('edit-run-km').value = draft.base.km;
+    document.getElementById('edit-run-duration').value = formatRunDuration(draft.base.duration_seconds);
+    document.getElementById('edit-run-activity').value = draft.base.activity_type || 'road';
+    populateRunShoeSelects(draft.base.shoe_id);
+    document.getElementById('run-modal').classList.add('active');
+  },
+  restored: () => updateRunActivityHint('edit-run'),
+});

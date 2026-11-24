@@ -757,3 +757,53 @@ test('SPEC-107 the goal form, shoe editor and account view register their worksp
   const source = fs.readFileSync('frontend/app-workspace.js', 'utf8');
   assert.doesNotMatch(source, /shoeModal|goalFormValues|prepareGoalForm|setGoalField|renderEmailSection|getSelectedCategories/);
 });
+
+test('SPEC-108 runs and sign-in hooks reach the workspace only through registrations', () => {
+  const calls = [];
+  const elements = new Proxy({}, { get: (rows, id) => rows[id] ||= { value: '', textContent: '', dataset: {},
+    classList: { contains: () => id === 'run-modal', add: () => calls.push(`show ${id}`), remove() {} } } });
+  const context = vm.createContext({ document: { getElementById: id => elements[id], querySelectorAll: () => [] },
+    captureAuthSession: () => ({}), isCurrentAuthSession: () => true, registerFeatureReset() {}, newOperationKey: () => 'key',
+    readForm: ids => Object.fromEntries(ids.map(id => [id, elements[id].value])),
+    runController: { editor: { id: 3, version: 2, date: '2026-11-01', km: 10, shoe_id: 7, duration_seconds: 3000, activity_type: 'trail', extra: 'x' },
+      openEditor: base => calls.push(`open ${base.id}`), state: {} },
+    selectedRunMonth: () => '2026-11', allRunShoes: () => [{ id: 7 }], formatRunDuration: seconds => `${seconds}s`,
+    populateRunShoeSelects: id => calls.push(`shoes ${id}`), updateRunActivityHint: prefix => calls.push(`hint ${prefix}`),
+    applyCoreResource() {}, inlineEditors: new Map(), activateLocalWorkspace: async () => calls.push('activate'),
+    refreshAdminEntry: async () => calls.push('admin'), loadRegistrationMode: async () => calls.push('mode'),
+  });
+  // The shared feature context installs the real run helpers; observe these instead.
+  Object.assign(context, { updateRunActivityHint: prefix => calls.push(`hint ${prefix}`),
+    formatRunDuration: seconds => `${seconds}s` });
+  vm.runInContext(fs.readFileSync('frontend/app-workspace.js', 'utf8'), context);
+  context.persistWorkspaceDrafts = () => calls.push('persist');
+  context.activateLocalWorkspace = async () => { calls.push('activate'); };
+  vm.runInContext(featureRegistrations(/^(?:registerWorkspaceRuns|registerWorkspaceEditor)\(/gm), context);
+  const draft = context.captureWorkspaceEditor();
+  assert.deepEqual(JSON.parse(JSON.stringify(draft)), { kind: 'run', values: { 'edit-run-date': '', 'edit-run-km': '', 'edit-run-activity': '',
+    'edit-run-duration': '', 'edit-run-shoe': '' },
+    base: { id: 3, version: 2, date: '2026-11-01', km: 10, shoe_id: 7, duration_seconds: 3000, activity_type: 'trail' } });
+  vm.runInContext("localWorkspace.editors['run:3'] = draft;", Object.assign(context, { draft: { ...draft, values: { 'edit-run-km': '12' } } }));
+  context.closeWorkspaceModal = () => {};
+  context.resumeWorkspaceEditor('run:3');
+  assert.deepEqual(calls.splice(0), ['open 3', 'shoes 7', 'show run-modal', 'hint edit-run']);
+  assert.equal(elements['edit-run-duration'].value, '3000s'); assert.equal(elements['edit-run-km'].value, '12');
+  assert.equal(context.applyLocalResource('runs', { month: '2026-11', rows: [1], summary: {}, hasMore: false }), true);
+  assert.deepEqual(JSON.parse(JSON.stringify(context.runController.state)), { rows: [1], summary: {}, hasMore: false, offset: 0 });
+  // Sign-in hooks: drafts are saved before a session ends; workspace then account react to the app view.
+  const authSource = fs.readFileSync('frontend/app-auth.js', 'utf8').replace(/\r\n/g, '\n');
+  const authFunction = name => {
+    const start = authSource.indexOf(`function ${name}(`);
+    return authSource.slice(start, authSource.indexOf('\n}', start) + 2);
+  };
+  vm.runInContext(`const authViewHooks = { sessionEnding: [], appShown: [], registerShown: [] };
+    ${['onAuthView', 'runAuthViewHooks'].map(authFunction).join('\n')}
+    ${featureRegistrations(/^onAuthView\(/gm)}
+    runAuthViewHooks('sessionEnding'); runAuthViewHooks('appShown'); runAuthViewHooks('registerShown');`, context);
+  assert.deepEqual(calls, ['persist', 'activate', 'admin', 'mode']);
+  for (const [file, names] of [['frontend/app-workspace.js', /runController|selectedRunMonth|allRunShoes|formatRunDuration|populateRunShoeSelects|updateRunActivityHint/],
+    ['frontend/app-auth.js', /persistWorkspaceDrafts|activateLocalWorkspace|refreshAdminEntry|loadRegistrationMode|function captureAuthSession/],
+    ['frontend/app-api.js', /clearAuth|showLoginView/]]) {
+    assert.doesNotMatch(fs.readFileSync(file, 'utf8').replace(/\/\/.*$/gm, ''), names, file);
+  }
+});

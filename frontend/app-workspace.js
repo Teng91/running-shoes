@@ -16,13 +16,23 @@ function registerWorkspaceForm(name, ids, adapter) {
   workspaceFormAdapters[name] = adapter;
 }
 
-// adapter: { capture() the open editor's draft or null, resume(draft) reopens it before its values return }.
+// adapter: { capture() the open editor's draft or null, resume(draft) reopens it before its values
+// return, restored(draft) optionally runs after they do }.
 function registerWorkspaceEditor(kind, adapter) {
   workspaceEditors.set(kind, adapter);
 }
 
 function onWorkspaceModalOpen(view) {
   workspaceModalViews.push(view);
+}
+
+// SPEC-108: the run feature registers how the workspace reads the shown month, restores that
+// month's cached page, lists shoes for re-pairing a queued run and refreshes the activity hint.
+// adapter: { month(), applyCachedPage(value), shoes(), formRestored() }.
+let workspaceRuns = null;
+
+function registerWorkspaceRuns(adapter) {
+  workspaceRuns = adapter;
 }
 
 async function initializeLocalWorkspace() {
@@ -100,7 +110,7 @@ function activateLocalWorkspace() {
         }
         const select = document.getElementById('run-shoe');
         if (draft.forms?.run?.['run-shoe'] && !select.value) select.dataset.requiresSelection = 'true';
-        if (draft.forms?.run && typeof updateRunActivityHint === 'function') updateRunActivityHint('run');
+        if (draft.forms?.run) workspaceRuns?.formRestored();
         // Monthly record editing was removed in SPEC-039; drafts saved by older versions are dropped.
         const editors = Object.entries(draft.editors || {}).filter(([, editor]) => editor.kind !== 'monthly');
         localWorkspace.editors = { ...Object.fromEntries(editors), ...localWorkspace.editors };
@@ -115,16 +125,14 @@ function activateLocalWorkspace() {
 function applyLocalResource(resource, value) {
   if (localWorkspace.fresh.has(resource)) return false;
   if (resource === 'shoes' || resource === 'monthly' || resource === 'goal') applyCoreResource(resource, value);
-  if (resource === 'runs' && value.month === selectedRunMonth()) {
-    Object.assign(runController.state, { rows: value.rows, summary: value.summary, hasMore: value.hasMore, offset: 0 });
-  }
+  if (resource === 'runs' && workspaceRuns && value.month === workspaceRuns.month()) workspaceRuns.applyCachedPage(value);
   return true;
 }
 
 function workspaceDataArrived(resource, value) {
   localWorkspace.fresh.add(resource);
   if (!localWorkspace.controller?.account || !authToken) return;
-  if (resource === 'runs') value = { month: selectedRunMonth(), rows: value.page.rows,
+  if (resource === 'runs') value = { month: workspaceRuns?.month(), rows: value.page.rows,
     summary: value.summary, hasMore: value.page.hasMore };
   void localWorkspace.controller.save('resource', resource, value).catch(workspaceStorageError);
 }
@@ -139,11 +147,6 @@ function captureWorkspaceEditor() {
   for (const adapter of workspaceEditors.values()) {
     const draft = adapter.capture();
     if (draft) return draft;
-  }
-  if (active('run-modal') && runController.editor) {
-    const { id, version, date, km, shoe_id, duration_seconds = null, activity_type = 'road' } = runController.editor;
-    return { kind: 'run', base: { id, version, date, km, shoe_id, duration_seconds, activity_type },
-      values: readForm(['edit-run-date', 'edit-run-km', 'edit-run-activity', 'edit-run-duration', 'edit-run-shoe']) };
   }
   for (const editor of inlineEditors.values()) {
     if (editor.draft) return { kind: editor.draft.kind, base: editor.draft.base,
@@ -179,19 +182,11 @@ function resumeWorkspaceEditor(key) {
   const draft = localWorkspace.editors[key];
   if (!draft) return;
   closeWorkspaceModal();
-  if (workspaceEditors.has(draft.kind)) {
-    workspaceEditors.get(draft.kind).resume(draft);
-  } else if (draft.kind === 'run') {
-    runController.openEditor(draft.base);
-    document.getElementById('edit-run-date').value = draft.base.date;
-    document.getElementById('edit-run-km').value = draft.base.km;
-    document.getElementById('edit-run-duration').value = formatRunDuration(draft.base.duration_seconds);
-    document.getElementById('edit-run-activity').value = draft.base.activity_type || 'road';
-    populateRunShoeSelects(draft.base.shoe_id);
-    document.getElementById('run-modal').classList.add('active');
-  } else return;
+  const editor = workspaceEditors.get(draft.kind);
+  if (!editor) return;
+  editor.resume(draft);
   for (const [id, value] of Object.entries(draft.values || {})) document.getElementById(id).value = value;
-  if (draft.kind === 'run' && typeof updateRunActivityHint === 'function') updateRunActivityHint('edit-run');
+  editor.restored?.(draft);
   if (draft.inline) {
     const fields = { mileage: 'f-mileage', expected_mileage: 'f-expected', monthly_km: 'f-monthly' };
     document.getElementById(fields[draft.inline.field]).value = draft.inline.value;
@@ -315,7 +310,7 @@ async function renderWorkspaceQueue() {
     card.append(text);
     if (row.status === 'blocked') {
       const select = document.createElement('select'); select.setAttribute('aria-label', '重新配對鞋款');
-      select.innerHTML = '<option value="">請明確選擇鞋款</option>' + allRunShoes().map(shoe => `<option value="${shoe.id}">${esc(shoeLabel(shoe))}</option>`).join('');
+      select.innerHTML = '<option value="">請明確選擇鞋款</option>' + (workspaceRuns?.shoes() || []).map(shoe => `<option value="${shoe.id}">${esc(shoeLabel(shoe))}</option>`).join('');
       const retry = document.createElement('button'); retry.className = 'btn btn-edit'; retry.textContent = '重新配對並重試';
       retry.onclick = async () => {
         if (!select.value) return;
@@ -398,3 +393,6 @@ registerFeatureReset('local-workspace', () => {
 
 // SPEC-106: drafts reconcile with loaded data that still matches the screen.
 registerDataHooks({ arrived: (resource, value, current) => { if (current) workspaceDataArrived(resource, value); } });
+
+// SPEC-108: drafts are saved before a session ends, and the workspace attaches when the app opens.
+onAuthView({ sessionEnding: () => persistWorkspaceDrafts(), appShown: () => { void activateLocalWorkspace(); } });

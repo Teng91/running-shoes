@@ -1,8 +1,18 @@
-// Authentication state, forms, and account transitions.
-let authToken = readStoredValue('token');
-let currentUser = readStoredValue('username');
-let authGeneration = 0;
+// Authentication forms and account transitions; the session identity lives in app-session.js (SPEC-108).
 let authOperation = null;
+
+// SPEC-108: features register what happens around sign-in instead of auth calling them by name.
+const authViewHooks = { sessionEnding: [], appShown: [], registerShown: [] };
+
+// hooks: { sessionEnding() before a session ends, appShown() when the app view opens,
+// registerShown() when the sign-up form opens }.
+function onAuthView(hooks) {
+  for (const [name, hook] of Object.entries(hooks)) authViewHooks[name].push(hook);
+}
+
+function runAuthViewHooks(name) {
+  authViewHooks[name].forEach(hook => hook());
+}
 
 function setAuthControlsDisabled(disabled) {
   document.querySelectorAll('#auth-view button[type="submit"]').forEach(button => { button.disabled = disabled; });
@@ -33,17 +43,6 @@ function finishAuthOperation(operation) {
   setAuthControlsDisabled(false);
 }
 
-function captureAuthSession() {
-  return { generation: authGeneration, token: authToken };
-}
-
-function isCurrentAuthSession(session) {
-  return session.generation === authGeneration && session.token === authToken;
-}
-
-function requireAuthSession(session) {
-  if (!isCurrentAuthSession(session)) throw new DOMException('登入工作階段已變更', 'AbortError');
-}
 // SPEC-075: 'invite', 'open' or 'closed'; null until the server answers.
 let registrationMode = null;
 const AUTH_INPUT_IDS = [
@@ -70,7 +69,7 @@ function setAuth(token, username) {
 
 function clearAuth({ persist = true } = {}) {
   cancelAuthOperation();
-  if (typeof persistWorkspaceDrafts === 'function') persistWorkspaceDrafts();
+  runAuthViewHooks('sessionEnding');
   authGeneration += 1;
   resetFeatureLifecycles();
   authToken = null;
@@ -106,8 +105,7 @@ function showAppView({ keepBoot = false } = {}) {
   document.getElementById('app-view').style.display = '';
   document.getElementById('user-label').textContent = currentUser || '';
   render();
-  if (typeof activateLocalWorkspace === 'function') void activateLocalWorkspace();
-  if (typeof refreshAdminEntry === 'function') void refreshAdminEntry();
+  runAuthViewHooks('appShown');
   if (!keepBoot) hideAppBoot();
 }
 
@@ -140,7 +138,7 @@ function showRegisterForm() {
   const resetForm = document.getElementById('reset-form');
   if (resetForm) resetForm.style.display = 'none';
   hideRegError();
-  if (typeof loadRegistrationMode === 'function') void loadRegistrationMode();
+  runAuthViewHooks('registerShown');
 }
 
 function showAuthError(msg) { const el = document.getElementById('auth-error'); el.textContent = msg; el.style.display = 'block'; }
@@ -266,3 +264,5 @@ async function handleRegister() {
 
 function handleLogout() { clearAuth(); showLoginView(); }
 
+// SPEC-108: a 401 from the server (dispatched by app-api.js) signs out here.
+window.addEventListener('auth-session-expired', () => { clearAuth(); showLoginView(); });

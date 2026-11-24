@@ -37,6 +37,8 @@ function featureContext(globals = {}) {
     captureAuthSession: () => ({}), isCurrentAuthSession: () => true,
     // SPEC-101: a whole feature script registers its panel hooks on load; panelWiring() replaces these.
     registerPanel() {}, registerResourceReader() {}, registerDataHooks() {}, workspaceDataArrived() {},
+    // SPEC-108: whole scripts register their sign-in and session-expiry hooks on load.
+    onAuthView() {},
     getSelectedCategories: () => [], ...rest });
   seedCoreData(context, core);
   context.seedCoreData = fields => seedCoreData(context, fields);
@@ -182,7 +184,8 @@ function panelWiring() {
 
 function transportContext() {
   const context = vm.createContext({
-    window: { location: { origin: 'http://test.local' } },
+    // SPEC-108: a real event target, so a 401 reaches the sign-out listener like in the page.
+    window: Object.assign(new EventTarget(), { location: { origin: 'http://test.local' } }), Event,
     DOMException, FormData, Blob, AbortController, setTimeout, clearTimeout, registerFeatureReset() {},
     clearCalls: 0, loginCalls: 0,
   });
@@ -192,6 +195,7 @@ function transportContext() {
     ${extract('requireAuthSession')}
     function clearAuth() { authToken = null; authGeneration++; clearCalls++; }
     function showLoginView() { loginCalls++; }
+    window.addEventListener('auth-session-expired', () => { clearAuth(); showLoginView(); });
     function switchSession(token) { authToken = token; authGeneration++; }
     function activeToken() { return authToken; }
     ${fs.readFileSync('frontend/app-api.js', 'utf8')}`, context);
