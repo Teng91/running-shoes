@@ -253,6 +253,44 @@ def coupling_violations(measured: dict[str, Any], baseline: dict[str, Any]) -> l
     return problems
 
 
+# SPEC-111: frontend functions stay at most 80 lines; the longer ones that remain are recorded in the
+# ratchet with their length, which may only shrink.
+FUNCTION_LINE_LIMIT = 80
+_FUNCTION_START = re.compile(r"^(?:export\s+)?(?:async\s+)?function\s*\*?\s*([A-Za-z_$][\w$]*)\s*\(")
+
+
+def frontend_function_lengths(frontend: Path, files: list[str]) -> dict[str, int]:
+    """{"file:function": lines} for each top-level function, declaration to its closing brace."""
+    lengths = {}
+    for filename in files:
+        lines = (frontend / filename).read_text(encoding="utf-8").splitlines()
+        start, name = None, ""
+        for number, line in enumerate(lines):
+            match = _FUNCTION_START.match(line)
+            if match and start is None:
+                start, name = number, match.group(1)
+            if start is not None and line.startswith("}"):
+                lengths[f"{filename}:{name}"] = number - start + 1
+                start = None
+    return lengths
+
+
+def function_length_violations(lengths: dict[str, int], recorded: dict[str, int]) -> list[str]:
+    """A new long function, or a recorded one growing, fails; shrinking must update the record."""
+    problems = []
+    for key, lines in sorted(lengths.items()):
+        if lines > FUNCTION_LINE_LIMIT and key not in recorded:
+            problems.append(f"{key} has {lines} lines (limit {FUNCTION_LINE_LIMIT}); split it into named steps.")
+        elif key in recorded and lines > recorded[key]:
+            problems.append(f"{key} grew from {recorded[key]} to {lines} lines; split it instead.")
+        elif key in recorded and lines != recorded[key]:
+            fix = "remove it from" if lines <= FUNCTION_LINE_LIMIT else f"set it to {lines} in"
+            problems.append(f"{key} now has {lines} lines; {fix} long_functions in {RATCHET_BASELINE.name}.")
+    for key in sorted(set(recorded) - set(lengths)):
+        problems.append(f"{key} no longer exists; remove it from long_functions in {RATCHET_BASELINE.name}.")
+    return problems
+
+
 _TOP_LEVEL_CALL = re.compile(r"^(?:void\s+)?([A-Za-z_$][\w$]*)\(", re.M)
 
 
@@ -306,6 +344,8 @@ def check_feature_boundaries() -> None:
     problems = coupling_violations(frontend_coupling(frontend, manifest["scripts"]), baseline)
     problems += complexity_exemption_violations(complexity_exemptions(ROOT / "backend"),
                                                 baseline["complexity_exemptions"])
+    lengths = frontend_function_lengths(frontend, manifest["scripts"] + manifest["modules"])
+    problems += function_length_violations(lengths, baseline["long_functions"])
     if problems:
         fail("architecture ratchet (SPEC-100): " + " ".join(problems))
 

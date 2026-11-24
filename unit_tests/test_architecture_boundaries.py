@@ -185,3 +185,30 @@ def test_only_the_session_module_writes_the_signed_in_identity(tmp_path):
     (tmp_path / "app-local.js").write_text("function f() { let currentUser = 1; currentUser = 2; }\n", encoding="utf-8")
     assert check_architecture.session_write_violations(tmp_path, ["app-session.js", "app-auth.js", "app-local.js"]) == [
         "app-auth.js:1: function signIn(t) { authToken = t; }", "app-auth.js:2: authGeneration += 1;"]
+
+
+def test_frontend_functions_stay_short_or_only_shrink(tmp_path):
+    """SPEC-111: a new function over 80 lines fails; a recorded long one may only shrink."""
+    import json
+
+    frontend = check_architecture.ROOT / "frontend"
+    manifest = json.loads((frontend / "assets.json").read_text(encoding="utf-8"))
+    baseline = json.loads(check_architecture.RATCHET_BASELINE.read_text(encoding="utf-8"))
+    lengths = check_architecture.frontend_function_lengths(frontend, manifest["scripts"] + manifest["modules"])
+    assert check_architecture.function_length_violations(lengths, baseline["long_functions"]) == []
+    assert lengths["app-agent.js:sendAgentMessage"] <= check_architecture.FUNCTION_LINE_LIMIT
+    assert lengths["app-shoe-charts.js:renderCharts"] <= check_architecture.FUNCTION_LINE_LIMIT
+
+    body = "\n".join("  step();" for _ in range(85))
+    (tmp_path / "a.js").write_text(f"function long() {{\n{body}\n}}\n\nasync function short() {{\n  return 1;\n}}\n",
+                                   encoding="utf-8")
+    (tmp_path / "m.mjs").write_text("export function made() {\n  return {\n    a: 1,\n  };\n}\n", encoding="utf-8")
+    lengths = check_architecture.frontend_function_lengths(tmp_path, ["a.js", "m.mjs"])
+    assert lengths == {"a.js:long": 87, "a.js:short": 3, "m.mjs:made": 5}
+    violations = check_architecture.function_length_violations
+    assert "split it into named steps" in violations(lengths, {})[0]
+    assert violations(lengths, {"a.js:long": 87}) == []
+    assert "grew from 80 to 87" in violations(lengths, {"a.js:long": 80})[0]
+    assert "set it to 87" in violations(lengths, {"a.js:long": 90})[0]
+    assert "remove it from" in violations({"a.js:long": 70}, {"a.js:long": 87})[0]
+    assert "no longer exists" in violations({}, {"a.js:gone": 99})[0]

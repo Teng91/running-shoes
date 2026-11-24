@@ -51,15 +51,22 @@ function renderCharts() {
   });
   renderShoeTimeline();
   renderDistanceMix();
+  // SPEC-111: the four active-shoe charts share one view of labels, colours and lifecycle numbers.
+  const view = {
+    textColor: getThemeColor('--text-dim', '#8b8d9a'),
+    gridColor: getThemeColor('--chart-grid', '#2a2d3e'),
+    mainTextColor: getThemeColor('--text', '#e4e4e7'),
+    labels: coreData.shoes.map(s => s.brand + ' ' + s.model),
+    colors: coreData.shoes.map(s => shoeColor(s.id)),
+    calcs: coreData.shoes.map(s => calc(s)),
+  };
+  renderProgressChart(view);
+  renderCostChart(view);
+  renderRetireChart(view);
+  renderValueChart(view);
+}
 
-  const textColor = getThemeColor('--text-dim', '#8b8d9a');
-  const gridColor = getThemeColor('--chart-grid', '#2a2d3e');
-  const mainTextColor = getThemeColor('--text', '#e4e4e7');
-
-  const labels = coreData.shoes.map(s => s.brand + ' ' + s.model);
-  const colors = coreData.shoes.map(s => shoeColor(s.id));
-  const calcs = coreData.shoes.map(s => calc(s));
-
+function renderProgressChart({ labels, calcs, textColor, gridColor }) {
   chartInstances.progress = new Chart(document.getElementById('chart-progress'), {
     type: 'bar',
     data: {
@@ -102,7 +109,9 @@ function renderCharts() {
       }
     }
   });
+}
 
+function renderCostChart({ labels, colors, calcs, textColor, gridColor }) {
   chartInstances.cost = new Chart(document.getElementById('chart-cost'), {
     type: 'bar',
     data: {
@@ -130,14 +139,15 @@ function renderCharts() {
       }
     }
   });
+}
 
+function renderRetireChart({ labels, colors, calcs, textColor, gridColor }) {
   const retireData = calcs.map((c, i) => ({
     x: c.retireDate ? c.retireDate.getTime() : null,
     y: i,
     shoeIdx: i,
     label: labels[i]
   })).filter(d => d.x !== null);
-
   chartInstances.retire = new Chart(document.getElementById('chart-retire'), {
     type: 'scatter',
     data: {
@@ -152,14 +162,7 @@ function renderCharts() {
       maintainAspectRatio: false,
       plugins: {
         legend: { display: false },
-        tooltip: {
-          callbacks: {
-            label: ctx => {
-              const d = new Date(ctx.raw.x);
-              return retireData[ctx.dataIndex].label + ': ' + fmtDate(d);
-            }
-          }
-        }
+        tooltip: { callbacks: { label: ctx => retireData[ctx.dataIndex].label + ': ' + fmtDate(new Date(ctx.raw.x)) } }
       },
       scales: {
         x: {
@@ -190,7 +193,9 @@ function renderCharts() {
       }
     }
   });
+}
 
+function renderValueChart({ labels, colors, textColor, mainTextColor }) {
   // SPEC-050: each active shoe's actual monthly average over the last 90 days, from the
   // backend forecast (the analysis window's 實際月均), not the planned monthly km.
   const recentMonthlyKm = coreData.shoes.map(s => Number(s.actual_monthly_km_90_days) || 0);
