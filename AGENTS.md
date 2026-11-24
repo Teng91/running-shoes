@@ -85,7 +85,7 @@
 - `frontend/app-inline-editors.js`: live table DOM ownership and immutable row snapshots across refreshes.
 - `frontend/runtime/workspace-controller.mjs`: injected account drafts, leases and durable run queue.
 - `frontend/app-local-store.js`: atomic IndexedDB adapter; credentials never belong in records.
-- `frontend/app-workspace.js`: account cache, draft and queue DOM bridge.
+- `frontend/app-workspace.js`: account cache, draft and queue DOM bridge; other features register their drafts (`registerWorkspaceForm`, `registerWorkspaceEditor`, `onWorkspaceModalOpen`) instead of the workspace reaching into their forms (SPEC-107).
 - `frontend/app-account.js`: sign-up invite field, admin invite/password panel and account deletion (SPEC-075).
 - `frontend/app-account-restore.js`: restore preview/window/session ownership.
 - `frontend/runtime/account-restore-controller.mjs`: injected restore operation, session and preview cleanup ownership; no DOM or browser transport.

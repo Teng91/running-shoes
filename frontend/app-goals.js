@@ -228,3 +228,10 @@ registerPanel('monthly', { enter: () => prepareGoalForm() });
 registerResourceCache('goal', () => {
   goalProgressRequestId++; resourceStore.invalidate(['goal-progress', 'training-trends']);
 });
+
+// SPEC-107: the goal form is a workspace draft while it differs from the saved goal.
+registerWorkspaceForm('goal', ['goal-start-year', 'goal-monthly-km'], {
+  isDraft: values => Boolean(values['goal-monthly-km']) && !formSnapshotMatches(values, goalFormValues(coreData.runningGoal)),
+  restore: (id, value) => { prepareGoalForm(); setGoalField(id, value); },
+  reset: () => { getFormDraft('goal').reset(); prepareGoalForm(); },
+});

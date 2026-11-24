@@ -324,3 +324,6 @@ async function changePassword() {
   showLoginView();
   showAuthError('密碼已更改，請用新密碼重新登入');
 }
+
+// SPEC-107: the account settings show the email section whenever they open.
+onWorkspaceModalOpen(() => { void renderEmailSection(); });

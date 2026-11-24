@@ -1,4 +1,4 @@
-const { test, assert, transportContext, vm, fs, path } = require('./helpers.cjs');
+const { test, assert, transportContext, vm, fs, path, featureRegistrations } = require('./helpers.cjs');
 const deferred = () => { let resolve; const promise = new Promise(r => { resolve = r; }); return { promise, resolve }; };
 async function bindRestoreController(context) {
   const { createAccountRestoreController } = await import('../../frontend/runtime/account-restore-controller.mjs');
@@ -713,4 +713,47 @@ test('local workspace store reopens a connection the browser closed', async () =
   // Application validation failures are never retried as connection loss.
   await assert.rejects(store.update(['synthetic-A', 'queue', 'op-2'], () => { throw Error('操作識別碼與內容不符'); }), /操作識別碼與內容不符/);
   assert.equal(fake.opens(), 3);
+});
+
+test('SPEC-107 the goal form, shoe editor and account view register their workspace drafts', async () => {
+  const calls = [];
+  const elements = new Proxy({}, { get: (rows, id) => rows[id] ||= { value: '', textContent: '', dataset: {},
+    classList: { contains: () => id === 'modal', add() {}, remove() {} } } });
+  const context = vm.createContext({ document: { getElementById: id => elements[id], querySelectorAll: () => [] },
+    window: { location: { origin: 'https://example.test' } }, currentUser: 'demo',
+    captureAuthSession: () => ({}), isCurrentAuthSession: () => true, registerFeatureReset() {}, newOperationKey: () => 'key',
+    readForm: ids => Object.fromEntries(ids.map(id => [id, elements[id].value])),
+    formSnapshotMatches: (a, b) => JSON.stringify(a) === JSON.stringify(b), coreData: { runningGoal: { start_year: 2026, monthly_km: 100 } },
+    goalFormValues: goal => ({ 'goal-start-year': String(goal.start_year), 'goal-monthly-km': String(goal.monthly_km) }),
+    getSelectedCategories: () => ['Daily'],
+    shoeModal: { context: { shoe: { id: 7 } }, mode: 'edit', formIds: { model: 'f-model' },
+      openForEdit: shoe => calls.push(`edit ${shoe.id}`), openForCreate: () => calls.push('create') },
+    renderEmailSection: async () => { calls.push('email'); }, loadWorkspaceHistory: async () => {},
+    inlineEditors: new Map(), structuredClone,
+  });
+  // The shared feature context installs the real goal helpers; observe these instead.
+  Object.assign(context, { prepareGoalForm: () => calls.push('prepare'), setGoalField: (id, value) => calls.push(`${id}=${value}`),
+    getFormDraft: () => ({ reset: () => calls.push('reset') }) });
+  vm.runInContext(fs.readFileSync('frontend/app-workspace.js', 'utf8'), context);
+  vm.runInContext(featureRegistrations(/^(?:registerWorkspaceForm|registerWorkspaceEditor|onWorkspaceModalOpen)\(/gm), context);
+  assert.deepEqual([...vm.runInContext('Object.keys(workspaceForms)', context)], ['run', 'goal']);
+  const saved = [];
+  vm.runInContext("localWorkspace.controller = { account: 'a', save: async (...args) => { saves.push(args); } };", Object.assign(context, { saves: saved }));
+  elements['goal-start-year'].value = '2026'; elements['goal-monthly-km'].value = '100'; elements['f-model'].value = 'Rider';
+  context.persistWorkspaceDrafts();
+  let snapshot = saved.at(-1)[2];
+  assert.equal(snapshot.forms.goal, undefined, 'a goal form equal to the saved goal is not a draft');
+  assert.deepEqual(snapshot.editors['shoe:7'], { kind: 'shoe', base: { id: 7 }, mode: 'edit', values: { 'f-model': 'Rider' }, categories: ['Daily'] });
+  elements['goal-monthly-km'].value = '150';
+  context.persistWorkspaceDrafts();
+  snapshot = saved.at(-1)[2];
+  assert.equal(snapshot.forms.goal['goal-monthly-km'], '150');
+  vm.runInContext("workspaceFormAdapters.goal.restore('goal-monthly-km', '150'); workspaceFormAdapters.goal.reset();", context);
+  context.closeWorkspaceModal = () => {}; context.renderWorkspaceQueue = async () => {};
+  context.resumeWorkspaceEditor('shoe:7');
+  context.openWorkspaceModal();
+  assert.deepEqual(calls, ['prepare', 'goal-monthly-km=150', 'reset', 'prepare', 'edit 7', 'email']);
+  assert.equal(elements['f-model'].value, 'Rider', 'the draft values return after the editor reopens');
+  const source = fs.readFileSync('frontend/app-workspace.js', 'utf8');
+  assert.doesNotMatch(source, /shoeModal|goalFormValues|prepareGoalForm|setGoalField|renderEmailSection|getSelectedCategories/);
 });

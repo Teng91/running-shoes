@@ -3,8 +3,27 @@ const localWorkspace = { controller: null, session: null, account: null, activat
   runDraftId: null, consumedRunDraftId: null, fresh: new Set(), edited: new Set(), editors: {}, restoring: false, error: '', ready: false, syncing: null, syncRefreshRequested: false, channel: null };
 const workspaceForms = {
   run: ['run-date', 'run-km', 'run-activity', 'run-duration', 'run-shoe'],
-  goal: ['goal-start-year', 'goal-monthly-km'],
 };
+// SPEC-107: features register how their drafts are captured and restored, so the workspace
+// never reaches into another feature's form or modal.
+const workspaceFormAdapters = {};
+const workspaceEditors = new Map();
+const workspaceModalViews = [];
+
+// adapter: { isDraft(values) whether the values are worth keeping, restore(id, value), reset() }.
+function registerWorkspaceForm(name, ids, adapter) {
+  workspaceForms[name] = ids;
+  workspaceFormAdapters[name] = adapter;
+}
+
+// adapter: { capture() the open editor's draft or null, resume(draft) reopens it before its values return }.
+function registerWorkspaceEditor(kind, adapter) {
+  workspaceEditors.set(kind, adapter);
+}
+
+function onWorkspaceModalOpen(view) {
+  workspaceModalViews.push(view);
+}
 
 async function initializeLocalWorkspace() {
   try {
@@ -74,7 +93,7 @@ function activateLocalWorkspace() {
           if (!workspaceForms[name]) continue;
           for (const id of workspaceForms[name]) {
             if (Object.hasOwn(values, id) && !localWorkspace.edited.has(id)) {
-              if (name === 'goal') { prepareGoalForm(); setGoalField(id, String(values[id])); }
+              if (workspaceFormAdapters[name]) workspaceFormAdapters[name].restore(id, String(values[id]));
               else document.getElementById(id).value = String(values[id]);
             }
           }
@@ -117,9 +136,9 @@ function workspaceStorageError(error) {
 
 function captureWorkspaceEditor() {
   const active = id => document.getElementById(id).classList.contains('active');
-  if (active('modal') && shoeModal.context) {
-    return { kind: 'shoe', base: shoeModal.mode === 'create' ? null : shoeModal.context.shoe, mode: shoeModal.mode,
-      values: readForm(Object.values(shoeModal.formIds)), categories: getSelectedCategories() };
+  for (const adapter of workspaceEditors.values()) {
+    const draft = adapter.capture();
+    if (draft) return draft;
   }
   if (active('run-modal') && runController.editor) {
     const { id, version, date, km, shoe_id, duration_seconds = null, activity_type = 'road' } = runController.editor;
@@ -142,8 +161,10 @@ function persistWorkspaceDrafts(event = null) {
   const forms = {};
   if (!localWorkspace.runDraftId) localWorkspace.runDraftId = newOperationKey();
   if (document.getElementById('run-km').value && localWorkspace.runDraftId !== localWorkspace.consumedRunDraftId) forms.run = readForm(workspaceForms.run);
-  const goal = readForm(workspaceForms.goal);
-  if (goal['goal-monthly-km'] && !formSnapshotMatches(goal, goalFormValues(coreData.runningGoal))) forms.goal = goal;
+  for (const [name, adapter] of Object.entries(workspaceFormAdapters)) {
+    const values = readForm(workspaceForms[name]);
+    if (adapter.isDraft(values)) forms[name] = values;
+  }
   const editor = captureWorkspaceEditor();
   if (editor) localWorkspace.editors[`${editor.kind}:${editor.base?.id || 'new'}`] = editor;
   const snapshot = { forms, runDraftId: localWorkspace.runDraftId, editors: structuredClone(localWorkspace.editors) };
@@ -158,10 +179,8 @@ function resumeWorkspaceEditor(key) {
   const draft = localWorkspace.editors[key];
   if (!draft) return;
   closeWorkspaceModal();
-  if (draft.kind === 'shoe') {
-    if (draft.base) shoeModal.openForEdit(draft.base, draft.base.is_retired);
-    else shoeModal.openForCreate();
-    if (draft.categories) document.querySelectorAll('#f-category-group input').forEach(input => { input.checked = draft.categories.includes(input.value); });
+  if (workspaceEditors.has(draft.kind)) {
+    workspaceEditors.get(draft.kind).resume(draft);
   } else if (draft.kind === 'run') {
     runController.openEditor(draft.base);
     document.getElementById('edit-run-date').value = draft.base.date;
@@ -328,7 +347,7 @@ function openWorkspaceModal() {
   document.getElementById('workspace-owner').textContent = '目前網站：' + window.location.origin + '；目前帳號：' + currentUser + '。匯入只寫入這個網站的此帳號。';
   document.getElementById('workspace-modal').classList.add('active');
   void renderWorkspaceQueue(); void loadWorkspaceHistory();
-  if (typeof renderEmailSection === 'function') void renderEmailSection();
+  workspaceModalViews.forEach(view => view());
 }
 function closeWorkspaceModal() {
   document.getElementById('workspace-modal').classList.remove('active');
@@ -347,7 +366,7 @@ async function clearLocalWorkspace() {
     let newerInput = false;
     for (const [name, ids] of Object.entries(workspaceForms)) {
       if (!formSnapshotMatches(operation.form.forms[name], readForm(ids))) { newerInput = true; continue; }
-      if (name === 'goal') { getFormDraft('goal').reset(); prepareGoalForm(); }
+      if (workspaceFormAdapters[name]) workspaceFormAdapters[name].reset();
       else {
         document.getElementById('run-km').value = '';
         document.getElementById('run-duration').value = '';

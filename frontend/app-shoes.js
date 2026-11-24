@@ -274,3 +274,16 @@ function openEditModal(i)    { shoeModal.openForEdit((inlineTableRows.get('shoe-
 function openRetiredEditModal(i) { shoeModal.openForEdit((inlineTableRows.get('retired-table') || coreData.retiredShoes)[i], true); }
 function closeModal()        { shoeModal.close(); }
 
+// SPEC-107: an open shoe form is saved as a workspace draft and can be resumed later.
+registerWorkspaceEditor('shoe', {
+  capture: () => {
+    if (!document.getElementById('modal').classList.contains('active') || !shoeModal.context) return null;
+    return { kind: 'shoe', base: shoeModal.mode === 'create' ? null : shoeModal.context.shoe, mode: shoeModal.mode,
+      values: readForm(Object.values(shoeModal.formIds)), categories: getSelectedCategories() };
+  },
+  resume: draft => {
+    if (draft.base) shoeModal.openForEdit(draft.base, draft.base.is_retired);
+    else shoeModal.openForCreate();
+    if (draft.categories) document.querySelectorAll('#f-category-group input').forEach(input => { input.checked = draft.categories.includes(input.value); });
+  },
+});
