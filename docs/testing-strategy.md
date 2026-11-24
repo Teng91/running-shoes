@@ -297,6 +297,10 @@ SPEC-032：合成資料驗證歷史筆數上限（v4.7.3 起 10,000／10,001）�
 
 [規格與具名案例](specs/061-ci-on-every-push-and-protected-main.md) 以文字解析 workflow：觸發條件是不限分支的 push、pull request、每週排程與手動執行，沒有 `paths-ignore`；部署條件仍只有 main 的 push／手動執行；main 以外的 ref 由較新的執行取消舊的，main 不取消。ruleset 由 `.github/rulesets/main.json` 描述，Python 測試確認它要求 PR、必要檢查與 workflow 的 5 個測試 job 完全一致、禁止刪除與 force push，且沒有繞過名單。
 
+## SPEC-114 最後 4 個長函式
+
+[規格與具名案例](specs/114-last-long-functions.md) 的架構測試確認前端沒有函式超過 80 行；輪替時間軸、月報串流、本機儲存與離線佇列的既有測試改為載入拆出的步驟後原封不動通過，瀏覽器 E2E 在 CI 驗證實際頁面。
+
 ## SPEC-113 介面動作由功能登記
 
 [規格與具名案例](specs/113-ui-action-registry.md) 的 Node 測試以真實的登記表、每個 script 實際的 `registerUiActions()` 敘述與分派器建立動作表，確認 HTML 與產生的列宣告的每個動作恰好一個處理函式、沒有多餘的登記，分派只執行最近的動作；重複或凍結後的登記會丟錯，分派器不再以名稱呼叫功能函式。

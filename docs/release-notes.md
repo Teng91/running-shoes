@@ -4,6 +4,13 @@
 每版的摘要見 [CHANGELOG.md](../CHANGELOG.md)；目前的功能與操作方式以 [README](../README.md) 為準。
 這裡保留當時的文字，後續版本可能已調整其中的行為。
 
+### 前端沒有超過 80 行的函式（SPEC-114，v4.29.10）
+
+- `app-shoe-charts.js` 的 `renderShoeTimeline`、`app-reports.js` 的 `generateReport`、`app-local-store.js` 的 `openLocalWorkspaceStore`、`runtime/workspace-controller.mjs` 的 `createWorkspaceController` 拆成具名步驟。
+- `scripts/architecture_ratchet.json` 的 `long_functions` 清空；本機資料庫仍是 `running-shoes-workspace` v1，紀錄格式不變。
+
+Asset 4.29.10／shell v116、schema 13 不變，可直接回滾至 v4.29.9 image。
+
 ### 介面動作由功能自行登記（SPEC-113，v4.29.9）
 
 - `app-lifecycle.js` 新增 `UI_ACTIONS` 登記表與 `registerUiActions()`；88 個動作搬到擁有處理函式的 21 個 script，`app-actions.js` 只剩委派分派，並在所有功能載入後凍結表格。
