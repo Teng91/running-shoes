@@ -295,6 +295,26 @@ def complexity_exemption_violations(exemptions: list[str], budget: int) -> list[
 
 
 def check_feature_boundaries() -> None:
+    """Backend layering, then the frontend rules and the ratchet (SPEC-100)."""
+    _check_router_mutations()
+    _check_domain_dependencies()
+    frontend = ROOT / "frontend"
+    manifest = json.loads((frontend / "assets.json").read_text(encoding="utf-8"))
+    _check_frontend_ownership(frontend, manifest)
+    _check_frontend_state(frontend, manifest["scripts"])
+    baseline = json.loads(RATCHET_BASELINE.read_text(encoding="utf-8"))
+    problems = coupling_violations(frontend_coupling(frontend, manifest["scripts"]), baseline)
+    problems += complexity_exemption_violations(complexity_exemptions(ROOT / "backend"),
+                                                baseline["complexity_exemptions"])
+    if problems:
+        fail("architecture ratchet (SPEC-100): " + " ".join(problems))
+
+
+_MUTATION_METHODS = {"commit", "rollback", "add", "add_all", "flush", "execute", "update", "delete"}
+
+
+def _check_router_mutations() -> None:
+    """Feature routers delegate every write to an application service."""
     for filename in ("runs.py", "shoes.py", "monthly.py", "auth.py", "goals.py", "reports.py", "workspace.py"):
         path = ROUTERS / filename
         tree = ast.parse(path.read_text(encoding="utf-8"))
@@ -302,12 +322,14 @@ def check_feature_boundaries() -> None:
             if (
                 isinstance(node, ast.Call)
                 and isinstance(node.func, ast.Attribute)
-                and node.func.attr in {"commit", "rollback", "add", "add_all", "flush", "execute", "update", "delete"}
-                and not (
-                    isinstance(node.func.value, ast.Name) and node.func.value.id == "router"
-                )
+                and node.func.attr in _MUTATION_METHODS
+                and not (isinstance(node.func.value, ast.Name) and node.func.value.id == "router")
             ):
                 fail(f"{path.relative_to(ROOT)} must delegate mutations to application services")
+
+
+def _check_domain_dependencies() -> None:
+    """Services and read models never reach HTTP or tool adapters; routers never import each other."""
     for directory in (SERVICES, ROOT / "backend" / "read_models"):
         for path in sorted(directory.glob("*.py")):
             chain = forbidden_dependency_chain(path, ("fastapi", "starlette", "backend.routers", "backend.main", "backend.tools"))
@@ -315,8 +337,10 @@ def check_feature_boundaries() -> None:
                 fail("domain/service dependency violation: " + " -> ".join(chain))
     for offender in router_cross_imports(ROUTERS):
         fail(f"router modules must not import each other: {offender}")
-    frontend = ROOT / "frontend"
-    manifest = json.loads((frontend / "assets.json").read_text(encoding="utf-8"))
+
+
+def _check_frontend_ownership(frontend: Path, manifest: dict[str, Any]) -> None:
+    """One owner per lifecycle reset; native runtime modules stay DOM and transport independent."""
     owners: dict[str, str] = {}
     for filename in manifest["scripts"]:
         source = (frontend / filename).read_text(encoding="utf-8")
@@ -328,19 +352,17 @@ def check_feature_boundaries() -> None:
         source = (frontend / filename).read_text(encoding="utf-8")
         if re.search(r"\b(?:document|window|localStorage|fetch)\b", source):
             fail(f"native runtime module must remain DOM/transport independent: {filename}")
-    for offender in core_data_violations(frontend, manifest["scripts"]):
+
+
+def _check_frontend_state(frontend: Path, scripts: list[str]) -> None:
+    """Core data and the session identity have single writers; load-time calls go to earlier scripts."""
+    for offender in core_data_violations(frontend, scripts):
         fail(f"core data is read through coreData and written only by applyCoreResource() in {CORE_DATA_WRITER}: "
              f"{offender}")
-    for offender in session_write_violations(frontend, manifest["scripts"]):
+    for offender in session_write_violations(frontend, scripts):
         fail(f"the session identity is written only through {SESSION_OWNER} (SPEC-109): {offender}")
-    for problem in load_order_violations(frontend, manifest["scripts"]):
+    for problem in load_order_violations(frontend, scripts):
         fail(f"frontend load order (SPEC-106): {problem}")
-    baseline = json.loads(RATCHET_BASELINE.read_text(encoding="utf-8"))
-    problems = coupling_violations(frontend_coupling(frontend, manifest["scripts"]), baseline)
-    problems += complexity_exemption_violations(complexity_exemptions(ROOT / "backend"),
-                                                baseline["complexity_exemptions"])
-    if problems:
-        fail("architecture ratchet (SPEC-100): " + " ".join(problems))
 
 
 def iter_routes(routes):
@@ -356,6 +378,18 @@ def iter_routes(routes):
 def main() -> None:
     check_feature_boundaries()
     router_files = sorted(ROUTERS.glob("*.py"))
+    _check_entry_points(router_files)
+    main_routes = _check_main_module()
+    route_count = _check_api_routes()
+    print(
+        "Architecture constraints passed: "
+        f"{len(router_files) - 1} router modules, {route_count} API method/path pairs, "
+        f"{main_routes}/{MAIN_ROUTE_BUDGET} routes remaining in main."
+    )
+
+
+def _check_entry_points(router_files: list[Path]) -> None:
+    """Routers exist and never import backend.main; services never import FastAPI or routers."""
     if len(router_files) < 2:
         fail("backend/routers must contain a package and at least one route module")
     for path in router_files:
@@ -374,6 +408,9 @@ def main() -> None:
                 f"{', '.join(sorted(forbidden))}"
             )
 
+
+def _check_main_module() -> int:
+    """backend/main.py only imports the app factory, restores no aliases and owns no routes."""
     main_source = (ROOT / "backend" / "main.py").read_text(encoding="utf-8")
     main_imports = imported_modules(ROOT / "backend" / "main.py")
     if main_imports != {"backend.app_factory"}:
@@ -403,7 +440,25 @@ def main() -> None:
             f"backend/main.py has {main_routes} routes; the ratcheted budget is "
             f"{MAIN_ROUTE_BUDGET}. Add new endpoints through a router."
         )
+    return main_routes
 
+
+_REQUIRED_API_PATHS = {
+    "/api/auth/register",
+    "/api/running-goal",
+    "/api/monthly-mileage",
+    "/api/agent/chat/stream",
+    "/api/reports/generate",
+    "/api/analytics/dashboard",
+    "/api/shoes/{shoe_id}/analytics",
+    "/api/export",
+    "/api/export/account",
+    "/api/spending/monthly",
+}
+
+
+def _check_api_routes() -> int:
+    """No duplicate API routes, the recorded contract, and every required router registered."""
     from backend.main import app
 
     routes = list(iter_routes(app.routes))
@@ -425,31 +480,10 @@ def main() -> None:
         removed = sorted(set(expected_contract) - set(actual_contract))
         fail(f"API contract changed; added={added}, removed={removed}")
 
-    api_paths = {
-        route.path
-        for route in routes
-        if getattr(route, "path", "").startswith("/api/")
-    }
-    required = {
-        "/api/auth/register",
-        "/api/running-goal",
-        "/api/monthly-mileage",
-        "/api/agent/chat/stream",
-        "/api/reports/generate",
-        "/api/analytics/dashboard",
-        "/api/shoes/{shoe_id}/analytics",
-        "/api/export",
-        "/api/export/account",
-        "/api/spending/monthly",
-    }
-    if not required.issubset(api_paths):
+    api_paths = {route.path for route in routes if getattr(route, "path", "").startswith("/api/")}
+    if not _REQUIRED_API_PATHS.issubset(api_paths):
         fail("the analytics/export/spending routers are not fully registered on the FastAPI app")
-
-    print(
-        "Architecture constraints passed: "
-        f"{len(router_files) - 1} router modules, {len(route_keys)} API method/path pairs, "
-        f"{main_routes}/{MAIN_ROUTE_BUDGET} routes remaining in main."
-    )
+    return len(route_keys)
 
 
 if __name__ == "__main__":

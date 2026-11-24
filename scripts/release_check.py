@@ -43,52 +43,58 @@ def fetch_public(origin: str, path: str) -> tuple[int, dict, bytes]:
 
 def check_release(fetcher, *, frontend: Path = FRONTEND) -> dict:
     manifest = json.loads((frontend / "assets.json").read_text(encoding="utf-8"))
-    version = manifest["version"]
+    _check_health_and_contract(fetcher)
+    assets = [*shell_asset_paths(manifest), ("/service-worker.js", "service-worker.js")]
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        list(pool.map(lambda item: _check_asset(fetcher, frontend, item), assets))
+    for path in ("/api/runs/summary?year=2026&month=1", "/api/runs/year-summary?year=2026",
+                 "/api/running-goal/progress?year=2026&month=1", "/api/spending/summary"):
+        if fetcher(path)[0] != 401:
+            raise ValueError(f"anonymous API isolation failed: {path.split('?')[0]}")
+    return {"version": manifest["version"], "cache": manifest["cache_name"], "assets": len(assets)}
 
-    def read_json(path: str) -> dict:
-        status, _, body = fetcher(path)
-        if status != 200:
-            raise ValueError(f"{path}: expected HTTP 200, got {status}")
-        result = json.loads(body)
-        if not isinstance(result, dict):
-            raise ValueError(f"{path}: invalid JSON object")
-        return result
 
-    live, ready = read_json("/health/live"), read_json("/health/ready")
+def _read_json(fetcher, path: str) -> dict:
+    status, _, body = fetcher(path)
+    if status != 200:
+        raise ValueError(f"{path}: expected HTTP 200, got {status}")
+    result = json.loads(body)
+    if not isinstance(result, dict):
+        raise ValueError(f"{path}: invalid JSON object")
+    return result
+
+
+def _check_health_and_contract(fetcher) -> None:
+    """Live and ready at this repository's schema version, and every contracted API route present."""
+    live, ready = _read_json(fetcher, "/health/live"), _read_json(fetcher, "/health/ready")
     expected_schema = int(re.search(
         r"CURRENT_SCHEMA_VERSION = (\d+)", (ROOT / "backend/migrations.py").read_text(encoding="utf-8")
     )[1])
     if live.get("status") != "ok" or ready.get("status") != "ok" or ready.get("schema_version") != expected_schema:
         raise ValueError("health/readiness or database schema version mismatch")
-    contract = read_json("/openapi.json").get("paths", {})
+    contract = _read_json(fetcher, "/openapi.json").get("paths", {})
     for entry in json.loads((ROOT / "unit_tests/api_contract.json").read_text(encoding="utf-8")):
         method, path = entry.split(" ", 1)
         if method.lower() not in contract.get(path, {}):
             raise ValueError(f"API contract missing: {entry}")
 
-    assets = [*shell_asset_paths(manifest), ("/service-worker.js", "service-worker.js")]
 
-    def check_asset(item):
-        url, name = item
-        status, headers, body = fetcher(url)
-        if status != 200:
-            raise ValueError(f"asset unavailable: {name} (HTTP {status})")
-        kind = {key.lower(): value for key, value in headers.items()}.get("content-type", "")
-        types = {(".js", ".mjs"): "javascript", (".css",): "text/css",
-                 (".html",): "text/html", (".png",): "image/png", (".svg",): "image/svg+xml",
-                 (".webmanifest",): "application/manifest+json"}
-        if any(name.endswith(suffixes) and expected not in kind for suffixes, expected in types.items()):
-            raise ValueError(f"asset MIME mismatch: {name}")
-        if hashlib.sha256(body).digest() != hashlib.sha256((frontend / name).read_bytes()).digest():
-            raise ValueError(f"asset content/version mismatch: {name}")
+_ASSET_TYPES = {(".js", ".mjs"): "javascript", (".css",): "text/css",
+                (".html",): "text/html", (".png",): "image/png", (".svg",): "image/svg+xml",
+                (".webmanifest",): "application/manifest+json"}
 
-    with ThreadPoolExecutor(max_workers=6) as pool:
-        list(pool.map(check_asset, assets))
-    for path in ("/api/runs/summary?year=2026&month=1", "/api/runs/year-summary?year=2026",
-                 "/api/running-goal/progress?year=2026&month=1", "/api/spending/summary"):
-        if fetcher(path)[0] != 401:
-            raise ValueError(f"anonymous API isolation failed: {path.split('?')[0]}")
-    return {"version": version, "cache": manifest["cache_name"], "assets": len(assets)}
+
+def _check_asset(fetcher, frontend: Path, item: tuple[str, str]) -> None:
+    """One published asset: served, with the right MIME type and exactly the repository's bytes."""
+    url, name = item
+    status, headers, body = fetcher(url)
+    if status != 200:
+        raise ValueError(f"asset unavailable: {name} (HTTP {status})")
+    kind = {key.lower(): value for key, value in headers.items()}.get("content-type", "")
+    if any(name.endswith(suffixes) and expected not in kind for suffixes, expected in _ASSET_TYPES.items()):
+        raise ValueError(f"asset MIME mismatch: {name}")
+    if hashlib.sha256(body).digest() != hashlib.sha256((frontend / name).read_bytes()).digest():
+        raise ValueError(f"asset content/version mismatch: {name}")
 
 
 def main() -> int:

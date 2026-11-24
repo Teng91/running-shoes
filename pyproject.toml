@@ -13,14 +13,10 @@ ignore = [
     "RUF003",
 ]
 
-# SPEC-100: backend functions stay below complexity 10. The functions that were already above it
-# carry a `# noqa: C901` until they are split; a new one fails the lint. Scripts and tests are exempt.
+# SPEC-100/110: every function in backend/, scripts/ and unit_tests/ stays below complexity 10;
+# a new one above it fails the lint (no `# noqa: C901` remains anywhere).
 [tool.ruff.lint.mccabe]
 max-complexity = 10
-
-[tool.ruff.lint.per-file-ignores]
-"scripts/**" = ["C901"]
-"unit_tests/**" = ["C901"]
 
 [tool.mypy]
 python_version = "3.11"

@@ -245,74 +245,106 @@ def run_frontend_pwa(*, optional: bool = False) -> None:
     run_checked(browser_command("PWA upgrade/offline tests", "unit_tests/frontend_pwa.cjs", 300))
 
 
-def run_task(task: str, *, base_url: str | None = None) -> None:
+def _test_fast(_base_url: str | None) -> None:
+    run_checked(Command("Ruff", (project_python(), "-m", "ruff", "check", "backend", "scripts", "unit_tests")))
+    run_checked(backend_test_command())
+
+
+def _frontend_test(_base_url: str | None) -> None:
+    run_checked(Command("Frontend regression tests", ("node", "--test", "unit_tests/frontend_regressions.cjs")))
+
+
+def _eval_agent(_base_url: str | None) -> None:
+    run_checked(
+        Command(
+            "Agent behavior evals",
+            (project_python(), "-m", "pytest", "-q", "unit_tests/test_agent_evals.py"),
+            needs_test_secret=True,
+        )
+    )
+
+
+def _audit_deps(_base_url: str | None) -> None:
+    for command in dependency_audit_commands():
+        run_checked(command)
+
+
+def _architecture_check(_base_url: str | None) -> None:
+    run_checked(
+        Command(
+            "Architecture constraints",
+            (project_python(), "scripts/check_architecture.py"),
+            needs_test_secret=True,
+        )
+    )
+
+
+def _security_check(_base_url: str | None) -> None:
+    run_checked(Command("Secret scan", (project_python(), "scripts/check_secrets.py")))
+
+
+def _docs_check(_base_url: str | None) -> None:
     python = project_python()
-    if task == "setup":
-        run_setup()
-    elif task == "test-fast":
-        run_checked(Command("Ruff", (python, "-m", "ruff", "check", "backend", "scripts", "unit_tests")))
-        run_checked(backend_test_command())
-    elif task == "frontend-test":
-        run_checked(Command("Frontend regression tests", ("node", "--test", "unit_tests/frontend_regressions.cjs")))
-    elif task == "frontend-layout":
-        run_frontend_layout()
-    elif task == "frontend-e2e":
-        run_frontend_e2e()
-    elif task == "frontend-pwa":
-        run_frontend_pwa()
-    elif task == "eval-agent":
-        run_checked(
-            Command(
-                "Agent behavior evals",
-                (python, "-m", "pytest", "-q", "unit_tests/test_agent_evals.py"),
-                needs_test_secret=True,
-            )
+    run_checked(Command("Generated frontend assets", (python, "scripts/build_frontend.py", "--check")))
+    run_checked(
+        Command(
+            "README consistency",
+            (python, "scripts/check_docs.py"),
+            needs_test_secret=True,
         )
-    elif task == "audit-deps":
-        for command in dependency_audit_commands():
-            run_checked(command)
-    elif task == "architecture-check":
-        run_checked(
-            Command(
-                "Architecture constraints",
-                (python, "scripts/check_architecture.py"),
-                needs_test_secret=True,
-            )
-        )
-    elif task == "security-check":
-        run_checked(Command("Secret scan", (python, "scripts/check_secrets.py")))
-    elif task == "docs-check":
-        run_checked(Command("Generated frontend assets", (python, "scripts/build_frontend.py", "--check")))
-        run_checked(
-            Command(
-                "README consistency",
-                (python, "scripts/check_docs.py"),
-                needs_test_secret=True,
-            )
-        )
-    elif task == "verify":
-        run_verify()
-    elif task == "verify-all":
-        run_verify()
-        run_frontend_layout(optional=True)
-        run_frontend_e2e(optional=True)
-        run_frontend_pwa(optional=True)
-    elif task == "diagnostics-generate":
-        if not layout_dependencies_available():
-            raise TaskError(browser_unavailable_message("diagnostics-generate"))
-        run_checked(browser_command("Capture synthetic browser failure", "scripts/diagnostics_drill.cjs", 60))
-        run_checked(Command("Verify captured diagnostics", (python, "scripts/verify_diagnostics.py")))
-    elif task == "diagnostics-verify":
-        run_checked(Command("Verify downloaded diagnostics", (python, "scripts/verify_diagnostics.py")))
-    elif task == "release-check":
-        if not base_url:
-            raise TaskError("release-check requires --base-url (HTTPS or a loopback fixture)")
-        if not layout_dependencies_available():
-            raise TaskError(browser_unavailable_message("release-check"))
-        run_checked(Command("Generated frontend assets", (python, "scripts/build_frontend.py", "--check")))
-        run_checked(Command("Read-only release verification", (python, "scripts/release_check.py", "--base-url", base_url)))
-    else:
+    )
+
+
+def _verify_all(_base_url: str | None) -> None:
+    run_verify()
+    run_frontend_layout(optional=True)
+    run_frontend_e2e(optional=True)
+    run_frontend_pwa(optional=True)
+
+
+def _diagnostics_generate(_base_url: str | None) -> None:
+    if not layout_dependencies_available():
+        raise TaskError(browser_unavailable_message("diagnostics-generate"))
+    run_checked(browser_command("Capture synthetic browser failure", "scripts/diagnostics_drill.cjs", 60))
+    run_checked(Command("Verify captured diagnostics", (project_python(), "scripts/verify_diagnostics.py")))
+
+
+def _diagnostics_verify(_base_url: str | None) -> None:
+    run_checked(Command("Verify downloaded diagnostics", (project_python(), "scripts/verify_diagnostics.py")))
+
+
+def _release_check(base_url: str | None) -> None:
+    if not base_url:
+        raise TaskError("release-check requires --base-url (HTTPS or a loopback fixture)")
+    if not layout_dependencies_available():
+        raise TaskError(browser_unavailable_message("release-check"))
+    python = project_python()
+    run_checked(Command("Generated frontend assets", (python, "scripts/build_frontend.py", "--check")))
+    run_checked(Command("Read-only release verification", (python, "scripts/release_check.py", "--base-url", base_url)))
+
+
+# SPEC-110: one small function per task; names are looked up at call time so tests can replace them.
+_TASK_RUNNERS: dict[str, str] = {
+    "setup": "run_setup", "test-fast": "_test_fast", "frontend-test": "_frontend_test",
+    "frontend-layout": "run_frontend_layout", "frontend-e2e": "run_frontend_e2e", "frontend-pwa": "run_frontend_pwa",
+    "eval-agent": "_eval_agent", "audit-deps": "_audit_deps", "architecture-check": "_architecture_check",
+    "security-check": "_security_check", "docs-check": "_docs_check", "verify": "run_verify",
+    "verify-all": "_verify_all", "diagnostics-generate": "_diagnostics_generate",
+    "diagnostics-verify": "_diagnostics_verify", "release-check": "_release_check",
+}
+# Runners that take the optional base URL; the others take no arguments.
+_URL_RUNNERS = {name for name in _TASK_RUNNERS.values() if name.startswith("_")}
+
+
+def run_task(task: str, *, base_url: str | None = None) -> None:
+    runner_name = _TASK_RUNNERS.get(task)
+    if runner_name is None:
         raise TaskError(f"Unknown task: {task}")
+    runner = globals()[runner_name]
+    if runner_name in _URL_RUNNERS:
+        runner(base_url)
+    else:
+        runner()
 
 
 def build_parser() -> argparse.ArgumentParser:

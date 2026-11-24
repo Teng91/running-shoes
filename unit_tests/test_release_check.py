@@ -39,33 +39,41 @@ def test_release_check_accepts_only_matching_complete_public_shell():
     assert result["assets"] == 58
 
 
+def _break_asset(failure, status, headers, body):
+    """One shell asset served altered, with the wrong MIME type or unavailable."""
+    if failure == "hash":
+        body += b"// altered"
+    if failure == "mime":
+        headers = {"Content-Type": "text/html"}
+    if failure == "http":
+        status = 503
+    return status, headers, body
+
+
+def _break_response(failure, path, response):
+    """The fixture response for path, broken the way the failure case names (SPEC-110: split out)."""
+    status, headers, body = response
+    if path.startswith("/app-api.js"):
+        return _break_asset(failure, status, headers, body)
+    if failure == "schema" and path == "/health/ready":
+        body = b'{"status":"ok","schema_version":1}'
+    if failure == "api" and path == "/openapi.json":
+        body = b'{"paths":{}}'
+    if failure == "auth" and path.startswith("/api/runs/year-summary"):
+        status = 200
+    if failure == "version" and path == "/":
+        expected_version = json.loads((FRONTEND / "assets.json").read_text(encoding="utf-8"))["version"]
+        body = body.replace(f'content="{expected_version}"'.encode(), b'content="0.0.0"')
+    if failure == "module-mime" and path.startswith("/runtime/feature-lifecycle.mjs"):
+        headers = {"Content-Type": "text/html"}
+    return status, headers, body
+
+
 @pytest.mark.parametrize("failure", ["hash", "mime", "http", "schema", "api", "auth", "version", "module-mime"])
 def test_release_check_fails_closed_on_broken_deployments(failure):
     good = fixture_fetcher()
-
-    def broken(path):
-        status, headers, body = good(path)
-        if path.startswith("/app-api.js"):
-            if failure == "hash":
-                body += b"// altered"
-            if failure == "mime":
-                headers = {"Content-Type": "text/html"}
-            if failure == "http":
-                status = 503
-        if failure == "schema" and path == "/health/ready":
-            body = b'{"status":"ok","schema_version":1}'
-        if failure == "api" and path == "/openapi.json":
-            body = b'{"paths":{}}'
-        if failure == "auth" and path.startswith("/api/runs/year-summary"):
-            status = 200
-        if failure == "version" and path == "/":
-            expected_version = json.loads((FRONTEND / "assets.json").read_text(encoding="utf-8"))["version"]
-            body = body.replace(f'content="{expected_version}"'.encode(), b'content="0.0.0"')
-        if failure == "module-mime" and path.startswith("/runtime/feature-lifecycle.mjs"):
-            headers = {"Content-Type": "text/html"}
-        return status, headers, body
     with pytest.raises(ValueError):
-        release_check.check_release(broken)
+        release_check.check_release(lambda path: _break_response(failure, path, good(path)))
 
 
 @pytest.mark.parametrize("origin", ["http://example.com", "https://user:secret@example.com", "https://example.com/path", "https://example.com?token=secret"])

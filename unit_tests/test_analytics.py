@@ -220,7 +220,6 @@ def test_shoe_analytics_survives_legacy_extreme_forecast_values(db, user_with_to
 
 
 def test_shoe_analytics_sql_is_bounded_and_user_scoped(db, user_with_token):
-    from datetime import timedelta
 
     from sqlalchemy import event
 
@@ -238,17 +237,8 @@ def test_shoe_analytics_sql_is_bounded_and_user_scoped(db, user_with_token):
     db.add_all([*shoes, foreign, deleted])
     db.flush()
     as_of = date(2026, 10, 23)
-    records = []
-    for shoe in shoes:
-        for index in range(400):
-            run = Run(user_id=user.id, shoe_id=shoe.id,
-                      date=(as_of - timedelta(days=index // 2)).isoformat(), km=1.25 + index % 3)
-            db.add(run)
-            records.append(run)
-        for when in ["2020-01-01", "2026-10-31", "2027-01-01"]:
-            run = Run(user_id=user.id, shoe_id=shoe.id, date=when, km=7.75)
-            db.add(run)
-            records.append(run)
+    records = [run for shoe in shoes for run in _bounded_history(user.id, shoe.id, as_of)]
+    db.add_all(records)
     db.add(Run(user_id=other.id, shoe_id=shoes[0].id, date="2026-10-22", km=9999))
     db.commit()
     # Warm attributes, then ensure read models never materialize even one Run entity.
@@ -285,25 +275,42 @@ def test_shoe_analytics_sql_is_bounded_and_user_scoped(db, user_with_token):
         event.remove(db, "loaded_as_persistent", load)
     assert [item["shoe"]["id"] for item in batch] == [shoe.id for shoe in shoes]
     for shoe, result in zip(shoes, batch, strict=True):
-        rows = [run for run in expected if run["shoe_id"] == shoe.id]
-        ordered = sorted(rows, key=lambda run: (run["date"], run["id"]), reverse=True)
-        usage = result["usage"]
-        assert usage["count"] == len(rows) == 403
-        assert usage["km"] == sum(run["km"] for run in rows)
-        assert usage["days"] == len({run["date"] for run in rows})
-        assert usage["first_run_date"] == "2020-01-01"
-        assert usage["last_run_date"] == "2027-01-01"
-        for days in [30, 90]:
-            start = (as_of - timedelta(days=days - 1)).isoformat()
-            assert usage[f"km_{days}_days"] == sum(run["km"] for run in rows if start <= run["date"] <= as_of.isoformat())
-        assert result["recent_runs"] == [
-            {**{key: run[key] for key in ["id", "date", "km"]}, "pace_seconds_per_km": None, "activity_type": "road"} for run in ordered[:12]
-        ]
-        assert len(result["monthly_history"]) == 12
-        assert result["monthly_history"][-1]["km"] == sum(run["km"] for run in rows if run["date"].startswith("2026-10"))
+        _assert_shoe_analytics(result, [run for run in expected if run["shoe_id"] == shoe.id], as_of)
         assert insights.shoe_analytics(db, user_id, shoe.id, today=as_of) == result
     assert insights.shoe_analytics(db, user_id, foreign.id, today=as_of) is None
     assert insights.shoe_analytics(db, user_id, deleted.id, today=as_of) is None
+
+
+def _bounded_history(user_id, shoe_id, as_of):
+    """400 recent runs (two a day) plus one very old, one later this month and one future run."""
+    from datetime import timedelta
+
+    recent = [Run(user_id=user_id, shoe_id=shoe_id, date=(as_of - timedelta(days=index // 2)).isoformat(),
+                  km=1.25 + index % 3) for index in range(400)]
+    edges = [Run(user_id=user_id, shoe_id=shoe_id, date=when, km=7.75)
+             for when in ["2020-01-01", "2026-10-31", "2027-01-01"]]
+    return recent + edges
+
+
+def _assert_shoe_analytics(result, rows, as_of):
+    """One shoe's batch result matches its 403 synthetic runs (SPEC-110: split from the test above)."""
+    from datetime import timedelta
+
+    ordered = sorted(rows, key=lambda run: (run["date"], run["id"]), reverse=True)
+    usage = result["usage"]
+    assert usage["count"] == len(rows) == 403
+    assert usage["km"] == sum(run["km"] for run in rows)
+    assert usage["days"] == len({run["date"] for run in rows})
+    assert usage["first_run_date"] == "2020-01-01"
+    assert usage["last_run_date"] == "2027-01-01"
+    for days in [30, 90]:
+        start = (as_of - timedelta(days=days - 1)).isoformat()
+        assert usage[f"km_{days}_days"] == sum(run["km"] for run in rows if start <= run["date"] <= as_of.isoformat())
+    assert result["recent_runs"] == [
+        {**{key: run[key] for key in ["id", "date", "km"]}, "pace_seconds_per_km": None, "activity_type": "road"} for run in ordered[:12]
+    ]
+    assert len(result["monthly_history"]) == 12
+    assert result["monthly_history"][-1]["km"] == sum(run["km"] for run in rows if run["date"].startswith("2026-10"))
 
 
 def test_shoe_analytics_empty_history_has_zero_metrics(db, user_with_token):
