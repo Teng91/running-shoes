@@ -30,13 +30,16 @@ function applyCoreResource(resource, value) {
 
 registerFeatureReset('dashboard-data', () => coreDataStore?.reset());
 
+// SPEC-106: a feature registers what invalidating one of its caches resets, when it loads;
+// the hooks are installed once the store exists.
+const resourceCacheHooks = [];
+
+function registerResourceCache(name, onInvalidate) {
+  resourceCacheHooks.push([name, onInvalidate]);
+}
+
 function registerResourceCaches() {
-  resourceStore.registerCache('spending', () => {
-    applyCoreResource('spending', null); spendingLoadRequestId++; spendingLoadPending = false;
-  });
-  resourceStore.registerCache('goal', () => {
-    goalProgressRequestId++; resourceStore.invalidate(['goal-progress', 'training-trends']);
-  });
+  for (const [name, onInvalidate] of resourceCacheHooks) resourceStore.registerCache(name, onInvalidate);
   resourceStore.registerCache('annual', () => {
     runController.state.annualRequest++;
     resourceStore.invalidate(['annual-summary', 'training-trends', 'shoe-timeline', 'pace-analysis', 'race-readiness', 'run-totals']);
@@ -53,13 +56,3 @@ function invalidateDataResources(resources) {
 }
 registerFeatureReset('data-resources', () => resourceStore?.reset());
 
-// loadData delivers resources progressively and records errors instead of rejecting.
-// Mutations need an explicit core-data check before reporting refreshed UI.
-async function refreshCoreData(options) {
-  const session = captureAuthSession();
-  await loadData(options);
-  if (!isCurrentAuthSession(session)) throw Object.assign(Error('登入狀態已變更'), { name: 'AbortError' });
-  if (resourceStore.policy(options?.mutation).resources.some(resource => resourceStore.getError(resource))) {
-    throw new Error('資料讀取尚未完成');
-  }
-}

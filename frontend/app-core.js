@@ -21,7 +21,8 @@ function registerResourceReader(name, reader) {
   resourceReaders.set(name, reader);
 }
 
-// hooks: { arrived(resource) after a resource is applied, invalidated() on a full redraw,
+// hooks: { arrived(resource, value, current) after a resource is applied (current: the value
+// still matches the screen's scope), invalidated() on a full redraw,
 // history() when a load also refreshes the import history }.
 function registerDataHooks(hooks) {
   dataHooks.push(hooks);
@@ -155,12 +156,22 @@ async function loadData({ mutation = null } = {}) {
     const reader = resourceReaders.get(resource);
     const current = !reader?.current || reader.current(scopes[resource]);
     if (reader && current) reader.apply(value);
-    if (typeof workspaceDataArrived === 'function' && current) workspaceDataArrived(resource, value);
-    dataHooks.forEach(hook => hook.arrived?.(resource));
+    dataHooks.forEach(hook => hook.arrived?.(resource, value, current));
     // A slow optional source must not hold an otherwise usable screen behind boot.
     if (typeof hideAppBoot === 'function') hideAppBoot();
   };
   const completion = resourceStore.refresh(mutation, readers, scopes, applyResource);
   if (resourceStore.policy(mutation).history) dataHooks.forEach(hook => void hook.history?.());
   await completion;
+}
+
+// loadData delivers resources progressively and records errors instead of rejecting.
+// Mutations need an explicit core-data check before reporting refreshed UI.
+async function refreshCoreData(options) {
+  const session = captureAuthSession();
+  await loadData(options);
+  if (!isCurrentAuthSession(session)) throw Object.assign(Error('登入狀態已變更'), { name: 'AbortError' });
+  if (resourceStore.policy(options?.mutation).resources.some(resource => resourceStore.getError(resource))) {
+    throw new Error('資料讀取尚未完成');
+  }
 }

@@ -376,3 +376,6 @@ registerFeatureReset('local-workspace', () => {
   document.getElementById('workspace-queue').replaceChildren();
   document.getElementById('workspace-drafts').replaceChildren();
 });
+
+// SPEC-106: drafts reconcile with loaded data that still matches the screen.
+registerDataHooks({ arrived: (resource, value, current) => { if (current) workspaceDataArrived(resource, value); } });

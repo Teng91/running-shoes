@@ -223,3 +223,8 @@ async function saveRunningGoal() {
 
 // SPEC-101: the goal form takes its baseline before the monthly tab becomes interactive.
 registerPanel('monthly', { enter: () => prepareGoalForm() });
+
+// SPEC-106: invalidating the goal drops goal progress and the trends that draw its pace line.
+registerResourceCache('goal', () => {
+  goalProgressRequestId++; resourceStore.invalidate(['goal-progress', 'training-trends']);
+});

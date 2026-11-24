@@ -4,6 +4,14 @@
 每版的摘要見 [CHANGELOG.md](../CHANGELOG.md)；目前的功能與操作方式以 [README](../README.md) 為準。
 這裡保留當時的文字，後續版本可能已調整其中的行為。
 
+### 資料快取重設由功能登記（SPEC-106，v4.29.4）
+
+- `app-resources.js` 新增 `registerResourceCache()`；`app-spending.js` 與 `app-goals.js` 登記各自的失效重設，bridge 不再改寫功能的狀態。
+- `refreshCoreData()` 移到 `app-core.js`；資料到達 hook 改為 `arrived(resource, value, current)`，`app-workspace.js` 以它對帳草稿。
+- `scripts/architecture_ratchet.json` 為 241 個名稱、10 對。
+
+Asset 4.29.4／shell v110、schema 13 不變，可直接回滾至 v4.29.3 image。
+
 ### 後端複雜度歸零與前端共用工具（SPEC-102～105，v4.29.3）
 
 - 後端：帳號匯入（SPEC-102）、AI 對話／資料庫遷移／模型呼叫（SPEC-103）與其餘 8 個函式（SPEC-104）拆成具名步驟，後端沒有任何函式超過複雜度 10，`# noqa: C901` 歸零；行為、錯誤訊息、SQL 與遷移順序不變。
