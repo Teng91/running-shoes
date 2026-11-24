@@ -220,3 +220,8 @@ function renderSpendingTable() {
 
 // SPEC-101: spending lives at the bottom of the shoes tab.
 registerPanel('shoes', { render: () => renderSpendingCharts() });
+
+// SPEC-106: invalidating spending drops the loaded summary and any read in flight.
+registerResourceCache('spending', () => {
+  applyCoreResource('spending', null); spendingLoadRequestId++; spendingLoadPending = false;
+});

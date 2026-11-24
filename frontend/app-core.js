@@ -2,31 +2,6 @@
 let panelRevision = 0;
 const renderedPanels = new Map();
 
-// SPEC-101: feature scripts register what each panel draws and which data they own when they
-// load. The shell never names a feature's functions, so features depend on it and not back.
-const panelHooks = new Map();
-const resourceReaders = new Map();
-const dataHooks = [];
-
-// hooks: { render() draws the panel, enter() runs before its tab opens, key() joins the redraw
-// key }. A panel runs its hooks in registration order, i.e. the script order in assets.json.
-function registerPanel(name, hooks) {
-  if (!panelHooks.has(name)) panelHooks.set(name, []);
-  panelHooks.get(name).push(hooks);
-}
-
-// reader: { scope() is taken when a load starts, read(scope) loads, current(scope) tells whether
-// the screen still shows that scope, apply(value) stores a current value }.
-function registerResourceReader(name, reader) {
-  resourceReaders.set(name, reader);
-}
-
-// hooks: { arrived(resource) after a resource is applied, invalidated() on a full redraw,
-// history() when a load also refreshes the import history }.
-function registerDataHooks(hooks) {
-  dataHooks.push(hooks);
-}
-
 function invalidatePanels(resource = null) {
   if (!resource) {
     panelRevision += 1;
@@ -155,12 +130,22 @@ async function loadData({ mutation = null } = {}) {
     const reader = resourceReaders.get(resource);
     const current = !reader?.current || reader.current(scopes[resource]);
     if (reader && current) reader.apply(value);
-    if (typeof workspaceDataArrived === 'function' && current) workspaceDataArrived(resource, value);
-    dataHooks.forEach(hook => hook.arrived?.(resource));
+    dataHooks.forEach(hook => hook.arrived?.(resource, value, current));
     // A slow optional source must not hold an otherwise usable screen behind boot.
     if (typeof hideAppBoot === 'function') hideAppBoot();
   };
   const completion = resourceStore.refresh(mutation, readers, scopes, applyResource);
   if (resourceStore.policy(mutation).history) dataHooks.forEach(hook => void hook.history?.());
   await completion;
+}
+
+// loadData delivers resources progressively and records errors instead of rejecting.
+// Mutations need an explicit core-data check before reporting refreshed UI.
+async function refreshCoreData(options) {
+  const session = captureAuthSession();
+  await loadData(options);
+  if (!isCurrentAuthSession(session)) throw Object.assign(Error('登入狀態已變更'), { name: 'AbortError' });
+  if (resourceStore.policy(options?.mutation).resources.some(resource => resourceStore.getError(resource))) {
+    throw new Error('資料讀取尚未完成');
+  }
 }

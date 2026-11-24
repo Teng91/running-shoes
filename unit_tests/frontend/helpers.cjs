@@ -36,7 +36,7 @@ function featureContext(globals = {}) {
     dashboardAnalyticsCache: new Map(), dashboardAnalyticsRequest: 0, inlineEditors: new Map(), inlineTableRows: new Map(),
     captureAuthSession: () => ({}), isCurrentAuthSession: () => true,
     // SPEC-101: a whole feature script registers its panel hooks on load; panelWiring() replaces these.
-    registerPanel() {}, registerResourceReader() {}, registerDataHooks() {},
+    registerPanel() {}, registerResourceReader() {}, registerDataHooks() {}, workspaceDataArrived() {},
     getSelectedCategories: () => [], ...rest });
   seedCoreData(context, core);
   context.seedCoreData = fields => seedCoreData(context, fields);
@@ -64,6 +64,8 @@ function featureContext(globals = {}) {
     + ['lastActivityTypeForShoe', 'runActivityLabel', 'updateRunActivityHint'].map(extract).join('\n'), context);
   // SPEC-093: calendar days come from the service's fixed zone, shared by every feature.
   vm.runInContext(source.match(/const APP_UTC_OFFSET_MINUTES = \d+;/)[0] + '\n' + extract('appCalendarDate'), context);
+  // SPEC-106: features register their cache hooks when they load; install them like initializeDataResources().
+  vm.runInContext(`const resourceCacheHooks = [];\n${extract('registerResourceCache')}\n${featureRegistrations(/^registerResourceCache\(/gm)}`, context);
   context.registerResourceCaches();
   return context;
 }
@@ -154,11 +156,11 @@ function extract(name) {
 }
 
 // SPEC-101: the top-level register*() statements of every script, in assets.json order.
-function featureRegistrations() {
+function featureRegistrations(pattern = /^register(?:Panel|ResourceReader|DataHooks)\(/gm) {
   const statements = [];
   for (const file of scriptPaths) {
     const text = readText(file);
-    for (const match of text.matchAll(/^register(?:Panel|ResourceReader|DataHooks)\(/gm)) {
+    for (const match of text.matchAll(pattern)) {
       let depth = 0, end = match.index;
       for (; end < text.length; end++) {
         if (text[end] === '(') depth++;

@@ -297,6 +297,10 @@ SPEC-032：合成資料驗證歷史筆數上限（v4.7.3 起 10,000／10,001）�
 
 [規格與具名案例](specs/061-ci-on-every-push-and-protected-main.md) 以文字解析 workflow：觸發條件是不限分支的 push、pull request、每週排程與手動執行，沒有 `paths-ignore`；部署條件仍只有 main 的 push／手動執行；main 以外的 ref 由較新的執行取消舊的，main 不取消。ruleset 由 `.github/rulesets/main.json` 描述，Python 測試確認它要求 PR、必要檢查與 workflow 的 5 個測試 job 完全一致、禁止刪除與 force push，且沒有繞過名單。
 
+## SPEC-106 資料快取重設由功能登記
+
+[規格與具名案例](specs/106-resource-cache-hooks.md) 的 Node 測試以真實的 resource store 接受鞋款與目標資料，確認支出與目標自行登記的重設會清空支出摘要、作廢進行中的讀取並遞增目標進度序號；工作區的資料 hook 只收到仍符合畫面範圍的資料；殼層擁有 `refreshCoreData()`，bridge 不再提到功能狀態。測試 helper 依 script 順序安裝各功能的 `registerResourceCache()`。
+
 ## SPEC-105 前端共用工具與比賽準備登記
 
 [規格與具名案例](specs/105-frontend-shared-helpers.md) 的 Node 測試確認月度分頁打開時，比賽準備透過自己的登記在月度圖表之後繪製；比賽準備測試載入整個 `app-pace-charts.js` 與 `app-race-goal.js`，確認表單經 `onRaceGoalShown()` 帶入目標（有目標時顯示刪除與「調整比賽」，沒有時邀請設定）；架構測試確認基準降為 13 對。

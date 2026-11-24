@@ -31,20 +31,8 @@
       "app-workspace.js"
     ],
     [
-      "app-core.js",
-      "app-resources.js"
-    ],
-    [
-      "app-goals.js",
-      "app-resources.js"
-    ],
-    [
       "app-goals.js",
       "app-workspace.js"
-    ],
-    [
-      "app-resources.js",
-      "app-spending.js"
     ],
     [
       "app-runs.js",

@@ -233,6 +233,26 @@ def coupling_violations(measured: dict[str, Any], baseline: dict[str, Any]) -> l
     return problems
 
 
+_TOP_LEVEL_CALL = re.compile(r"^(?:void\s+)?([A-Za-z_$][\w$]*)\(", re.M)
+
+
+def load_order_violations(frontend: Path, scripts: list[str]) -> list[str]:
+    """SPEC-106: a statement that runs while a script loads may only call functions of scripts
+    loaded before it (or itself); a later script's function does not exist yet."""
+    code = {filename: _script_code(frontend / filename) for filename in scripts}
+    owners: dict[str, int] = {}
+    for index, filename in enumerate(scripts):
+        for match in _TOP_LEVEL_DECLARATION.finditer(code[filename]):
+            owners.setdefault(match.group(1) or match.group(2), index)
+    problems = []
+    for index, filename in enumerate(scripts):
+        for match in _TOP_LEVEL_CALL.finditer(code[filename]):
+            owner = owners.get(match.group(1))
+            if owner is not None and owner > index:
+                problems.append(f"{filename} calls {match.group(1)}() while loading, but {scripts[owner]} loads later")
+    return problems
+
+
 def complexity_exemptions(backend: Path) -> list[str]:
     """Backend lines that silence ruff's C901, i.e. functions still above complexity 10."""
     return [
@@ -291,6 +311,8 @@ def check_feature_boundaries() -> None:
     for offender in core_data_violations(frontend, manifest["scripts"]):
         fail(f"core data is read through coreData and written only by applyCoreResource() in {CORE_DATA_WRITER}: "
              f"{offender}")
+    for problem in load_order_violations(frontend, manifest["scripts"]):
+        fail(f"frontend load order (SPEC-106): {problem}")
     baseline = json.loads(RATCHET_BASELINE.read_text(encoding="utf-8"))
     problems = coupling_violations(frontend_coupling(frontend, manifest["scripts"]), baseline)
     problems += complexity_exemption_violations(complexity_exemptions(ROOT / "backend"),

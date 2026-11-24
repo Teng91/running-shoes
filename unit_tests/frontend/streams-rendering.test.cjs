@@ -65,6 +65,30 @@ test('SPEC-101 features register their panels and data in script order; the shel
   for (const name of hooks) assert.doesNotMatch(shell, new RegExp(`(?<![.\\w])${name}\\(`), name);
 });
 
+test('SPEC-106 features own their cache resets and the workspace hears only current data', async () => {
+  const arrived = [];
+  const context = runContext({ goalProgressRequestId: 0, spendingLoadRequestId: 4, spendingLoadPending: true,
+    spendingSummary: { total_paid: 10 }, render() {}, workspaceDataArrived: (...args) => arrived.push(args) });
+  assert.deepEqual([...vm.runInContext('resourceCacheHooks.map(([name]) => name)', context)], ['goal', 'spending']);
+  // Accepting shoes resets spending; accepting the goal resets goal progress (resource-store policy).
+  const accept = async (resource, value) => context.resourceStore.accept(
+    [await context.resourceStore.read(resource, { loader: async () => value })]);
+  await accept('shoes', [[], []]);
+  assert.equal(context.coreData.spendingSummary, null);
+  assert.equal(context.spendingLoadRequestId, 5); assert.equal(context.spendingLoadPending, false);
+  await accept('goal', {});
+  assert.equal(context.goalProgressRequestId, 1);
+  vm.runInContext(panelWiring(), context);
+  vm.runInContext('dataHooks', context).forEach(hook => {
+    hook.arrived?.('runs', { page: 1 }, false); hook.arrived?.('goal', { version: 2 }, true);
+  });
+  assert.deepEqual(arrived.map(([resource]) => resource), ['goal']);
+  const shell = readText('frontend/app-core.js').replace(/\/\/.*$/gm, '');
+  assert.match(shell, /async function refreshCoreData\(/);
+  assert.doesNotMatch(shell, /workspaceDataArrived/);
+  assert.doesNotMatch(readText('frontend/app-resources.js'), /spendingLoad|goalProgressRequestId|loadData\(/);
+});
+
 test('shoe retirement presentation uses only the backend date, including no forecast', () => {
   const context = vm.createContext({});
   vm.runInContext(extract('calc'), context);
