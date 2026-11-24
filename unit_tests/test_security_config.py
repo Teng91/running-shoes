@@ -21,6 +21,7 @@ FRONTEND_SOURCE = "\n".join(
         "styles.css",
         "app-boot.js",
         "app-state.js",
+        "app-session.js",
         "app-api.js",
         "app-auth.js",
         "app-streams.js",
@@ -118,8 +119,10 @@ def test_agent_frontend_handles_http_auth_and_non_sse_errors_before_streaming():
     guard = adapter[adapter.index("async function authenticatedFetch"):]
     guard = guard[:guard.index("async function readAuthenticatedBody")]
     assert guard.index("requireAuthSession(session);") < guard.index("response.status === 401")
-    assert "clearAuth();" in guard
-    assert "showLoginView();" in guard
+    # SPEC-108: a 401 signs out through the event app-auth.js listens for.
+    assert "window.dispatchEvent(new Event('auth-session-expired'));" in guard
+    auth = (PROJECT_ROOT / "frontend/app-auth.js").read_text(encoding="utf-8")
+    assert "window.addEventListener('auth-session-expired', () => { clearAuth(); showLoginView(); });" in auth
     assert "isCurrentRequest()" in guarded_section
     stream_adapter = (PROJECT_ROOT / "frontend/app-streams.js").read_text(encoding="utf-8")
     assert stream_adapter.index("!response.ok") < stream_adapter.index("response.body.getReader()")

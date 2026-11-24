@@ -80,7 +80,8 @@
 - `frontend/app-boot.js`: startup loading, stylesheet readiness, timeout, and retry state.
 - `frontend/app-state.js`: shared browser state (`coreData` is the core data store's read-only view; never declare core data globals again), presentation constants and the guarded localStorage helpers (`readStoredValue` and friends); classic scripts never touch `localStorage` outside a try (SPEC-087).
 - `frontend/app-api.js`: authenticated JSON and upload transport helpers.
-- `frontend/app-auth.js`: authentication state, forms, and account transitions.
+- `frontend/app-session.js`: the signed-in identity (`authToken`, `currentUser`, `authGeneration`, `captureAuthSession`/`isCurrentAuthSession`/`requireAuthSession`); loads right after `app-state.js`. A 401 is the window event `auth-session-expired`, dispatched by `app-api.js` and handled by `app-auth.js` (SPEC-108).
+- `frontend/app-auth.js`: sign-in forms and account transitions; features register what happens around sign-in with `onAuthView` (SPEC-108).
 - `frontend/app-streams.js`: shared authenticated SSE decoding, cancellation, and terminal state.
 - `frontend/app-inline-editors.js`: live table DOM ownership and immutable row snapshots across refreshes.
 - `frontend/runtime/workspace-controller.mjs`: injected account drafts, leases and durable run queue.

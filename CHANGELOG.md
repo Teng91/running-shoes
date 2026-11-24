@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [4.29.6] - 2026-11-24
+
+### Changed
+- 前端不再有互相引用的 script（SPEC-108），畫面與登入流程不變：登入身分獨立成新的 `app-session.js`；401 時由 `app-api.js` 發出 `auth-session-expired` 事件、`app-auth.js` 登出；工作區與帳號以 `onAuthView()` 登記登入前後要做的事；跑步以 `registerWorkspaceRuns()` 與 `registerWorkspaceEditor('run', …)` 登記草稿與月份快取。互相使用的 script 由 7 對降到 0 對。Asset 4.29.6／shell v112，schema 13 不變。
+
 ## [4.29.5] - 2026-11-24
 
 ### Changed

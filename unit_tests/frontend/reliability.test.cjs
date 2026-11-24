@@ -31,10 +31,10 @@ test('SPEC-019 storage invalidation never deletes the replacement tab credential
 });
 
 test('SPEC-087 a browser that blocks site storage still starts and keeps the login in memory', () => {
-  const context = nodeVm.createContext({ document: { getElementById: () => null, querySelectorAll: () => [] } });
+  const context = nodeVm.createContext({ document: { getElementById: () => null, querySelectorAll: () => [] }, window: new EventTarget() });
   nodeVm.runInContext(`Object.defineProperty(globalThis, 'localStorage', {
     get() { throw new Error('SecurityError: site data is blocked'); } })`, context);
-  for (const file of ['app-lifecycle.js', 'app-state.js', 'app-auth.js']) {
+  for (const file of ['app-lifecycle.js', 'app-state.js', 'app-session.js', 'app-auth.js']) {
     nodeVm.runInContext(readText('frontend/' + file), context, { filename: file });
   }
   context.resetFeatureLifecycles = () => {};

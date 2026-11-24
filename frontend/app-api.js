@@ -72,8 +72,8 @@ async function authenticatedFetch(url, options = {}) {
     for (const controller of activeHttpRequests) {
       if (controller.signal === options.signal) activeHttpRequests.delete(controller);
     }
-    clearAuth();
-    showLoginView();
+    // SPEC-108: app-auth.js signs out (synchronously) when it hears this.
+    window.dispatchEvent(new Event('auth-session-expired'));
     const error = new Error('登入已過期，請重新登入。');
     error.status = 401;
     throw error;

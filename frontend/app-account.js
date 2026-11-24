@@ -327,3 +327,6 @@ async function changePassword() {
 
 // SPEC-107: the account settings show the email section whenever they open.
 onWorkspaceModalOpen(() => { void renderEmailSection(); });
+
+// SPEC-108: the admin entry follows the signed-in account; the sign-up form asks for the mode.
+onAuthView({ appShown: () => { void refreshAdminEntry(); }, registerShown: () => { void loadRegistrationMode(); } });

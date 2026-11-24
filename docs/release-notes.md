@@ -4,6 +4,15 @@
 每版的摘要見 [CHANGELOG.md](../CHANGELOG.md)；目前的功能與操作方式以 [README](../README.md) 為準。
 這裡保留當時的文字，後續版本可能已調整其中的行為。
 
+### 登入身分獨立與跑步草稿登記（SPEC-108，v4.29.6）
+
+- 新 script `frontend/app-session.js`（在 `app-state.js` 之後載入）擁有 `authToken`、`currentUser`、`authGeneration` 與 `captureAuthSession()`／`isCurrentAuthSession()`／`requireAuthSession()`；`app-auth.js` 只留登入表單與帳號切換。
+- 401：`app-api.js` 同步發出 window 事件 `auth-session-expired`，`app-auth.js` 監聽後登出並顯示登入畫面。
+- `app-auth.js` 新增 `onAuthView()`；`app-workspace.js` 新增 `registerWorkspaceRuns()`，跑步編輯改用 `registerWorkspaceEditor('run', …)`。
+- 前端沒有互相使用的 script；`scripts/architecture_ratchet.json` 為 240 個名稱、0 對、0 個複雜度豁免。
+
+Asset 4.29.6／shell v112、schema 13 不變，可直接回滾至 v4.29.5 image。
+
 ### 草稿由功能向工作區登記（SPEC-107，v4.29.5）
 
 - `app-workspace.js` 新增 `registerWorkspaceForm()`、`registerWorkspaceEditor()`、`onWorkspaceModalOpen()`；`app-goals.js` 登記目標表單、`app-shoes.js` 登記鞋款編輯、`app-account.js` 登記 Email 區塊。

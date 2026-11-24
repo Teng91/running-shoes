@@ -1,12 +1,13 @@
 const CACHE_PREFIX = 'running-shoes-shell-';
-const CACHE_NAME = 'running-shoes-shell-v111';
-const APP_ASSET_VERSION = '4.29.5';
+const CACHE_NAME = 'running-shoes-shell-v112';
+const APP_ASSET_VERSION = '4.29.6';
 const versioned = path => `${path}?v=${APP_ASSET_VERSION}`;
 const APP_SHELL = [
   '/',
   versioned('/app-boot.js'),
   versioned('/app-lifecycle.js'),
   versioned('/app-state.js'),
+  versioned('/app-session.js'),
   versioned('/app-api.js'),
   versioned('/app-auth.js'),
   versioned('/app-streams.js'),

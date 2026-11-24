@@ -1,34 +1,5 @@
 {
-  "cross_script_names": 241,
+  "cross_script_names": 240,
   "complexity_exemptions": 0,
-  "mutual_pairs": [
-    [
-      "app-account.js",
-      "app-auth.js"
-    ],
-    [
-      "app-agent.js",
-      "app-auth.js"
-    ],
-    [
-      "app-api.js",
-      "app-auth.js"
-    ],
-    [
-      "app-auth.js",
-      "app-core.js"
-    ],
-    [
-      "app-auth.js",
-      "app-lifecycle.js"
-    ],
-    [
-      "app-auth.js",
-      "app-workspace.js"
-    ],
-    [
-      "app-runs.js",
-      "app-workspace.js"
-    ]
-  ]
+  "mutual_pairs": []
 }
