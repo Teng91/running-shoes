@@ -31,8 +31,23 @@ def _remember(db: Session, plan: ImportPlan, entity: str, key: str | int, target
         plan.mappings[identity] = target
 
 
-def execute_import(db: Session, uid: int, backup: AccountBackup, config: Settings, plan: ImportPlan, *, update_existing: bool = False) -> None:  # noqa: C901
+def execute_import(db: Session, uid: int, backup: AccountBackup, config: Settings, plan: ImportPlan, *, update_existing: bool = False) -> None:
+    """Merge (or, with ``update_existing``, update from) one archive; each step keeps the original order."""
     original_periods = set(plan.months)
+    shoes = _import_shoes(db, uid, backup, plan, update_existing)
+    _import_runs(db, uid, backup, plan, shoes, update_existing)
+    if update_existing:
+        _apply_month_changes(db, uid, plan)
+    _import_months(db, uid, backup, plan, original_periods, update_existing)
+    _import_goal(db, uid, backup, plan, update_existing)
+    _import_reports(db, uid, backup, plan, update_existing)
+    _import_strava_history(db, uid, backup, config, plan)
+    _import_audit_history(db, uid, backup, plan)
+    db.flush()
+
+
+def _import_shoes(db: Session, uid: int, backup: AccountBackup, plan: ImportPlan, update_existing: bool) -> dict[int, int]:
+    """Create unmatched shoes (and update matched ones); returns source shoe ID -> target shoe ID."""
     if update_existing:
         for identifier, values in plan.changes.shoes.items():
             _update_fields(plan.shoes[identifier], values)
@@ -46,12 +61,16 @@ def execute_import(db: Session, uid: int, backup: AccountBackup, config: Setting
             db.add(shoe_row)
             db.flush()
             target = shoe_row.id
-        elif update_existing:
-            existing_shoe = plan.shoes.get(target)
-            if existing_shoe is None:
-                raise Conflict("來源鞋款已不存在，無法更新")
+        elif update_existing and plan.shoes.get(target) is None:
+            raise Conflict("來源鞋款已不存在，無法更新")
         shoes[shoe_item.id] = target
         _remember(db, plan, "shoe", shoe_item.id, target)
+    return shoes
+
+
+def _import_runs(db: Session, uid: int, backup: AccountBackup, plan: ImportPlan, shoes: dict[int, int],
+                 update_existing: bool) -> None:
+    """Create unmatched runs (and patch matched ones); a merge then adds the new runs' mileage."""
     deltas: list[RunDelta] = []
     db.flush()
     available_shoes = {identifier for (identifier,) in db.query(models.Shoe.id).filter_by(user_id=uid).all()}
@@ -61,11 +80,7 @@ def execute_import(db: Session, uid: int, backup: AccountBackup, config: Setting
             shoe_id = shoes[run_item.shoe_id]
             if shoe_id not in available_shoes:
                 raise Conflict("來源鞋款已有後續刪除，無法合併跑步紀錄")
-            run_row = models.Run(id=allocate_id(db, "runs"), user_id=uid, shoe_id=shoe_id, date=run_item.date, km=run_item.km, strava_id=run_item.strava_id,
-                                 duration_seconds=run_item.duration_seconds, activity_type=run_item.activity_type)
-            db.add(run_row)
-            db.flush()
-            target = run_row.id
+            target = _create_run(db, uid, run_item, shoe_id)
             deltas.append((shoe_id, run_item.date, run_item.km, run_item.activity_type))
         elif update_existing and target in plan.runs:
             values = dict(plan.changes.runs.get(target, {}))
@@ -78,17 +93,34 @@ def execute_import(db: Session, uid: int, backup: AccountBackup, config: Setting
     if not update_existing:
         apply_run_mileage_deltas(db, uid, deltas, 1)
         db.expire_all()
-    if update_existing:
-        for (year, month), values in plan.changes.months.items():
-            row = plan.months.get((year, month))
-            if row is None:
-                row = models.MonthlyMileage(id=allocate_id(db, "monthly_mileages"), user_id=uid, year=year, month=month,
-                                            **values)
-                db.add(row)
-                plan.months[(year, month)] = row
-            else:
-                _update_fields(row, values)
-        db.flush()
+
+
+def _create_run(db: Session, uid: int, run_item: Any, shoe_id: int) -> int:
+    run_row = models.Run(id=allocate_id(db, "runs"), user_id=uid, shoe_id=shoe_id, date=run_item.date, km=run_item.km,
+                         strava_id=run_item.strava_id, duration_seconds=run_item.duration_seconds,
+                         activity_type=run_item.activity_type)
+    db.add(run_row)
+    db.flush()
+    return run_row.id
+
+
+def _apply_month_changes(db: Session, uid: int, plan: ImportPlan) -> None:
+    """An update writes the projected monthly totals, creating months that do not exist yet."""
+    for (year, month), values in plan.changes.months.items():
+        row = plan.months.get((year, month))
+        if row is None:
+            row = models.MonthlyMileage(id=allocate_id(db, "monthly_mileages"), user_id=uid, year=year, month=month,
+                                        **values)
+            db.add(row)
+            plan.months[(year, month)] = row
+        else:
+            _update_fields(row, values)
+    db.flush()
+
+
+def _import_months(db: Session, uid: int, backup: AccountBackup, plan: ImportPlan,
+                   original_periods: set[tuple[int, int]], update_existing: bool) -> None:
+    """A merge carries over adjustments for months the account did not have; both modes map each month."""
     for month_item in backup.monthly_mileages:
         key = f"{month_item.year}-{month_item.month}"
         if plan.existing("month", key) is not None and not update_existing:
@@ -96,21 +128,30 @@ def execute_import(db: Session, uid: int, backup: AccountBackup, config: Setting
         month_row = db.query(models.MonthlyMileage).filter_by(user_id=uid, year=month_item.year, month=month_item.month).first()
         if not update_existing and (month_item.year, month_item.month) not in original_periods:
             if month_row is None:
-                month_row = models.MonthlyMileage(id=allocate_id(db, "monthly_mileages"), user_id=uid, year=month_item.year, month=month_item.month, km=0, adjustment_km=0)
+                month_row = models.MonthlyMileage(id=allocate_id(db, "monthly_mileages"), user_id=uid, year=month_item.year,
+                                                  month=month_item.month, km=0, adjustment_km=0)
                 db.add(month_row)
                 db.flush()
             month_row.km += float(month_item.adjustment_km or 0)
             month_row.adjustment_km = float(month_item.adjustment_km or 0)
         assert month_row is not None
         _remember(db, plan, "month", key, month_row.id)
+
+
+def _import_goal(db: Session, uid: int, backup: AccountBackup, plan: ImportPlan, update_existing: bool) -> None:
     existing_goal = db.query(models.RunningGoal).filter_by(user_id=uid).first()
-    if backup.running_goal and (update_existing or not existing_goal):
-        goal = backup.running_goal
-        if existing_goal:
-            _update_fields(existing_goal, plan.changes.goal)
-        else:
-            db.add(models.RunningGoal(user_id=uid, start_year=goal.start_year, monthly_km=goal.monthly_km,
-                                      yearly_km=round(goal.monthly_km * 12, 2), version=1))
+    if not backup.running_goal or not (update_existing or not existing_goal):
+        return
+    goal = backup.running_goal
+    if existing_goal:
+        _update_fields(existing_goal, plan.changes.goal)
+    else:
+        db.add(models.RunningGoal(user_id=uid, start_year=goal.start_year, monthly_km=goal.monthly_km,
+                                  yearly_km=round(goal.monthly_km * 12, 2), version=1))
+
+
+def _import_reports(db: Session, uid: int, backup: AccountBackup, plan: ImportPlan, update_existing: bool) -> None:
+    """Missing reports are added; an update also patches existing ones and drops their generation state."""
     for report_item in backup.monthly_reports:
         report_row = db.query(models.MonthlyReport).filter_by(user_id=uid, year=report_item.year, month=report_item.month).first()
         if report_row is None:
@@ -120,23 +161,29 @@ def execute_import(db: Session, uid: int, backup: AccountBackup, config: Setting
             _update_fields(report_row, plan.changes.reports.get((report_item.year, report_item.month), {}))
         if update_existing:
             db.query(models.ReportGeneration).filter_by(user_id=uid, year=report_item.year, month=report_item.month).delete(synchronize_session=False)
+
+
+def _import_strava_history(db: Session, uid: int, backup: AccountBackup, config: Settings, plan: ImportPlan) -> None:
+    """Newest Strava import records first, up to the account's remaining history quota."""
     import_slots = max(0, config.max_strava_import_history_per_user - db.query(models.StravaImport).filter_by(user_id=uid).count())
     for import_item in sorted(backup.strava_imports, key=lambda row: row.imported_at.timestamp(), reverse=True):
         key = payload_hash(import_item.model_dump(mode="json"))
-        if plan.existing("import", key) is None:
-            if import_slots == 0:
-                _remember(db, plan, "import", key, 0)  # Explicitly skipped metadata, not a business-row reference.
-                continue
-            import_slots -= 1
-            import_row = models.StravaImport(user_id=uid, **import_item.model_dump())
-            db.add(import_row)
-            db.flush()
-            _remember(db, plan, "import", key, import_row.id)
+        if plan.existing("import", key) is not None:
+            continue
+        if import_slots == 0:
+            _remember(db, plan, "import", key, 0)  # Explicitly skipped metadata, not a business-row reference.
+            continue
+        import_slots -= 1
+        import_row = models.StravaImport(user_id=uid, **import_item.model_dump())
+        db.add(import_row)
+        db.flush()
+        _remember(db, plan, "import", key, import_row.id)
+
+
+def _import_audit_history(db: Session, uid: int, backup: AccountBackup, plan: ImportPlan) -> None:
     for history_item in backup.history:
         if plan.existing("history", str(history_item.id)) is None:
             history_row = models.AuditEvent(user_id=uid, **history_item.model_dump(exclude={"id", "imported"}), imported=True)
             db.add(history_row)
             db.flush()
             _remember(db, plan, "history", history_item.id, history_row.id)
-    db.flush()
-

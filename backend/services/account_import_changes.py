@@ -10,6 +10,11 @@ from backend.run_metrics import counts_toward_training
 if TYPE_CHECKING:
     from backend.services.account_import_plan import ImportPlan
 
+# A run after the import: (shoe key, date, km, activity type). A shoe key is ('existing', target ID)
+# or ('source', archive ID): new source shoe IDs occupy a separate namespace until execution allocates IDs.
+ShoeKey = tuple[str, int]
+FinalRun = tuple[ShoeKey, str, float, str]
+
 
 @dataclass
 class ImportChanges:
@@ -29,9 +34,28 @@ def changed_fields(row: Any, values: dict[str, Any]) -> dict[str, Any]:
     return {name: value for name, value in values.items() if comparable(name, getattr(row, name)) != comparable(name, value)}
 
 
-def build_changes(plan: 'ImportPlan', backup: AccountBackup) -> ImportChanges:  # noqa: C901
+def build_changes(plan: 'ImportPlan', backup: AccountBackup) -> ImportChanges:
+    """Every field an update would write, with shoe and month totals projected from the final runs."""
     changes = ImportChanges()
-    # New source shoe IDs occupy a separate namespace until execution allocates IDs.
+    final_runs = _run_changes(plan, backup, changes)
+    by_shoe, by_month = _projected_totals(final_runs)
+    _shoe_changes(plan, backup, by_shoe, changes)
+    _month_changes(plan, backup, by_month, changes)
+    if backup.running_goal and plan.goal:
+        goal = backup.running_goal
+        changes.goal = changed_fields(plan.goal, {'start_year': goal.start_year, 'monthly_km': goal.monthly_km,
+                                                  'yearly_km': round(goal.monthly_km * 12, 2)})
+    for report_item in backup.monthly_reports:
+        period = (report_item.year, report_item.month)
+        if period in plan.reports:
+            patch = changed_fields(plan.reports[period], report_item.model_dump(exclude_none=True))
+            if patch:
+                changes.reports[period] = patch
+    return changes
+
+
+def _run_changes(plan: 'ImportPlan', backup: AccountBackup, changes: ImportChanges) -> dict[tuple[str, int], FinalRun]:
+    """Record run patches; returns every run the account will have, keyed like the shoe keys."""
     final_runs = {('existing', row.id): (('existing', row.shoe_id), row.date, row.km, row.activity_type)
                   for row in plan.runs.values()}
     for run_item in backup.runs:
@@ -42,29 +66,43 @@ def build_changes(plan: 'ImportPlan', backup: AccountBackup) -> ImportChanges:  
             final_runs[('source', run_item.id)] = (shoe_key, run_item.date, run_item.km, run_item.activity_type)
         elif target in plan.runs:
             run_row = plan.runs[target]
-            values = run_item.model_dump(exclude={'id', 'shoe_id', 'aliases'})
-            if values.get('duration_seconds') is None:
-                # A merge never clears a stored moving time (older archives have none).
-                values.pop('duration_seconds', None)
-            if backup.version < 5:
-                # Older archives have no activity type; a merge keeps the stored one.
-                values.pop('activity_type', None)
-            patch = changed_fields(run_row, values)
-            if run_row.shoe_id != shoe_target:
-                # This field contains a source ID; execution resolves it after shoe creation.
-                patch['shoe_id'] = run_item.shoe_id
+            patch = _run_patch(run_row, run_item, backup.version, shoe_target)
             if patch:
                 changes.runs[target] = patch
             activity_type = run_item.activity_type if backup.version >= 5 else run_row.activity_type
             final_runs[('existing', target)] = (shoe_key, run_item.date, run_item.km, activity_type)
         # Missing mapped runs are deletion tombstones and remain absent.
-    by_shoe: dict[tuple[str, int], float] = {}
+    return final_runs
+
+
+def _run_patch(run_row: Any, run_item: Any, version: int, shoe_target: int | None) -> dict[str, Any]:
+    values = run_item.model_dump(exclude={'id', 'shoe_id', 'aliases'})
+    if values.get('duration_seconds') is None:
+        # A merge never clears a stored moving time (older archives have none).
+        values.pop('duration_seconds', None)
+    if version < 5:
+        # Older archives have no activity type; a merge keeps the stored one.
+        values.pop('activity_type', None)
+    patch = changed_fields(run_row, values)
+    if run_row.shoe_id != shoe_target:
+        # This field contains a source ID; execution resolves it after shoe creation.
+        patch['shoe_id'] = run_item.shoe_id
+    return patch
+
+
+def _projected_totals(final_runs: dict[tuple[str, int], FinalRun]) -> tuple[dict[ShoeKey, float], dict[tuple[int, int], float]]:
+    """Every activity wears its shoe; only training runs count toward the month (SPEC-096)."""
+    by_shoe: dict[ShoeKey, float] = {}
     by_month: dict[tuple[int, int], float] = {}
     for shoe_key, date, km, activity_type in final_runs.values():
         by_shoe[shoe_key] = by_shoe.get(shoe_key, 0) + km
         if counts_toward_training(activity_type):
             period = (int(date[:4]), int(date[5:7]))
             by_month[period] = by_month.get(period, 0) + km
+    return by_shoe, by_month
+
+
+def _shoe_changes(plan: 'ImportPlan', backup: AccountBackup, by_shoe: dict[ShoeKey, float], changes: ImportChanges) -> None:
     baselines = {row.id: row.baseline_mileage for row in plan.shoes.values()}
     for shoe_item in backup.shoes:
         target = plan.existing('shoe', shoe_item.id)
@@ -79,6 +117,10 @@ def build_changes(plan: 'ImportPlan', backup: AccountBackup) -> ImportChanges:  
         total = round(baselines[identifier] + by_shoe.get(('existing', identifier), 0), 2)
         if round(shoe_row.mileage, 2) != total:
             changes.shoes.setdefault(identifier, {})['mileage'] = total
+
+
+def _month_changes(plan: 'ImportPlan', backup: AccountBackup, by_month: dict[tuple[int, int], float],
+                   changes: ImportChanges) -> None:
     incoming_months = {(item.year, item.month): item for item in backup.monthly_mileages}
     for period in plan.months.keys() | incoming_months.keys() | by_month.keys():
         current = plan.months.get(period)
@@ -88,14 +130,3 @@ def build_changes(plan: 'ImportPlan', backup: AccountBackup) -> ImportChanges:  
         patch = changed_fields(current, values) if current else values
         if patch:
             changes.months[period] = patch
-    if backup.running_goal and plan.goal:
-        goal = backup.running_goal
-        changes.goal = changed_fields(plan.goal, {'start_year': goal.start_year, 'monthly_km': goal.monthly_km,
-                                                  'yearly_km': round(goal.monthly_km * 12, 2)})
-    for report_item in backup.monthly_reports:
-        period = (report_item.year, report_item.month)
-        if period in plan.reports:
-            patch = changed_fields(plan.reports[period], report_item.model_dump(exclude_none=True))
-            if patch:
-                changes.reports[period] = patch
-    return changes
