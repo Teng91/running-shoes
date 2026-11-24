@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [4.29.5] - 2026-11-24
+
+### Changed
+- 鞋款編輯、目標表單與帳號設定向工作區登記自己的草稿（SPEC-107），畫面與草稿格式不變：工作區以 `registerWorkspaceForm()`、`registerWorkspaceEditor()`、`onWorkspaceModalOpen()` 取得各功能的存取方式，不再直接操作它們的表單與視窗。互相使用的 script 由 10 對降到 7 對。Asset 4.29.5／shell v111，schema 13 不變。
+
 ## [4.29.4] - 2026-11-24
 
 ### Changed

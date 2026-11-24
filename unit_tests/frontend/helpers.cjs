@@ -198,4 +198,4 @@ function transportContext() {
   return context;
 }
 
-module.exports = { runContext, test, assert, fs, path, readText, vm: { ...vm, createContext: featureContext }, htmlSource, scriptPaths, scriptSource, styleSource, source, authOperationContext, streamContext, editContext, tableHeaders, extract, panelWiring, transportContext };
+module.exports = { runContext, test, assert, fs, path, readText, vm: { ...vm, createContext: featureContext }, htmlSource, scriptPaths, scriptSource, styleSource, source, authOperationContext, streamContext, editContext, tableHeaders, extract, panelWiring, featureRegistrations, transportContext };

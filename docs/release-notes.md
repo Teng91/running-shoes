@@ -4,6 +4,13 @@
 每版的摘要見 [CHANGELOG.md](../CHANGELOG.md)；目前的功能與操作方式以 [README](../README.md) 為準。
 這裡保留當時的文字，後續版本可能已調整其中的行為。
 
+### 草稿由功能向工作區登記（SPEC-107，v4.29.5）
+
+- `app-workspace.js` 新增 `registerWorkspaceForm()`、`registerWorkspaceEditor()`、`onWorkspaceModalOpen()`；`app-goals.js` 登記目標表單、`app-shoes.js` 登記鞋款編輯、`app-account.js` 登記 Email 區塊。
+- 本機草稿格式不變，舊版存下的目標與鞋款草稿照常還原。`scripts/architecture_ratchet.json` 為 241 個名稱、7 對。
+
+Asset 4.29.5／shell v111、schema 13 不變，可直接回滾至 v4.29.4 image。
+
 ### 資料快取重設由功能登記（SPEC-106，v4.29.4）
 
 - `app-resources.js` 新增 `registerResourceCache()`；`app-spending.js` 與 `app-goals.js` 登記各自的失效重設，bridge 不再改寫功能的狀態。

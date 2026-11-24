@@ -1,14 +1,10 @@
 {
-  "cross_script_names": 244,
+  "cross_script_names": 241,
   "complexity_exemptions": 0,
   "mutual_pairs": [
     [
       "app-account.js",
       "app-auth.js"
-    ],
-    [
-      "app-account.js",
-      "app-workspace.js"
     ],
     [
       "app-agent.js",
@@ -31,15 +27,7 @@
       "app-workspace.js"
     ],
     [
-      "app-goals.js",
-      "app-workspace.js"
-    ],
-    [
       "app-runs.js",
-      "app-workspace.js"
-    ],
-    [
-      "app-shoes.js",
       "app-workspace.js"
     ]
   ]
