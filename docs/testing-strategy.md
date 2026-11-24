@@ -297,6 +297,10 @@ SPEC-032：合成資料驗證歷史筆數上限（v4.7.3 起 10,000／10,001）�
 
 [規格與具名案例](specs/061-ci-on-every-push-and-protected-main.md) 以文字解析 workflow：觸發條件是不限分支的 push、pull request、每週排程與手動執行，沒有 `paths-ignore`；部署條件仍只有 main 的 push／手動執行；main 以外的 ref 由較新的執行取消舊的，main 不取消。ruleset 由 `.github/rulesets/main.json` 描述，Python 測試確認它要求 PR、必要檢查與 workflow 的 5 個測試 job 完全一致、禁止刪除與 force push，且沒有繞過名單。
 
+## SPEC-102 拆解帳號匯入函式
+
+[規格與具名案例](specs/102-split-account-import.md) 是不改行為的重構：既有的帳號還原測試（合併、更新、墓碑、來源別名、配額、交易回滾與預覽差異）原封不動地通過，證明寫入順序與結果不變；架構測試確認 `# noqa: C901` 的數量降為基準的 12 個。
+
 ## SPEC-101 功能自行註冊面板
 
 [規格與具名案例](specs/101-panel-registry.md) 的 Node 測試以 `panelWiring()` 載入殼層的註冊函式與每個 script 實際的 `register*()` 敘述：鞋款、跑步分頁依 script 順序繪製，所選月份改變時重畫，月度分頁打開前建立目標表單基準，資源到達時 dashboard 重畫，整體失效作廢年度讀取，且 `app-core.js` 不以名稱呼叫功能函式；月報分頁只在登入後載入。既有的 `loadData`、面板快取與目標表單測試改走同一套註冊。
