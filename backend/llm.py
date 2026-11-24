@@ -105,7 +105,7 @@ _DAILY_USAGE_POOL_LIMIT = 50
 _LLM_TIMEOUT_SECONDS = 90.0
 
 
-def _fetch_free_models() -> list[dict[str, str]]:
+def _fetch_free_models() -> list[dict[str, str]]:  # noqa: C901
     """抓取今日使用量前 50 名中的免費工具模型。
 
     Pricing and tool support come from the live catalog. Popularity comes from
@@ -368,7 +368,7 @@ def _detail_field(detail: Any, key: str) -> Any:
     return detail.get(key) if isinstance(detail, dict) else getattr(detail, key, None)
 
 
-def call_llm_stream(
+def call_llm_stream(  # noqa: C901
     provider: LLMProvider,
     model: str,
     messages: list[dict[str, Any]],

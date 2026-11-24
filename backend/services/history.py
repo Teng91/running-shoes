@@ -40,7 +40,7 @@ def list_history(db: Session, user_id: int, *, before: int | None = None, limit:
     ], "next_cursor": rows[limit - 1].id if len(rows) > limit else None}
 
 
-def restore_deleted(db: Session, user_id: int, event_id: int, config: Settings) -> dict:
+def restore_deleted(db: Session, user_id: int, event_id: int, config: Settings) -> dict:  # noqa: C901
     with write_transaction(db, user_id, reason="history.restore"):
         event = db.query(models.AuditEvent).filter_by(id=event_id, user_id=user_id).first()
         if event is None:

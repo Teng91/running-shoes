@@ -101,7 +101,7 @@ def search_subject(user_message: str) -> str:
     return " ".join(token for token in tokens if token not in {"的", "與", "和"}) or user_message.strip()
 
 
-def build_query_plan(user_message: str, history: list[dict] | None = None) -> QueryPlan:
+def build_query_plan(user_message: str, history: list[dict] | None = None) -> QueryPlan:  # noqa: C901
     effective_message = user_message
     normalized = " ".join(user_message.casefold().split()).strip("？?!！。,.， ")
     if normalized in AFFIRMATIVE_REPLIES:

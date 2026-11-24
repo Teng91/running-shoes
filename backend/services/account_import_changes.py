@@ -29,7 +29,7 @@ def changed_fields(row: Any, values: dict[str, Any]) -> dict[str, Any]:
     return {name: value for name, value in values.items() if comparable(name, getattr(row, name)) != comparable(name, value)}
 
 
-def build_changes(plan: 'ImportPlan', backup: AccountBackup) -> ImportChanges:
+def build_changes(plan: 'ImportPlan', backup: AccountBackup) -> ImportChanges:  # noqa: C901
     changes = ImportChanges()
     # New source shoe IDs occupy a separate namespace until execution allocates IDs.
     final_runs = {('existing', row.id): (('existing', row.shoe_id), row.date, row.km, row.activity_type)

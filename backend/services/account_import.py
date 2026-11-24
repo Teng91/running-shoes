@@ -31,7 +31,7 @@ def _remember(db: Session, plan: ImportPlan, entity: str, key: str | int, target
         plan.mappings[identity] = target
 
 
-def execute_import(db: Session, uid: int, backup: AccountBackup, config: Settings, plan: ImportPlan, *, update_existing: bool = False) -> None:
+def execute_import(db: Session, uid: int, backup: AccountBackup, config: Settings, plan: ImportPlan, *, update_existing: bool = False) -> None:  # noqa: C901
     original_periods = set(plan.months)
     if update_existing:
         for identifier, values in plan.changes.shoes.items():

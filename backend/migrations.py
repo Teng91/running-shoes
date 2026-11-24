@@ -227,7 +227,7 @@ def schema_version(engine: Engine) -> int:
         return 0
 
 
-def run_startup_migrations(
+def run_startup_migrations(  # noqa: C901
     engine: Engine,
     session_factory: Callable[[], Session],
     *,
