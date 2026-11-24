@@ -39,6 +39,8 @@ function featureContext(globals = {}) {
     registerPanel() {}, registerResourceReader() {}, registerDataHooks() {}, workspaceDataArrived() {},
     // SPEC-108: whole scripts register their sign-in and session-expiry hooks on load.
     onAuthView() {},
+    // SPEC-113: whole scripts register their UI actions on load.
+    registerUiActions() {},
     getSelectedCategories: () => [], ...rest });
   seedCoreData(context, core);
   context.seedCoreData = fields => seedCoreData(context, fields);

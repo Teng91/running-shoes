@@ -149,3 +149,15 @@ async function refreshCoreData(options) {
     throw new Error('資料讀取尚未完成');
   }
 }
+
+// SPEC-113: this feature's delegated UI actions; markup names them with data-click and the like.
+registerUiActions({
+  click: {
+    // Navigation tabs already carry data-tab, which also drives their active state.
+    'switch-tab': element => switchTab(element.dataset.tab),
+    'open-ai-panel': element => switchTab(element.dataset.aiPanel),
+    'toggle-mobile-menu': element => setMobileMenu(element.getAttribute('aria-expanded') !== 'true'),
+    'set-theme': element => setThemePreference(element.dataset.themeChoice),
+    'reload-data': () => loadData(),
+  },
+});

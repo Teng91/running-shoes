@@ -2,7 +2,7 @@
   "name": "running-shoes-harness",
   "private": true,
   "license": "MIT",
-  "version": "4.29.8",
+  "version": "4.29.9",
   "engines": {
     "node": ">=22"
   },

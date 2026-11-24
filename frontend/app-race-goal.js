@@ -117,3 +117,14 @@ async function deleteRaceGoal() {
 
 // SPEC-105: the form takes the loaded race goal unless the user is editing it.
 onRaceGoalShown(() => prepareRaceForm());
+
+// SPEC-113: this feature's delegated UI actions; markup names them with data-click and the like.
+registerUiActions({
+  click: {
+    'race-settings': element => toggleRaceSettings(element.dataset.open === 'true'),
+    'delete-race-goal': () => deleteRaceGoal(),
+  },
+  submit: {
+    'save-race-goal': () => saveRaceGoal(),
+  },
+});

@@ -45,3 +45,10 @@ async function refreshAgentModels() {
     btn.textContent = '↻ 刷新模型列表';
   }
 }
+
+// SPEC-113: this feature's delegated UI actions; markup names them with data-click and the like.
+registerUiActions({
+  click: {
+    'refresh-models': () => refreshAgentModels(),
+  },
+});

@@ -675,6 +675,7 @@ flowchart LR
 - **限流**：`rate_limits.consume()` 把同一請求的所有視窗放在一個交易，滿了就整筆回滾；限額來自 `app.state.settings`，不再保留記憶體桶。SPEC-071 再加上 AI 的每帳號與全站 24 小時視窗，限流桶保留 24 小時。
 - **稽核 trigger**：每次啟動依目前欄位重建，避免舊欄位清單使快照不完整或使寫入失敗。
 - **Strava**：`strava_import.parse_activity_dates()` 把 UTC 時間戳轉為 `clock.APP_TIMEZONE` 日期。`date_corrections()` 只修正仍停在舊 UTC 日期的既有活動，`services/strava_imports.py` 在匯入交易中移動日期與月跑量。
+- **v4.29.9**：介面動作由功能自行登記（SPEC-113）。`app-lifecycle.js` 擁有 `UI_ACTIONS` 與 `registerUiActions`，各功能登記自己的動作，`app-actions.js` 只分派；依賴方向改為 feature → lifecycle，分派器不再依賴功能。
 - **v4.29.8**：前端函式長度上限（SPEC-111）。architecture-check 量測前端頂層函式（上限 80 行，剩下的長函式記錄在基準只准變短）；`sendAgentMessage` 與 `renderCharts` 拆成具名步驟。依賴方向不變。
 - **v4.29.7**：登入身分單一寫入點（SPEC-109）。`app-session.js` 的 `startAuthSession`／`endAuthSession` 是唯一寫入點，architecture-check 強制；單一使用者的月報與單鞋分析狀態搬到使用者身邊。依賴方向不變。
 - **v4.29.6**：前端沒有互相引用的 script（SPEC-108）。新增 `app-session.js` 擁有登入身分；401 以 `auth-session-expired` 事件交給 `app-auth.js`；工作區與帳號以 `onAuthView` 登記，跑步以 `registerWorkspaceRuns` 與 `registerWorkspaceEditor` 登記。依賴方向：feature → session／auth／workspace，不再反向。

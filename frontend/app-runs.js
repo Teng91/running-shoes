@@ -446,3 +446,30 @@ registerWorkspaceEditor('run', {
   },
   restored: () => updateRunActivityHint('edit-run'),
 });
+
+// SPEC-113: this feature's delegated UI actions; markup names them with data-click and the like.
+registerUiActions({
+  click: {
+    'retry-runs': () => loadRunsForSelectedMonth(runController.state.retryOptions),
+    'load-runs': () => loadRunsForSelectedMonth(),
+    'run-page': element => changeRunPage(Number(element.dataset.step)),
+    'open-run': element => openRunModal(Number(element.dataset.runId)),
+    'close-run-modal': () => closeRunModal(),
+    'delete-editing-run': () => deleteEditingRun(),
+    'filter-run-day': element => filterRunDay(element.dataset.date),
+  },
+  change: {
+    'run-date-warning': element => updateRunDateWarning(element.dataset.form),
+    'run-shoe': element => onRunShoeChange(element.dataset.form),
+    'run-activity-hint': element => updateRunActivityHint(element.dataset.form),
+    'load-runs': () => loadRunsForSelectedMonth(),
+  },
+  input: {
+    'run-pace-preview': element => updateRunPacePreview(element.dataset.form),
+    'duration-digits': element => formatDurationInput(element),
+  },
+  submit: {
+    'add-run': () => addRun(),
+    'save-run': () => saveRun(),
+  },
+});

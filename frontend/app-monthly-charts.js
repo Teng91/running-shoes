@@ -366,3 +366,10 @@ async function renderYearReview() {
 
 // SPEC-101: the monthly tab's charts, once Chart.js has loaded.
 registerPanel('monthly', { render: () => { if (typeof Chart !== 'undefined') renderMonthlyCharts(); } });
+
+// SPEC-113: this feature's delegated UI actions; markup names them with data-click and the like.
+registerUiActions({
+  change: {
+    'year': () => onYearChange(),
+  },
+});
