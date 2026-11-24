@@ -1,3 +1,9 @@
+// SPEC-115: spending's own sort and money format (it is their only user).
+const byDate = (a, b) => new Date(a.date) - new Date(b.date);
+function fmtMoney(v) {
+  return '$' + Math.round(v).toLocaleString();
+}
+
 let spendingLoadRequestId = 0;
 let spendingLoadPending = false;
 

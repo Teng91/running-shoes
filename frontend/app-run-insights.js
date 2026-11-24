@@ -1,4 +1,9 @@
 // Run dashboard cards, calendar, charts, and per-shoe analytics.
+// SPEC-115: the shown month's loaded runs; only the run log uses them.
+function monthRuns() {
+  const month = selectedRunMonth();
+  return runController.state.rows.filter(run => run.date.slice(0, 7) === month);
+}
 let shoeAnalyticsRequestId = 0;
 registerFeatureReset('run-insights', () => {
   resourceStore?.invalidate(['dashboard-analytics', 'home-summary']);

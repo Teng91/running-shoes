@@ -28,23 +28,6 @@ function esc(str) {
     .replace(/'/g, '&#039;');
 }
 
-const BRAND_COLORS = {
-  'Mizuno': ['#38BDF8', '#7DD3FC', '#0EA5E9'],
-  'New Balance': ['#F87171', '#FCA5A5', '#EF4444'],
-  'Adidas': ['#FACC15', '#FDE047', '#EAB308'],
-  'PUMA': ['#4ADE80', '#86EFAC', '#22C55E'],
-  'Nike': ['#FB923C', '#FDBA74', '#F97316'],
-  'Asics': ['#A78BFA', '#C4B5FD', '#8B5CF6'],
-  'Saucony': ['#F472B6', '#F9A8D4', '#EC4899'],
-  'Hoka': ['#2DD4BF', '#5EEAD4', '#14B8A6'],
-  'FILA': ['#FB7185', '#FDA4AF', '#F43F5E'],
-  'On': ['#C084FC', '#D8B4FE', '#A855F7'],
-  'Brooks': ['#34D399', '#6EE7B7', '#10B981'],
-  'Skechers': ['#FBBF24', '#FDE68A', '#F59E0B'],
-  'Under Armour': ['#94A3B8', '#CBD5E1', '#64748B'],
-  'Salomon': ['#F97316', '#FDBA74', '#EA580C'],
-};
-
 // Lifespan alert policy, mirrored from backend/shoe_metrics.py (SPEC-055): watch from 80%,
 // prepare a replacement from 90%. A Python test keeps both sides equal.
 const LIFECYCLE_MONITOR_PERCENT = 80;
@@ -85,7 +68,6 @@ function localDateISO(instant = new Date()) {
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
-const byDate = (a, b) => new Date(a.date) - new Date(b.date);
 // Core account data (SPEC-095): shoes, retiredShoes, monthlyMileages, runningGoal,
 // stravaImports, spendingSummary and monthlySpending live in the store of
 // runtime/core-data.mjs. Scripts read them as coreData.shoes and so on; the view is

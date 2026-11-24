@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [4.29.11] - 2026-11-25
+
+### Changed
+- 只有一個使用者的宣告搬到使用者身邊（SPEC-115），畫面不變：`BRAND_COLORS` 移到 dashboard，`byDate` 與 `fmtMoney` 移到支出，`monthRuns` 移到跑步紀錄畫面。跨 script 名稱由 170 降到 166。Asset 4.29.11／shell v117，schema 13 不變。
+
 ## [4.29.10] - 2026-11-25
 
 ### Changed

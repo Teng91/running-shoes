@@ -1,4 +1,21 @@
 // Dashboard calculations, cards, alerts, and shoe tables.
+// SPEC-115: brand colours are used only by the dashboard's shoe colours.
+const BRAND_COLORS = {
+  'Mizuno': ['#38BDF8', '#7DD3FC', '#0EA5E9'],
+  'New Balance': ['#F87171', '#FCA5A5', '#EF4444'],
+  'Adidas': ['#FACC15', '#FDE047', '#EAB308'],
+  'PUMA': ['#4ADE80', '#86EFAC', '#22C55E'],
+  'Nike': ['#FB923C', '#FDBA74', '#F97316'],
+  'Asics': ['#A78BFA', '#C4B5FD', '#8B5CF6'],
+  'Saucony': ['#F472B6', '#F9A8D4', '#EC4899'],
+  'Hoka': ['#2DD4BF', '#5EEAD4', '#14B8A6'],
+  'FILA': ['#FB7185', '#FDA4AF', '#F43F5E'],
+  'On': ['#C084FC', '#D8B4FE', '#A855F7'],
+  'Brooks': ['#34D399', '#6EE7B7', '#10B981'],
+  'Skechers': ['#FBBF24', '#FDE68A', '#F59E0B'],
+  'Under Armour': ['#94A3B8', '#CBD5E1', '#64748B'],
+  'Salomon': ['#F97316', '#FDBA74', '#EA580C'],
+};
 function calc(shoe) {
   const discount = (shoe.discount_percent || 0) / 100;
   const costPerKm = shoe.cost_per_km ?? null;
@@ -11,7 +28,6 @@ function calc(shoe) {
 
 // ====== Formatting ======
 function fmtPct(v) { return (v * 100).toFixed(2) + '%'; }
-function fmtMoney(v) { return '$' + Math.round(v).toLocaleString(); }
 function fmtDate(d) { if (!d) return '-'; return `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`; }
 // Why a retirement date is (or is not) shown; SPEC-069 adds pairs idle for 90 days.
 function forecastSourceText(source) {
