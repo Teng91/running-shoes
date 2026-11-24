@@ -634,6 +634,7 @@ v3.10.1／schema 6 將預覽主鍵改為 `(user_id, token)`，交易保留舊預
 `backup_contract.py` 同時擁有匯出／匯入的集合、UTF-8 位元組及結構檢查；export service 在一致快照中以 cap+1 分批讀取並逐筆檢查容量並在產檔前驗證契約。HTTP 僅處理本人 include_history 選項與下載回應，不靜默裁切。
 
 `account_import_plan.py` 保留 user-scoped 來源辨識與配額；query-free `account_import_changes.py` 以快照投影最終跑步、鞋款及月份，產生欄位 patch；preview 由 patch 計數，executor 套用同一 patch，交易／回執仍由 account_restore 擁有。移除 executor 內第二套對帳及欄位比較。
+SPEC-102 起 `execute_import` 與 `build_changes` 只依序呼叫各資料種類的步驟函式（鞋款、跑步、月份、目標、月報、匯入紀錄、稽核歷史），每個函式的複雜度都在 10 以下；步驟共用 caller-owned session，不自行 commit。
 
 restore controller 擁有 committed／refreshRequired／refreshing 與原操作身分。bridge 將 loadData 的 resource errors 轉為可重試的讀取失敗，不把提交成功誤報成可再次提交；重新載入檢查 session／revision／owner。詳見 [ADR-0012](adr/0012-account-transfer-contract-and-diffs.md)。
 
