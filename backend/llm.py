@@ -105,7 +105,7 @@ _DAILY_USAGE_POOL_LIMIT = 50
 _LLM_TIMEOUT_SECONDS = 90.0
 
 
-def _fetch_free_models() -> list[dict[str, str]]:  # noqa: C901
+def _fetch_free_models() -> list[dict[str, str]]:
     """抓取今日使用量前 50 名中的免費工具模型。
 
     Pricing and tool support come from the live catalog. Popularity comes from
@@ -119,81 +119,15 @@ def _fetch_free_models() -> list[dict[str, str]]:  # noqa: C901
         raise LLMError(f"未設定 {cfg['key_label']}，無法抓取模型列表。")
 
     try:
-        resp = httpx.get(
-            _MODELS_URL,
-            headers={"Authorization": f"Bearer {api_key}"},
-            timeout=15,
-        )
-        resp.raise_for_status()
-        data = resp.json()
+        data = _get_json(_MODELS_URL, api_key)
     except (httpx.HTTPError, TypeError, ValueError) as exc:
         raise LLMError(f"抓取 OpenRouter 模型列表失敗：{exc}") from exc
     if not isinstance(data, dict) or not isinstance(data.get("data"), list):
         raise LLMError("抓取 OpenRouter 模型列表失敗：回傳格式無效。")
-
-    models_by_id: dict[str, dict[str, str]] = {}
-    model_keys: dict[str, str] = {}
-    for item in data.get("data", []):
-        if not isinstance(item, dict):
-            continue
-        model_id = item.get("id")
-        if not isinstance(model_id, str) or not model_id:
-            continue
-        pricing = item.get("pricing")
-        pricing = pricing if isinstance(pricing, dict) else {}
-        supported = item.get("supported_parameters")
-        supported = supported if isinstance(supported, list) else []
-        try:
-            prompt_price = pricing.get("prompt")
-            completion_price = pricing.get("completion")
-            is_free = float(str(prompt_price)) == 0 and float(str(completion_price)) == 0
-        except (TypeError, ValueError):
-            is_free = False
-        supports_tools = "tools" in supported
-        if is_free and supports_tools and model_id not in _REMOVED_MODELS:
-            models_by_id[model_id] = {
-                "id": model_id,
-                "display": str(item.get("name") or model_id),
-            }
-            model_keys[model_id] = model_id
-            canonical = item.get("canonical_slug")
-            if isinstance(canonical, str) and canonical:
-                tail = model_id.rsplit("/", 1)[-1]
-                if ":" in tail:
-                    variant = tail.split(":", 1)[1]
-                    model_keys.setdefault(f"{canonical}:{variant}", model_id)
-                else:
-                    model_keys.setdefault(canonical, model_id)
+    models_by_id, model_keys = _free_tool_models(data["data"])
 
     try:
-        rankings = httpx.get(
-            _RANKINGS_URL,
-            headers={"Authorization": f"Bearer {api_key}"},
-            timeout=15,
-        )
-        rankings.raise_for_status()
-        ranking_body = rankings.json()
-        ranking_data = ranking_body.get("data", []) if isinstance(ranking_body, dict) else []
-        ranking_rows: list[dict[str, Any]] = [
-            row for row in ranking_data if isinstance(row, dict)
-        ] if isinstance(ranking_data, list) else []
-        meta = ranking_body.get("meta", {}) if isinstance(ranking_body, dict) else {}
-        end_date = meta.get("end_date") if isinstance(meta, dict) else None
-        if not end_date:
-            dates = [str(row["date"]) for row in ranking_rows if row.get("date")]
-            end_date = max(dates) if dates else None
-        totals: dict[str, int] = {}
-        for row in ranking_rows:
-            if end_date and row.get("date") != end_date:
-                continue
-            ranked_slug = row.get("model_permaslug")
-            if not isinstance(ranked_slug, str) or ranked_slug == "other":
-                continue
-            try:
-                total_tokens = int(row.get("total_tokens") or 0)
-            except (TypeError, ValueError):
-                continue
-            totals[ranked_slug] = totals.get(ranked_slug, 0) + total_tokens
+        totals = _daily_token_totals(_get_json(_RANKINGS_URL, api_key))
     except (httpx.HTTPError, TypeError, ValueError, KeyError) as exc:
         raise LLMError(f"抓取 OpenRouter 本日模型排行榜失敗：{exc}") from exc
 
@@ -208,6 +142,77 @@ def _fetch_free_models() -> list[dict[str, str]]:  # noqa: C901
             models.append(models_by_id[model_id])
             seen.add(model_id)
     return models
+
+
+def _get_json(url: str, api_key: str) -> Any:
+    response = httpx.get(url, headers={"Authorization": f"Bearer {api_key}"}, timeout=15)
+    response.raise_for_status()
+    return response.json()
+
+
+def _is_free(pricing: dict) -> bool:
+    try:
+        return float(str(pricing.get("prompt"))) == 0 and float(str(pricing.get("completion"))) == 0
+    except (TypeError, ValueError):
+        return False
+
+
+def _free_tool_models(items: list) -> tuple[dict[str, dict[str, str]], dict[str, str]]:
+    """Free, tool-capable catalog models by ID, and every ranking key that names one of them."""
+    models_by_id: dict[str, dict[str, str]] = {}
+    model_keys: dict[str, str] = {}
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        model_id = item.get("id")
+        if not isinstance(model_id, str) or not model_id:
+            continue
+        pricing = item.get("pricing")
+        supported = item.get("supported_parameters")
+        supports_tools = "tools" in (supported if isinstance(supported, list) else [])
+        if not (_is_free(pricing if isinstance(pricing, dict) else {}) and supports_tools
+                and model_id not in _REMOVED_MODELS):
+            continue
+        models_by_id[model_id] = {"id": model_id, "display": str(item.get("name") or model_id)}
+        model_keys[model_id] = model_id
+        _add_canonical_key(model_keys, model_id, item.get("canonical_slug"))
+    return models_by_id, model_keys
+
+
+def _add_canonical_key(model_keys: dict[str, str], model_id: str, canonical: Any) -> None:
+    """Rankings name models by canonical slug, keeping a variant suffix such as ``:free``."""
+    if not isinstance(canonical, str) or not canonical:
+        return
+    tail = model_id.rsplit("/", 1)[-1]
+    if ":" in tail:
+        variant = tail.split(":", 1)[1]
+        model_keys.setdefault(f"{canonical}:{variant}", model_id)
+    else:
+        model_keys.setdefault(canonical, model_id)
+
+
+def _daily_token_totals(ranking_body: Any) -> dict[str, int]:
+    """Total tokens per model slug on the ranking's latest day."""
+    ranking_data = ranking_body.get("data", []) if isinstance(ranking_body, dict) else []
+    ranking_rows: list[dict[str, Any]] = [
+        row for row in ranking_data if isinstance(row, dict)
+    ] if isinstance(ranking_data, list) else []
+    meta = ranking_body.get("meta", {}) if isinstance(ranking_body, dict) else {}
+    end_date = meta.get("end_date") if isinstance(meta, dict) else None
+    if not end_date:
+        dates = [str(row["date"]) for row in ranking_rows if row.get("date")]
+        end_date = max(dates) if dates else None
+    totals: dict[str, int] = {}
+    for row in ranking_rows:
+        ranked_slug = row.get("model_permaslug")
+        if (end_date and row.get("date") != end_date) or not isinstance(ranked_slug, str) or ranked_slug == "other":
+            continue
+        try:
+            total_tokens = int(row.get("total_tokens") or 0)
+        except (TypeError, ValueError):
+            continue
+        totals[ranked_slug] = totals.get(ranked_slug, 0) + total_tokens
+    return totals
 
 def _get_models(provider: LLMProvider, force: bool = False) -> list[dict[str, str]]:
     """取得模型列表，優先使用快取，快取失效時從 OpenRouter API 抓取。
@@ -368,7 +373,7 @@ def _detail_field(detail: Any, key: str) -> Any:
     return detail.get(key) if isinstance(detail, dict) else getattr(detail, key, None)
 
 
-def call_llm_stream(  # noqa: C901
+def call_llm_stream(
     provider: LLMProvider,
     model: str,
     messages: list[dict[str, Any]],
@@ -389,17 +394,7 @@ def call_llm_stream(  # noqa: C901
     """
     client = _build_client(provider)
 
-    kwargs: dict[str, Any] = {
-        "model": model,
-        "messages": messages,
-        "temperature": 0.3,
-        "max_tokens": current_config().max_output_tokens,
-        "stream": True,
-        "stream_options": {"include_usage": False},
-    }
-    if tools:
-        kwargs["tools"] = tools
-
+    kwargs = _stream_request(model, messages, tools)
     full_content = ""
     finish_reason = None
     actual_model = None
@@ -421,19 +416,7 @@ def call_llm_stream(  # noqa: C901
             if delta and delta.content:
                 full_content += delta.content
                 yield delta.content
-            for position, tool_call in enumerate(getattr(delta, "tool_calls", None) or []):
-                index = getattr(tool_call, "index", None)
-                index = position if index is None else index
-                part = tool_call_parts.setdefault(
-                    index,
-                    {"id": "", "name": "", "arguments": ""},
-                )
-                if getattr(tool_call, "id", None):
-                    part["id"] = tool_call.id
-                function = getattr(tool_call, "function", None)
-                if function:
-                    part["name"] += getattr(function, "name", None) or ""
-                    part["arguments"] += getattr(function, "arguments", None) or ""
+            _merge_tool_call_deltas(tool_call_parts, getattr(delta, "tool_calls", None) or [])
             if choice.finish_reason:
                 finish_reason = choice.finish_reason
     except LLMError:
@@ -442,37 +425,70 @@ def call_llm_stream(  # noqa: C901
         logger.warning("LLM stream failed (%s / %s): %r", provider.value, model, exc)
         raise LLMError(user_facing_error(exc)) from exc
     finally:
-        close_stream = getattr(stream, "close", None)
-        if close_stream is not None:
-            close_stream()
+        _close_quietly(stream)
 
     if not full_content and finish_reason is None:
         raise LLMError(f"LLM 回傳空串流（{provider.value} / {model}）")
 
-    tool_calls = []
-    for index, part in sorted(tool_call_parts.items()):
-        if not part["name"]:
-            continue
-        raw_arguments = part["arguments"] or "{}"
-        normalized_arguments = raw_arguments
-        try:
-            arguments = json.loads(raw_arguments)
-            if not isinstance(arguments, dict):
-                arguments = {}
-                normalized_arguments = "{}"
-        except (TypeError, json.JSONDecodeError):
-            arguments = {}
-            normalized_arguments = "{}"
-        tool_calls.append({
-            "id": part["id"] or f"call_{index}",
-            "name": part["name"],
-            "arguments": arguments,
-            "arguments_json": normalized_arguments,
-        })
-
     return {
         "content": full_content,
         "finish_reason": finish_reason,
-        "tool_calls": tool_calls,
+        "tool_calls": _finished_tool_calls(tool_call_parts),
         "model": actual_model,
     }
+
+
+def _stream_request(model: str, messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None) -> dict[str, Any]:
+    kwargs: dict[str, Any] = {
+        "model": model,
+        "messages": messages,
+        "temperature": 0.3,
+        "max_tokens": current_config().max_output_tokens,
+        "stream": True,
+        "stream_options": {"include_usage": False},
+    }
+    if tools:
+        kwargs["tools"] = tools
+    return kwargs
+
+
+def _close_quietly(stream: Any) -> None:
+    """Close the provider stream if it was opened and can be closed."""
+    close_stream = getattr(stream, "close", None)
+    if close_stream is not None:
+        close_stream()
+
+
+def _merge_tool_call_deltas(parts: dict[int, dict[str, str]], tool_calls: list) -> None:
+    """Native tool calls arrive in fragments; join each call's ID, name and arguments by index."""
+    for position, tool_call in enumerate(tool_calls):
+        index = getattr(tool_call, "index", None)
+        index = position if index is None else index
+        part = parts.setdefault(index, {"id": "", "name": "", "arguments": ""})
+        if getattr(tool_call, "id", None):
+            part["id"] = tool_call.id
+        function = getattr(tool_call, "function", None)
+        if function:
+            part["name"] += getattr(function, "name", None) or ""
+            part["arguments"] += getattr(function, "arguments", None) or ""
+
+
+def _finished_tool_calls(parts: dict[int, dict[str, str]]) -> list[dict[str, Any]]:
+    """Named calls in index order; arguments that are not a JSON object become ``{}``."""
+    tool_calls = []
+    for index, part in sorted(parts.items()):
+        if not part["name"]:
+            continue
+        raw_arguments = part["arguments"] or "{}"
+        try:
+            arguments = json.loads(raw_arguments)
+        except (TypeError, json.JSONDecodeError):
+            arguments = None
+        normalized_arguments = raw_arguments if isinstance(arguments, dict) else "{}"
+        tool_calls.append({
+            "id": part["id"] or f"call_{index}",
+            "name": part["name"],
+            "arguments": arguments if isinstance(arguments, dict) else {},
+            "arguments_json": normalized_arguments,
+        })
+    return tool_calls

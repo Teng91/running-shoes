@@ -3,6 +3,7 @@
 import json
 import logging
 from collections.abc import Generator
+from dataclasses import dataclass, field
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -179,7 +180,50 @@ def _prefetch_plan(
     return search_fails, search_calls, executed_calls, search_payloads
 
 
-def run_agent_stream(  # noqa: C901
+@dataclass
+class _AgentRun:
+    """State shared by the turns of one chat answer (SPEC-103)."""
+
+    messages: list[dict]
+    db: Session | None
+    user_id: int | None
+    executed_calls: set[tuple[str, str]]
+    search_payloads: list[dict[str, Any]]
+    web_search_fails: int = 0
+    web_search_calls: int = 0
+
+    @property
+    def has_database(self) -> bool:
+        return self.db is not None and self.user_id is not None
+
+
+@dataclass
+class _Turn:
+    """What one model call produced: its text and the tool calls it asked for."""
+
+    content: str = ""
+    tool_calls: list[dict[str, Any]] = field(default_factory=list)
+    native: bool = False
+    failed: bool = False
+
+    @property
+    def wants_tools(self) -> bool:
+        return bool(self.tool_calls)
+
+
+_LAST_TURN_PROMPT = (
+    "[系統提示] 這是最後一輪，請「不要」再呼叫任何工具，"
+    "直接根據上面已取得的跑鞋、跑量與搜尋資料，給出完整的最終建議。"
+    "若某些市售鞋款資訊沒查到，就用你現有的資料分析並誠實說明。"
+)
+_STOP_TOOLS_PROMPT = (
+    "[系統提示] 工具呼叫已失敗、重複或達到上限。請**不要**再呼叫"
+    "相同工具，直接根據前面取得的資料給出最終回答；缺少資訊時誠實說明。"
+)
+_MISSING_DATABASE_EVENT = {"type": "error", "text": "無法執行資料庫工具：缺少使用者資料庫上下文。"}
+
+
+def run_agent_stream(
     user_message: str,
     history: list[dict] | None = None,
     provider: str = "openrouter",
@@ -188,157 +232,179 @@ def run_agent_stream(  # noqa: C901
     user_id: int | None = None,
 ) -> Generator[str, None, None]:
     try:
-        prov = llm.LLMProvider.from_str(provider)
+        prov, model_id = _resolve_model(provider, model)
     except llm.LLMError as exc:
         yield agent_protocol.sse({"type": "error", "text": str(exc)})
         yield agent_protocol.sse({"type": "done"})
         return
-    if model is None:
-        available_models = llm.MODELS.get(prov.value, [])
-        model = available_models[0]["id"] if available_models else ""
 
     messages = _build_messages(history, user_message)
     query_plan = agent_planner.build_query_plan(user_message, history)
-    available_tools = db_tools.TOOL_DEFINITIONS if (
-        query_plan.web_queries or query_plan.database_tools
-        or agent_planner.should_offer_tools(user_message, history)
-    ) else None
-    prefetch = _prefetch_plan(query_plan, messages, db, user_id)
-    try:
-        while True:
-            yield next(prefetch)
-    except StopIteration as stop:
-        web_search_fails, web_search_calls, executed_calls, search_payloads = stop.value
-    if query_plan.database_tools and (db is None or user_id is None):
-        yield _source_summary_event(search_payloads)
+    available_tools = _offered_tools(query_plan, user_message, history)
+    fails, calls, executed_calls, search_payloads = yield from _prefetch_plan(query_plan, messages, db, user_id)
+    run = _AgentRun(messages, db, user_id, executed_calls, search_payloads, fails, calls)
+    if query_plan.database_tools and not run.has_database:
+        yield _source_summary_event(run.search_payloads)
         yield agent_protocol.sse({"type": "done"})
         return
 
-    for turn in range(MAX_TURNS):
-        is_last_turn = turn == MAX_TURNS - 1
+    for turn_number in range(MAX_TURNS):
+        is_last_turn = turn_number == MAX_TURNS - 1
         if is_last_turn:
-            messages.append({"role": "user", "content": (
-                "[系統提示] 這是最後一輪，請「不要」再呼叫任何工具，"
-                "直接根據上面已取得的跑鞋、跑量與搜尋資料，給出完整的最終建議。"
-                "若某些市售鞋款資訊沒查到，就用你現有的資料分析並誠實說明。"
-            )})
-        full_content = ""
-        seen_tool = False
-        tool_calls: list[dict[str, Any]] = []
-        llm_result: dict[str, Any] = {}
-        try:
-            stream_gen = llm.call_llm_stream(
-                prov, model, messages,
-                tools=None if is_last_turn else available_tools,
-                include_reasoning=True,
-            )
-            try:
-                while True:
-                    chunk = next(stream_gen)
-                    if not chunk:
-                        continue
-                    if isinstance(chunk, llm.ReasoningText):
-                        # SPEC-086: show the model's thinking while it happens; it
-                        # never joins the answer, tool parsing or the history.
-                        yield agent_protocol.sse({"type": "thinking", "text": str(chunk)})
-                        continue
-                    full_content += chunk
-                    if not seen_tool:
-                        parsed = db_tools.parse_tool_calls(full_content)
-                        if parsed and not is_last_turn:
-                            seen_tool = True
-                            tool_calls = parsed
-                            yield agent_protocol.sse({
-                                "type": "reasoning_start",
-                                "text": db_tools.strip_tool_markers(full_content),
-                            })
-                            close_stream = getattr(stream_gen, "close", None)
-                            if close_stream is not None:
-                                close_stream()
-                            break
-                        yield agent_protocol.sse({"type": "token", "text": chunk})
-            except StopIteration as stop:
-                llm_result = stop.value or {}
-        except llm.LLMError as exc:
-            yield agent_protocol.sse({"type": "error", "text": str(exc)})
+            run.messages.append({"role": "user", "content": _LAST_TURN_PROMPT})
+        turn = yield from _stream_model_turn(prov, model_id, run.messages, None if is_last_turn else available_tools,
+                                             is_last_turn)
+        if turn.failed:
             break
-        except Exception:
-            # Unexpected exception text may contain provider URLs or internal state.
-            logger.exception("Unexpected model stream failure")
-            yield agent_protocol.sse({"type": "error", "text": "模型呼叫發生錯誤，請稍後再試或更換模型。"})
-            break
-
-        native_tool_calls = llm_result.get("tool_calls", [])
-        if native_tool_calls and not is_last_turn:
-            seen_tool = True
-            tool_calls = native_tool_calls
-            yield agent_protocol.sse({"type": "reasoning_start", "text": full_content.strip()})
-        if not seen_tool:
-            if not full_content.strip():
+        if not turn.wants_tools:
+            if not turn.content.strip():
                 yield agent_protocol.sse({"type": "token", "text": "（模型沒有回應，請再試一次或更換模型。）"})
             break
+        _record_assistant_turn(run.messages, turn)
+        blocked = yield from _run_tool_calls(run, turn)
+        if blocked is None:
+            return
+        if run.web_search_fails >= WEB_SEARCH_FAIL_LIMIT or blocked:
+            run.messages.append({"role": "user", "content": _STOP_TOOLS_PROMPT})
 
-        if native_tool_calls:
-            messages.append({
-                "role": "assistant", "content": full_content or None,
-                "tool_calls": [{
-                    "id": call["id"], "type": "function",
-                    "function": {
-                        "name": call["name"],
-                        "arguments": call.get("arguments_json")
-                        or json.dumps(call["arguments"], ensure_ascii=False),
-                    },
-                } for call in tool_calls],
-            })
-        else:
-            tool_calls = db_tools.parse_tool_calls(full_content)[:1]
-            last_close = full_content.rfind("</tool>")
-            clean_content = full_content[:last_close + len("</tool>")] if last_close != -1 else full_content
-            messages.append({"role": "assistant", "content": clean_content})
-
-        blocked_tool_call = False
-        for call in tool_calls:
-            name = call["name"]
-            arguments = call["arguments"]
-            yield agent_protocol.sse({"type": "tool", "name": name, "args": arguments})
-            if name in db_tools.REGISTRY and (db is None or user_id is None):
-                yield agent_protocol.sse({"type": "error", "text": "無法執行資料庫工具：缺少使用者資料庫上下文。"})
-                yield agent_protocol.sse({"type": "done"})
-                return
-            call_key = (name, json.dumps(arguments, ensure_ascii=False, sort_keys=True))
-            duplicate = call_key in executed_calls
-            limit_reached = name == "web_search" and web_search_calls >= WEB_SEARCH_CALL_LIMIT
-            if duplicate or limit_reached:
-                blocked_tool_call = True
-                output = json.dumps({
-                    "tool": name, "schema_version": 1, "ok": False,
-                    "status": "duplicate_call_blocked" if duplicate else "search_call_limit_reached",
-                    "error": "Do not call this tool again; answer with existing results.",
-                }, ensure_ascii=False, separators=(",", ":"))
-            else:
-                executed_calls.add(call_key)
-                if name == "web_search":
-                    web_search_calls += 1
-                output = _execute_tool_safely(name, arguments, db, user_id)
-            yield agent_protocol.tool_done_event(name, output)
-            if name == "web_search":
-                payload = agent_protocol.search_payload(output)
-                if payload is not None:
-                    search_payloads.append(payload)
-                if is_failure(output):
-                    web_search_fails += 1
-            if native_tool_calls:
-                messages.append({
-                    "role": "tool", "tool_call_id": call["id"], "name": name,
-                    "content": output,
-                })
-            else:
-                messages.append({"role": "user", "content": f"[工具 {name} 的結果]\n{output}"})
-        if web_search_fails >= WEB_SEARCH_FAIL_LIMIT or blocked_tool_call:
-            messages.append({"role": "user", "content": (
-                "[系統提示] 工具呼叫已失敗、重複或達到上限。請**不要**再呼叫"
-                "相同工具，直接根據前面取得的資料給出最終回答；缺少資訊時誠實說明。"
-            )})
-
-    yield _source_summary_event(search_payloads)
+    yield _source_summary_event(run.search_payloads)
     yield agent_protocol.sse({"type": "done"})
+
+
+def _resolve_model(provider: str, model: str | None) -> tuple[llm.LLMProvider, str]:
+    """The provider and model to call; without a model, the provider's first listed one."""
+    prov = llm.LLMProvider.from_str(provider)
+    if model is not None:
+        return prov, model
+    available_models = llm.MODELS.get(prov.value, [])
+    return prov, available_models[0]["id"] if available_models else ""
+
+
+def _offered_tools(query_plan: QueryPlan, user_message: str, history: list[dict] | None) -> Any:
+    """Tools are offered when the plan uses them or the message asks for data or advice."""
+    wanted = (query_plan.web_queries or query_plan.database_tools
+              or agent_planner.should_offer_tools(user_message, history))
+    return db_tools.TOOL_DEFINITIONS if wanted else None
+
+
+def _stream_model_turn(
+    prov: llm.LLMProvider, model: str, messages: list[dict], tools: Any, is_last_turn: bool,
+) -> Generator[str, None, _Turn]:
+    """Stream one model call as thinking/token events; stop at the first text tool call."""
+    turn = _Turn()
+    result: dict[str, Any] = {}
+    try:
+        stream = llm.call_llm_stream(prov, model, messages, tools=tools, include_reasoning=True)
+        try:
+            while True:
+                chunk = next(stream)
+                event = _chunk_event(turn, chunk, is_last_turn)
+                if event is not None:
+                    yield event
+                if turn.wants_tools:
+                    close_stream = getattr(stream, "close", None)
+                    if close_stream is not None:
+                        close_stream()
+                    break
+        except StopIteration as stop:
+            result = stop.value or {}
+    except llm.LLMError as exc:
+        yield agent_protocol.sse({"type": "error", "text": str(exc)})
+        turn.failed = True
+        return turn
+    except Exception:
+        # Unexpected exception text may contain provider URLs or internal state.
+        logger.exception("Unexpected model stream failure")
+        yield agent_protocol.sse({"type": "error", "text": "模型呼叫發生錯誤，請稍後再試或更換模型。"})
+        turn.failed = True
+        return turn
+    native_calls = result.get("tool_calls", [])
+    if native_calls and not is_last_turn:
+        turn.tool_calls, turn.native = native_calls, True
+        yield agent_protocol.sse({"type": "reasoning_start", "text": turn.content.strip()})
+    return turn
+
+
+def _chunk_event(turn: _Turn, chunk: Any, is_last_turn: bool) -> str | None:
+    """The SSE event for one streamed chunk; a text tool call ends the answer stream."""
+    if not chunk:
+        return None
+    if isinstance(chunk, llm.ReasoningText):
+        # SPEC-086: show the model's thinking while it happens; it never joins the answer,
+        # tool parsing or the history.
+        return agent_protocol.sse({"type": "thinking", "text": str(chunk)})
+    turn.content += chunk
+    if turn.wants_tools:
+        return None
+    parsed = db_tools.parse_tool_calls(turn.content)
+    if parsed and not is_last_turn:
+        turn.tool_calls = parsed
+        return agent_protocol.sse({"type": "reasoning_start", "text": db_tools.strip_tool_markers(turn.content)})
+    return agent_protocol.sse({"type": "token", "text": chunk})
+
+
+def _record_assistant_turn(messages: list[dict], turn: _Turn) -> None:
+    """Add the assistant message that asked for tools; text calls keep only the first one."""
+    if turn.native:
+        messages.append({
+            "role": "assistant", "content": turn.content or None,
+            "tool_calls": [{
+                "id": call["id"], "type": "function",
+                "function": {
+                    "name": call["name"],
+                    "arguments": call.get("arguments_json") or json.dumps(call["arguments"], ensure_ascii=False),
+                },
+            } for call in turn.tool_calls],
+        })
+        return
+    turn.tool_calls = db_tools.parse_tool_calls(turn.content)[:1]
+    last_close = turn.content.rfind("</tool>")
+    clean_content = turn.content[:last_close + len("</tool>")] if last_close != -1 else turn.content
+    messages.append({"role": "assistant", "content": clean_content})
+
+
+def _run_tool_calls(run: _AgentRun, turn: _Turn) -> Generator[str, None, bool | None]:
+    """Run the requested tools; returns whether one was blocked, or None when the answer must stop."""
+    blocked = False
+    for call in turn.tool_calls:
+        name, arguments = call["name"], call["arguments"]
+        yield agent_protocol.sse({"type": "tool", "name": name, "args": arguments})
+        if name in db_tools.REGISTRY and not run.has_database:
+            yield agent_protocol.sse(_MISSING_DATABASE_EVENT)
+            yield agent_protocol.sse({"type": "done"})
+            return None
+        output, was_blocked = _tool_output(run, name, arguments)
+        blocked = blocked or was_blocked
+        yield agent_protocol.tool_done_event(name, output)
+        if name == "web_search":
+            _note_search_result(run, output)
+        if turn.native:
+            run.messages.append({"role": "tool", "tool_call_id": call["id"], "name": name, "content": output})
+        else:
+            run.messages.append({"role": "user", "content": f"[工具 {name} 的結果]\n{output}"})
+    return blocked
+
+
+def _tool_output(run: _AgentRun, name: str, arguments: Any) -> tuple[str, bool]:
+    """Execute a tool, or refuse a repeated call or a web search over the limit."""
+    call_key = (name, json.dumps(arguments, ensure_ascii=False, sort_keys=True))
+    duplicate = call_key in run.executed_calls
+    limit_reached = name == "web_search" and run.web_search_calls >= WEB_SEARCH_CALL_LIMIT
+    if duplicate or limit_reached:
+        return json.dumps({
+            "tool": name, "schema_version": 1, "ok": False,
+            "status": "duplicate_call_blocked" if duplicate else "search_call_limit_reached",
+            "error": "Do not call this tool again; answer with existing results.",
+        }, ensure_ascii=False, separators=(",", ":")), True
+    run.executed_calls.add(call_key)
+    if name == "web_search":
+        run.web_search_calls += 1
+    return _execute_tool_safely(name, arguments, run.db, run.user_id), False
+
+
+def _note_search_result(run: _AgentRun, output: str) -> None:
+    payload = agent_protocol.search_payload(output)
+    if payload is not None:
+        run.search_payloads.append(payload)
+    if is_failure(output):
+        run.web_search_fails += 1

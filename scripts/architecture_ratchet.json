@@ -1,6 +1,6 @@
 {
   "cross_script_names": 244,
-  "complexity_exemptions": 12,
+  "complexity_exemptions": 8,
   "mutual_pairs": [
     [
       "app-account.js",
