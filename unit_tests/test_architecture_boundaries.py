@@ -152,3 +152,18 @@ def test_backend_complexity_is_linted_and_exemptions_only_shrink(tmp_path):
     assert check_architecture.complexity_exemption_violations(["x", "y"], 2) == []
     assert "split the new one" in check_architecture.complexity_exemption_violations(["x", "y"], 1)[0]
     assert "from 3 to 2" in check_architecture.complexity_exemption_violations(["x", "y"], 3)[0]
+
+
+def test_scripts_call_only_earlier_scripts_while_loading(tmp_path):
+    """SPEC-106: a top-level call to a function of a later script fails in the browser."""
+    import json
+
+    frontend = check_architecture.ROOT / "frontend"
+    manifest = json.loads((frontend / "assets.json").read_text(encoding="utf-8"))
+    assert check_architecture.load_order_violations(frontend, manifest["scripts"]) == []
+
+    (tmp_path / "early.js").write_text(
+        "function hook() {}\nregisterLater({ a: 1 });\nhook();\nfunction run() { registerLater(); }\n", encoding="utf-8")
+    (tmp_path / "late.js").write_text("function registerLater() {}\nhook();\n", encoding="utf-8")
+    assert check_architecture.load_order_violations(tmp_path, ["early.js", "late.js"]) == [
+        "early.js calls registerLater() while loading, but late.js loads later"]

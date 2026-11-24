@@ -73,7 +73,7 @@
 - `frontend/runtime/feature-lifecycle.mjs`: DOM-independent native module for feature lifecycle ownership.
 - `frontend/runtime/run-controller.mjs`: native run state/operation owner with injected transport, session and key factory; DOM remains in the bridge.
 - `frontend/runtime/strava-controller.mjs`: native Strava preview/import/window ownership; DOM remains in `app-strava.js`.
-- `frontend/app-lifecycle.js`: compatibility bridge and reset registration.
+- `frontend/app-lifecycle.js`: compatibility bridge, reset registration and the panel/data registry (`registerPanel`, `registerResourceReader`, `registerDataHooks`); it loads first because a script may call, while it loads, only functions of earlier scripts (`architecture-check` enforces it, SPEC-106).
 - `frontend/app-dates.js`: calendar parsing, cross-day limits and draft-safe foreground refresh.
 - `frontend/app-dialogs.js`: modal semantics and keyboard/focus lifecycle.
 - `frontend/app-updates.js`: shell version diagnostics, open-app deployment checks (focus, visibility, reconnect, 30 min), automatic reload at safe moments (background, untouched after returning, 5 idle minutes; postponed by `appUpdateBusy()`) and the update prompt (SPEC-049, SPEC-059).

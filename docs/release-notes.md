@@ -8,7 +8,7 @@
 
 - `app-resources.js` 新增 `registerResourceCache()`；`app-spending.js` 與 `app-goals.js` 登記各自的失效重設，bridge 不再改寫功能的狀態。
 - `refreshCoreData()` 移到 `app-core.js`；資料到達 hook 改為 `arrived(resource, value, current)`，`app-workspace.js` 以它對帳草稿。
-- `scripts/architecture_ratchet.json` 為 241 個名稱、10 對。
+- 登記函式（`registerPanel`、`registerResourceReader`、`registerDataHooks`）移到最早載入的 `app-lifecycle.js`：工作區在 `app-core.js` 之前載入，載入時就要登記；`architecture-check` 新增 `load_order_violations()`，script 載入時只能呼叫較早載入的函式。`scripts/architecture_ratchet.json` 為 244 個名稱、10 對。
 
 Asset 4.29.4／shell v110、schema 13 不變，可直接回滾至 v4.29.3 image。
 

@@ -60,3 +60,31 @@ function getFormDraft(name) {
   }
   return formDrafts.get(name);
 }
+
+// SPEC-101: feature scripts register what each panel draws and which data they own when they
+// load. The shell (app-core.js) never names a feature's functions, so features depend on it and
+// not back. The registry lives here because this script loads before every feature (SPEC-106):
+// a script may call, while it loads, only functions of scripts loaded before it.
+const panelHooks = new Map();
+const resourceReaders = new Map();
+const dataHooks = [];
+
+// hooks: { render() draws the panel, enter() runs before its tab opens, key() joins the redraw
+// key }. A panel runs its hooks in registration order, i.e. the script order in assets.json.
+function registerPanel(name, hooks) {
+  if (!panelHooks.has(name)) panelHooks.set(name, []);
+  panelHooks.get(name).push(hooks);
+}
+
+// reader: { scope() is taken when a load starts, read(scope) loads, current(scope) tells whether
+// the screen still shows that scope, apply(value) stores a current value }.
+function registerResourceReader(name, reader) {
+  resourceReaders.set(name, reader);
+}
+
+// hooks: { arrived(resource, value, current) after a resource is applied (current: the value
+// still matches the screen's scope), invalidated() on a full redraw,
+// history() when a load also refreshes the import history }.
+function registerDataHooks(hooks) {
+  dataHooks.push(hooks);
+}

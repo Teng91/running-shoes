@@ -2,32 +2,6 @@
 let panelRevision = 0;
 const renderedPanels = new Map();
 
-// SPEC-101: feature scripts register what each panel draws and which data they own when they
-// load. The shell never names a feature's functions, so features depend on it and not back.
-const panelHooks = new Map();
-const resourceReaders = new Map();
-const dataHooks = [];
-
-// hooks: { render() draws the panel, enter() runs before its tab opens, key() joins the redraw
-// key }. A panel runs its hooks in registration order, i.e. the script order in assets.json.
-function registerPanel(name, hooks) {
-  if (!panelHooks.has(name)) panelHooks.set(name, []);
-  panelHooks.get(name).push(hooks);
-}
-
-// reader: { scope() is taken when a load starts, read(scope) loads, current(scope) tells whether
-// the screen still shows that scope, apply(value) stores a current value }.
-function registerResourceReader(name, reader) {
-  resourceReaders.set(name, reader);
-}
-
-// hooks: { arrived(resource, value, current) after a resource is applied (current: the value
-// still matches the screen's scope), invalidated() on a full redraw,
-// history() when a load also refreshes the import history }.
-function registerDataHooks(hooks) {
-  dataHooks.push(hooks);
-}
-
 function invalidatePanels(resource = null) {
   if (!resource) {
     panelRevision += 1;

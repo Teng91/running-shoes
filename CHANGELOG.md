@@ -5,7 +5,7 @@
 ## [4.29.4] - 2026-11-24
 
 ### Changed
-- 資料快取的重設由各功能自行登記（SPEC-106），畫面不變：支出與目標以 `registerResourceCache()` 登記失效時要重設的狀態，`refreshCoreData()` 移到 `app-core.js`，工作區改以資料 hook 接收仍符合畫面範圍的資料。互相使用的 script 由 13 對降到 10 對。Asset 4.29.4／shell v110，schema 13 不變。
+- 資料快取的重設由各功能自行登記（SPEC-106），畫面不變：支出與目標以 `registerResourceCache()` 登記失效時要重設的狀態，`refreshCoreData()` 移到 `app-core.js`，工作區改以資料 hook 接收仍符合畫面範圍的資料；登記函式移到最早載入的 `app-lifecycle.js`，架構檢查也擋住載入時呼叫較晚載入的 script。互相使用的 script 由 13 對降到 10 對。Asset 4.29.4／shell v110，schema 13 不變。
 
 ## [4.29.3] - 2026-11-24
 
