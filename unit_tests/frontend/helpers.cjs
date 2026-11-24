@@ -69,6 +69,11 @@ function featureContext(globals = {}) {
   // SPEC-106: features register their cache hooks when they load; install them like initializeDataResources().
   vm.runInContext(`const resourceCacheHooks = [];\n${extract('registerResourceCache')}\n${featureRegistrations(/^registerResourceCache\(/gm)}`, context);
   context.registerResourceCaches();
+  // SPEC-112: what a test passes in wins over the shared helpers installed above (for example a
+  // prepareGoalForm or updateRunActivityHint spy), so a test never has to re-assign it afterwards.
+  for (const [name, value] of Object.entries(rest)) {
+    if (context[name] !== value) context[name] = value;
+  }
   return context;
 }
 

@@ -40,8 +40,6 @@ test('SPEC-101 features register their panels and data in script order; the shel
   });
   vm.runInContext(`let panelRevision = 0, currentTheme = 'light';
     const renderedPanels = new Map();\n${panelWiring()}\n${extract('invalidatePanels')}\n${extract('renderActivePanel')}`, context);
-  // The shared feature context installs the real goal form helpers; observe this one instead.
-  context.prepareGoalForm = () => order.push('prepareGoalForm');
   context.renderActivePanel();
   assert.deepEqual(order.splice(0), ['renderCards', 'renderAlerts', 'renderCategorySummary', 'renderTable',
     'renderRetiredTable', 'renderCharts', 'renderSpendingCharts']);
@@ -321,4 +319,15 @@ test('markdown sanitizer parses untrusted HTML in an inert document and allowlis
   assert.match(html, /<a>bad<\/a>/);
   assert.match(html, /<div>steal\(\)<\/div>/);
   assert.match(html, /<td colspan="2" align="center">cell<\/td>/);
+});
+
+test('SPEC-112 what a test passes in wins over the shared helpers the feature context installs', () => {
+  const spy = () => 'spy';
+  const context = runContext({ prepareGoalForm: spy, updateRunActivityHint: spy, getFormDraft: spy, readForm: spy });
+  for (const name of ['prepareGoalForm', 'updateRunActivityHint', 'getFormDraft', 'readForm']) {
+    assert.equal(context[name], spy, name);
+  }
+  // Helpers a test does not pass stay the real shared ones.
+  assert.equal(typeof context.setGoalField, 'function');
+  assert.notEqual(context.setGoalField, spy);
 });
