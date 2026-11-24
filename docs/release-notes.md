@@ -4,6 +4,14 @@
 每版的摘要見 [CHANGELOG.md](../CHANGELOG.md)；目前的功能與操作方式以 [README](../README.md) 為準。
 這裡保留當時的文字，後續版本可能已調整其中的行為。
 
+### 畫面殼層改由功能自行註冊（SPEC-101，v4.29.2）
+
+- `app-core.js` 新增 `registerPanel()`、`registerResourceReader()`、`registerDataHooks()`；`renderActivePanel()`、`switchTab()`、`invalidatePanels()` 與 `loadData()` 只執行已登記的 hook，不再以名稱呼叫功能函式。
+- 跑步紀錄的讀取與套用移到 `app-runs.js` 的 `runsResourceReader()`；月報分頁的載入移到 `app-reports.js`，目標表單基準移到 `app-goals.js`；`localDateISO()` 移到 `app-state.js`。
+- 同版也包含 SPEC-099（閒置改為 suspend）與 SPEC-100（`architecture-check` 的耦合基準與後端 C901 複雜度規則）。`scripts/architecture_ratchet.json` 降為 244 個名稱、16 對。
+
+Asset 4.29.2／shell v108、schema 13 不變，可直接回滾至 v4.29.1 image。
+
 ### 健行與步行不出現在跑步畫面（SPEC-098，v4.29.1）
 
 - `read_models/runs.month_run_summary` 只彙總 `TRAINING_RUN`：`calendar` 與 `shoe_usage` 不再含健行與步行（總數本來就只算跑步）。`list_runs` 不變。

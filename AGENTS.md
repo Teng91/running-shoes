@@ -90,7 +90,7 @@
 - `frontend/app-account-restore.js`: restore preview/window/session ownership.
 - `frontend/runtime/account-restore-controller.mjs`: injected restore operation, session and preview cleanup ownership; no DOM or browser transport.
 - `frontend/app-history.js`: audit paging and recover-deletion presentation.
-- `frontend/app-core.js`: dashboard shell, theme, tabs, and aggregate data loading.
+- `frontend/app-core.js`: dashboard shell, theme, tabs, and aggregate data loading. Features register what they draw and load (`registerPanel`, `registerResourceReader`, `registerDataHooks`); the shell never calls a feature function by name (SPEC-101).
 - `frontend/app-dashboard.js`: dashboard cards, alerts, and shoe tables.
 - `frontend/app-onboarding.js`: the new-account getting-started card, derived only from loaded shoes, monthly mileage and the goal (SPEC-084).
 - `frontend/app-exports.js`: authenticated shoe exports and account backup downloads.

@@ -1,4 +1,4 @@
-const { runContext, test, assert, fs, path, vm, htmlSource, scriptPaths, scriptSource, styleSource, source, authOperationContext, streamContext, editContext, tableHeaders, extract, transportContext } = require('./helpers.cjs');
+const { runContext, test, assert, fs, path, vm, htmlSource, scriptPaths, scriptSource, styleSource, source, authOperationContext, streamContext, editContext, tableHeaders, extract, panelWiring, transportContext } = require('./helpers.cjs');
 
 test('replacement alerts require backup for every purpose and handle unclassified shoes', () => {
   const container = {};
@@ -87,6 +87,7 @@ test('failed reload retains previous data and exposes a retry; recovery hides er
   vm.runInContext(`let authToken = 'test', selectedYear;
     let runs = [], spendingLoadRequestId = 0,
     spendingLoadPending = false, goalProgressRequestId = 0, runSummary, runPageOffset, runPageHasMore, runDayFilter, runListRequestId = 0;
+    ${panelWiring()}
     ${extract('loadData')}`, context);
   await context.loadData();
   assert.equal(context.coreData.shoes[0].id, 1);

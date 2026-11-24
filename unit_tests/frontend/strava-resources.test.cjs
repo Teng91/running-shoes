@@ -1,4 +1,4 @@
-const { test, assert, vm, extract, source, runContext } = require('./helpers.cjs');
+const { test, assert, vm, extract, panelWiring, source, runContext } = require('./helpers.cjs');
 const { observeWorkerUpdate } = require('../../scripts/worker_update.cjs');
 function deferred() { let resolve, reject; const promise = new Promise((a, b) => { resolve = a; reject = b; }); return { promise, resolve, reject }; }
 const flush = () => new Promise(resolve => setImmediate(resolve));
@@ -93,6 +93,7 @@ test('SPEC-025 dashboard renders fast resources while a peer remains pending', a
     apiGet: async url => url === '/running-goal' ? slow.promise : [], fetchRunPage: async () => ({ rows: [{ id: 42 }], hasMore: false }) });
   vm.runInContext(`let selectedYear;
     let spendingLoadRequestId=0, spendingLoadPending=false, goalProgressRequestId=0;
+    ${panelWiring()}
     ${extract('loadData')}`, context);
   const loading = context.loadData(); await flush();
   assert.equal(context.runController.state.rows[0].id, 42); assert.ok(renders > 0); assert.ok(boots > 0);
@@ -155,7 +156,7 @@ test('SPEC-025 goal baseline exists before the first deferred panel render', () 
     window: { matchMedia: () => ({ matches: false }) } });
   elements['app-workspace'].classList.toggle = () => {};
   elements['sidebar-menu'].classList.contains = () => false;
-  vm.runInContext(extract('switchTab'), context);
+  vm.runInContext(panelWiring() + extract('switchTab'), context);
   context.renderActivePanel = () => context.prepareGoalForm();
   context.switchTab('monthly');
   assert.equal(elements['goal-monthly-km'].value, '125');

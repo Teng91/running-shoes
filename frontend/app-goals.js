@@ -220,3 +220,6 @@ async function saveRunningGoal() {
     }
   }
 }
+
+// SPEC-101: the goal form takes its baseline before the monthly tab becomes interactive.
+registerPanel('monthly', { enter: () => prepareGoalForm() });

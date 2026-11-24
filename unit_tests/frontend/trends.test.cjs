@@ -1,4 +1,4 @@
-const { runContext, test, assert, vm, extract, htmlSource, source, readText } = require('./helpers.cjs');
+const { runContext, test, assert, vm, extract, panelWiring, htmlSource, source, readText } = require('./helpers.cjs');
 
 function elements() {
   return new Proxy({}, { get: (target, id) => target[id] ||= {
@@ -151,6 +151,7 @@ function shoesPanelContext() {
   vm.runInContext(`const DAY_MS = 86400000; let shoeTimelineRequestId = 0, distanceMixRequestId = 0;
     const DISTANCE_COLORS = ['#ef4444'];
     function renderCharts() { renderShoeTimeline(); renderDistanceMix(); }
+    ${panelWiring()}
     ${['invalidatePanels', 'renderActivePanel', 'renderShoeTimeline', 'renderDistanceMix'].map(extract).join('\n')}`, context);
   const settle = () => new Promise(resolve => setImmediate(resolve));
   // Mirrors loadData's applyResource: accept (cache hooks run), then render(resource).

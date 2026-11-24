@@ -217,3 +217,6 @@ function renderSpendingTable() {
 
 
 // ====== Init ======
+
+// SPEC-101: spending lives at the bottom of the shoes tab.
+registerPanel('shoes', { render: () => renderSpendingCharts() });
