@@ -1,7 +1,7 @@
 """Ordered, idempotent SQLite schema migrations."""
 
 from collections.abc import Callable
-from typing import cast
+from typing import Any, cast
 
 from sqlalchemy import Table, inspect, text
 from sqlalchemy.engine import Engine
@@ -227,86 +227,134 @@ def schema_version(engine: Engine) -> int:
         return 0
 
 
-def run_startup_migrations(  # noqa: C901
+def run_startup_migrations(
     engine: Engine,
     session_factory: Callable[[], Session],
     *,
     migration_password: str | None = None,
 ) -> None:
+    """Bring any supported database up to CURRENT_SCHEMA_VERSION; each step is idempotent (SPEC-103)."""
     applied_version = schema_version(engine)
     if applied_version > CURRENT_SCHEMA_VERSION:
         raise RuntimeError(
             f"database schema {applied_version} is newer than supported "
             f"version {CURRENT_SCHEMA_VERSION}; refusing to downgrade"
         )
-
-    # One-time migration: if old schema exists (shoes table without user_id), migrate
-    inspector = inspect(engine)
-    existing_tables = inspector.get_table_names()
-    existing_shoe_columns = (
-        {column["name"] for column in inspector.get_columns("shoes")}
-        if "shoes" in existing_tables
-        else set()
-    )
-
-    if "shoes" in existing_tables and "user_id" not in existing_shoe_columns:
-        if not migration_password:
-            raise RuntimeError(
-                "MIGRATION_PASSWORD is required to migrate the legacy shoes database; "
-                "refusing to start with an unusable schema."
-            )
-
-        # Old schema: create users table, add user_id to shoes, assign to "Demo"
-        user_table = cast(Table, models.User.__table__)
-        Base.metadata.create_all(bind=engine, tables=[user_table])
-        with engine.begin() as conn:
-            if "token_version" not in {c["name"] for c in inspect(conn).get_columns("users")}:
-                conn.execute(text("ALTER TABLE users ADD COLUMN token_version INTEGER NOT NULL DEFAULT 0"))
-        db = session_factory()
-        try:
-            with engine.begin() as connection:
-                columns = {column["name"] for column in inspect(connection).get_columns("users")}
-                if "backup_id" not in columns:
-                    connection.execute(text("ALTER TABLE users ADD COLUMN backup_id VARCHAR(36) NOT NULL DEFAULT ''"))
-                if "data_revision" not in columns:
-                    connection.execute(text("ALTER TABLE users ADD COLUMN data_revision INTEGER NOT NULL DEFAULT 0"))
-                # The legacy owner lookup below reads users through the current ORM model (SPEC-079).
-                if "email" not in columns:
-                    connection.execute(text("ALTER TABLE users ADD COLUMN email VARCHAR(254)"))
-            demo_user = db.query(models.User).filter(models.User.username == "Demo").first()
-            if demo_user is None:
-                demo_user = models.User(
-                    username="Demo",
-                    hashed_password=get_password_hash(migration_password),
-                )
-                db.add(demo_user)
-                db.commit()
-                db.refresh(demo_user)
-
-            # Add user_id column (SQLite allows ALTER TABLE ADD COLUMN without FK)
-            with engine.connect() as conn:
-                conn.execute(text("ALTER TABLE shoes ADD COLUMN user_id INTEGER"))
-                conn.execute(
-                    text("UPDATE shoes SET user_id = :uid"),
-                    {"uid": demo_user.id},
-                )
-                conn.commit()
-        finally:
-            db.close()
-
+    _migrate_legacy_owner(engine, session_factory, migration_password)
     Base.metadata.create_all(bind=engine, tables=[
-        table for table in Base.metadata.sorted_tables if table.name not in {"report_generations", "mutation_receipts", "entity_sequences", "write_contexts", "audit_events", "restore_previews", "restore_mappings", "run_tombstones"}
+        table for table in Base.metadata.sorted_tables if table.name not in _LATER_SCHEMA_TABLES
     ])
+    _ensure_account_identity(engine)
+    _add_version_columns(engine)
+    _add_mileage_baselines(engine)
+    _add_run_provenance_and_indexes(engine)
+    _migrate_shoe_categories(engine)
+    # Schema 3 adds display-only nicknames without rewriting mileage or versions.
+    if applied_version < 3 and "nickname" not in _columns(engine, "shoes"):
+        with engine.begin() as connection:
+            connection.execute(text(
+                "ALTER TABLE shoes ADD COLUMN nickname VARCHAR(80) NOT NULL DEFAULT ''"
+            ))
+    # Schema 4 adds one latest-generation receipt per user/month. Saved reports
+    # remain untouched, and no empty placeholder report becomes visible.
+    if applied_version < 4:
+        cast(Table, models.ReportGeneration.__table__).create(bind=engine, checkfirst=True)
+    for model in (models.MutationReceipt, models.EntitySequence, models.WriteContext, models.AuditEvent,
+                  models.RestorePreview, models.RestoreMapping, models.RunTombstone):
+        cast(Table, model.__table__).create(bind=engine, checkfirst=True)
+    if applied_version < 6:
+        _migrate_preview_tokens(engine)
+    _migrate_schema_seven(engine, applied_version)
+    _migrate_schema_eight(engine, applied_version)
+    _migrate_schema_nine(engine)
+    _migrate_schema_ten(engine)
+    _migrate_schema_eleven(engine)
+    _migrate_schema_twelve(engine)
+    _migrate_schema_thirteen(engine, applied_version)
+    _ensure_lookup_indexes(engine)
+    _sync_entity_sequences(engine)
+    install_audit_triggers(engine)
+    _drop_empty_legacy_tables(engine)
+    _record_schema_version(engine)
 
+
+# Tables created later by their own schema steps, not by the first create_all().
+_LATER_SCHEMA_TABLES = {
+    "report_generations", "mutation_receipts", "entity_sequences", "write_contexts", "audit_events",
+    "restore_previews", "restore_mappings", "run_tombstones",
+}
+
+
+def _columns(bind: Any, table: str) -> set[str]:
+    return {column["name"] for column in inspect(bind).get_columns(table)}
+
+
+def _migrate_legacy_owner(
+    engine: Engine, session_factory: Callable[[], Session], migration_password: str | None,
+) -> None:
+    """One-time migration: a shoes table without user_id belongs to a new "Demo" account."""
+    inspector = inspect(engine)
+    if "shoes" not in inspector.get_table_names():
+        return
+    if "user_id" in {column["name"] for column in inspector.get_columns("shoes")}:
+        return
+    if not migration_password:
+        raise RuntimeError(
+            "MIGRATION_PASSWORD is required to migrate the legacy shoes database; "
+            "refusing to start with an unusable schema."
+        )
+    # Old schema: create users table, add user_id to shoes, assign to "Demo"
+    user_table = cast(Table, models.User.__table__)
+    Base.metadata.create_all(bind=engine, tables=[user_table])
+    with engine.begin() as conn:
+        if "token_version" not in _columns(conn, "users"):
+            conn.execute(text("ALTER TABLE users ADD COLUMN token_version INTEGER NOT NULL DEFAULT 0"))
+    db = session_factory()
+    try:
+        with engine.begin() as connection:
+            columns = _columns(connection, "users")
+            if "backup_id" not in columns:
+                connection.execute(text("ALTER TABLE users ADD COLUMN backup_id VARCHAR(36) NOT NULL DEFAULT ''"))
+            if "data_revision" not in columns:
+                connection.execute(text("ALTER TABLE users ADD COLUMN data_revision INTEGER NOT NULL DEFAULT 0"))
+            # The legacy owner lookup below reads users through the current ORM model (SPEC-079).
+            if "email" not in columns:
+                connection.execute(text("ALTER TABLE users ADD COLUMN email VARCHAR(254)"))
+        demo_user = db.query(models.User).filter(models.User.username == "Demo").first()
+        if demo_user is None:
+            demo_user = models.User(
+                username="Demo",
+                hashed_password=get_password_hash(migration_password),
+            )
+            db.add(demo_user)
+            db.commit()
+            db.refresh(demo_user)
+
+        # Add user_id column (SQLite allows ALTER TABLE ADD COLUMN without FK)
+        with engine.connect() as conn:
+            conn.execute(text("ALTER TABLE shoes ADD COLUMN user_id INTEGER"))
+            conn.execute(
+                text("UPDATE shoes SET user_id = :uid"),
+                {"uid": demo_user.id},
+            )
+            conn.commit()
+    finally:
+        db.close()
+
+
+def _ensure_account_identity(engine: Engine) -> None:
+    """Every account has a backup identity and a data revision."""
     with engine.begin() as connection:
-        columns = {column["name"] for column in inspect(connection).get_columns("users")}
+        columns = _columns(connection, "users")
         if "backup_id" not in columns:
             connection.execute(text("ALTER TABLE users ADD COLUMN backup_id VARCHAR(36) NOT NULL DEFAULT ''"))
         if "data_revision" not in columns:
             connection.execute(text("ALTER TABLE users ADD COLUMN data_revision INTEGER NOT NULL DEFAULT 0"))
         connection.execute(text("UPDATE users SET backup_id=lower(hex(randomblob(16))) WHERE backup_id=''"))
 
-    # Add concurrency/session versions to existing databases without changing data.
+
+def _add_version_columns(engine: Engine) -> None:
+    """Add concurrency/session versions to existing databases without changing data."""
     for table, column in (
         ("users", "token_version"),
         ("shoes", "version"),
@@ -315,15 +363,17 @@ def run_startup_migrations(  # noqa: C901
         ("monthly_mileages", "version"),
         ("running_goals", "version"),
     ):
-        columns = {item["name"] for item in inspect(engine).get_columns(table)}
-        if column not in columns:
+        if column not in _columns(engine, table):
             with engine.begin() as conn:
                 conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} INTEGER NOT NULL DEFAULT 0"))
 
-    # Make historical/manual mileage explicit while preserving the exact totals
-    # shown before this migration.  These baselines remain unchanged as runs are
-    # added, edited, or deleted.
-    shoe_columns = {column["name"] for column in inspect(engine).get_columns("shoes")}
+
+def _add_mileage_baselines(engine: Engine) -> None:
+    """Make historical/manual mileage explicit while preserving the exact totals shown before.
+
+    These baselines remain unchanged as runs are added, edited, or deleted.
+    """
+    shoe_columns = _columns(engine, "shoes")
     if "baseline_mileage" not in shoe_columns:
         with engine.begin() as conn:
             conn.execute(text(
@@ -337,11 +387,7 @@ def run_startup_migrations(  # noqa: C901
                     "SELECT SUM(runs.km) FROM runs WHERE runs.shoe_id = shoes.id "
                     "AND runs.user_id = shoes.user_id), 0)"
                 ))
-
-    monthly_columns = {
-        column["name"] for column in inspect(engine).get_columns("monthly_mileages")
-    }
-    if "adjustment_km" not in monthly_columns:
+    if "adjustment_km" not in _columns(engine, "monthly_mileages"):
         with engine.begin() as conn:
             conn.execute(text(
                 "ALTER TABLE monthly_mileages "
@@ -354,8 +400,10 @@ def run_startup_migrations(  # noqa: C901
                 "AND CAST(substr(runs.date, 6, 2) AS INTEGER) = monthly_mileages.month), 0)"
             ))
 
-    # Incremental migration for Strava provenance on run records.
-    run_columns = {column["name"] for column in inspect(engine).get_columns("runs")}
+
+def _add_run_provenance_and_indexes(engine: Engine) -> None:
+    """Strava provenance on runs, and the run-log index create_all() does not add to old tables."""
+    run_columns = _columns(engine, "runs")
     with engine.begin() as conn:
         if "strava_id" not in run_columns:
             conn.execute(text("ALTER TABLE runs ADD COLUMN strava_id VARCHAR"))
@@ -363,8 +411,6 @@ def run_startup_migrations(  # noqa: C901
             "CREATE UNIQUE INDEX IF NOT EXISTS idx_runs_user_strava_id "
             "ON runs (user_id, strava_id) WHERE strava_id IS NOT NULL"
         ))
-
-    # create_all() does not add indexes to tables that already exist.
     # Keep the run-log query path fast for upgraded databases as history grows.
     with engine.begin() as conn:
         conn.execute(text(
@@ -373,10 +419,10 @@ def run_startup_migrations(  # noqa: C901
         ))
         conn.execute(text("PRAGMA optimize"))
 
-    # Incremental migration for SQLite databases created before shoe categories
-    # were changed from a single string to a JSON array of multiple purposes.
-    # create_all() does not alter existing tables, so we need ALTER TABLE here.
-    shoe_columns = {column["name"] for column in inspect(engine).get_columns("shoes")}
+
+def _migrate_shoe_categories(engine: Engine) -> None:
+    """Single-string categories become a JSON array; discontinued purposes are removed."""
+    shoe_columns = _columns(engine, "shoes")
     with engine.begin() as conn:
         if "categories" not in shoe_columns:
             if "category" in shoe_columns:
@@ -401,42 +447,17 @@ def run_startup_migrations(  # noqa: C901
             )
         """))
 
-    # Schema 3 adds display-only nicknames without rewriting mileage or versions.
-    if applied_version < 3 and "nickname" not in {
-        column["name"] for column in inspect(engine).get_columns("shoes")
-    }:
-        with engine.begin() as connection:
-            connection.execute(text(
-                "ALTER TABLE shoes ADD COLUMN nickname VARCHAR(80) NOT NULL DEFAULT ''"
-            ))
 
-    # Schema 4 adds one latest-generation receipt per user/month. Saved reports
-    # remain untouched, and no empty placeholder report becomes visible.
-    if applied_version < 4:
-        cast(Table, models.ReportGeneration.__table__).create(bind=engine, checkfirst=True)
-
-    for model in (models.MutationReceipt, models.EntitySequence, models.WriteContext, models.AuditEvent,
-                  models.RestorePreview, models.RestoreMapping, models.RunTombstone):
-        cast(Table, model.__table__).create(bind=engine, checkfirst=True)
-    if applied_version < 6:
-        _migrate_preview_tokens(engine)
-    _migrate_schema_seven(engine, applied_version)
-    _migrate_schema_eight(engine, applied_version)
-    _migrate_schema_nine(engine)
-    _migrate_schema_ten(engine)
-    _migrate_schema_eleven(engine)
-    _migrate_schema_twelve(engine)
-    _migrate_schema_thirteen(engine, applied_version)
-    _ensure_lookup_indexes(engine)
+def _sync_entity_sequences(engine: Engine) -> None:
     with engine.begin() as connection:
         for table in ("runs", "monthly_mileages"):
             connection.execute(text(
                 f"INSERT INTO entity_sequences (name,next_id) SELECT :name,coalesce(max(id),0)+1 FROM {table} WHERE 1 "
                 "ON CONFLICT(name) DO UPDATE SET next_id=max(entity_sequences.next_id,excluded.next_id)"
             ), {"name": table})
-    install_audit_triggers(engine)
-    _drop_empty_legacy_tables(engine)
 
+
+def _record_schema_version(engine: Engine) -> None:
     with engine.begin() as connection:
         connection.execute(text(
             "CREATE TABLE IF NOT EXISTS schema_metadata ("
