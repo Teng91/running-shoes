@@ -4,6 +4,13 @@
 每版的摘要見 [CHANGELOG.md](../CHANGELOG.md)；目前的功能與操作方式以 [README](../README.md) 為準。
 這裡保留當時的文字，後續版本可能已調整其中的行為。
 
+### 單一使用者的宣告歸位（SPEC-115，v4.29.11）
+
+- `BRAND_COLORS` 從 `app-state.js` 移到 `app-dashboard.js`；`byDate`（`app-state.js`）與 `fmtMoney`（`app-dashboard.js`）移到 `app-spending.js`；`monthRuns` 從 `app-runs.js` 移到 `app-run-insights.js`。
+- 其餘單一使用者的名稱是模組 API、初始化函式或鏡像常數，刻意保留。`scripts/architecture_ratchet.json` 為 166 個名稱、0 對、沒有長函式。
+
+Asset 4.29.11／shell v117、schema 13 不變，可直接回滾至 v4.29.10 image。
+
 ### 前端沒有超過 80 行的函式（SPEC-114，v4.29.10）
 
 - `app-shoe-charts.js` 的 `renderShoeTimeline`、`app-reports.js` 的 `generateReport`、`app-local-store.js` 的 `openLocalWorkspaceStore`、`runtime/workspace-controller.mjs` 的 `createWorkspaceController` 拆成具名步驟。

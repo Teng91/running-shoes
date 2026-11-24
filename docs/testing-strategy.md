@@ -297,6 +297,10 @@ SPEC-032：合成資料驗證歷史筆數上限（v4.7.3 起 10,000／10,001）�
 
 [規格與具名案例](specs/061-ci-on-every-push-and-protected-main.md) 以文字解析 workflow：觸發條件是不限分支的 push、pull request、每週排程與手動執行，沒有 `paths-ignore`；部署條件仍只有 main 的 push／手動執行；main 以外的 ref 由較新的執行取消舊的，main 不取消。ruleset 由 `.github/rulesets/main.json` 描述，Python 測試確認它要求 PR、必要檢查與 workflow 的 5 個測試 job 完全一致、禁止刪除與 force push，且沒有繞過名單。
 
+## SPEC-115 單一使用者的宣告歸位
+
+[規格與具名案例](specs/115-single-consumer-declarations.md) 的架構測試確認基準降為 166 個名稱；支出、鞋款顏色與跑步紀錄的既有測試在搬移後原封不動通過。
+
 ## SPEC-114 最後 4 個長函式
 
 [規格與具名案例](specs/114-last-long-functions.md) 的架構測試確認前端沒有函式超過 80 行；輪替時間軸、月報串流、本機儲存與離線佇列的既有測試改為載入拆出的步驟後原封不動通過，瀏覽器 E2E 在 CI 驗證實際頁面。

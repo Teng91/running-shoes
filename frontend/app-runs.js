@@ -270,11 +270,6 @@ function filterRunDay(date) {
   return loadRunsForSelectedMonth({ day: Number(date.slice(8)) });
 }
 
-function monthRuns() {
-  const month = selectedRunMonth();
-  return runController.state.rows.filter(run => run.date.slice(0, 7) === month);
-}
-
 async function addRun() {
   refreshDateLimits();
   if (runController.saving) return;
