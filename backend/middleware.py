@@ -136,7 +136,7 @@ class UploadLimitMiddleware:
         self.max_bytes = max_bytes
         self.max_backup_bytes = max_backup_bytes
 
-    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:  # noqa: C901
         if (
             scope["type"] != "http"
             or scope.get("method") != "POST"

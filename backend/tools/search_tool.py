@@ -195,7 +195,7 @@ def _cache_ttl(query: str) -> int:
     return SEARCH_CACHE_TTL_SECONDS
 
 
-def web_search(query: str, max_results: int = MAX_RESULTS) -> str:
+def web_search(query: str, max_results: int = MAX_RESULTS) -> str:  # noqa: C901
     """搜尋網路，回傳已驗證、排序且帶穩定來源 ID 的 JSON。"""
     normalized_query = " ".join(query.split())
     cache_key = (normalized_query.casefold(), max_results)

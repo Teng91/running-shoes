@@ -152,7 +152,7 @@ def _normalize_gear(value: str) -> str:
     return "".join(character for character in value.casefold() if character.isalnum())
 
 
-def parse_csv(
+def parse_csv(  # noqa: C901
     raw: bytes,
     *,
     max_rows: int,
