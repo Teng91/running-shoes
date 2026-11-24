@@ -1,6 +1,5 @@
 // Shared chart registry, analysis request identity, and label utilities.
 let chartInstances = {};
-let shoeAnalyticsRequestId = 0;
 // SPEC-051: one numeric chart face and a carbon tooltip that reads in both themes.
 const CHART_FONT_FAMILY = '"DIN Alternate", Bahnschrift, "Segoe UI", system-ui, sans-serif';
 if (typeof Chart !== 'undefined') {

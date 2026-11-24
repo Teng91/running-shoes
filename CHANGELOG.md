@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [4.29.7] - 2026-11-24
+
+### Changed
+- 登入身分只由 `app-session.js` 寫入（SPEC-109），登入行為不變：`startAuthSession()`／`endAuthSession()` 是唯一的寫入點，架構檢查擋住其他 script 改寫 `authToken`、`currentUser`、`authGeneration`；只有月報與單鞋分析使用的 4 個狀態變數搬到它們自己的 script。跨 script 名稱由 240 降到 237。Asset 4.29.7／shell v113，schema 13 不變。
+
 ## [4.29.6] - 2026-11-24
 
 ### Changed

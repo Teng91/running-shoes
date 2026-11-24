@@ -1,4 +1,8 @@
 // ── 月報 ──────────────────────────────────────────────────────
+// Report request identities (SPEC-109: owned here, the only script that uses them).
+let reportLoadRequestId = 0;
+let reportLoadController = null;
+let reportGenerationRequestId = 0;
 registerFeatureReset('monthly-reports', () => {
   reportLoadRequestId += 1;
   reportLoadController?.abort();

@@ -167,3 +167,20 @@ def test_scripts_call_only_earlier_scripts_while_loading(tmp_path):
     (tmp_path / "late.js").write_text("function registerLater() {}\nhook();\n", encoding="utf-8")
     assert check_architecture.load_order_violations(tmp_path, ["early.js", "late.js"]) == [
         "early.js calls registerLater() while loading, but late.js loads later"]
+
+
+def test_only_the_session_module_writes_the_signed_in_identity(tmp_path):
+    """SPEC-109: startAuthSession/endAuthSession in app-session.js are the only writers."""
+    import json
+
+    frontend = check_architecture.ROOT / "frontend"
+    manifest = json.loads((frontend / "assets.json").read_text(encoding="utf-8"))
+    assert check_architecture.session_write_violations(frontend, manifest["scripts"]) == []
+
+    (tmp_path / "app-session.js").write_text("let authToken = null;\nfunction start(t) { authToken = t; }\n", encoding="utf-8")
+    (tmp_path / "app-auth.js").write_text(
+        "function signIn(t) { authToken = t; }\nauthGeneration += 1;\nif (authToken === null) go();\n"
+        "// authToken = 'comment'\nconst view = { currentUser: 1 };\n", encoding="utf-8")
+    (tmp_path / "app-local.js").write_text("function f() { let currentUser = 1; currentUser = 2; }\n", encoding="utf-8")
+    assert check_architecture.session_write_violations(tmp_path, ["app-session.js", "app-auth.js", "app-local.js"]) == [
+        "app-auth.js:1: function signIn(t) { authToken = t; }", "app-auth.js:2: authGeneration += 1;"]

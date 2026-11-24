@@ -1,4 +1,5 @@
 // Run dashboard cards, calendar, charts, and per-shoe analytics.
+let shoeAnalyticsRequestId = 0;
 registerFeatureReset('run-insights', () => {
   resourceStore?.invalidate(['dashboard-analytics', 'home-summary']);
   dashboardAnalyticsRequest += 1;

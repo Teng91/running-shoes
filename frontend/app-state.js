@@ -100,9 +100,6 @@ let coreData = Object.freeze({
 let selectedYear = null;
 let selectedSpendingYear = null;
 let dashboardAnalyticsRequest = 0;
-let reportLoadRequestId = 0;
-let reportLoadController = null;
-let reportGenerationRequestId = 0;
 let reportGenerationController = null;
 // SPEC-082: the saved preference is light, dark or system (the default); currentTheme is
 // the theme actually shown, resolved from the device setting when following the system.
