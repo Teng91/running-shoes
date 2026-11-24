@@ -271,7 +271,9 @@ flowchart LR
 ```
 
 `app-state.js` 只保存共享 state、常數與有 try/catch 的 localStorage 存取函式；`app-api.js` 是 transport adapter；`app-auth.js` 管理 session
-transition；`app-core.js` 組合畫面資料但不承擔 feature-specific rendering。跑步 CRUD、Strava 與洞察分別位於
+transition；`app-core.js` 組合畫面資料但不承擔 feature-specific rendering：功能 script 載入時以 `registerPanel()`（繪製、分頁打開前準備、重畫鍵）、
+`registerResourceReader()`（`loadData()` 的額外資源，例如跑步紀錄）與 `registerDataHooks()`（資源到達、整體失效、匯入紀錄）登記自己，
+殼層不以名稱呼叫任何功能函式，依賴方向是 feature → shell（SPEC-101）。跑步 CRUD、Strava 與洞察分別位於
 三個 module，降低修改匯入功能時誤動月曆或編輯流程的風險。
 
 ### SPEC-017：真正的依賴與狀態邊界
@@ -671,6 +673,7 @@ flowchart LR
 - **限流**：`rate_limits.consume()` 把同一請求的所有視窗放在一個交易，滿了就整筆回滾；限額來自 `app.state.settings`，不再保留記憶體桶。SPEC-071 再加上 AI 的每帳號與全站 24 小時視窗，限流桶保留 24 小時。
 - **稽核 trigger**：每次啟動依目前欄位重建，避免舊欄位清單使快照不完整或使寫入失敗。
 - **Strava**：`strava_import.parse_activity_dates()` 把 UTC 時間戳轉為 `clock.APP_TIMEZONE` 日期。`date_corrections()` 只修正仍停在舊 UTC 日期的既有活動，`services/strava_imports.py` 在匯入交易中移動日期與月跑量。
+- **v4.29.2**：功能自行註冊面板（SPEC-101）。`app-core.js` 提供 `registerPanel`／`registerResourceReader`／`registerDataHooks`，功能 script 登記自己的繪製、資源與資料 hook，殼層不再呼叫功能函式；依賴方向改為 feature → shell。`localDateISO` 移到 `app-state.js`。
 - **v4.29.1**：健行與步行不出現在跑步畫面（SPEC-098）。`month_run_summary` 與 `shoe_distance_mix` 套用既有的 `TRAINING_RUN`；依賴方向不變。
 - **v4.29.0**：步行類型與 Strava 健行／步行選擇匯入（SPEC-097）。`strava_import.split_shoe_only()` 在 router 的日期篩選之後套用，service 與 read model 不變。依賴方向不變。
 - **v4.28.0**：運動類型（SPEC-096）。Schema 13 新增 `runs.activity_type`（回滾腳本 `scripts/rollback_schema_thirteen.sql`）。`run_metrics` 是哪種類型計入哪些統計的唯一來源，`read_models/run_statistics.py` 提供共用的 `TRAINING_RUN`／`PACE_RUN` 過濾條件；`services/mileage.apply_run_mileage_deltas` 依類型決定是否寫入月跑量。依賴方向不變。

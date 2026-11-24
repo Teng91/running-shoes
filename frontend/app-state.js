@@ -74,6 +74,12 @@ function appCalendarDate(instant = new Date()) {
   return { year: shifted.getUTCFullYear(), month: shifted.getUTCMonth() + 1, day: shifted.getUTCDate() };
 }
 
+// The service's calendar date as YYYY-MM-DD (Taiwan time, SPEC-093), whatever zone the device is in.
+function localDateISO(instant = new Date()) {
+  const { year, month, day } = appCalendarDate(instant);
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
 const byDate = (a, b) => new Date(a.date) - new Date(b.date);
 // Core account data (SPEC-095): shoes, retiredShoes, monthlyMileages, runningGoal,
 // stravaImports, spendingSummary and monthlySpending live in the store of

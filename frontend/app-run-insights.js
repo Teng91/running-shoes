@@ -303,3 +303,6 @@ async function renderHomeSummary() {
   }
   renderShoeSuggestion(summary.suggestion);
 }
+
+// SPEC-101: the runs tab shows this month's log and the home summary.
+registerPanel('runs', { render: () => { renderRunLog(); renderHomeSummary(); } });

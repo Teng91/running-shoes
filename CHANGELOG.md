@@ -2,7 +2,10 @@
 
 ## [Unreleased]
 
+## [4.29.2] - 2026-11-24
+
 ### Changed
+- 拆解前端中心節點 `app-core.js`（SPEC-101），功能與畫面不變：殼層不再以名稱呼叫各功能，改由功能在載入時以 `registerPanel()`、`registerResourceReader()`、`registerDataHooks()` 登記自己要畫的面板、跑步紀錄的讀取與資料到達時的動作；`localDateISO()` 移到 `app-state.js`。互相使用的 script 由 25 對降到 16 對，跨 script 名稱由 255 個降到 244 個。Asset 4.29.2／shell v108，schema 13 不變。
 - 正式站閒置時改為暫停（suspend）而不是停機：再次打開網站只要幾百毫秒就能恢復，不必等冷啟動；費用不變，資料不受影響。部署後的第一次喚醒仍是冷啟動（SPEC-099）。
 - 架構檢查加上只准變少的基準（SPEC-100），功能與畫面不變：`architecture-check` 量測前端 classic script 之間共用的頂層名稱（255 個）與互相使用的 script 對（25 對），記在 `scripts/architecture_ratchet.json`；ruff 對後端啟用複雜度規則 C901（上限 10），既有 14 個超標函式暫時以 `# noqa: C901` 標記，標記數量同樣只能減少。
 

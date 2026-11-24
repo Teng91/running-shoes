@@ -325,3 +325,6 @@ async function importStrava() {
 function setStravaMappingDisabled(disabled) {
   document.querySelectorAll('#strava-mapping select, #strava-conflicts select').forEach(select => { select.disabled = disabled; });
 }
+
+// SPEC-101: a dashboard load that refreshes history reloads the Strava import list.
+registerDataHooks({ history: () => loadStravaHistory() });
