@@ -111,3 +111,15 @@ async function refreshAccountRestoreView() {
   }
 }
 registerFeatureReset('account-restore', resetAccountRestore);
+
+// SPEC-113: this feature's delegated UI actions; markup names them with data-click and the like.
+registerUiActions({
+  click: {
+    'preview-restore': () => previewAccountRestore(),
+    'refresh-restore': () => refreshAccountRestoreView(),
+    'apply-restore': () => applyAccountRestore(),
+  },
+  change: {
+    'preview-restore': () => previewAccountRestore(),
+  },
+});

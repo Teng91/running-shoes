@@ -330,3 +330,25 @@ onWorkspaceModalOpen(() => { void renderEmailSection(); });
 
 // SPEC-108: the admin entry follows the signed-in account; the sign-up form asks for the mode.
 onAuthView({ appShown: () => { void refreshAdminEntry(); }, registerShown: () => { void loadRegistrationMode(); } });
+
+// SPEC-113: this feature's delegated UI actions; markup names them with data-click and the like.
+registerUiActions({
+  click: {
+    'open-admin': () => openAdminModal(),
+    'close-admin': () => closeAdminModal(),
+    'create-invite': () => createInvite(),
+    'revoke-invite': element => revokeInvite(Number(element.dataset.inviteId)),
+    'admin-reset-password': () => adminResetPassword(),
+    'delete-account': () => deleteAccount(),
+    'logout-everywhere': () => logoutEverywhere(),
+    'show-reset-form': () => showResetForm(),
+    'send-reset-code': () => sendResetCode(),
+    'send-email-code': () => sendEmailCode(),
+    'confirm-email-code': () => confirmEmailCode(),
+    'remove-email': () => removeEmail(),
+    'change-password': () => changePassword(),
+  },
+  submit: {
+    'reset-password': () => handleResetPassword(),
+  },
+});

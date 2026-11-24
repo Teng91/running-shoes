@@ -65,3 +65,12 @@ function onboardingSetGoal() {
 
 // SPEC-101: the getting-started card sits on the runs tab, after the home summary.
 registerPanel('runs', { render: () => renderOnboarding() });
+
+// SPEC-113: this feature's delegated UI actions; markup names them with data-click and the like.
+registerUiActions({
+  click: {
+    'dismiss-onboarding': () => dismissOnboarding(),
+    'onboarding-log-run': () => onboardingLogRun(),
+    'onboarding-set-goal': () => onboardingSetGoal(),
+  },
+});

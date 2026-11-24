@@ -403,3 +403,10 @@ function renderCumulativeChart(trends) {
     note.textContent = `全年累計 ${cumulative.ytd_km.toFixed(1)} km，目標 ${cumulative.yearly_goal_km.toFixed(0)} km。`;
   }
 }
+
+// SPEC-113: this feature's delegated UI actions; markup names them with data-click and the like.
+registerUiActions({
+  click: {
+    'weekly-page': element => changeWeeklyWindow(Number(element.dataset.step)),
+  },
+});

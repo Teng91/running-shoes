@@ -450,3 +450,16 @@ function showAgentFailure(turn, e) {
   addRetryButton();
 }
 
+// SPEC-113: this feature's delegated UI actions; markup names them with data-click and the like.
+registerUiActions({
+  click: {
+    'send-agent-message': () => sendAgentMessage(),
+  },
+  keydown: {
+    'agent-compose': (_element, event) => {
+      if (event.key !== 'Enter' || event.shiftKey) return;
+      event.preventDefault();
+      sendAgentMessage();
+    },
+  },
+});

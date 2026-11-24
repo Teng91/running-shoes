@@ -256,3 +256,16 @@ function handleLogout() { clearAuth(); showLoginView(); }
 
 // SPEC-108: a 401 from the server (dispatched by app-api.js) signs out here.
 window.addEventListener('auth-session-expired', () => { clearAuth(); showLoginView(); });
+
+// SPEC-113: this feature's delegated UI actions; markup names them with data-click and the like.
+registerUiActions({
+  click: {
+    'show-login-form': () => showLoginForm(),
+    'show-register-form': () => showRegisterForm(),
+    logout: () => handleLogout(),
+  },
+  submit: {
+    login: () => handleLogin(),
+    register: () => handleRegister(),
+  },
+});

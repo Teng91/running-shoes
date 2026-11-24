@@ -328,3 +328,17 @@ function setStravaMappingDisabled(disabled) {
 
 // SPEC-101: a dashboard load that refreshes history reloads the Strava import list.
 registerDataHooks({ history: () => loadStravaHistory() });
+
+// SPEC-113: this feature's delegated UI actions; markup names them with data-click and the like.
+registerUiActions({
+  click: {
+    'open-strava': () => openStravaModal(),
+    'close-strava': () => closeStravaModal(),
+    'import-strava': () => importStrava(),
+  },
+  change: {
+    'preview-strava': () => previewStravaFile(),
+    'strava-date-warning': element => updateStravaDateWarning(Number(element.dataset.index)),
+    'strava-conflict-choice': () => updateStravaImportButton(),
+  },
+});

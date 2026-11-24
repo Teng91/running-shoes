@@ -103,7 +103,7 @@
 - `frontend/app-pace-charts.js`: shared race state, race readiness cards and pace trend charts (SPEC-065).
 - `frontend/app-race-goal.js`: the race goal form: open, validate, save and delete (SPEC-090).
 - `frontend/app-spending.js`: spending cards, charts, and table.
-- `frontend/app-actions.js`: delegated `data-click`/`data-change`/… UI actions; markup and generated rows never contain inline JavaScript handlers (the page CSP blocks them).
+- `frontend/app-actions.js`: dispatches delegated `data-click`/`data-change`/… UI actions; each feature registers its own with `registerUiActions` (`app-lifecycle.js`) while it loads, and the table is frozen here (SPEC-113); markup and generated rows never contain inline JavaScript handlers (the page CSP blocks them).
 - `frontend/offline.html`: script-free offline fallback with its own strict CSP.
 - `frontend/app.js`: bootstrap and global dialog event wiring.
 - `frontend/app-agent.js`: AI conversation and streaming presentation; completed turns persist in this tab's `sessionStorage` (never localStorage) and are cleared on logout or account switch (SPEC-059).

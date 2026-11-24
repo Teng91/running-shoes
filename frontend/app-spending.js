@@ -225,3 +225,13 @@ registerPanel('shoes', { render: () => renderSpendingCharts() });
 registerResourceCache('spending', () => {
   applyCoreResource('spending', null); spendingLoadRequestId++; spendingLoadPending = false;
 });
+
+// SPEC-113: this feature's delegated UI actions; markup names them with data-click and the like.
+registerUiActions({
+  click: {
+    'load-spending': () => loadSpendingData(),
+  },
+  change: {
+    'spending-year': () => onSpendingYearChange(),
+  },
+});

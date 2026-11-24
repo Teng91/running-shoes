@@ -396,3 +396,13 @@ registerDataHooks({ arrived: (resource, value, current) => { if (current) worksp
 
 // SPEC-108: drafts are saved before a session ends, and the workspace attaches when the app opens.
 onAuthView({ sessionEnding: () => persistWorkspaceDrafts(), appShown: () => { void activateLocalWorkspace(); } });
+
+// SPEC-113: this feature's delegated UI actions; markup names them with data-click and the like.
+registerUiActions({
+  click: {
+    'open-workspace': () => openWorkspaceModal(),
+    'close-workspace': () => closeWorkspaceModal(),
+    'sync-workspace': () => syncWorkspace({ manual: true }),
+    'clear-local-workspace': () => clearLocalWorkspace(),
+  },
+});

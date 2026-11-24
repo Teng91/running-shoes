@@ -4,6 +4,14 @@
 每版的摘要見 [CHANGELOG.md](../CHANGELOG.md)；目前的功能與操作方式以 [README](../README.md) 為準。
 這裡保留當時的文字，後續版本可能已調整其中的行為。
 
+### 介面動作由功能自行登記（SPEC-113，v4.29.9）
+
+- `app-lifecycle.js` 新增 `UI_ACTIONS` 登記表與 `registerUiActions()`；88 個動作搬到擁有處理函式的 21 個 script，`app-actions.js` 只剩委派分派，並在所有功能載入後凍結表格。
+- 重複的動作名稱或凍結後的登記會丟出錯誤，不會被靜靜忽略。`scripts/architecture_ratchet.json` 為 170 個名稱、0 對。
+- 同版也包含 SPEC-112（前端測試替身優先）。
+
+Asset 4.29.9／shell v115、schema 13 不變，可直接回滾至 v4.29.8 image。
+
 ### 前端函式長度上限（SPEC-111，v4.29.8）
 
 - `check_architecture.frontend_function_lengths()` 與 `function_length_violations()`：前端頂層函式上限 80 行，`scripts/architecture_ratchet.json` 的 `long_functions` 記錄仍超過的 4 個函式與行數。

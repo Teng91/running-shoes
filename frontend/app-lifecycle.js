@@ -88,3 +88,19 @@ function registerResourceReader(name, reader) {
 function registerDataHooks(hooks) {
   dataHooks.push(hooks);
 }
+
+// SPEC-113: delegated UI actions by event type. Each feature registers the actions its markup
+// names (data-click="run-page" and the like); app-actions.js dispatches them and freezes the
+// table once every feature has loaded. A name registered twice for one event type is an error.
+const UI_ACTIONS = { click: {}, dblclick: {}, change: {}, input: {}, submit: {}, keydown: {} };
+
+function registerUiActions(actionsByType) {
+  for (const [type, actions] of Object.entries(actionsByType)) {
+    // A late registration would otherwise be dropped silently by the frozen table.
+    if (Object.isFrozen(UI_ACTIONS[type])) throw new Error('UI actions are already installed; register them while the script loads');
+    for (const [name, handler] of Object.entries(actions)) {
+      if (Object.hasOwn(UI_ACTIONS[type], name)) throw new Error(`UI action ${type}:${name} is registered twice`);
+      UI_ACTIONS[type][name] = handler;
+    }
+  }
+}

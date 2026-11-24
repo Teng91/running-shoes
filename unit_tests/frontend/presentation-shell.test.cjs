@@ -1,4 +1,4 @@
-const { test, assert, fs, path, vm, htmlSource, scriptPaths, scriptSource, styleSource, source, authOperationContext, streamContext, editContext, tableHeaders, extract, transportContext } = require('./helpers.cjs');
+const { test, assert, fs, path, vm, htmlSource, scriptPaths, scriptSource, styleSource, source, authOperationContext, streamContext, editContext, tableHeaders, extract, featureRegistrations, transportContext } = require('./helpers.cjs');
 
 test('startup and login show progress until the application is ready', () => {
   assert.match(htmlSource, /id="app-boot"[^>]+role="status"[^>]+aria-live="polite"/);
@@ -145,7 +145,11 @@ function loadUiActions(globals = {}) {
   const listeners = {};
   const context = plainVm.createContext({ Element, console, ...globals,
     document: { addEventListener: (type, listener) => { listeners[type] = listener; } } });
-  plainVm.runInContext(fs.readFileSync('frontend/app-actions.js', 'utf8') + '\nthis.UI_ACTIONS = UI_ACTIONS;', context);
+  // SPEC-113: the real registry, every feature's registerUiActions() statement, then the dispatcher.
+  const lifecycle = fs.readFileSync('frontend/app-lifecycle.js', 'utf8').replace(/\r\n/g, '\n');
+  const registry = lifecycle.slice(lifecycle.indexOf('const UI_ACTIONS = '));
+  plainVm.runInContext(`${registry}\n${featureRegistrations(/^registerUiActions\(/gm)}\n`
+    + fs.readFileSync('frontend/app-actions.js', 'utf8') + '\nthis.UI_ACTIONS = UI_ACTIONS;', context);
   const element = (attributes, parent = null, tagName = 'BUTTON') => Object.assign(new Element(), {
     tagName, parent, dataset: attributes.dataset || {},
     getAttribute: name => attributes[name],
@@ -179,6 +183,24 @@ test('SPEC-047 every declared data action has exactly one registered handler', (
   const registered = Object.entries(context.UI_ACTIONS).flatMap(([type, actions]) => Object.keys(actions).map(name => `${type}:${name}`));
   assert.deepEqual(registered.filter(key => !declared.has(key)), [], 'no registered action is unused');
   assert.deepEqual(Object.keys(listeners).sort(), ['change', 'click', 'dblclick', 'input', 'keydown', 'submit']);
+});
+
+test('SPEC-113 features register their own UI actions; duplicates fail and the table freezes', () => {
+  const { context } = loadUiActions();
+  assert.ok(Object.isFrozen(context.UI_ACTIONS) && Object.isFrozen(context.UI_ACTIONS.click));
+  assert.throws(() => context.registerUiActions({ click: { 'late-action': () => {} } }), /already installed/);
+  const plainVm = require('node:vm');
+  const fresh = plainVm.createContext({});
+  const lifecycle = fs.readFileSync('frontend/app-lifecycle.js', 'utf8').replace(/\r\n/g, '\n');
+  plainVm.runInContext(lifecycle.slice(lifecycle.indexOf('const UI_ACTIONS = ')), fresh);
+  plainVm.runInContext("registerUiActions({ click: { 'run-page': () => 1 } });", fresh);
+  assert.throws(() => plainVm.runInContext("registerUiActions({ click: { 'run-page': () => 2 } });", fresh),
+    /UI action click:run-page is registered twice/);
+  // The dispatcher names no feature function: every handler lives with its feature.
+  const dispatcher = fs.readFileSync('frontend/app-actions.js', 'utf8');
+  for (const name of ['openRunModal', 'switchTab', 'handleLogin', 'sendAgentMessage', 'saveRunningGoal']) {
+    assert.doesNotMatch(dispatcher, new RegExp(`\\b${name}\\(`), name);
+  }
 });
 
 test('SPEC-047 delegated dispatch runs only the nearest action and owns navigation defaults', () => {

@@ -120,3 +120,11 @@ function applyAppUpdate() {
 function dismissAppUpdate() {
   document.getElementById('app-update-notice').hidden = true;
 }
+
+// SPEC-113: this feature's delegated UI actions; markup names them with data-click and the like.
+registerUiActions({
+  click: {
+    'apply-app-update': () => applyAppUpdate(),
+    'dismiss-app-update': () => dismissAppUpdate(),
+  },
+});

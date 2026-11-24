@@ -60,3 +60,10 @@ registerFeatureReset('workspace-history', () => {
   workspaceHistory.request++; workspaceHistory.cursor = null;
   document.getElementById('workspace-history').replaceChildren();
 });
+
+// SPEC-113: this feature's delegated UI actions; markup names them with data-click and the like.
+registerUiActions({
+  click: {
+    'load-history': element => loadWorkspaceHistory(element.dataset.more === 'true'),
+  },
+});

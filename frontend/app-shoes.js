@@ -287,3 +287,18 @@ registerWorkspaceEditor('shoe', {
     if (draft.categories) document.querySelectorAll('#f-category-group input').forEach(input => { input.checked = draft.categories.includes(input.value); });
   },
 });
+
+// SPEC-113: this feature's delegated UI actions; markup names them with data-click and the like.
+registerUiActions({
+  click: {
+    'add-shoe': () => openAddModal(),
+    'edit-shoe': element => openEditModal(Number(element.dataset.index)),
+    'edit-retired-shoe': element => openRetiredEditModal(Number(element.dataset.index)),
+    'close-shoe-modal': () => closeModal(),
+  },
+  dblclick: {
+    'inline-edit': element => inlineEditRow(
+      inlineTableRows.get(element.dataset.table), Number(element.dataset.index), element.dataset.field, element,
+    ),
+  },
+});

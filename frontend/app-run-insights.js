@@ -303,3 +303,12 @@ async function renderHomeSummary() {
 
 // SPEC-101: the runs tab shows this month's log and the home summary.
 registerPanel('runs', { render: () => { renderRunLog(); renderHomeSummary(); } });
+
+// SPEC-113: this feature's delegated UI actions; markup names them with data-click and the like.
+registerUiActions({
+  click: {
+    'select-calendar-date': (element, event) => selectRunCalendarDate(element.dataset.date, event),
+    'open-shoe-analytics': element => openShoeAnalytics(Number(element.dataset.shoeId)),
+    'close-shoe-analytics': () => closeShoeAnalytics(),
+  },
+});

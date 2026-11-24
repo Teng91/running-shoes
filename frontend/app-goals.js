@@ -235,3 +235,17 @@ registerWorkspaceForm('goal', ['goal-start-year', 'goal-monthly-km'], {
   restore: (id, value) => { prepareGoalForm(); setGoalField(id, value); },
   reset: () => { getFormDraft('goal').reset(); prepareGoalForm(); },
 });
+
+// SPEC-113: this feature's delegated UI actions; markup names them with data-click and the like.
+registerUiActions({
+  click: {
+    'goal-settings': element => toggleGoalSettings(element.dataset.open === 'true'),
+    'render-goal-progress': () => renderGoalProgress(),
+  },
+  input: {
+    'goal-yearly-hint': () => updateGoalYearlyHint(),
+  },
+  submit: {
+    'save-goal': () => saveRunningGoal(),
+  },
+});

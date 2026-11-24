@@ -2,7 +2,10 @@
 
 ## [Unreleased]
 
+## [4.29.9] - 2026-11-25
+
 ### Changed
+- 每個功能登記自己的介面動作（SPEC-113），畫面不變：88 個按鈕、表單與輸入動作從 `app-actions.js` 搬到擁有處理函式的 21 個 script，以 `registerUiActions()` 在載入時登記；`app-actions.js` 只負責分派並凍結動作表，重複或太晚的登記會直接丟錯。跨 script 名稱由 237 降到 170。Asset 4.29.9／shell v115，schema 13 不變。
 - 前端測試傳入的替身優先於共用輔助函式（SPEC-112），正式站不變：`featureContext()` 安裝共用函式後把測試傳入的值放回去，三個測試不再需要事後覆寫，SPEC-108 測試改用共用的 `extract()`。
 
 ## [4.29.8] - 2026-11-25

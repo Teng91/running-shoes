@@ -109,3 +109,13 @@ registerFeatureReset('account-export', () => {
   const button = document.getElementById('workspace-export');
   button.disabled = false; button.textContent = '下載目前帳號資料 JSON';
 });
+
+// SPEC-113: this feature's delegated UI actions; markup names them with data-click and the like.
+registerUiActions({
+  click: {
+    'export-account': element => exportAccountData(element.dataset.fromWorkspace === 'true'),
+    'open-export': () => openExportModal(),
+    'close-export-modal': () => closeExportModal(),
+    'export-shoes': () => doExport(),
+  },
+});

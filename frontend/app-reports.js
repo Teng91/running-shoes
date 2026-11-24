@@ -264,3 +264,14 @@ registerPanel('report', { enter: () => {
   loadReportHistory();
   loadSavedReport();
 } });
+
+// SPEC-113: this feature's delegated UI actions; markup names them with data-click and the like.
+registerUiActions({
+  click: {
+    'generate-report': () => generateReport(),
+  },
+  change: {
+    'load-saved-report': () => loadSavedReport(),
+    'report-history': () => onReportHistoryChange(),
+  },
+});
