@@ -4,6 +4,14 @@
 每版的摘要見 [CHANGELOG.md](../CHANGELOG.md)；目前的功能與操作方式以 [README](../README.md) 為準。
 這裡保留當時的文字，後續版本可能已調整其中的行為。
 
+### 登入身分單一寫入點（SPEC-109，v4.29.7）
+
+- `app-session.js` 新增 `startAuthSession()`、`endAuthSession()`；`app-auth.js` 不再直接改寫身分，登入操作的世代改以 `captureAuthSession()` 讀取。
+- `check_architecture.session_write_violations()` 擋住 `app-session.js` 以外的身分寫入。
+- `reportLoadRequestId`、`reportLoadController`、`reportGenerationRequestId` 移到 `app-reports.js`，`shoeAnalyticsRequestId` 移到 `app-run-insights.js`。`scripts/architecture_ratchet.json` 為 237 個名稱、0 對。
+
+Asset 4.29.7／shell v113、schema 13 不變，可直接回滾至 v4.29.6 image。
+
 ### 登入身分獨立與跑步草稿登記（SPEC-108，v4.29.6）
 
 - 新 script `frontend/app-session.js`（在 `app-state.js` 之後載入）擁有 `authToken`、`currentUser`、`authGeneration` 與 `captureAuthSession()`／`isCurrentAuthSession()`／`requireAuthSession()`；`app-auth.js` 只留登入表單與帳號切換。

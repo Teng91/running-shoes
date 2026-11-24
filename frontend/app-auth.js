@@ -27,14 +27,14 @@ function cancelAuthOperation() {
 
 function beginAuthOperation() {
   if (authOperation) return null;
-  const operation = { controller: new AbortController(), generation: authGeneration };
+  const operation = { controller: new AbortController(), generation: captureAuthSession().generation };
   authOperation = operation;
   setAuthControlsDisabled(true);
   return operation;
 }
 
 function isCurrentAuthOperation(operation) {
-  return authOperation === operation && operation.generation === authGeneration && !operation.controller.signal.aborted;
+  return authOperation === operation && operation.generation === captureAuthSession().generation && !operation.controller.signal.aborted;
 }
 
 function finishAuthOperation(operation) {
@@ -61,23 +61,13 @@ function resetAuthInputs() {
 
 function setAuth(token, username) {
   clearAuth();
-  authToken = token;
-  currentUser = username;
-  writeStoredValue('token', token);
-  writeStoredValue('username', username);
+  startAuthSession(token, username);
 }
 
 function clearAuth({ persist = true } = {}) {
   cancelAuthOperation();
   runAuthViewHooks('sessionEnding');
-  authGeneration += 1;
-  resetFeatureLifecycles();
-  authToken = null;
-  currentUser = null;
-  if (persist) {
-    removeStoredValue('token');
-    removeStoredValue('username');
-  }
+  endAuthSession(() => resetFeatureLifecycles(), { persist });
   resetAuthInputs();
 }
 

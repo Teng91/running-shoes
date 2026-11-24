@@ -297,6 +297,10 @@ SPEC-032：合成資料驗證歷史筆數上限（v4.7.3 起 10,000／10,001）�
 
 [規格與具名案例](specs/061-ci-on-every-push-and-protected-main.md) 以文字解析 workflow：觸發條件是不限分支的 push、pull request、每週排程與手動執行，沒有 `paths-ignore`；部署條件仍只有 main 的 push／手動執行；main 以外的 ref 由較新的執行取消舊的，main 不取消。ruleset 由 `.github/rulesets/main.json` 描述，Python 測試確認它要求 PR、必要檢查與 workflow 的 5 個測試 job 完全一致、禁止刪除與 force push，且沒有繞過名單。
 
+## SPEC-109 登入身分單一寫入點
+
+[規格與具名案例](specs/109-session-single-writer.md) 的架構測試確認目前的前端只有 `app-session.js` 寫入登入身分，並以暫存 script 確認其他 script 的賦值與遞增逐行被指出，註解、物件 key 與同名區域變數不算；既有的封鎖 storage 與 401 測試確認登入、登出的身分變化不變。
+
 ## SPEC-108 登入身分獨立與跑步草稿登記
 
 [規格與具名案例](specs/108-session-module-and-run-drafts.md) 的 transport 測試以真正的 `EventTarget` 當 window，401 經 `auth-session-expired` 事件觸發登出；Node 測試載入整個工作區與跑步、工作區、帳號實際的登記敘述，確認跑步編輯草稿的擷取與繼續編輯、月份快取只套用到目前月份，以及 session 結束、畫面打開與註冊表單打開的 hook 順序；並確認 auth、工作區與 transport 原始碼不再提到彼此的函式。封鎖 storage 的測試另外載入 `app-session.js`。

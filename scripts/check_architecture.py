@@ -121,6 +121,26 @@ CORE_DATA_FIELDS = (
 )
 CORE_DATA_WRITER = "app-resources.js"
 CORE_DATA_DECLARATIONS = "app-state.js"
+# SPEC-109: the signed-in identity is written only by app-session.js (startAuthSession/endAuthSession).
+SESSION_FIELDS = ("authToken", "currentUser", "authGeneration")
+SESSION_OWNER = "app-session.js"
+
+
+def session_write_violations(frontend: Path, scripts: list[str]) -> list[str]:
+    """Assignments to the session identity outside its owner; a local of the same name is not it."""
+    names = "|".join(SESSION_FIELDS)
+    write = re.compile(rf"(?<![\w.$])({names})\s*(?:[-+*/]?=(?![=>])|\+\+|--)")
+    offenders = []
+    for filename in scripts:
+        if filename == SESSION_OWNER:
+            continue
+        lines = _code_lines(frontend / filename)
+        source = "\n".join(code for _number, code, _line in lines)
+        local = {name for name in SESSION_FIELDS if re.search(rf"\b(?:let|const|var)\s+{name}\b", source)}
+        for number, code, line in lines:
+            if any(match.group(1) not in local for match in write.finditer(code)):
+                offenders.append(f"{filename}:{number}: {line.strip()}")
+    return offenders
 _MUTATING_METHODS = "push|pop|shift|unshift|splice|sort|reverse|fill|copyWithin"
 
 
@@ -311,6 +331,8 @@ def check_feature_boundaries() -> None:
     for offender in core_data_violations(frontend, manifest["scripts"]):
         fail(f"core data is read through coreData and written only by applyCoreResource() in {CORE_DATA_WRITER}: "
              f"{offender}")
+    for offender in session_write_violations(frontend, manifest["scripts"]):
+        fail(f"the session identity is written only through {SESSION_OWNER} (SPEC-109): {offender}")
     for problem in load_order_violations(frontend, manifest["scripts"]):
         fail(f"frontend load order (SPEC-106): {problem}")
     baseline = json.loads(RATCHET_BASELINE.read_text(encoding="utf-8"))
