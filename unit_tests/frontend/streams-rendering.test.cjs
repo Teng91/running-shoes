@@ -1,4 +1,4 @@
-const { runContext, test, assert, fs, path, vm, htmlSource, scriptPaths, scriptSource, styleSource, source, authOperationContext, streamContext, editContext, tableHeaders, extract, transportContext } = require('./helpers.cjs');
+const { runContext, test, assert, fs, path, vm, htmlSource, scriptPaths, scriptSource, styleSource, source, authOperationContext, streamContext, editContext, tableHeaders, extract, panelWiring, readText, transportContext } = require('./helpers.cjs');
 
 test('panel rendering is lazy, reused, and invalidated by data or theme changes', () => {
   const counts = {};
@@ -10,7 +10,7 @@ test('panel rendering is lazy, reused, and invalidated by data or theme changes'
     ...Object.fromEntries(hooks.map(name => [name, () => { counts[name] = (counts[name] || 0) + 1; }])),
   });
   vm.runInContext(`let panelRevision = 0, stackedRunsRequestId = 0, currentTheme = 'light';
-    const renderedPanels = new Map();\n${extract('invalidatePanels')}\n${extract('renderActivePanel')}`, context);
+    const renderedPanels = new Map();\n${panelWiring()}\n${extract('invalidatePanels')}\n${extract('renderActivePanel')}`, context);
   context.renderActivePanel(); context.renderActivePanel();
   assert.equal(counts.renderRunLog, 1);
   assert.equal(counts.renderCharts, undefined);
@@ -24,6 +24,43 @@ test('panel rendering is lazy, reused, and invalidated by data or theme changes'
   assert.equal(counts.renderMonthlyCharts, 1, 'data changes do not redraw hidden panels');
   vm.runInContext("currentTheme = 'dark'", context); context.renderActivePanel();
   assert.equal(counts.renderRunLog, 3);
+});
+
+test('SPEC-101 features register their panels and data in script order; the shell names none of them', () => {
+  const order = [];
+  const hooks = ['renderCards', 'renderAlerts', 'renderCategorySummary', 'renderTable', 'renderRetiredTable',
+    'renderCharts', 'renderSpendingCharts', 'populateRunShoeSelects', 'renderRunLog', 'renderHomeSummary',
+    'renderOnboarding', 'renderMonthlyCharts', 'prepareGoalForm', 'loadStravaHistory', 'render'];
+  let active = 'shoes';
+  const context = runContext({ document: { querySelector: () => ({ dataset: { panel: active } }) },
+    Chart() {}, localDateISO: () => '2026-10-19', selectedRunMonth: () => '2026-10',
+    ...Object.fromEntries(hooks.map(name => [name, (...args) => order.push(args.length ? `${name}(${args})` : name)])),
+  });
+  vm.runInContext(`let panelRevision = 0, currentTheme = 'light';
+    const renderedPanels = new Map();\n${panelWiring()}\n${extract('invalidatePanels')}\n${extract('renderActivePanel')}`, context);
+  // The shared feature context installs the real goal form helpers; observe this one instead.
+  context.prepareGoalForm = () => order.push('prepareGoalForm');
+  context.renderActivePanel();
+  assert.deepEqual(order.splice(0), ['renderCards', 'renderAlerts', 'renderCategorySummary', 'renderTable',
+    'renderRetiredTable', 'renderCharts', 'renderSpendingCharts']);
+  active = 'runs'; context.renderActivePanel();
+  assert.deepEqual(order.splice(0), ['populateRunShoeSelects', 'renderRunLog', 'renderHomeSummary', 'renderOnboarding']);
+  // The run month is part of the runs panel's redraw key.
+  context.renderActivePanel(); assert.deepEqual(order, []);
+  context.selectedRunMonth = () => '2026-09'; context.renderActivePanel();
+  assert.deepEqual(order.splice(0), ['populateRunShoeSelects', 'renderRunLog', 'renderHomeSummary', 'renderOnboarding']);
+  const panels = vm.runInContext('panelHooks', context), readers = vm.runInContext('resourceReaders', context);
+  assert.deepEqual([...panels.keys()].sort(), ['monthly', 'report', 'runs', 'shoes']);
+  assert.deepEqual([...readers.keys()], ['runs']);
+  panels.get('monthly').forEach(hook => hook.enter?.());
+  vm.runInContext('dataHooks', context).forEach(hook => { hook.arrived?.('goal'); hook.history?.(); });
+  assert.deepEqual(order.splice(0), ['prepareGoalForm', 'loadStravaHistory', 'render(goal)']);
+  // A full redraw drops an in-flight annual run read.
+  const before = context.runController.state.annualRequest;
+  context.invalidatePanels(); assert.equal(context.runController.state.annualRequest, before + 1);
+  // The shell calls no feature function by name: only registered hooks.
+  const shell = readText('frontend/app-core.js').replace(/\/\/.*$/gm, '');
+  for (const name of hooks) assert.doesNotMatch(shell, new RegExp(`(?<![.\\w])${name}\\(`), name);
 });
 
 test('shoe retirement presentation uses only the backend date, including no forecast', () => {

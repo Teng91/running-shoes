@@ -230,4 +230,8 @@ function renderRetiredTable() {
   }).join('');
 }
 
-// ====== Monthly Mileage Table ======
+// SPEC-101: the shoes tab opens with the cards, alerts and tables; every applied resource redraws.
+registerPanel('shoes', { render: () => {
+  renderCards(); renderAlerts(); renderCategorySummary(); renderTable(); renderRetiredTable();
+} });
+registerDataHooks({ arrived: resource => render(resource) });

@@ -1,4 +1,4 @@
-const { test, assert, vm, fs, extract, runContext, source, htmlSource } = require('./helpers.cjs');
+const { test, assert, vm, fs, extract, panelWiring, runContext, source, htmlSource } = require('./helpers.cjs');
 
 function nodes() {
   return new Proxy({}, { get: (target, id) => target[id] ||= { dataset: {}, value: '', style: {}, hidden: true,
@@ -70,6 +70,7 @@ function refreshContext() {
   context.seedCoreData({ runningGoal: {}, spendingSummary: { retained: true } });
   vm.runInContext(`let selectedYear;
     let spendingLoadRequestId = 0, spendingLoadPending = false, goalProgressRequestId = 0;
+    ${panelWiring()}
     ${extract('loadData')}`, context);
   return { context, calls };
 }

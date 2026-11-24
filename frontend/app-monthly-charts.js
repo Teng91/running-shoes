@@ -368,3 +368,6 @@ async function renderYearReview() {
       ? `NT$ ${Math.round(review.shoe_spend).toLocaleString()}${review.cost_per_km != null ? ` · 每 km NT$ ${review.cost_per_km.toFixed(1)}` : ''}` : '這一年沒有買鞋'),
   ].join('');
 }
+
+// SPEC-101: the monthly tab's charts, once Chart.js has loaded.
+registerPanel('monthly', { render: () => { if (typeof Chart !== 'undefined') renderMonthlyCharts(); } });

@@ -2,10 +2,35 @@
 let panelRevision = 0;
 const renderedPanels = new Map();
 
+// SPEC-101: feature scripts register what each panel draws and which data they own when they
+// load. The shell never names a feature's functions, so features depend on it and not back.
+const panelHooks = new Map();
+const resourceReaders = new Map();
+const dataHooks = [];
+
+// hooks: { render() draws the panel, enter() runs before its tab opens, key() joins the redraw
+// key }. A panel runs its hooks in registration order, i.e. the script order in assets.json.
+function registerPanel(name, hooks) {
+  if (!panelHooks.has(name)) panelHooks.set(name, []);
+  panelHooks.get(name).push(hooks);
+}
+
+// reader: { scope() is taken when a load starts, read(scope) loads, current(scope) tells whether
+// the screen still shows that scope, apply(value) stores a current value }.
+function registerResourceReader(name, reader) {
+  resourceReaders.set(name, reader);
+}
+
+// hooks: { arrived(resource) after a resource is applied, invalidated() on a full redraw,
+// history() when a load also refreshes the import history }.
+function registerDataHooks(hooks) {
+  dataHooks.push(hooks);
+}
+
 function invalidatePanels(resource = null) {
   if (!resource) {
     panelRevision += 1;
-    runController.state.annualRequest += 1;
+    dataHooks.forEach(hook => hook.invalidated?.());
     return;
   }
   // The shoes panel also draws run-derived charts (rotation timeline, distance mix). Accepting
@@ -24,19 +49,11 @@ function resetPanelRendering() {
 
 function renderActivePanel() {
   const name = document.querySelector('.tab-panel.active')?.dataset.panel;
-  const key = `${panelRevision}|${currentTheme}|${localDateISO()}|${name === 'runs' ? selectedRunMonth() : ''}`;
+  const hooks = panelHooks.get(name) || [];
+  const key = [panelRevision, currentTheme, localDateISO(), ...hooks.map(hook => hook.key?.() ?? '')].join('|');
   if (!name || renderedPanels.get(name) === key) return;
   renderedPanels.set(name, key);
-  if (name === 'shoes') {
-    renderCards(); renderAlerts(); renderCategorySummary(); renderTable(); renderRetiredTable();
-    if (typeof Chart !== 'undefined') renderCharts();
-    // Spending lives at the bottom of the shoes tab.
-    renderSpendingCharts();
-  } else if (name === 'runs') {
-    populateRunShoeSelects(); renderRunLog(); renderHomeSummary(); renderOnboarding();
-  } else if (name === 'monthly') {
-    if (typeof Chart !== 'undefined') renderMonthlyCharts();
-  }
+  hooks.forEach(hook => hook.render?.());
 }
 
 function setMobileMenu(open) {
@@ -45,9 +62,9 @@ function setMobileMenu(open) {
 }
 
 function switchTab(name) {
-  // Establish a baseline before the fields become interactive; the chart render
-  // runs in a later frame and must already recognize edits made in between.
-  if (name === 'monthly') prepareGoalForm();
+  // Features prepare before the fields become interactive (the goal form takes its baseline);
+  // the chart render runs in a later frame and must already recognize edits made in between.
+  (panelHooks.get(name) || []).forEach(hook => hook.enter?.());
   // Chat and the monthly report share one AI destination.
   const destination = name === 'report' ? 'agent' : name;
   document.querySelectorAll('.tab').forEach(tab => {
@@ -65,10 +82,6 @@ function switchTab(name) {
     window.scrollTo(0, 0);
   }
   requestAnimationFrame(() => renderActivePanel());
-  if (name === 'report' && authToken) {
-    loadReportHistory();
-    loadSavedReport();
-  }
 }
 
 const systemLightQuery = window.matchMedia ? window.matchMedia('(prefers-color-scheme: light)') : null;
@@ -115,20 +128,20 @@ registerFeatureReset('panel-rendering', resetPanelRendering);
 
 async function loadData({ mutation = null } = {}) {
   const session = captureAuthSession();
-  const requestedRunMonth = selectedRunMonth();
-  const [runYear, runMonth] = requestedRunMonth.split('-').map(Number);
   const error = document.getElementById('data-load-error');
+  // Scopes are taken now: a value loaded for another scope (e.g. a run month the user has
+  // since left) is not applied.
+  const scopes = {};
   const readers = {
     shoes: () => Promise.all([apiGet('/shoes/active'), apiGet('/shoes/retired')]),
     monthly: () => apiGet('/monthly-mileage'),
-    runs: () => {
-      const requestId = ++runController.state.listRequest;
-      return Promise.all([fetchRunPage({ year: runYear, month: runMonth }),
-        apiGet(`/runs/summary?year=${runYear}&month=${runMonth}`)])
-        .then(([page, summary]) => ({ page, summary, requestId }));
-    },
-    goal: () => apiGet('/running-goal'),
   };
+  for (const [name, reader] of resourceReaders) {
+    const scope = reader.scope?.();
+    if (scope !== undefined) scopes[name] = scope;
+    readers[name] = () => reader.read(scope);
+  }
+  readers.goal = () => apiGet('/running-goal');
   const applyResource = result => {
     const [accepted] = resourceStore.accept([result], mutation);
     if (!accepted || !isCurrentAuthSession(session)) return;
@@ -139,18 +152,15 @@ async function loadData({ mutation = null } = {}) {
       return;
     }
     if (resource === 'shoes' || resource === 'monthly' || resource === 'goal') applyCoreResource(resource, value);
-    if (resource === 'runs' && value.requestId === runController.state.listRequest
-        && requestedRunMonth === selectedRunMonth()) {
-      const { page, summary } = value;
-      Object.assign(runController.state, { rows: page.rows, summary, offset: 0, hasMore: page.hasMore, day: null });
-      document.getElementById('run-load-error').hidden = true;
-    }
-    if (typeof workspaceDataArrived === 'function' && (resource !== 'runs' || requestedRunMonth === selectedRunMonth())) workspaceDataArrived(resource, value);
-    render(resource);
+    const reader = resourceReaders.get(resource);
+    const current = !reader?.current || reader.current(scopes[resource]);
+    if (reader && current) reader.apply(value);
+    if (typeof workspaceDataArrived === 'function' && current) workspaceDataArrived(resource, value);
+    dataHooks.forEach(hook => hook.arrived?.(resource));
     // A slow optional source must not hold an otherwise usable screen behind boot.
     if (typeof hideAppBoot === 'function') hideAppBoot();
   };
-  const completion = resourceStore.refresh(mutation, readers, { runs: requestedRunMonth }, applyResource);
-  if (resourceStore.policy(mutation).history) void loadStravaHistory();
+  const completion = resourceStore.refresh(mutation, readers, scopes, applyResource);
+  if (resourceStore.policy(mutation).history) dataHooks.forEach(hook => void hook.history?.());
   await completion;
 }

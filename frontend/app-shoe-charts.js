@@ -441,3 +441,6 @@ async function renderDistanceMix() {
     ? `15 km 以上的長跑最常穿 ${shoeName(longRuns[0].row.shoe_id)}（${longRuns[0].long} 次）。`
     : '現役鞋還沒有 15 km 以上的長跑紀錄。';
 }
+
+// SPEC-101: shoe charts follow the shoes tab's tables once Chart.js has loaded.
+registerPanel('shoes', { render: () => { if (typeof Chart !== 'undefined') renderCharts(); } });
