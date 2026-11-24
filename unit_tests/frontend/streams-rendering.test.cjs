@@ -3,7 +3,7 @@ const { runContext, test, assert, fs, path, vm, htmlSource, scriptPaths, scriptS
 test('panel rendering is lazy, reused, and invalidated by data or theme changes', () => {
   const counts = {};
   const hooks = ['renderCards', 'renderAlerts', 'renderCategorySummary', 'renderTable', 'renderRetiredTable',
-    'renderCharts', 'populateRunShoeSelects', 'renderRunLog', 'renderHomeSummary', 'renderOnboarding', 'renderMonthlyCharts', 'renderSpendingCharts'];
+    'renderCharts', 'populateRunShoeSelects', 'renderRunLog', 'renderHomeSummary', 'renderOnboarding', 'renderMonthlyCharts', 'renderPaceAnalysis', 'renderSpendingCharts'];
   let active = 'runs';
   const context = runContext({ document: { querySelector: () => ({ dataset: { panel: active } }) },
     Chart() {}, localDateISO: () => '2026-10-19', selectedRunMonth: () => '2026-10',
@@ -17,6 +17,8 @@ test('panel rendering is lazy, reused, and invalidated by data or theme changes'
   assert.equal(counts.renderMonthlyCharts, undefined);
   active = 'monthly'; context.renderActivePanel();
   assert.equal(counts.renderMonthlyCharts, 1);
+  // SPEC-105: race readiness registers itself on the monthly tab, after the monthly charts.
+  assert.equal(counts.renderPaceAnalysis, 1);
   active = 'runs'; context.renderActivePanel();
   assert.equal(counts.renderRunLog, 1);
   context.invalidatePanels(); context.renderActivePanel();

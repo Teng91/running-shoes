@@ -35,24 +35,12 @@
       "app-resources.js"
     ],
     [
-      "app-dashboard.js",
-      "app-run-insights.js"
-    ],
-    [
       "app-goals.js",
       "app-resources.js"
     ],
     [
       "app-goals.js",
       "app-workspace.js"
-    ],
-    [
-      "app-monthly-charts.js",
-      "app-pace-charts.js"
-    ],
-    [
-      "app-pace-charts.js",
-      "app-race-goal.js"
     ],
     [
       "app-resources.js",

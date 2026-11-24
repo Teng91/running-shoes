@@ -43,7 +43,6 @@ function renderMonthlyCharts() {
   renderYearOverYearChart();
   renderYearReview();
   renderTrends();
-  renderPaceAnalysis();
 }
 
 async function renderShoeStackedChart() {
@@ -312,10 +311,6 @@ function renderYearOverYearChart() {
 
 // ====== Year in review ======
 let yearReviewRequestId = 0;
-
-function reviewCard(label, value, sub = '') {
-  return `<div class="review-card"><div class="review-label">${label}</div><div class="review-value">${value}</div>${sub ? `<div class="review-sub">${sub}</div>` : ''}</div>`;
-}
 
 async function renderYearReview() {
   if (document.querySelector('.tab-panel.active')?.dataset.panel !== 'monthly') return;

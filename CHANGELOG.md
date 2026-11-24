@@ -2,7 +2,10 @@
 
 ## [Unreleased]
 
+## [4.29.3] - 2026-11-24
+
 ### Changed
+- 共用的前端小工具放到共用的位置（SPEC-105），畫面不變：`getThemeColor()` 移到 `app-state.js`、`reviewCard()` 移到 `app-charts.js`；比賽準備自行登記在月度分頁，比賽表單透過 `onRaceGoalShown()` 接收載入的目標。互相使用的 script 由 16 對降到 13 對。Asset 4.29.3／shell v109，schema 13 不變。
 - 拆解帳號匯入的兩個最複雜函式（SPEC-102），功能與資料不變：`execute_import`（複雜度 32）改為依序呼叫鞋款、跑步、月跑量、目標、月報、Strava 匯入紀錄與稽核歷史的步驟函式，`build_changes`（22）拆出跑步 patch、預估總里程、鞋款與月跑量差異；拆完每個函式都在 10 以下，後端的 `# noqa: C901` 由 14 個降到 12 個。
 - 拆解 AI 對話、資料庫遷移與模型呼叫的複雜函式（SPEC-103），功能不變：`run_agent_stream`（30）拆成每輪串流、記錄與工具執行的步驟，`run_startup_migrations`（24）依原順序呼叫各遷移步驟，`call_llm_stream` 與 `_fetch_free_models`（各 19）拆出 tool call 片段合併、參數正規化、免費模型篩選與每日排行統計；後端的 `# noqa: C901` 由 12 個降到 8 個。
 - 拆完後端其餘的複雜函式（SPEC-104），功能不變：備份驗證、AI 查詢規劃、刪除復原、首頁統計、匯入計畫、網路搜尋、Strava CSV 解析與上傳大小限制都拆成具名的小步驟；後端不再有任何 `# noqa: C901`，之後超過複雜度 10 的函式會直接讓 lint 失敗。

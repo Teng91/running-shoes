@@ -80,6 +80,13 @@ async function readAnalytics(name, path, check) {
   return result.value;
 }
 
+// SPEC-105: views of the race goal (the form in app-race-goal.js) refresh when it loads.
+const raceGoalViews = [];
+
+function onRaceGoalShown(view) {
+  raceGoalViews.push(view);
+}
+
 async function renderPaceAnalysis() {
   if (document.querySelector('.tab-panel.active')?.dataset.panel !== 'monthly') return;
   const requestId = ++racePrepRequestId;
@@ -97,7 +104,7 @@ async function renderPaceAnalysis() {
   if (document.querySelector('.tab-panel.active')?.dataset.panel !== 'monthly') return;
   destroyPaceCharts();
   raceGoal = race.goal;
-  prepareRaceForm();
+  raceGoalViews.forEach(view => view());
   const colors = {
     text: getThemeColor('--text-dim', '#8b8d9a'), grid: getThemeColor('--chart-grid', '#f1f5f9'),
     primary: getThemeColor('--chart-1', '#c8ff3c'), soft: getThemeColor('--chart-1-soft', 'rgba(200, 255, 60, .38)'),
@@ -305,3 +312,6 @@ function paceTrendText(analysis) {
     : '設定比賽目標後，點會依強度上色並畫出目標配速。');
   return parts.join('');
 }
+
+// SPEC-105: race readiness follows the monthly charts on the monthly tab.
+registerPanel('monthly', { render: () => { if (typeof Chart !== 'undefined') renderPaceAnalysis(); } });

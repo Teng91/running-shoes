@@ -4,6 +4,13 @@
 每版的摘要見 [CHANGELOG.md](../CHANGELOG.md)；目前的功能與操作方式以 [README](../README.md) 為準。
 這裡保留當時的文字，後續版本可能已調整其中的行為。
 
+### 後端複雜度歸零與前端共用工具（SPEC-102～105，v4.29.3）
+
+- 後端：帳號匯入（SPEC-102）、AI 對話／資料庫遷移／模型呼叫（SPEC-103）與其餘 8 個函式（SPEC-104）拆成具名步驟，後端沒有任何函式超過複雜度 10，`# noqa: C901` 歸零；行為、錯誤訊息、SQL 與遷移順序不變。
+- 前端（SPEC-105）：`getThemeColor()` 移到 `app-state.js`、`reviewCard()` 移到 `app-charts.js`；比賽準備以 `registerPanel('monthly', …)` 登記，比賽表單以 `onRaceGoalShown()` 接收目標。`scripts/architecture_ratchet.json` 為 244 個名稱、13 對、0 個複雜度豁免。
+
+Asset 4.29.3／shell v109、schema 13 不變，可直接回滾至 v4.29.2 image。
+
 ### 畫面殼層改由功能自行註冊（SPEC-101，v4.29.2）
 
 - `app-core.js` 新增 `registerPanel()`、`registerResourceReader()`、`registerDataHooks()`；`renderActivePanel()`、`switchTab()`、`invalidatePanels()` 與 `loadData()` 只執行已登記的 hook，不再以名稱呼叫功能函式。

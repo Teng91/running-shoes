@@ -28,3 +28,8 @@ function fitChartLabel(label, chart, widthFraction) {
   ctx.restore();
   return result;
 }
+
+// One summary card of the year review and race readiness (SPEC-105).
+function reviewCard(label, value, sub = '') {
+  return `<div class="review-card"><div class="review-label">${label}</div><div class="review-value">${value}</div>${sub ? `<div class="review-sub">${sub}</div>` : ''}</div>`;
+}
