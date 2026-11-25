@@ -72,12 +72,12 @@ const plan = {
   weeks_total: 12, weeks_chosen: true, default_weeks: 12, weeks_until_race: 9, start_date: '2026-09-21', started: true, baseline_km: 12.4, baseline_start: '2026-08-24', baseline_end: '2026-09-20',
   peak_km: 22, longest_planned_km: 11, long_threshold_km: 15.8, long_below_threshold: true, weeks_done: 1, weeks_past: 3,
   weeks: [
-    { week: 1, week_start: '2026-09-21', phase: 'build', km: 15, long_km: 7, race_pace_km: 0, actual_km: 15.2, actual_longest_km: 7, status: 'done' },
-    { week: 2, week_start: '2026-09-28', phase: 'build', km: 17, long_km: 8, race_pace_km: 0, actual_km: 11, actual_longest_km: 5, status: 'partial' },
-    { week: 3, week_start: '2026-10-05', phase: 'build', km: 18, long_km: 9, race_pace_km: 3, actual_km: 4, actual_longest_km: 4, status: 'missed' },
-    { week: 4, week_start: '2026-10-12', phase: 'recovery', km: 15, long_km: 7, race_pace_km: 0, actual_km: 6.5, actual_longest_km: 6.5, status: 'current' },
-    { week: 5, week_start: '2026-10-19', phase: 'taper', km: 15, long_km: 8, race_pace_km: 3, actual_km: 0, actual_longest_km: 0, status: 'upcoming' },
-    { week: 6, week_start: '2026-10-26', phase: 'race', km: 28, long_km: 21.1, race_pace_km: 0, actual_km: 0, actual_longest_km: 0, status: 'upcoming' },
+    { week: 1, week_start: '2026-09-21', phase: 'build', km: 15, long_km: 7, zone_runs: { easy: 2, steady: 1, race: 0, fast: 0 }, actual_km: 15.2, actual_longest_km: 7, status: 'done' },
+    { week: 2, week_start: '2026-09-28', phase: 'build', km: 17, long_km: 8, zone_runs: { easy: 0, steady: 0, race: 0, fast: 0 }, actual_km: 11, actual_longest_km: 5, status: 'partial' },
+    { week: 3, week_start: '2026-10-05', phase: 'build', km: 18, long_km: 9, zone_runs: { easy: 0, steady: 0, race: 0, fast: 0 }, actual_km: 4, actual_longest_km: 4, status: 'missed' },
+    { week: 4, week_start: '2026-10-12', phase: 'recovery', km: 15, long_km: 7, zone_runs: { easy: 0, steady: 0, race: 0, fast: 0 }, actual_km: 6.5, actual_longest_km: 6.5, status: 'current' },
+    { week: 5, week_start: '2026-10-19', phase: 'taper', km: 15, long_km: 8, zone_runs: { easy: 0, steady: 0, race: 0, fast: 0 }, actual_km: 0, actual_longest_km: 0, status: 'upcoming' },
+    { week: 6, week_start: '2026-10-26', phase: 'race', km: 28, long_km: 21.1, zone_runs: { easy: 0, steady: 0, race: 0, fast: 0 }, actual_km: 0, actual_longest_km: 0, status: 'upcoming' },
   ],
 };
 
@@ -87,15 +87,16 @@ test('SPEC-119 the weekly plan lays out backend targets, actual distance and sta
   assert.equal(nodes['race-plan'].hidden, false);
   const rows = nodes['race-plan-table'].innerHTML.split('</tr>').filter(row => row.includes('<tr'));
   assert.equal(rows.length, 6);
-  assert.match(rows[0], /class="race-plan-done"[\s\S]*第 1 週[\s\S]*9\/21[\s\S]*累積[\s\S]*>15<[\s\S]*15\.2<small> · 最長 7\.0<\/small>[\s\S]*達成/);
+  assert.match(rows[0], /class="race-plan-done"[\s\S]*第 1 週[\s\S]*9\/21[\s\S]*累積[\s\S]*>15<[\s\S]*15\.2<small> · 最長 7\.0<\/small>[\s\S]*輕鬆 2<\/span>[\s\S]*穩定 1<\/span><\/td>[\s\S]*達成/);
+  assert.doesNotMatch(rows[0], /比賽配速 0|更快 0/, 'zones without runs are left out');
   assert.match(rows[1], /部分完成/);
-  assert.match(rows[2], /class="race-plan-missed"[\s\S]*>3<\/td>[\s\S]*未達/);
+  assert.match(rows[2], /class="race-plan-missed"[\s\S]*<td>—<\/td>[\s\S]*未達/, 'a week without timed runs shows a dash');
   assert.match(rows[3], /class="race-plan-current race-plan-light"[\s\S]*恢復週[\s\S]*本週/);
-  assert.match(rows[4], /減量[\s\S]*>—<\/td>[\s\S]*<td><\/td>/, 'an upcoming week has no actual distance or status');
+  assert.match(rows[4], /減量[\s\S]*>—<\/td>\s*<td>—<\/td>\s*<td><\/td>/, 'an upcoming week has no actual distance, zones or status');
   assert.match(rows[5], /比賽週[\s\S]*比賽 21\.1/);
   assert.equal(nodes['race-plan-note'].textContent,
     '本週是第 4 週（恢復週）：建議 15 km、最長一次 7 km，已跑 6.5 km，還差 8.5 km。課表從 9/21 開始共 12 週，已過 3 週、達成 1 週。起點是 8/24–9/20 平均每週 12.4 km，不到 15 km 以 15 km 起算，'
-    + '每週最多加 10%，每 4 週一次恢復週，最後減量進入比賽週。輕鬆跑配速 6:26 以上，比賽配速段跑 5:41/km；'
+    + '每週最多加 10%，每 4 週一次恢復週，最後減量進入比賽週。輕鬆跑配速 6:26 以上；強度是每週有填時間的路跑落在各區間的次數，區間同下方強度分布。'
     + '達到建議跑量與最長一次的 9 成算達成。依目前跑量，課表最長只排到 11 km，不到比賽距離 75% 的 15.8 km，'
     + '可以考慮放寬目標時間或選較晚的比賽。');
 

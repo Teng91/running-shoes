@@ -263,3 +263,5 @@
 .race-plan-done .race-plan-status { border-color: var(--accent-line); background: rgba(var(--accent-rgb), .16); }
 .race-plan-partial .race-plan-status { border-color: rgba(255, 138, 31, .45); background: rgba(255, 138, 31, .12); }
 .race-plan-missed .race-plan-status { border-color: rgba(255, 77, 94, .45); background: rgba(255, 77, 94, .12); }
+.race-plan-zone { display: inline-flex; align-items: center; gap: 4px; margin-right: 10px; white-space: nowrap; }
+.race-plan-zone i { width: 8px; height: 8px; border-radius: 2px; }

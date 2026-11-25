@@ -159,6 +159,14 @@ function renderRaceCards(race) {
 const RACE_PLAN_PHASES = { build: '累積', recovery: '恢復週', peak: '高峰', taper: '減量', race: '比賽週' };
 const RACE_PLAN_STATUS = { done: '達成', partial: '部分完成', missed: '未達', current: '本週', upcoming: '' };
 
+// SPEC-121: a started week's timed road runs per intensity zone, the zones of the chart below.
+function racePlanZoneText(week, zones) {
+  if (week.status === 'upcoming') return '—';
+  const parts = zones.filter(zone => week.zone_runs?.[zone.key])
+    .map(zone => `<span class="race-plan-zone"><i style="background:${zoneColor(zone.key)}"></i>${esc(zone.label)} ${week.zone_runs[zone.key]}</span>`);
+  return parts.join('') || '—';
+}
+
 function renderRacePlan(race) {
   const section = document.getElementById('race-plan');
   const plan = race.plan;
@@ -174,8 +182,8 @@ function renderRacePlan(race) {
       <td>${esc(RACE_PLAN_PHASES[week.phase] || week.phase)}</td>
       <td class="numeric">${week.km}</td>
       <td class="numeric">${esc(longText)}</td>
-      <td class="numeric">${week.race_pace_km ? week.race_pace_km : '—'}</td>
       <td class="numeric">${actual}</td>
+      <td>${racePlanZoneText(week, race.zones)}</td>
       <td>${RACE_PLAN_STATUS[week.status] ? `<span class="race-plan-status">${esc(RACE_PLAN_STATUS[week.status])}</span>` : ''}</td>
     </tr>`;
   }).join('');
@@ -199,7 +207,7 @@ function racePlanText(race) {
     : `課表會從 ${raceShortDate(plan.start_date)} 開始，共 ${plan.weeks_total} 週。`];
   const floor = plan.baseline_km < 15 ? '，不到 15 km 以 15 km 起算' : '';
   parts.push(`起點是 ${raceShortDate(plan.baseline_start)}–${raceShortDate(plan.baseline_end)} 平均每週 ${Number(plan.baseline_km).toFixed(1)} km${floor}，每週最多加 10%，每 4 週一次恢復週，最後減量進入比賽週。`);
-  parts.push(`輕鬆跑配速 ${paceClock(easy?.min_pace)} 以上，比賽配速段跑 ${paceClock(race.goal_pace)}/km；達到建議跑量與最長一次的 9 成算達成。`);
+  parts.push(`輕鬆跑配速 ${paceClock(easy?.min_pace)} 以上；強度是每週有填時間的路跑落在各區間的次數，區間同下方強度分布。達到建議跑量與最長一次的 9 成算達成。`);
   if (!plan.weeks_chosen) {
     parts.push(`課表週數沿用${raceDistanceName(race.goal.distance_km)}預設的 ${plan.default_weeks} 週；按「調整比賽」可以改成 4～24 週，例如從本週開始的 ${Math.max(4, plan.weeks_until_race)} 週。`);
   }
