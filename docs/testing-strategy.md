@@ -301,6 +301,10 @@ SPEC-032：合成資料驗證歷史筆數上限（v4.7.3 起 10,000／10,001）�
 
 [規格與具名案例](specs/116-keep-scheduled-workflows-enabled.md) 以文字解析 `offsite-backup.yml`：續命 job 不依賴備份 job、只有它有 `actions: write`、只用 `GITHUB_TOKEN` 不用 secret、失敗只發警告，且 repo 裡每個有 `schedule` 的 workflow 都在它的重新啟用清單中。
 
+## SPEC-121 課表的每週強度次數與減量修正
+
+[規格與具名案例](specs/121-plan-zone-counts-and-taper.md) 以回報的 4 週半馬課表確認減量週低於高峰週，並以各區間一次的計時路跑確認每週強度次數（越野跑與今天之後的紀錄不計）；前端測試確認強度欄略過 0 次、未開始的週顯示「—」。
+
 ## SPEC-120 課表週數與 IndexedDB 重試
 
 [規格與具名案例](specs/120-plan-weeks-and-indexeddb-retry.md) 測試自訂週數的課表長度與開始日、API 儲存與驗證、schema 14 升級與回滾保留週數，前端表單的建議週數與提示、本週摘要，以及假的 IndexedDB 在開啟與交易各丟一次 `UnknownError` 時重試成功、寫入只套用一次、連續失敗時回報錯誤。

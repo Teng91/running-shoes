@@ -45,7 +45,6 @@ def test_plan_builds_from_the_baseline_with_recovery_taper_and_race_week():
         if week["phase"] in {"build", "peak"} and previous["phase"] in {"build", "peak"}:
             assert week["km"] <= previous["km"] * 1.1 + 0.5
     assert all(week["long_km"] <= week["km"] / 2 + 0.5 for week in plan["weeks"] if week["phase"] != "race")
-    assert all(week["race_pace_km"] == 0 for week in plan["weeks"] if week["phase"] in {"recovery", "race"})
     assert all(week["status"] == "upcoming" for week in plan["weeks"])
 
 
@@ -103,6 +102,26 @@ def test_plan_weeks_are_saved_with_the_goal(client, db):
     assert race_preparation(db, user.id, date(2099, 4, 1))["plan"]["weeks_total"] == 9
 
 
+def test_a_short_plan_never_tapers_above_its_own_peak_and_counts_zones():
+    # SPEC-121: four weeks before a half marathon from 33 km a week (the reported plan).
+    goal = {**HALF, "race_date": "2026-12-06", "plan_weeks": 4}
+    runs = weekly_runs(date(2026, 10, 12), date(2026, 11, 9), 33)
+    goal_pace = HALF["target_seconds"] / HALF["distance_km"]  # 341 s/km
+    timed = [(date(2026, 11, 10), 10, round(10 * (goal_pace + 60))),   # easy
+             (date(2026, 11, 12), 8, round(8 * (goal_pace + 20))),     # steady
+             (date(2026, 11, 15), 16, round(16 * goal_pace)),          # race pace
+             (date(2026, 11, 13), 5, round(5 * (goal_pace - 30))),     # fast
+             (date(2026, 11, 26), 6, round(6 * (goal_pace + 60)))]     # after as_of: ignored
+    plan = build_plan(goal, runs, date(2026, 11, 25), timed)
+    assert [(week["phase"], week["km"]) for week in plan["weeks"]] == [
+        ("build", 33), ("peak", 36), ("taper", 27), ("race", 32)]
+    peak = max(week["km"] for week in plan["weeks"] if week["phase"] in {"build", "peak"})
+    assert all(week["km"] < peak for week in plan["weeks"] if week["phase"] == "taper")
+    assert plan["weeks"][0]["zone_runs"] == {"easy": 1, "steady": 1, "race": 1, "fast": 1}
+    assert plan["weeks"][2]["zone_runs"] == {"easy": 0, "steady": 0, "race": 0, "fast": 0}
+    assert "race_pace_km" not in plan["weeks"][0]
+
+
 def test_no_plan_after_the_race():
     assert build_plan(HALF, [], date(2027, 2, 22)) is None
     assert build_plan(HALF, [], date(2027, 2, 21))["weeks"][-1]["status"] == "current"
@@ -113,13 +132,19 @@ def test_race_analytics_include_a_user_scoped_plan_that_ignores_hikes(client, db
     other, other_shoe = owner(db, "plan-other")
     db.add(RaceGoal(user_id=user.id, version=1, **{**HALF, "race_date": "2026-03-29"}))
     db.add(Run(user_id=user.id, shoe_id=shoe.id, date="2026-01-01", km=12, activity_type="trail"))
+    # Zones count timed road runs only: this timed trail run in week 1 is not counted.
+    db.add(Run(user_id=user.id, shoe_id=shoe.id, date="2026-01-06", km=10, duration_seconds=3600, activity_type="trail"))
+    db.add(Run(user_id=user.id, shoe_id=shoe.id, date="2026-01-07", km=10, duration_seconds=4000))
     db.add(Run(user_id=user.id, shoe_id=shoe.id, date="2026-01-02", km=40, activity_type="hike"))
     db.add(Run(user_id=other.id, shoe_id=other_shoe.id, date="2026-01-02", km=50))
     db.commit()
 
     # The plan starts Monday 2026-01-05; its baseline counts the trail run but not the hike.
-    plan = race_preparation(db, user.id, date(2026, 1, 5))["plan"]
+    assert race_preparation(db, user.id, date(2026, 1, 5))["plan"]["baseline_km"] == 3
+    plan = race_preparation(db, user.id, date(2026, 1, 8))["plan"]
     assert (plan["start_date"], plan["started"], plan["baseline_km"]) == ("2026-01-05", True, 3)
+    assert plan["weeks"][0]["zone_runs"] == {"easy": 1, "steady": 0, "race": 0, "fast": 0}
+    assert plan["weeks"][0]["actual_km"] == 20, "the trail run still counts toward distance"
     response = client.get("/api/analytics/race", headers=headers(user)).json()
     assert response["goal"]["race_date"] == "2026-03-29"
     assert response["plan"] is None, "the race is over by the real date"

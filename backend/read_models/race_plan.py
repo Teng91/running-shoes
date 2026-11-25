@@ -22,9 +22,16 @@ from datetime import date, timedelta
 from sqlalchemy.orm import Session
 
 from backend import models
-from backend.read_models.race_readiness import LONG_RUN_SHARE, race_readiness
+from backend.read_models.race_readiness import (
+    LONG_RUN_SHARE,
+    ZONES,
+    goal_pace,
+    race_readiness,
+    zone_for,
+)
 from backend.read_models.rounding import round_metric
 from backend.read_models.run_statistics import TRAINING_RUN
+from backend.run_metrics import PACE_ACTIVITY_TYPES
 
 BASELINE_WEEKS = 4
 # A beginner still gets a plan: the baseline is never below this weekly distance.
@@ -36,7 +43,6 @@ MAX_PEAK_GROWTH = 1.5
 RECOVERY_EVERY = 4
 RECOVERY_SHARE = 0.8
 LONG_RUN_MAX_SHARE = 0.5
-RACE_PACE_SHARE = 0.15
 RACE_WEEK_EASY_SHARE = 0.3
 # A week counts as done at 90% of its distance and long run, as partly done at 60%.
 DONE_SHARE = 0.9
@@ -77,6 +83,8 @@ def _monday(day: date) -> date:
 
 
 def _planned_weeks(profile: Profile, total: int, base: float, long_base: float, distance: float) -> list[dict]:
+    # Taper and race week follow the highest volume the plan reaches, so a short plan never
+    # tapers above its own peak week (SPEC-121).
     peak = max(base, min(profile.peak_km, base * MAX_PEAK_GROWTH))
     build_count = total - len(profile.taper) - 1
     weeks: list[dict] = []
@@ -91,18 +99,22 @@ def _planned_weeks(profile: Profile, total: int, base: float, long_base: float, 
                 long = min(profile.long_peak_km, max(long * WEEKLY_GROWTH, long + 1))
             long = min(long, volume * LONG_RUN_MAX_SHARE) if index else long
             week_km, long_km = volume, long
-        race_pace = 0 if recovery or index < 2 else min(distance * 0.5, week_km * RACE_PACE_SHARE)
-        weeks.append({"phase": "recovery" if recovery else "build", "km": _km(week_km),
-                      "long_km": _km(long_km), "race_pace_km": _km(race_pace)})
+        weeks.append({"phase": "recovery" if recovery else "build", "km": _km(week_km), "long_km": _km(long_km)})
     if weeks and weeks[-1]["phase"] == "build":
         weeks[-1]["phase"] = "peak"
     for share in profile.taper:
-        week_km = peak * share
-        weeks.append({"phase": "taper", "km": _km(week_km), "long_km": _km(long * share),
-                      "race_pace_km": _km(min(distance * 0.3, week_km * RACE_PACE_SHARE))})
-    weeks.append({"phase": "race", "km": _km(peak * RACE_WEEK_EASY_SHARE + distance),
-                  "long_km": round_metric(distance, 1), "race_pace_km": 0})
+        weeks.append({"phase": "taper", "km": _km(volume * share), "long_km": _km(long * share)})
+    weeks.append({"phase": "race", "km": _km(volume * RACE_WEEK_EASY_SHARE + distance),
+                  "long_km": round_metric(distance, 1)})
     return weeks
+
+
+def _zone_runs(timed_runs: list[tuple[date, float, int]], pace_goal: float) -> dict[str, int]:
+    """Road runs with a time per intensity zone, the same zones as the readiness chart (SPEC-121)."""
+    counts = {key: 0 for key, _, _, _ in ZONES}
+    for _, km, seconds in timed_runs:
+        counts[zone_for(seconds / km, pace_goal)] += 1
+    return counts
 
 
 def _status(week: dict, start: date, as_of: date) -> str:
@@ -116,8 +128,12 @@ def _status(week: dict, start: date, as_of: date) -> str:
     return "partial" if week["actual_km"] >= week["km"] * PARTIAL_SHARE else "missed"
 
 
-def build_plan(goal: dict, runs: list[tuple[date, float]], as_of: date) -> dict | None:
-    """The weekly plan for `goal`, with each started week's actual distance; None after the race."""
+def build_plan(goal: dict, runs: list[tuple[date, float]], as_of: date,
+               timed_runs: list[tuple[date, float, int]] | None = None) -> dict | None:
+    """The weekly plan for `goal`, with each started week's actual distance; None after the race.
+
+    `timed_runs` are the road runs with a time, counted per intensity zone in started weeks.
+    """
     race_day = date.fromisoformat(goal["race_date"])
     if race_day < as_of:
         return None
@@ -134,9 +150,12 @@ def build_plan(goal: dict, runs: list[tuple[date, float]], as_of: date) -> dict 
     weeks = []
     for offset, planned in enumerate(_planned_weeks(profile, total, base, long_base, distance)):
         week_start = start + timedelta(weeks=offset)
-        rows = [km for day, km in runs if week_start <= day < week_start + timedelta(days=7) and day <= as_of]
+        week_end = min(week_start + timedelta(days=6), as_of)
+        rows = [km for day, km in runs if week_start <= day <= week_end]
+        timed = [run for run in timed_runs or [] if week_start <= run[0] <= week_end]
         week = {"week": offset + 1, "week_start": week_start.isoformat(), **planned,
-                "actual_km": round_metric(sum(rows)), "actual_longest_km": round_metric(max(rows, default=0.0))}
+                "actual_km": round_metric(sum(rows)), "actual_longest_km": round_metric(max(rows, default=0.0)),
+                "zone_runs": _zone_runs(timed, goal_pace(goal))}
         week["status"] = _status(week, week_start, as_of)
         weeks.append(week)
     longest_planned = max(week["long_km"] for week in weeks if week["phase"] != "race")
@@ -170,8 +189,12 @@ def race_preparation(db: Session, user_id: int, as_of: date) -> dict:
 
 def _race_plan(db: Session, user_id: int, goal: dict, as_of: date) -> dict | None:
     rows = (
-        db.query(models.Run.date, models.Run.km)
+        db.query(models.Run.date, models.Run.km, models.Run.duration_seconds, models.Run.activity_type)
         .filter(models.Run.user_id == user_id, TRAINING_RUN, models.Run.date <= as_of.isoformat())
         .all()
     )
-    return build_plan(goal, [(date.fromisoformat(day), float(km)) for day, km in rows], as_of)
+    runs = [(date.fromisoformat(day), float(km)) for day, km, _, _ in rows]
+    # Pace zones use road runs only, like race readiness (SPEC-096).
+    timed = [(date.fromisoformat(day), float(km), seconds) for day, km, seconds, kind in rows
+             if seconds and kind in PACE_ACTIVITY_TYPES]
+    return build_plan(goal, runs, as_of, timed)

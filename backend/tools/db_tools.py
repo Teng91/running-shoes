@@ -187,7 +187,7 @@ def race_training_plan(db: Session, user_id: int) -> str:
             "zones": "依目標配速劃分的強度區間（每公里秒數）；min_pace 是快的一端",
             "prediction": "依參考成績以 Riegel 公式預估的完賽時間；margin_seconds 正數代表比目標快",
             "long_runs": "近 8 週長距離（≥ 比賽距離 75%）的次數與是否足夠",
-            "plan.weeks": "每週課表：km 是建議週跑量、long_km 是建議最長一次、race_pace_km 是比賽配速段；"
+            "plan.weeks": "每週課表：km 是建議週跑量、long_km 是建議最長一次、zone_runs 是該週有填時間的路跑落在各強度區間（zones）的次數；"
                           "phase 為 build（累積）、recovery（恢復週）、peak（高峰）、taper（減量）、race（比賽週）",
             "plan.weeks.status": "done 達成、partial 部分完成、missed 未達、current 本週進行中、upcoming 未開始",
             "plan.baseline_km": "課表開始前 4 週的平均週跑量，課表由此每週最多增加 10%",

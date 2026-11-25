@@ -11,6 +11,12 @@
 
 Asset 4.29.12／shell v118、schema 13 不變，可直接回滾至 v4.29.11 image；移除這個 job 不影響備份。
 
+### 課表的每週強度次數與減量修正（SPEC-121，v5.0.2）
+
+- 課表每週新增 `zone_runs`（有填時間的路跑依目標配速分到四個強度區間的次數），移除 `race_pace_km`；前端「強度（次）」欄取代「比賽配速段」。
+- 減量週與比賽週改以最後的累積週跑量計算；之前用理論上限，4 週課表會出現減量週 37 km 高於高峰週 36 km。
+- 沒有 schema 變更，可直接回滾至 v5.0.1 image。Asset 5.0.2／shell v123。
+
 ### 課表週數與 IndexedDB 重試（SPEC-120，v5.0.1）
 
 - Schema 14 新增 `race_goals.plan_weeks`（可為 null）。`PUT /api/race-goal` 接受嚴格整數 4～24 或 null；`race_plan` 以它決定課表長度，null 沿用距離預設，回應新增 `weeks_chosen`、`default_weeks`、`weeks_until_race`。
