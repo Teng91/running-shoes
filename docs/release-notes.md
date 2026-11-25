@@ -4,6 +4,12 @@
 每版的摘要見 [CHANGELOG.md](../CHANGELOG.md)；目前的功能與操作方式以 [README](../README.md) 為準。
 這裡保留當時的文字，後續版本可能已調整其中的行為。
 
+### 帳號備份包含目標賽事（SPEC-126，v5.1.0）
+
+- 備份格式 v6 新增 `race_goal`（`BackupRaceGoal`，沿用 `RaceGoalUpdate` 驗證）；v6 以前的檔案不可帶它，指紋去掉這個欄位，與先前相同。
+- 預覽 summary 新增 `new_race_goal`、`updated_race_goal`、`unchanged_race_goal`；匯入行為與跑量目標相同。
+- 沒有 schema 變更。回滾至 v5.0.6 image 後，舊版會拒絕 v6 檔案：重新下載備份（v5），或把檔案的 `version` 改為 5 並刪除 `race_goal`。Asset 5.1.0／shell v128。
+
 ### 留白的課表週數由後端決定（SPEC-125，v5.0.6）
 
 - `services/race_goals.save_race_goal` 收到 `plan_weeks: null` 時，以 `read_models/race_plan.suggested_plan_weeks` 存入剩下週數（最多距離預設、至少 4 週），與網頁 `suggestedPlanWeeks` 相同；SPEC-120 以前存成 null 的目標不改寫，仍用距離預設週數。

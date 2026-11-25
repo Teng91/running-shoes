@@ -41,9 +41,9 @@ async function previewAccountRestore() {
     if (!preview) return;
     const summary = preview.summary;
     const source = `來源帳號：${summary.source_username}；匯出時間：${summary.exported_at}。接收網站：${window.location.origin}；接收帳號：${currentUser}。`;
-    const updates = mode === 'update' ? `將更新 ${summary.updated_shoes} 雙鞋、${summary.updated_runs} 筆跑步、${summary.updated_months} 個月份、${summary.updated_reports} 份月報${summary.updated_goal ? '及跑量目標' : ''}。` : '';
-    const unchanged = mode === 'update' ? `內容相同：${summary.unchanged_shoes || 0} 雙鞋、${summary.unchanged_runs || 0} 筆跑步、${summary.unchanged_months || 0} 個月份、${summary.unchanged_reports || 0} 份月報${summary.unchanged_goal ? '及跑量目標' : ''}。` : '';
-    const additions = `另新增 ${summary.new_months || 0} 個月份、${summary.new_reports || 0} 份月報${summary.new_goal ? '及跑量目標' : ''}。`;
+    const updates = mode === 'update' ? `將更新 ${summary.updated_shoes} 雙鞋、${summary.updated_runs} 筆跑步、${summary.updated_months} 個月份、${summary.updated_reports} 份月報${restoreGoalText(summary.updated_goal, summary.updated_race_goal)}。` : '';
+    const unchanged = mode === 'update' ? `內容相同：${summary.unchanged_shoes || 0} 雙鞋、${summary.unchanged_runs || 0} 筆跑步、${summary.unchanged_months || 0} 個月份、${summary.unchanged_reports || 0} 份月報${restoreGoalText(summary.unchanged_goal, summary.unchanged_race_goal)}。` : '';
+    const additions = `另新增 ${summary.new_months || 0} 個月份、${summary.new_reports || 0} 份月報${restoreGoalText(summary.new_goal, summary.new_race_goal)}。`;
     const deleted = summary.preserved_deleted_runs ? `保留已刪除的 ${summary.preserved_deleted_runs} 筆跑步，不重建。` : '';
     text.textContent = source + `預計新增 ${summary.new_shoes} 雙鞋、${summary.new_runs} 筆跑步。` + updates + additions + unchanged + deleted + `${summary.policy}。` +
       `另有 ${summary.monthly_records} 個月份、${summary.reports} 份月報、${summary.history_records} 筆唯讀歷史；匯入摘要新增 ${summary.new_import_summaries} 筆、略過 ${summary.skipped_import_summaries} 筆（保留既有摘要及容量限制）。` +
@@ -52,6 +52,12 @@ async function previewAccountRestore() {
   } catch (error) {
     if (accountRestore.current(operation) && error.name !== 'AbortError') text.textContent = error.message;
   }
+}
+
+// SPEC-126: the one-row goals a preview mentions, such as '及跑量目標與目標賽事'.
+function restoreGoalText(runningGoal, raceGoal) {
+  const names = [runningGoal && '跑量目標', raceGoal && '目標賽事'].filter(Boolean);
+  return names.length ? `及${names.join('與')}` : '';
 }
 
 async function applyAccountRestore() {

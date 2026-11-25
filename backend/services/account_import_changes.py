@@ -23,6 +23,7 @@ class ImportChanges:
     months: dict[tuple[int, int], dict[str, Any]] = field(default_factory=dict)
     reports: dict[tuple[int, int], dict[str, Any]] = field(default_factory=dict)
     goal: dict[str, Any] = field(default_factory=dict)
+    race_goal: dict[str, Any] = field(default_factory=dict)
     new_shoe_mileages: dict[int, float] = field(default_factory=dict)
 
 
@@ -45,6 +46,8 @@ def build_changes(plan: 'ImportPlan', backup: AccountBackup) -> ImportChanges:
         goal = backup.running_goal
         changes.goal = changed_fields(plan.goal, {'start_year': goal.start_year, 'monthly_km': goal.monthly_km,
                                                   'yearly_km': round(goal.monthly_km * 12, 2)})
+    if backup.race_goal and plan.race_goal:
+        changes.race_goal = changed_fields(plan.race_goal, backup.race_goal.model_dump())
     for report_item in backup.monthly_reports:
         period = (report_item.year, report_item.month)
         if period in plan.reports:
