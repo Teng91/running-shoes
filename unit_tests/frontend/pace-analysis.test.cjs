@@ -109,6 +109,15 @@ test('SPEC-119 the weekly plan lays out backend targets, actual distance and sta
   await baseOnly.context.renderPaceAnalysis();
   assert.match(baseOnly.nodes['race-plan-note'].textContent, /15\.8 km；先把平常週跑量提高到約 42 km，就排得到。$/);
 
+  // SPEC-123: a lowered week is marked and the note says the weeks ahead restart from what was run.
+  const lowered = { ...plan, weeks: plan.weeks.map(week => ({ ...week, adjusted: week.week === 4 })) };
+  const adapted = racePrepContext({ race: { ...race, plan: lowered }, pace });
+  await adapted.context.renderPaceAnalysis();
+  const adaptedRows = adapted.nodes['race-plan-table'].innerHTML.split('</tr>');
+  assert.match(adaptedRows[3], /恢復週<small> · 已調降<\/small>/);
+  assert.doesNotMatch(adaptedRows[2], /已調降/);
+  assert.match(adapted.nodes['race-plan-note'].textContent, /前兩週不到建議跑量的 6 成，第 4 週起改從實際跑量重新累積，之後的週跟著調整，已開始的週不變。/);
+
   // A goal saved before plan lengths existed keeps the default and says how to change it.
   const legacy = racePrepContext({ race: { ...race, plan: { ...plan, weeks_chosen: false } }, pace });
   await legacy.context.renderPaceAnalysis();

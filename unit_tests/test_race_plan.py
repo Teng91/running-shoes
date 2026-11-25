@@ -67,16 +67,42 @@ def test_started_weeks_compare_actual_distance_and_past_weeks_never_move():
 
     assert (plan["start_date"], plan["started"], plan["baseline_km"]) == ("2026-10-19", True, 20)
     first = plan["weeks"][:4]
-    assert [(week["km"], week["long_km"]) for week in first] == [(20, 10), (22, 11), (24, 12), (19, 10)]
+    # Weeks 2 and 3 reached 19 of 46 km, so the current week starts again from 15 km (SPEC-123).
+    assert [(week["km"], week["long_km"]) for week in first] == [(20, 10), (22, 11), (24, 12), (12, 6)]
+    assert [week["adjusted"] for week in first] == [False, False, False, True]
     assert [week["status"] for week in first] == ["done", "partial", "missed", "current"]
     assert [week["actual_km"] for week in first] == [20, 14, 5, 6]
     assert first[0]["actual_longest_km"] == 10
     assert (plan["weeks_done"], plan["weeks_past"]) == (1, 3)
 
     later = build_plan(goal, runs, date(2026, 12, 2))
-    assert [week["km"] for week in later["weeks"]] == [week["km"] for week in plan["weeks"]], "the baseline is fixed"
+    assert later["baseline_km"] == 20, "the baseline is fixed"
+    assert [week["km"] for week in later["weeks"][:4]] == [week["km"] for week in first], "started weeks never move"
     assert later["weeks"][3]["status"] == "missed"
 
+
+def test_weeks_ahead_restart_from_what_was_run_after_a_shortfall():
+    # SPEC-123: ten weeks before a 10K (from Monday 2026-10-19) on 20 km weeks.
+    goal = {**HALF, "race_date": "2026-12-27", "distance_km": 10}
+    runs = weekly_runs(date(2026, 9, 1), date(2026, 10, 26), 20)
+    before = build_plan(goal, runs, date(2026, 10, 28))
+    assert [week["km"] for week in before["weeks"]] == [20, 22, 24, 19, 27, 29, 30, 30, 21, 19]
+    assert not any(week["adjusted"] for week in before["weeks"])
+
+    # Week 2 ran nothing, so on its Monday week 3 starts again from the 15 km floor.
+    stopped = [*runs, (date(2026, 11, 3), 6), (date(2026, 11, 7), 6)]
+    plan = build_plan(goal, stopped, date(2026, 11, 3))
+    assert [(week["km"], week["long_km"], week["adjusted"]) for week in plan["weeks"][:5]] == [
+        (20, 10, False), (22, 11, False), (15, 8, True), (12, 6, False), (17, 8, False)]
+    assert plan["weeks"][2]["status"] == "current"
+    assert plan["weeks"][-2]["km"] < before["weeks"][-2]["km"], "taper and race week follow the lower volume"
+
+    # Running the lowered weeks keeps the plan growing from there; one gap lowers it only once.
+    back = [*stopped, (date(2026, 11, 12), 6), (date(2026, 11, 15), 6), (date(2026, 11, 18), 8), (date(2026, 11, 22), 9)]
+    resumed = build_plan(goal, back, date(2026, 11, 25))
+    assert [week["status"] for week in resumed["weeks"][2:5]] == ["partial", "done", "done"]
+    assert [(week["km"], week["adjusted"]) for week in resumed["weeks"][2:6]] == [(15, True), (12, False), (17, False), (18, False)]
+    assert [week["km"] for week in resumed["weeks"][:3]] == [week["km"] for week in plan["weeks"][:3]], "started weeks never move"
 
 def test_the_runner_chooses_how_many_weeks_the_plan_lasts():
     # Seven weeks before a half marathon: the default 12-week plan began five weeks ago.
