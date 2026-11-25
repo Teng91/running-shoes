@@ -179,7 +179,7 @@ function renderRacePlan(race) {
     return `<tr class="race-plan-${esc(week.status)}${week.phase === 'recovery' || week.phase === 'taper' ? ' race-plan-light' : ''}">
       <td>第 ${week.week} 週</td>
       <td>${esc(raceShortDate(week.week_start))}</td>
-      <td>${esc(RACE_PLAN_PHASES[week.phase] || week.phase)}</td>
+      <td>${esc(RACE_PLAN_PHASES[week.phase] || week.phase)}${week.adjusted ? '<small> · 已調降</small>' : ''}</td>
       <td class="numeric">${week.km}</td>
       <td class="numeric">${esc(longText)}</td>
       <td class="numeric">${actual}</td>
@@ -210,6 +210,11 @@ function racePlanText(race) {
   parts.push(`輕鬆跑配速 ${paceClock(easy?.min_pace)} 以上；強度是每週有填時間的路跑落在各區間的次數，區間同下方強度分布。達到建議跑量與最長一次的 9 成算達成。`);
   if (!plan.weeks_chosen) {
     parts.push(`課表週數沿用${raceDistanceName(race.goal.distance_km)}預設的 ${plan.default_weeks} 週；按「調整比賽」可以改成 4～24 週，例如從本週開始的 ${Math.max(4, plan.weeks_until_race)} 週。`);
+  }
+  const adjusted = plan.weeks.filter(week => week.adjusted).pop();
+  if (adjusted) {
+    // SPEC-123: a shortfall lowers the weeks ahead; started weeks keep their targets.
+    parts.push(`前兩週不到建議跑量的 6 成，第 ${adjusted.week} 週起改從實際跑量重新累積，之後的週跟著調整，已開始的週不變。`);
   }
   if (plan.long_below_threshold) parts.push(racePlanLongText(plan));
   return parts.join('');

@@ -366,7 +366,7 @@ async function run(engine, name) {
               week: index + 1, week_start: new Date(Date.UTC(2026, 8, 21 + index * 7)).toISOString().slice(0, 10), phase,
               km: phase === 'race' ? 33.7 : 28 + index, long_km: phase === 'race' ? 21.1 : 14 + (index % 3), zone_runs: { easy: 2, steady: 1, race: index % 2, fast: 0 },
               actual_km: index < 6 ? 25.5 + index : 0, actual_longest_km: index < 6 ? 12.4 : 0,
-              status: ['done', 'partial', 'done', 'missed', 'done', 'current'][index] || 'upcoming' })),
+              adjusted: index === 5, status: ['done', 'partial', 'done', 'missed', 'done', 'current'][index] || 'upcoming' })),
           },
           } });
         }
