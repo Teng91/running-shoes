@@ -1,5 +1,38 @@
 // Race goal form: open, fill, validate, save and delete the target race (SPEC-065).
 // Shared race state and the readiness charts stay in app-pace-charts.js (SPEC-090).
+// SPEC-119: default plan length by distance, mirroring backend/read_models/race_plan.PROFILES.
+const RACE_PLAN_DEFAULT_WEEKS = [[5.5, 8], [10.5, 10], [21.5, 12], [Infinity, 16]];
+const RACE_PLAN_MIN_WEEKS = 4;
+const RACE_PLAN_MAX_WEEKS = 24;
+
+// Weeks from this week to race week, both included, in the app's calendar (SPEC-093).
+function racePlanWeeksUntil(raceDate) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raceDate)) return null;
+  const monday = iso => {
+    const [year, month, day] = iso.split('-').map(Number);
+    const value = Date.UTC(year, month - 1, day) / 86400000;
+    return value - (new Date(value * 86400000).getUTCDay() + 6) % 7;
+  };
+  return Math.round((monday(raceDate) - monday(localDateISO())) / 7) + 1;
+}
+
+// The weeks left until the race, at most the distance's default and never below the minimum.
+function suggestedPlanWeeks(distanceKm, raceDate) {
+  const standard = RACE_PLAN_DEFAULT_WEEKS.find(([limit]) => Number(distanceKm) <= limit)[1];
+  const until = racePlanWeeksUntil(raceDate);
+  return Math.max(RACE_PLAN_MIN_WEEKS, until === null ? standard : Math.min(standard, until));
+}
+
+function updateRacePlanHint() {
+  const raceDate = document.getElementById('race-date').value;
+  const suggested = suggestedPlanWeeks(document.getElementById('race-distance').value, raceDate);
+  const until = racePlanWeeksUntil(raceDate);
+  document.getElementById('race-plan-weeks').placeholder = String(suggested);
+  document.getElementById('race-plan-weeks-hint').textContent = until === null || until < 1
+    ? `留白排 ${suggested} 週，可填 ${RACE_PLAN_MIN_WEEKS}～${RACE_PLAN_MAX_WEEKS} 週。`
+    : `距離比賽還有 ${until} 週；留白排 ${suggested} 週，${until > suggested ? `比賽前 ${suggested} 週開始` : '從本週開始'}。`;
+}
+
 function raceFormValues(goal) {
   return {
     'race-name': goal?.race_name || '',
@@ -9,6 +42,7 @@ function raceFormValues(goal) {
     'race-ref-distance': goal?.reference_distance_km != null ? String(goal.reference_distance_km) : '',
     'race-ref-time': goal?.reference_seconds != null ? formatRunDuration(goal.reference_seconds) : '',
     'race-ref-temp': goal?.reference_temperature_c != null ? String(goal.reference_temperature_c) : '',
+    'race-plan-weeks': goal?.plan_weeks != null ? String(goal.plan_weeks) : '',
   };
 }
 
@@ -21,6 +55,7 @@ function prepareRaceForm() {
     distance.insertAdjacentHTML('beforeend', `<option value="${esc(values['race-distance'])}">${esc(raceDistanceName(values['race-distance']))}</option>`);
   }
   for (const [id, value] of Object.entries(values)) document.getElementById(id).value = value;
+  updateRacePlanHint();
   document.getElementById('delete-race-btn').hidden = !raceGoal;
   document.getElementById('race-edit-toggle').textContent = raceGoal ? '調整比賽' : '設定比賽';
   document.getElementById('race-goal-summary').textContent = raceGoal
@@ -55,6 +90,11 @@ function readRaceForm() {
   const referenceDistance = value('race-ref-distance') === '' ? null : Number(value('race-ref-distance'));
   const temperature = value('race-ref-temp') === '' ? null : Number(value('race-ref-temp'));
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value('race-date'))) return { error: '請選擇比賽日期。' };
+  const planWeeks = value('race-plan-weeks') === ''
+    ? suggestedPlanWeeks(value('race-distance'), value('race-date')) : Number(value('race-plan-weeks'));
+  if (!Number.isInteger(planWeeks) || planWeeks < RACE_PLAN_MIN_WEEKS || planWeeks > RACE_PLAN_MAX_WEEKS) {
+    return { error: `課表週數請填 ${RACE_PLAN_MIN_WEEKS}～${RACE_PLAN_MAX_WEEKS} 的整數，或留白。` };
+  }
   if (!(target > 0)) return { error: '目標時間格式是 1:59:59 或 52:00。' };
   if ((referenceDistance === null) !== (referenceTime === null)) return { error: '參考成績要同時填距離與時間，或兩個都留白。' };
   if (referenceTime !== null && !(referenceTime > 0)) return { error: '參考成績時間格式是 52:00 或 1:05:30。' };
@@ -65,6 +105,7 @@ function readRaceForm() {
     race_name: value('race-name'), race_date: value('race-date'),
     distance_km: Number(value('race-distance')), target_seconds: target,
     reference_distance_km: referenceDistance, reference_seconds: referenceTime, reference_temperature_c: temperature,
+    plan_weeks: planWeeks,
   } };
 }
 
@@ -126,5 +167,8 @@ registerUiActions({
   },
   submit: {
     'save-race-goal': () => saveRaceGoal(),
+  },
+  change: {
+    'race-plan-hint': () => updateRacePlanHint(),
   },
 });

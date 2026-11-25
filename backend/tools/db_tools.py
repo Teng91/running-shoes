@@ -191,6 +191,7 @@ def race_training_plan(db: Session, user_id: int) -> str:
                           "phase 為 build（累積）、recovery（恢復週）、peak（高峰）、taper（減量）、race（比賽週）",
             "plan.weeks.status": "done 達成、partial 部分完成、missed 未達、current 本週進行中、upcoming 未開始",
             "plan.baseline_km": "課表開始前 4 週的平均週跑量，課表由此每週最多增加 10%",
+            "plan.weeks_total": "課表週數（含比賽週）；weeks_chosen 為 false 時沿用距離預設的 default_weeks，使用者可在比賽設定改成 4～24 週",
             "plan.long_below_threshold": "true 代表依目前跑量，課表的最長一次仍不到比賽距離的 75%",
             "plan": "比賽結束後為 null",
         },

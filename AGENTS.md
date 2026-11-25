@@ -9,7 +9,7 @@
 - `backend/forecasting.py`: shared retirement policy and batched user-scoped forecasts.
 - `backend/run_metrics.py`: canonical run duration bounds and pace (seconds per km, time-weighted averages); pace is derived, never stored (SPEC-060), and the bounds are mirrored in `frontend/app-state.js`. It also owns the activity types (SPEC-096): every type (road, trail, hike, walk) counts toward shoes, `TRAINING_ACTIVITY_TYPES` toward volume/goals/streaks and `PACE_ACTIVITY_TYPES` toward pace and race readiness; read models filter with `run_statistics.TRAINING_RUN`/`PACE_RUN`.
 - `backend/read_models/race_readiness.py`: target race, Riegel prediction, intensity zones relative to goal race pace and long-run readiness (SPEC-065); `routers/race_goal.py` and `services/race_goals.py` own the race goal reads and writes.
-- `backend/read_models/race_plan.py`: the deterministic weekly race training plan (SPEC-119); its baseline is fixed once the plan starts, so past weeks never move. `race_preparation` adds it to race readiness for `GET /api/analytics/race` and the `race_training_plan` AI tool.
+- `backend/read_models/race_plan.py`: the deterministic weekly race training plan (SPEC-119); its length is the goal's `plan_weeks` (SPEC-120, else the distance default) and its baseline is fixed once the plan starts, so past weeks never move. `race_preparation` adds it to race readiness for `GET /api/analytics/race` and the `race_training_plan` AI tool.
 - `backend/shoe_metrics.py`: canonical shoe cost, discount and lifecycle arithmetic, plus the single 80%/90% lifespan alert thresholds (mirrored in `frontend/app-state.js`).
 - `backend/read_models/`: user-scoped native statistics shared by HTTP, reports and AI adapters; never import tools or HTTP frameworks.
 - `backend/seeding.py`: optional default data using an injected session factory.
@@ -51,7 +51,7 @@
 - `backend/services/history.py`: user-scoped audit and conflict-aware deletion recovery.
 - `backend/services/run_identity.py`: user-scoped deletion tombstones (`run_tombstones`, never inferred from audit rows; schema 8 keeps the Strava activity so a CSV re-import never recreates a deleted run) and recovered source aliases; caller-owned transactions.
 - `backend/services/identifiers.py`: monotonic run/month primary-key allocation metadata.
-- `backend/migrations.py`: ordered SQLite schema upgrades and the current schema version (13); read-only lookup indexes such as `idx_shoes_user_id` are created idempotently by `_ensure_lookup_indexes` without a schema bump (SPEC-089); `scripts/rollback_schema_thirteen.sql`, `scripts/rollback_schema_twelve.sql`, `scripts/rollback_schema_eleven.sql`, `scripts/rollback_schema_ten.sql`, `scripts/rollback_schema_nine.sql`, `scripts/rollback_schema_eight.sql` and `scripts/rollback_schema_seven.sql` are the documented 13 → 12, 12 → 11, 11 → 10, 10 → 9, 9 → 8, 8 → 7 and 7 → 6 rollbacks.
+- `backend/migrations.py`: ordered SQLite schema upgrades and the current schema version (14); read-only lookup indexes such as `idx_shoes_user_id` are created idempotently by `_ensure_lookup_indexes` without a schema bump (SPEC-089); `scripts/rollback_schema_fourteen.sql`, `scripts/rollback_schema_thirteen.sql`, `scripts/rollback_schema_twelve.sql`, `scripts/rollback_schema_eleven.sql`, `scripts/rollback_schema_ten.sql`, `scripts/rollback_schema_nine.sql`, `scripts/rollback_schema_eight.sql` and `scripts/rollback_schema_seven.sql` are the documented 14 → 13, 13 → 12, 12 → 11, 11 → 10, 10 → 9, 9 → 8, 8 → 7 and 7 → 6 rollbacks.
 - `backend/rate_limits.py`: SQLite fixed-window throttling for authentication, AI, backup previews and Strava uploads, consumed all-or-nothing on its own transaction with limits from app settings; never commits the request session.
 - `docs/architecture.md`: current SDD, module boundaries, diagrams, and evolution sequence.
 - `docs/release-notes.md`: per-version behavior, compatibility and rollback notes (newest first); README describes only current behavior.
@@ -86,7 +86,7 @@
 - `frontend/app-streams.js`: shared authenticated SSE decoding, cancellation, and terminal state.
 - `frontend/app-inline-editors.js`: live table DOM ownership and immutable row snapshots across refreshes.
 - `frontend/runtime/workspace-controller.mjs`: injected account drafts, leases and durable run queue.
-- `frontend/app-local-store.js`: atomic IndexedDB adapter; credentials never belong in records.
+- `frontend/app-local-store.js`: atomic IndexedDB adapter; reopens closed connections and retries a WebKit `UnknownError` once on a fresh connection (SPEC-120); credentials never belong in records.
 - `frontend/app-workspace.js`: account cache, draft and queue DOM bridge; other features register their drafts (`registerWorkspaceForm`, `registerWorkspaceEditor`, `onWorkspaceModalOpen`) instead of the workspace reaching into their forms (SPEC-107).
 - `frontend/app-account.js`: sign-up invite field, admin invite/password panel and account deletion (SPEC-075).
 - `frontend/app-account-restore.js`: restore preview/window/session ownership.

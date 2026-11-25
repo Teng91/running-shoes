@@ -3,7 +3,8 @@
 The plan is a deterministic function of the race goal and the runner's own volume, so the
 same data always gives the same plan and past weeks never move:
 
-- The plan starts a fixed number of weeks before race week (by race distance).
+- The plan starts the runner's chosen number of weeks before race week (4–24, including race
+  week); a goal without a choice uses its distance's default.
 - Its baseline is the average weekly distance of the four weeks before the plan starts (or
   before this week, while the plan has not started), so it no longer changes once it starts.
 - Build weeks grow at most 10% a week, every fourth week is a lighter recovery week, then the
@@ -42,6 +43,10 @@ DONE_SHARE = 0.9
 PARTIAL_SHARE = 0.6
 
 
+MIN_PLAN_WEEKS = 4
+MAX_PLAN_WEEKS = 24
+
+
 @dataclass(frozen=True)
 class Profile:
     weeks: int
@@ -71,9 +76,9 @@ def _monday(day: date) -> date:
     return day - timedelta(days=day.weekday())
 
 
-def _planned_weeks(profile: Profile, base: float, long_base: float, distance: float) -> list[dict]:
+def _planned_weeks(profile: Profile, total: int, base: float, long_base: float, distance: float) -> list[dict]:
     peak = max(base, min(profile.peak_km, base * MAX_PEAK_GROWTH))
-    build_count = profile.weeks - len(profile.taper) - 1
+    build_count = total - len(profile.taper) - 1
     weeks: list[dict] = []
     volume, long = base, long_base
     for index in range(build_count):
@@ -118,15 +123,16 @@ def build_plan(goal: dict, runs: list[tuple[date, float]], as_of: date) -> dict 
         return None
     distance = float(goal["distance_km"])
     profile = profile_for(distance)
+    total = goal.get("plan_weeks") or profile.weeks
     race_monday = _monday(race_day)
-    start = race_monday - timedelta(weeks=profile.weeks - 1)
+    start = race_monday - timedelta(weeks=total - 1)
     baseline_end = min(start, _monday(as_of))
     baseline_runs = [km for day, km in runs if baseline_end - timedelta(weeks=BASELINE_WEEKS) <= day < baseline_end]
     baseline = sum(baseline_runs) / BASELINE_WEEKS
     base = max(baseline, MIN_BASE_KM)
     long_base = max(MIN_LONG_KM, min(max(baseline_runs, default=0.0), base * LONG_RUN_MAX_SHARE))
     weeks = []
-    for offset, planned in enumerate(_planned_weeks(profile, base, long_base, distance)):
+    for offset, planned in enumerate(_planned_weeks(profile, total, base, long_base, distance)):
         week_start = start + timedelta(weeks=offset)
         rows = [km for day, km in runs if week_start <= day < week_start + timedelta(days=7) and day <= as_of]
         week = {"week": offset + 1, "week_start": week_start.isoformat(), **planned,
@@ -136,7 +142,10 @@ def build_plan(goal: dict, runs: list[tuple[date, float]], as_of: date) -> dict 
     longest_planned = max(week["long_km"] for week in weeks if week["phase"] != "race")
     long_threshold = round_metric(distance * LONG_RUN_SHARE, 1)
     return {
-        "weeks_total": profile.weeks,
+        "weeks_total": total,
+        "weeks_chosen": goal.get("plan_weeks") is not None,
+        "default_weeks": profile.weeks,
+        "weeks_until_race": (race_monday - _monday(as_of)).days // 7 + 1,
         "start_date": start.isoformat(),
         "started": start <= as_of,
         "baseline_km": round_metric(baseline, 1),

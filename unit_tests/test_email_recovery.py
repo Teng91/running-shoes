@@ -216,13 +216,14 @@ def _engine(tmp_path, name):
 def test_schema_twelve_adds_email_and_codes_then_rolls_back(tmp_path):
     engine, sessions = _engine(tmp_path, "schema12.sqlite")
     run_startup_migrations(engine, sessions)
-    assert schema_version(engine) == 13
+    assert schema_version(engine) == 14
     with engine.connect() as connection:
         assert connection.execute(text("SELECT 1 FROM sqlite_master WHERE name = 'uq_users_email_lower'")).first()
         assert connection.execute(text("SELECT 1 FROM sqlite_master WHERE name = 'email_codes'")).first()
     script = Path("scripts/rollback_schema_twelve.sql").read_text(encoding="utf-8")
     connection = engine.raw_connection()
     try:
+        connection.executescript(Path("scripts/rollback_schema_fourteen.sql").read_text(encoding="utf-8"))
         connection.executescript(Path("scripts/rollback_schema_thirteen.sql").read_text(encoding="utf-8"))
         connection.executescript(script)
         with pytest.raises(Exception, match="CHECK constraint failed"):
@@ -232,7 +233,7 @@ def test_schema_twelve_adds_email_and_codes_then_rolls_back(tmp_path):
         connection.close()
     assert schema_version(engine) == 11
     run_startup_migrations(engine, sessions)
-    assert schema_version(engine) == 13
+    assert schema_version(engine) == 14
     engine.dispose()
 
 

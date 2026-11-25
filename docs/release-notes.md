@@ -11,6 +11,13 @@
 
 Asset 4.29.12／shell v118、schema 13 不變，可直接回滾至 v4.29.11 image；移除這個 job 不影響備份。
 
+### 課表週數與 IndexedDB 重試（SPEC-120，v5.0.1）
+
+- Schema 14 新增 `race_goals.plan_weeks`（可為 null）。`PUT /api/race-goal` 接受嚴格整數 4～24 或 null；`race_plan` 以它決定課表長度，null 沿用距離預設，回應新增 `weeks_chosen`、`default_weeks`、`weeks_until_race`。
+- 前端表單留白時送出「剩餘週數，最多到預設」，所以新設定的課表從本週開始；既有目標不自動改寫，畫面提示到「調整比賽」設定。
+- `app-local-store.js` 開啟或交易遇到 WebKit 的 `UnknownError` 時關閉壞掉的連線、開新連線重試一次；中止的交易沒有寫入，不會重複套用。
+- 回滾：停止寫入並驗證 schema-14 備份後執行 `scripts/rollback_schema_fourteen.sql`，再部署 v5.0.0 image；欄位保留但 schema-13 程式不讀。Asset 5.0.1／shell v122。
+
 ### 比賽訓練課表（SPEC-119，v5.0.0）
 
 - `backend/read_models/race_plan.py` 依目標賽事距離排出 8／10／12／16 週課表（5K／10K／半馬／全馬），起點是課表開始前 4 週的平均週跑量（最低以 15 km 起算），累積週每週最多加 10%、每 4 週一次恢復週（8 成），高峰後減量，最後一週是比賽週。最長一次每週最多加 10%（至少 1 km）、不超過當週一半，全程上限依距離為 10／14／19／32 km。

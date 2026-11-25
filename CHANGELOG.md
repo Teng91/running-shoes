@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+## [5.0.1] - 2026-11-25
+
+### Changed
+- 課表週數由使用者決定（SPEC-120）：比賽設定新增「課表週數（含比賽週）」，可填 4～24 週；留白時排「距離比賽剩下的週數」（最多到距離預設），課表從本週開始，不會再出現開始日早已過去、前幾週全是未達的課表。課表說明最前面改成本週的建議跑量、最長一次、已跑與還差多少；之前設定的比賽沿用預設週數，並提示到「調整比賽」修改。
+- Schema 14 新增 `race_goals.plan_weeks`，`PUT /api/race-goal` 接受、`GET` 回傳；回滾腳本 `scripts/rollback_schema_fourteen.sql`。
+
+### Fixed
+- 本機資料在 Safari／WebKit 偶爾「恢復本機資料失敗：An internal error was encountered in the Indexed Database server」：開啟或交易遇到這個錯誤時換新連線重試一次（也修正 CI 的 WebKit E2E 偶發失敗）。Asset 5.0.1／shell v122。
+
 ## [5.0.0] - 2026-11-25
 
 ### Added

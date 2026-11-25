@@ -301,6 +301,10 @@ SPEC-032：合成資料驗證歷史筆數上限（v4.7.3 起 10,000／10,001）�
 
 [規格與具名案例](specs/116-keep-scheduled-workflows-enabled.md) 以文字解析 `offsite-backup.yml`：續命 job 不依賴備份 job、只有它有 `actions: write`、只用 `GITHUB_TOKEN` 不用 secret、失敗只發警告，且 repo 裡每個有 `schedule` 的 workflow 都在它的重新啟用清單中。
 
+## SPEC-120 課表週數與 IndexedDB 重試
+
+[規格與具名案例](specs/120-plan-weeks-and-indexeddb-retry.md) 測試自訂週數的課表長度與開始日、API 儲存與驗證、schema 14 升級與回滾保留週數，前端表單的建議週數與提示、本週摘要，以及假的 IndexedDB 在開啟與交易各丟一次 `UnknownError` 時重試成功、寫入只套用一次、連續失敗時回報錯誤。
+
 ## SPEC-119 比賽訓練課表
 
 [規格與具名案例](specs/119-race-training-plan.md) 以純函式測試課表的成長、恢復週、減量與比賽週，新手的最低起點與長距離不足提醒，已過週次的達成狀態與起點固定；API 測試確認課表只算自己的路跑與越野跑。前端測試確認課表只排版後端數字，版面測試在每種寬度載入 12 週課表；Agent eval 確認課表問題會呼叫 `race_training_plan`。

@@ -182,15 +182,27 @@ function renderRacePlan(race) {
   document.getElementById('race-plan-note').textContent = racePlanText(race);
 }
 
+function racePlanCurrentText(plan) {
+  const week = plan.weeks.find(row => row.status === 'current');
+  if (!week) return '';
+  const left = Math.round((week.km - week.actual_km) * 10) / 10;
+  const progress = left > 0 ? `已跑 ${Number(week.actual_km).toFixed(1)} km，還差 ${left.toFixed(1)} km` : `已跑 ${Number(week.actual_km).toFixed(1)} km，達到建議跑量`;
+  const long = week.phase === 'race' ? `比賽 ${Number(week.long_km).toFixed(1)} km` : `最長一次 ${week.long_km} km`;
+  return `本週是第 ${week.week} 週（${RACE_PLAN_PHASES[week.phase] || week.phase}）：建議 ${week.km} km、${long}，${progress}。`;
+}
+
 function racePlanText(race) {
   const plan = race.plan;
   const easy = race.zones.find(zone => zone.key === 'easy');
-  const parts = [plan.started
+  const parts = [racePlanCurrentText(plan), plan.started
     ? `課表從 ${raceShortDate(plan.start_date)} 開始共 ${plan.weeks_total} 週，已過 ${plan.weeks_past} 週、達成 ${plan.weeks_done} 週。`
     : `課表會從 ${raceShortDate(plan.start_date)} 開始，共 ${plan.weeks_total} 週。`];
   const floor = plan.baseline_km < 15 ? '，不到 15 km 以 15 km 起算' : '';
   parts.push(`起點是 ${raceShortDate(plan.baseline_start)}–${raceShortDate(plan.baseline_end)} 平均每週 ${Number(plan.baseline_km).toFixed(1)} km${floor}，每週最多加 10%，每 4 週一次恢復週，最後減量進入比賽週。`);
   parts.push(`輕鬆跑配速 ${paceClock(easy?.min_pace)} 以上，比賽配速段跑 ${paceClock(race.goal_pace)}/km；達到建議跑量與最長一次的 9 成算達成。`);
+  if (!plan.weeks_chosen) {
+    parts.push(`課表週數沿用${raceDistanceName(race.goal.distance_km)}預設的 ${plan.default_weeks} 週；按「調整比賽」可以改成 4～24 週，例如從本週開始的 ${Math.max(4, plan.weeks_until_race)} 週。`);
+  }
   if (plan.long_below_threshold) {
     parts.push(`依目前跑量，課表最長只排到 ${plan.longest_planned_km} km，不到比賽距離 75% 的 ${Number(plan.long_threshold_km).toFixed(1)} km，可以考慮放寬目標時間或選較晚的比賽。`);
   }

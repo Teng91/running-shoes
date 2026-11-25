@@ -538,11 +538,11 @@ window.__appBootLegacyPoll = window.setInterval(function () {
         </div>
         <div class="form-group">
           <label for="race-date">比賽日期</label>
-          <input id="race-date" type="date">
+          <input id="race-date" type="date" data-change="race-plan-hint">
         </div>
         <div class="form-group">
           <label for="race-distance">距離</label>
-          <select id="race-distance">
+          <select id="race-distance" data-change="race-plan-hint">
             <option value="21.0975">半馬 21.1 km</option>
             <option value="10">10K</option>
             <option value="5">5K</option>
@@ -553,6 +553,11 @@ window.__appBootLegacyPoll = window.setInterval(function () {
           <label for="race-target">目標時間</label>
           <input id="race-target" type="text" inputmode="numeric" placeholder="15959 → 1:59:59" data-input="duration-digits" aria-describedby="race-target-hint">
           <span class="goal-field-hint" id="race-target-hint"></span>
+        </div>
+        <div class="form-group">
+          <label for="race-plan-weeks">課表週數（含比賽週）</label>
+          <input id="race-plan-weeks" type="number" min="4" max="24" step="1" inputmode="numeric" aria-describedby="race-plan-weeks-hint">
+          <span class="goal-field-hint" id="race-plan-weeks-hint"></span>
         </div>
         <div class="form-group">
           <label for="race-ref-distance">參考成績距離 (km，選填)</label>

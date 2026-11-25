@@ -51,6 +51,7 @@ def race_goal_values(db: Session, user_id: int) -> dict | None:
         "reference_distance_km": goal.reference_distance_km,
         "reference_seconds": goal.reference_seconds,
         "reference_temperature_c": goal.reference_temperature_c,
+        "plan_weeks": goal.plan_weeks,
     }
 
 

@@ -402,6 +402,8 @@ class RaceGoalUpdate(BaseModel):
     reference_distance_km: RaceDistanceKm | None = None
     reference_seconds: RaceSeconds | None = None
     reference_temperature_c: Annotated[float, Field(ge=-30, le=50, allow_inf_nan=False)] | None = None
+    # SPEC-119: weeks of training including race week; None uses the distance's default.
+    plan_weeks: Annotated[int, Field(strict=True, ge=4, le=24)] | None = None
 
     @field_validator("race_name")
     @classmethod
@@ -447,6 +449,7 @@ class RaceGoalOut(BaseModel):
     reference_distance_km: float | None
     reference_seconds: int | None
     reference_temperature_c: float | None
+    plan_weeks: int | None
 
 
 # ── Run Log Schemas ────────────────────────────────────
