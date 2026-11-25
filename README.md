@@ -55,7 +55,7 @@ Python 3.11 · FastAPI · SQLAlchemy · SQLite · 原生 JavaScript（不需要�
 | 項目 | 數量 |
 | --- | --- |
 | 正式版本 | 125 個 tag，2026-06 開始，目前 v4.26 |
-| 自動化測試 | Python 790 項、前端 Node 回歸 252 項、40 組版面設定（WebKit／Chromium × 亮暗 × 10 種尺寸）、真實 CRUD E2E 與 PWA 升級／離線測試 |
+| 自動化測試 | Python 791 項、前端 Node 回歸 252 項、40 組版面設定（WebKit／Chromium × 亮暗 × 10 種尺寸）、真實 CRUD E2E 與 PWA 升級／離線測試 |
 | 功能規格 | 91 份 SPEC，每份含 Goals、帳號隔離、migration／rollback 與 AC 追蹤 |
 | API | 66 個端點，與 `unit_tests/api_contract.json` 及下方 API 表自動比對 |
 | 資料庫 | SQLite schema 13，每一版都有守衛的回滾腳本 |
@@ -195,7 +195,7 @@ flowchart LR
 
 ## 品質：測試與規格
 
-- **Python 790 項**：API、交易與並行、migration 與回滾、備份往返、帳號隔離、Agent 規劃與工具（外部 LLM 與搜尋一律 mock），一律使用暫存或記憶體資料庫，不碰正式 `shoes.db`。
+- **Python 791 項**：API、交易與並行、migration 與回滾、備份往返、帳號隔離、Agent 規劃與工具（外部 LLM 與搜尋一律 mock），一律使用暫存或記憶體資料庫，不碰正式 `shoes.db`。
 - **前端 Node 回歸 252 項**：以 `vm` 載入實際前端程式，驗證狀態、競態、草稿、串流與圖表資料。
 - **瀏覽器**：Playwright 在 WebKit 與 Chromium 跑 40 組版面設定（含幾何對齊與無溢出）、真實 FastAPI＋暫存 SQLite 的 CRUD E2E、Service Worker 升級與離線；失敗時保存截圖與 trace。
 - **修 bug 先寫重現測試**：例如 v4.17.0 的 CI 抓到新圖表檔案重複宣告全域常數，修正時同時加上掃描所有 script 的測試。
@@ -941,7 +941,7 @@ Playwright／Chromium／WebKit 齊全時，也會執行版面測試。
 避免每次停止都重跑。Hook 不會呼叫其他模型、外部 API，或傳送提示、diff、原始碼與測試輸出。
 GitHub Actions 仍會在 push／pull request 執行 `verify`，並以三個可獨立重跑的 browser jobs 執行完整版面矩陣、真實 CRUD E2E 與 PWA 升級／離線測試；push 到 main 時再依序快照、部署、檢查並發版（見「日常開發流程、自動部署與發版」）；Dependabot 每月以單一 PR 合併 GitHub Actions 更新；Python 只接收安全性更新 PR，例行升級依下方 `uv pip compile --universal` 步驟手動重編鎖定檔（Dependabot 產生的鎖定檔會遺失 Windows 條件）。
 
-本次驗證基線為 Python **790 passed**、前端回歸測試 **252 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
+本次驗證基線為 Python **791 passed**、前端回歸測試 **252 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
 版面檢查涵蓋 WebKit／Chromium、亮／暗模式與 10 組直橫向尺寸，共 40 組設定，檢查四個功能分頁與月報、三個認證表單、圖表、全部彈窗、行內編輯、停用／錯誤及空資料狀態。
 
 主要表單、工具列與彈窗操作統一為 44px 控制項；桌面表格內的緊湊操作為 36px，手機至少 44px。
@@ -1236,6 +1236,8 @@ Machine 若已停止，先用 `fly machine start <id> -a running-shoes` 啟動�
 repo 是公開的，任何登入 GitHub 的人都看得到 artifact 和 log，所以只上傳加密檔，log 只印檔名與大小。公開 repo 的 Actions 與 artifact 不收費。
 
 設定（只需一次）：repo 的 **Settings → Secrets and variables → Actions → New repository secret**，新增 `BACKUP_PASSPHRASE`（至少 20 字元，建議 32 字元以上的隨機字串），並另外存在密碼管理器；**遺失就無法解密備份**。沒有這個 secret 時 workflow 會在第一步失敗，不會產生任何備份。部署用的 `FLY_API_TOKEN` 共用。
+
+排程續命（SPEC-116）：公開 repo 連續 60 天沒有 commit 時，GitHub 會悄悄停用所有排程 workflow。同一個 workflow 的 `keep-schedules-enabled` job 每天以 `GITHUB_TOKEN` 重新啟用 `offsite-backup.yml` 與 `verify.yml`，不產生 commit；只有這個 job 有 `actions: write`，失敗只發警告，不影響備份。GitHub 沒有文件保證這會重設 60 天計時；若仍收到排程停用的通知信，改用 repo 以外的 cron 呼叫 `workflow_dispatch`。
 
 還原：從 Actions 執行頁下載 artifact（zip 解開後是 `.tar.gz.enc`），然後：
 

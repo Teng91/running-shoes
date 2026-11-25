@@ -4,6 +4,13 @@
 每版的摘要見 [CHANGELOG.md](../CHANGELOG.md)；目前的功能與操作方式以 [README](../README.md) 為準。
 這裡保留當時的文字，後續版本可能已調整其中的行為。
 
+### 排程 workflow 每天續命（SPEC-116，v4.29.12）
+
+- `offsite-backup.yml` 新增 `keep-schedules-enabled` job，與 `backup` 平行執行，job 權限只有 `actions: write`，以 `GITHUB_TOKEN` 呼叫 `PUT /repos/{repo}/actions/workflows/{file}/enable` 重新啟用 `offsite-backup.yml` 與 `verify.yml`；失敗只印 `::warning::`。備份 job 仍只有 `contents: read`。
+- 尚未證實 enable 會重設 GitHub 的 60 天計時；若仍收到排程停用通知信，改用 repo 以外的 cron 呼叫 `workflow_dispatch`。
+
+Asset 4.29.12／shell v118、schema 13 不變，可直接回滾至 v4.29.11 image；移除這個 job 不影響備份。
+
 ### 單一使用者的宣告歸位（SPEC-115，v4.29.11）
 
 - `BRAND_COLORS` 從 `app-state.js` 移到 `app-dashboard.js`；`byDate`（`app-state.js`）與 `fmtMoney`（`app-dashboard.js`）移到 `app-spending.js`；`monthRuns` 從 `app-runs.js` 移到 `app-run-insights.js`。

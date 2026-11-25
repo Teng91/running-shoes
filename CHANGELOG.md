@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [4.29.12] - 2026-11-25
+
+### Changed
+- 排程 workflow 每天續命（SPEC-116），正式站不變：`offsite-backup.yml` 新增獨立的 `keep-schedules-enabled` job，每天以 `GITHUB_TOKEN` 重新啟用 `offsite-backup.yml` 與 `verify.yml`，避免 repo 60 天沒有 commit 時 GitHub 悄悄停用異地備份與每週漏洞檢查；只有這個 job 有 `actions: write`，失敗只發警告。Asset 4.29.12／shell v118，schema 13 不變。
+
 ## [4.29.11] - 2026-11-25
 
 ### Changed
