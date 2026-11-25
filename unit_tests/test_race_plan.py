@@ -79,6 +79,30 @@ def test_started_weeks_compare_actual_distance_and_past_weeks_never_move():
     assert later["weeks"][3]["status"] == "missed"
 
 
+def test_the_runner_chooses_how_many_weeks_the_plan_lasts():
+    # Seven weeks before a half marathon: the default 12-week plan began five weeks ago.
+    as_of = date(2027, 1, 6)
+    default = build_plan(HALF, [], as_of)
+    assert (default["weeks_total"], default["weeks_chosen"], default["default_weeks"]) == (12, False, 12)
+    assert (default["start_date"], default["weeks_until_race"]) == ("2026-11-30", 7)
+    chosen = build_plan({**HALF, "plan_weeks": 7}, [], as_of)
+    assert (chosen["weeks_total"], chosen["weeks_chosen"], chosen["start_date"]) == (7, True, "2027-01-04")
+    assert [week["phase"] for week in chosen["weeks"]] == [
+        "build", "build", "build", "recovery", "peak", "taper", "race"]
+    assert chosen["weeks"][0]["status"] == "current"
+    full = build_plan({**HALF, "distance_km": 42.195, "plan_weeks": 4}, [], as_of)
+    assert [week["phase"] for week in full["weeks"]] == ["peak", "taper", "taper", "race"]
+
+
+def test_plan_weeks_are_saved_with_the_goal(client, db):
+    user, _ = owner(db, "plan-weeks")
+    saved = client.put("/api/race-goal", headers=headers(user), json={**HALF, "race_date": "2099-06-07", "plan_weeks": 9})
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["plan_weeks"] == 9
+    assert client.get("/api/race-goal", headers=headers(user)).json()["plan_weeks"] == 9
+    assert race_preparation(db, user.id, date(2099, 4, 1))["plan"]["weeks_total"] == 9
+
+
 def test_no_plan_after_the_race():
     assert build_plan(HALF, [], date(2027, 2, 22)) is None
     assert build_plan(HALF, [], date(2027, 2, 21))["weeks"][-1]["status"] == "current"

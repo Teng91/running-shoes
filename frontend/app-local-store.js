@@ -1,11 +1,32 @@
 // IndexedDB transactions resolve only after commit, including lease compare/update.
 // Browsers may close a live connection (WebKit/iOS Safari after backgrounding or under memory
 // pressure, or a versionchange); the next operation reopens instead of failing until reload.
+// WebKit also reports a broken IndexedDB backend as UnknownError ("An internal error was
+// encountered in the Indexed Database server"); opening or a transaction is retried once on a
+// fresh connection. An aborted transaction wrote nothing, so the retry cannot apply twice.
 async function openLocalWorkspaceStore() {
   // SPEC-114: one connection handle shared by the open, transaction and record steps below.
   const handle = { database: null, opening: null };
-  await openWorkspaceDatabase(handle);
-  return workspaceStoreRecords((mode, job) => runWorkspaceTransaction(handle, mode, job));
+  await openWorkspaceDatabase(handle).catch(error => {
+    if (!isTransientWorkspaceError(error)) throw error;
+    return openWorkspaceDatabase(handle);
+  });
+  return workspaceStoreRecords((mode, job) => retryWorkspaceTransaction(handle, mode, job));
+}
+
+function isTransientWorkspaceError(error) {
+  return error?.name === 'UnknownError';
+}
+
+async function retryWorkspaceTransaction(handle, mode, job) {
+  try { return await runWorkspaceTransaction(handle, mode, job); }
+  catch (error) {
+    if (!isTransientWorkspaceError(error)) throw error;
+    const broken = handle.database;
+    handle.database = null;
+    try { broken?.close(); } catch { /* already closed */ }
+    return runWorkspaceTransaction(handle, mode, job);
+  }
 }
 
 function openWorkspaceDatabase(handle) {

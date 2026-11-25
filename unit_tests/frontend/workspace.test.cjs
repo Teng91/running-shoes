@@ -660,12 +660,21 @@ test('SPEC-034 a commit during cloud refresh schedules a fresh trailing read', a
 function fakeIndexedDB() {
   // Minimal IndexedDB for app-local-store.js; a closed connection throws like WebKit's.
   const rows = new Map(), connections = []; let opens = 0;
+  const fail = { open: false, transaction: false };
+  const internalError = () => Object.assign(Error('An internal error was encountered in the Indexed Database server'), { name: 'UnknownError' });
   function connect() {
     const connection = { closing: false, onclose: null, onversionchange: null,
       close() { this.closing = true; },
       createObjectStore: () => ({ createIndex() {} }),
       transaction() {
         if (this.closing) { const error = Error('The database connection is closing.'); error.name = 'InvalidStateError'; throw error; }
+        if (fail.transaction) {
+          // WebKit's broken backend: the transaction errors before any request succeeds.
+          fail.transaction = false;
+          const broken = { abort() {}, objectStore: () => ({ index: () => ({ getAll: () => ({}) }), get: () => ({}), put() {}, delete() {} }) };
+          queueMicrotask(() => { broken.error = internalError(); broken.onerror?.(); });
+          return broken;
+        }
         let pending = 0;
         const tx = { aborted: false, error: null, abort() { this.aborted = true; queueMicrotask(() => tx.onabort?.()); } };
         const request = run => {
@@ -688,11 +697,18 @@ function fakeIndexedDB() {
     return connection;
   }
   const indexedDB = { open() {
-    const request = {}, first = ++opens === 1;
+    const request = {};
+    ++opens;
+    if (fail.open) {
+      fail.open = false;
+      setTimeout(() => { request.error = internalError(); request.onerror?.(); });
+      return request;
+    }
+    const first = connections.length === 0;
     setTimeout(() => { request.result = connect(); if (first) request.onupgradeneeded?.(); request.onsuccess?.(); });
     return request;
   } };
-  return { indexedDB, connections, opens: () => opens };
+  return { indexedDB, connections, fail, opens: () => opens };
 }
 
 test('local workspace store reopens a connection the browser closed', async () => {
@@ -713,6 +729,26 @@ test('local workspace store reopens a connection the browser closed', async () =
   // Application validation failures are never retried as connection loss.
   await assert.rejects(store.update(['synthetic-A', 'queue', 'op-2'], () => { throw Error('操作識別碼與內容不符'); }), /操作識別碼與內容不符/);
   assert.equal(fake.opens(), 3);
+});
+
+test('SPEC-120 the local workspace store retries WebKit internal IndexedDB errors once', async () => {
+  const fake = fakeIndexedDB();
+  const context = require('node:vm').createContext({ indexedDB: fake.indexedDB, setTimeout, clearTimeout, queueMicrotask, structuredClone });
+  require('node:vm').runInContext(fs.readFileSync(path.join(__dirname, '../../frontend/app-local-store.js'), 'utf8'), context);
+  fake.fail.open = true;
+  const store = await context.openLocalWorkspaceStore();
+  assert.equal(fake.opens(), 2, 'a failed first open is retried');
+  await store.update(['synthetic-A', 'queue', 'op-1'], () => ({ status: 'pending' }));
+  fake.fail.transaction = true;
+  assert.equal((await store.list('synthetic-A', 'queue')).length, 1, 'the restore read succeeds on a fresh connection');
+  assert.equal(fake.opens(), 3);
+  assert.equal(fake.connections[0].closing, true, 'the broken connection is closed');
+  fake.fail.transaction = true;
+  await store.update(['synthetic-A', 'queue', 'op-1'], value => ({ ...value, status: 'sent' }));
+  assert.equal((await store.list('synthetic-A', 'queue'))[0].status, 'sent', 'a retried write applies once');
+  // Only one retry: a backend that keeps failing still reports the error.
+  fake.fail.open = true; fake.fail.transaction = true;
+  await assert.rejects(store.list('synthetic-A', 'queue'), /internal error/);
 });
 
 test('SPEC-107 the goal form, shoe editor and account view register their workspace drafts', async () => {

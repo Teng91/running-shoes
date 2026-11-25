@@ -200,6 +200,8 @@ class RaceGoal(Base):
     reference_distance_km: Mapped[float | None] = mapped_column(Float, nullable=True)
     reference_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
     reference_temperature_c: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # SPEC-119: training plan length chosen by the runner; NULL uses the distance's default.
+    plan_weeks: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
 class Run(Base):

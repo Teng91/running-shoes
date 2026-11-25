@@ -26,7 +26,7 @@ def test_race_goal_is_saved_versioned_validated_and_user_scoped(client, db):
 
     saved = client.put("/api/race-goal", headers=headers(user), json={**HALF, "race_name": "  示範半馬 "})
     assert saved.status_code == 200, saved.text
-    assert saved.json() == {**HALF, "version": 1}
+    assert saved.json() == {**HALF, "plan_weeks": None, "version": 1}
     stale = client.put("/api/race-goal", headers=headers(user), json={**HALF, "expected_version": 0})
     assert stale.status_code == 409
     updated = client.put("/api/race-goal", headers=headers(user), json={**HALF, "target_seconds": 7100, "expected_version": 1})
@@ -36,7 +36,8 @@ def test_race_goal_is_saved_versioned_validated_and_user_scoped(client, db):
     for bad in ({"race_date": "2026-13-01"}, {"race_date": "2026/12/06"}, {"target_seconds": 30},
                 {"target_seconds": 7200.5}, {"reference_seconds": None},
                 {"reference_distance_km": None, "reference_seconds": None},
-                {"reference_seconds": 60}, {"distance_km": 0.5}, {"reference_temperature_c": 70}):
+                {"reference_seconds": 60}, {"distance_km": 0.5}, {"reference_temperature_c": 70},
+                {"plan_weeks": 3}, {"plan_weeks": 25}, {"plan_weeks": 8.5}, {"plan_weeks": "8"}):
         response = client.put("/api/race-goal", headers=headers(user), json={**HALF, **bad})
         assert response.status_code == 422, bad
     no_reference = {**HALF, "reference_distance_km": None, "reference_seconds": None, "reference_temperature_c": None}
@@ -126,7 +127,7 @@ def test_schema_ten_rollback_keeps_the_race_goal_and_reupgrades(tmp_path):
     event.listen(engine, "connect", lambda connection, _: configure_sqlite_connection(connection))
     sessions = sessionmaker(bind=engine, autoflush=False)
     run_startup_migrations(engine, sessions)
-    assert schema_version(engine) == 13
+    assert schema_version(engine) == 14
     with sessions() as db:
         user, _ = owner(db, "rollback10")
         db.add(RaceGoal(user_id=user.id, version=1, **HALF))
@@ -134,6 +135,7 @@ def test_schema_ten_rollback_keeps_the_race_goal_and_reupgrades(tmp_path):
     script = Path("scripts/rollback_schema_ten.sql").read_text(encoding="utf-8")
     connection = engine.raw_connection()
     try:
+        connection.executescript(Path("scripts/rollback_schema_fourteen.sql").read_text(encoding="utf-8"))
         connection.executescript(Path("scripts/rollback_schema_thirteen.sql").read_text(encoding="utf-8"))
         connection.executescript(Path("scripts/rollback_schema_twelve.sql").read_text(encoding="utf-8"))
         connection.executescript(Path("scripts/rollback_schema_eleven.sql").read_text(encoding="utf-8"))
@@ -145,7 +147,7 @@ def test_schema_ten_rollback_keeps_the_race_goal_and_reupgrades(tmp_path):
         connection.close()
     assert schema_version(engine) == 9
     run_startup_migrations(engine, sessions)
-    assert schema_version(engine) == 13
+    assert schema_version(engine) == 14
     with sessions() as db:
         assert db.query(RaceGoal).one().target_seconds == 7200
     engine.dispose()

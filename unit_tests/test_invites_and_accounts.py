@@ -189,12 +189,13 @@ def _engine(tmp_path, name):
 def test_schema_eleven_adds_invites_and_a_case_insensitive_name_index_then_rolls_back(tmp_path):
     engine, sessions = _engine(tmp_path, "schema11.sqlite")
     run_startup_migrations(engine, sessions)
-    assert schema_version(engine) == 13
+    assert schema_version(engine) == 14
     assert "invites" in inspect(engine).get_table_names()
     assert _name_index(engine)
     script = Path("scripts/rollback_schema_eleven.sql").read_text(encoding="utf-8")
     connection = engine.raw_connection()
     try:
+        connection.executescript(Path("scripts/rollback_schema_fourteen.sql").read_text(encoding="utf-8"))
         connection.executescript(Path("scripts/rollback_schema_thirteen.sql").read_text(encoding="utf-8"))
         connection.executescript(Path("scripts/rollback_schema_twelve.sql").read_text(encoding="utf-8"))
         connection.executescript(script)
@@ -206,7 +207,7 @@ def test_schema_eleven_adds_invites_and_a_case_insensitive_name_index_then_rolls
     assert schema_version(engine) == 10
     assert not _name_index(engine)
     run_startup_migrations(engine, sessions)
-    assert schema_version(engine) == 13
+    assert schema_version(engine) == 14
     engine.dispose()
 
 
@@ -220,7 +221,7 @@ def test_schema_eleven_skips_the_name_index_when_old_accounts_differ_only_by_cas
         db.add_all([models.User(username="Same", hashed_password="x"), models.User(username="same", hashed_password="x")])
         db.commit()
     run_startup_migrations(engine, sessions)
-    assert schema_version(engine) == 13, "startup still succeeds"
+    assert schema_version(engine) == 14, "startup still succeeds"
     assert not _name_index(engine)
     engine.dispose()
 

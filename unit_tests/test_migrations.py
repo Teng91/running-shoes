@@ -282,7 +282,7 @@ def test_startup_drops_only_empty_legacy_tables():
         assert connection.execute(text("SELECT value FROM app_settings")).scalar_one() == "row"
         assert connection.execute(text(
             "SELECT value FROM schema_metadata WHERE key = 'schema_version'"
-        )).scalar_one() == "13"
+        )).scalar_one() == "14"
 
 
 def test_startup_adds_the_shoe_owner_index_to_older_databases():
@@ -353,7 +353,7 @@ def test_schema_thirteen_defaults_runs_to_road(tmp_path):
         shoe_before = connection.execute(text("SELECT mileage FROM shoes")).scalar()
     run_startup_migrations(engine, sessions)
     run_startup_migrations(engine, sessions)  # idempotent
-    assert schema_version(engine) == 13
+    assert schema_version(engine) == 14
     with engine.connect() as connection:
         assert connection.execute(text("SELECT DISTINCT activity_type FROM runs")).scalars().all() == ["road"]
         assert connection.execute(text("SELECT mileage FROM shoes")).scalar() == shoe_before == 16.5
@@ -382,6 +382,7 @@ def test_rollback_schema_thirteen_restores_hike_mileage(tmp_path):
     script = Path("scripts/rollback_schema_thirteen.sql").read_text(encoding="utf-8")
     connection = engine.raw_connection()
     try:
+        connection.executescript(Path("scripts/rollback_schema_fourteen.sql").read_text(encoding="utf-8"))
         connection.executescript(script)
         with pytest.raises(Exception, match="CHECK constraint failed"):
             connection.executescript(script)
@@ -397,7 +398,7 @@ def test_rollback_schema_thirteen_restores_hike_mileage(tmp_path):
         )).scalar() == 1
 
     run_startup_migrations(engine, sessions)
-    assert schema_version(engine) == 13
+    assert schema_version(engine) == 14
     assert (_month_km(engine, user_id, 10), _month_km(engine, user_id, 11)) == (10, 0)
     assert _month_km(engine, other_id, 10) == 3
     with engine.connect() as connection:
@@ -420,6 +421,7 @@ def test_rollback_schema_thirteen_restores_walk_mileage(tmp_path):
     assert _month_km(engine, user_id, 10) == 10
     connection = engine.raw_connection()
     try:
+        connection.executescript(Path("scripts/rollback_schema_fourteen.sql").read_text(encoding="utf-8"))
         connection.executescript(Path("scripts/rollback_schema_thirteen.sql").read_text(encoding="utf-8"))
     finally:
         connection.close()
@@ -427,4 +429,36 @@ def test_rollback_schema_thirteen_restores_walk_mileage(tmp_path):
     assert _month_km(engine, user_id, 10) == 16.5
     run_startup_migrations(engine, sessions)
     assert _month_km(engine, user_id, 10) == 10
+    engine.dispose()
+
+
+def test_schema_fourteen_adds_plan_weeks_and_rolls_back_keeping_goals(tmp_path):
+    """SPEC-119: race_goals.plan_weeks is a nullable column; the rollback keeps every goal."""
+    from pathlib import Path
+
+    from backend.migrations import schema_version
+
+    engine, sessions = _file_engine(tmp_path, "rollback14.sqlite")
+    run_startup_migrations(engine, sessions)
+    assert schema_version(engine) == 14
+    user_id, _ = _account(sessions, "rollback14-owner")
+    with engine.begin() as connection:
+        connection.execute(text(
+            "INSERT INTO race_goals (user_id, version, race_name, race_date, distance_km, target_seconds, plan_weeks) "
+            "VALUES (:u, 1, '', '2027-03-21', 42.195, 14400, 10)"
+        ), {"u": user_id})
+    script = Path("scripts/rollback_schema_fourteen.sql").read_text(encoding="utf-8")
+    connection = engine.raw_connection()
+    try:
+        connection.executescript(script)
+        with pytest.raises(Exception, match="CHECK constraint failed"):
+            connection.executescript(script)
+        connection.rollback()
+    finally:
+        connection.close()
+    assert schema_version(engine) == 13
+    run_startup_migrations(engine, sessions)
+    assert schema_version(engine) == 14
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT plan_weeks FROM race_goals WHERE user_id = :u"), {"u": user_id}).scalar() == 10
     engine.dispose()

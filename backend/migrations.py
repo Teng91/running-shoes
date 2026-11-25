@@ -13,7 +13,7 @@ from backend.audit_schema import install_audit_triggers
 from backend.credentials import get_password_hash
 from backend.database import Base
 
-CURRENT_SCHEMA_VERSION = 13
+CURRENT_SCHEMA_VERSION = 14
 
 
 def _migrate_preview_tokens(engine: Engine) -> None:
@@ -173,6 +173,13 @@ def _migrate_schema_thirteen(engine: Engine, applied_version: int) -> None:
             )
 
 
+def _migrate_schema_fourteen(engine: Engine) -> None:
+    """Race training plan length (SPEC-119): a nullable column, so existing goals keep their plan."""
+    with engine.begin() as connection:
+        if "plan_weeks" not in {column["name"] for column in inspect(connection).get_columns("race_goals")}:
+            connection.exec_driver_sql("ALTER TABLE race_goals ADD COLUMN plan_weeks INTEGER")
+
+
 def _ensure_lookup_indexes(engine: Engine) -> None:
     """Indexes that only speed up reads (SPEC-089).
 
@@ -271,6 +278,7 @@ def run_startup_migrations(
     _migrate_schema_eleven(engine)
     _migrate_schema_twelve(engine)
     _migrate_schema_thirteen(engine, applied_version)
+    _migrate_schema_fourteen(engine)
     _ensure_lookup_indexes(engine)
     _sync_entity_sequences(engine)
     install_audit_triggers(engine)

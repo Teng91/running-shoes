@@ -19,7 +19,7 @@ function racePrepContext({ race, pace, puts = [], deletes = [] }) {
   const context = vm.createContext({
     Chart, esc, console: { error() {} }, chartInstances: {}, registerFeatureReset() {},
     getThemeColor: (token, fallback) => fallback, confirm: () => true,
-    invalidateDataResources: () => {},
+    invalidateDataResources: () => {}, localDateISO: () => '2026-11-17',
     apiGet: async path => { reads.push(path); return path === '/analytics/race' ? race : pace; },
     apiPut: async (path, payload) => { puts.push({ path, payload }); return { version: 1, ...payload }; },
     apiDelete: async path => { deletes.push(path); return { deleted: true }; },
@@ -69,7 +69,7 @@ const pace = {
 };
 
 const plan = {
-  weeks_total: 12, start_date: '2026-09-21', started: true, baseline_km: 12.4, baseline_start: '2026-08-24', baseline_end: '2026-09-20',
+  weeks_total: 12, weeks_chosen: true, default_weeks: 12, weeks_until_race: 9, start_date: '2026-09-21', started: true, baseline_km: 12.4, baseline_start: '2026-08-24', baseline_end: '2026-09-20',
   peak_km: 22, longest_planned_km: 11, long_threshold_km: 15.8, long_below_threshold: true, weeks_done: 1, weeks_past: 3,
   weeks: [
     { week: 1, week_start: '2026-09-21', phase: 'build', km: 15, long_km: 7, race_pace_km: 0, actual_km: 15.2, actual_longest_km: 7, status: 'done' },
@@ -94,12 +94,18 @@ test('SPEC-119 the weekly plan lays out backend targets, actual distance and sta
   assert.match(rows[4], /減量[\s\S]*>—<\/td>[\s\S]*<td><\/td>/, 'an upcoming week has no actual distance or status');
   assert.match(rows[5], /比賽週[\s\S]*比賽 21\.1/);
   assert.equal(nodes['race-plan-note'].textContent,
-    '課表從 9/21 開始共 12 週，已過 3 週、達成 1 週。起點是 8/24–9/20 平均每週 12.4 km，不到 15 km 以 15 km 起算，'
+    '本週是第 4 週（恢復週）：建議 15 km、最長一次 7 km，已跑 6.5 km，還差 8.5 km。課表從 9/21 開始共 12 週，已過 3 週、達成 1 週。起點是 8/24–9/20 平均每週 12.4 km，不到 15 km 以 15 km 起算，'
     + '每週最多加 10%，每 4 週一次恢復週，最後減量進入比賽週。輕鬆跑配速 6:26 以上，比賽配速段跑 5:41/km；'
     + '達到建議跑量與最長一次的 9 成算達成。依目前跑量，課表最長只排到 11 km，不到比賽距離 75% 的 15.8 km，'
     + '可以考慮放寬目標時間或選較晚的比賽。');
 
-  const upcoming = { ...plan, started: false, baseline_km: 30, long_below_threshold: false };
+  // A goal saved before plan lengths existed keeps the default and says how to change it.
+  const legacy = racePrepContext({ race: { ...race, plan: { ...plan, weeks_chosen: false } }, pace });
+  await legacy.context.renderPaceAnalysis();
+  assert.match(legacy.nodes['race-plan-note'].textContent, /課表週數沿用半馬預設的 12 週；按「調整比賽」可以改成 4～24 週，例如從本週開始的 9 週。/);
+
+  const upcoming = { ...plan, started: false, baseline_km: 30, long_below_threshold: false,
+    weeks: plan.weeks.map(week => ({ ...week, status: 'upcoming' })) };
   const later = racePrepContext({ race: { ...race, plan: upcoming }, pace });
   await later.context.renderPaceAnalysis();
   assert.match(later.nodes['race-plan-note'].textContent, /^課表會從 9\/21 開始，共 12 週。起點是 8\/24–9\/20 平均每週 30\.0 km，每週/);
@@ -189,20 +195,33 @@ test('SPEC-065 the race form validates its fields and saves the parsed goal', as
   await context.saveRaceGoal();
   assert.deepEqual(JSON.parse(JSON.stringify(puts[0])), { path: '/race-goal', payload: {
     expected_version: 0, race_name: '示範半馬', race_date: '2026-12-13', distance_km: 21.0975, target_seconds: 7199,
-    reference_distance_km: 10, reference_seconds: 3120, reference_temperature_c: 28 } });
+    reference_distance_km: 10, reference_seconds: 3120, reference_temperature_c: 28, plan_weeks: 4 } });
   assert.equal(nodes['race-settings-status'].textContent, '比賽目標已儲存。');
+  // SPEC-119: a blank plan length starts this week (four weeks before 12/13); a typed one is kept.
+  context.updateRacePlanHint();
+  assert.equal(nodes['race-plan-weeks'].placeholder, '4');
+  assert.equal(nodes['race-plan-weeks-hint'].textContent, '距離比賽還有 4 週；留白排 4 週，從本週開始。');
+  fill({ 'race-date': '2027-04-25', 'race-distance': '42.195' });
+  context.updateRacePlanHint();
+  assert.equal(nodes['race-plan-weeks-hint'].textContent, '距離比賽還有 23 週；留白排 16 週，比賽前 16 週開始。');
+  fill({ 'race-plan-weeks': '10' });
+  await context.saveRaceGoal();
+  assert.equal(puts[1].payload.plan_weeks, 10);
+  fill({ 'race-date': '2026-12-13', 'race-distance': '21.0975', 'race-plan-weeks': '' });
 
   for (const [values, message] of [
     [{ 'race-date': '' }, /比賽日期/],
     [{ 'race-date': '2026-12-13', 'race-target': '2 小時' }, /目標時間格式/],
     [{ 'race-target': '1:59:59', 'race-ref-time': '' }, /同時填距離與時間/],
     [{ 'race-ref-time': '52:00', 'race-ref-distance': '0.5' }, /至少 1 km/],
+    [{ 'race-ref-distance': '10', 'race-plan-weeks': '3' }, /課表週數請填 4～24/],
+    [{ 'race-plan-weeks': '8.5' }, /課表週數請填 4～24/],
   ]) {
     fill(values);
     await context.saveRaceGoal();
     assert.match(nodes['race-settings-status'].textContent, message);
   }
-  assert.equal(puts.length, 1, 'invalid forms never reach the API');
+  assert.equal(puts.length, 2, 'invalid forms never reach the API');
 });
 
 test('SPEC-064 classic scripts never redeclare a top-level name from another script', () => {

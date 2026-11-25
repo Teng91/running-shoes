@@ -360,7 +360,7 @@ async function run(engine, name) {
               longest_recent_percent: 76, enough: false, last_long_run_by: '2026-11-29', weekly, average_weekly_km: 31.68 },
             // SPEC-119: the weekly plan table lays out at every width.
             plan: {
-            weeks_total: 12, start_date: '2026-09-21', started: true, baseline_km: 28.4, baseline_start: '2026-08-24', baseline_end: '2026-09-20',
+            weeks_total: 12, weeks_chosen: true, default_weeks: 12, weeks_until_race: 7, start_date: '2026-09-21', started: true, baseline_km: 28.4, baseline_start: '2026-08-24', baseline_end: '2026-09-20',
             peak_km: 42, longest_planned_km: 19, long_threshold_km: 15.8, long_below_threshold: false, weeks_done: 3, weeks_past: 5,
             weeks: ['build', 'build', 'build', 'recovery', 'build', 'build', 'build', 'recovery', 'build', 'peak', 'taper', 'race'].map((phase, index) => ({
               week: index + 1, week_start: new Date(Date.UTC(2026, 8, 21 + index * 7)).toISOString().slice(0, 10), phase,
