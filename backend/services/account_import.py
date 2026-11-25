@@ -40,6 +40,7 @@ def execute_import(db: Session, uid: int, backup: AccountBackup, config: Setting
         _apply_month_changes(db, uid, plan)
     _import_months(db, uid, backup, plan, original_periods, update_existing)
     _import_goal(db, uid, backup, plan, update_existing)
+    _import_race_goal(db, uid, backup, plan, update_existing)
     _import_reports(db, uid, backup, plan, update_existing)
     _import_strava_history(db, uid, backup, config, plan)
     _import_audit_history(db, uid, backup, plan)
@@ -148,6 +149,16 @@ def _import_goal(db: Session, uid: int, backup: AccountBackup, plan: ImportPlan,
     else:
         db.add(models.RunningGoal(user_id=uid, start_year=goal.start_year, monthly_km=goal.monthly_km,
                                   yearly_km=round(goal.monthly_km * 12, 2), version=1))
+
+
+def _import_race_goal(db: Session, uid: int, backup: AccountBackup, plan: ImportPlan, update_existing: bool) -> None:
+    """SPEC-126: a missing target race is added; only an update overwrites an existing one."""
+    if backup.race_goal is None:
+        return
+    if plan.race_goal is None:
+        db.add(models.RaceGoal(user_id=uid, version=1, **backup.race_goal.model_dump()))
+    elif update_existing:
+        _update_fields(plan.race_goal, plan.changes.race_goal)
 
 
 def _import_reports(db: Session, uid: int, backup: AccountBackup, plan: ImportPlan, update_existing: bool) -> None:

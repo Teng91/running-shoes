@@ -28,6 +28,7 @@ class ImportPlan:
     goal: models.RunningGoal | None
     import_count: int
     run_targets: dict[int, int | None]
+    race_goal: models.RaceGoal | None = None
     changes: ImportChanges = field(default_factory=ImportChanges)
 
     def existing(self, entity: str, key: str | int) -> int | None:
@@ -46,7 +47,8 @@ def build_import_plan(db: Session, uid: int, backup: AccountBackup, mode: Restor
     plan = ImportPlan(uid, source, mappings, shoes, runs,
                       {(row.year, row.month): row for row in db.query(models.MonthlyMileage).filter_by(user_id=uid).all()},
                       {(row.year, row.month): row for row in db.query(models.MonthlyReport).filter_by(user_id=uid).all()},
-                      db.query(models.RunningGoal).filter_by(user_id=uid).first(), len(imports), targets)
+                      db.query(models.RunningGoal).filter_by(user_id=uid).first(), len(imports), targets,
+                      db.query(models.RaceGoal).filter_by(user_id=uid).first())
     if mode == "update":
         plan.changes = build_changes(plan, backup)
     return plan
@@ -116,16 +118,20 @@ def summarize_import(plan: ImportPlan, backup: AccountBackup, config: Settings, 
             "updated_months": sum(period in periods for period in plan.changes.months),
             "updated_reports": len(plan.changes.reports),
             "updated_goal": bool(plan.changes.goal),
+            "updated_race_goal": bool(plan.changes.race_goal),
             "new_months": len((set(plan.changes.months) if mode == "update" else
                                 {(row.year, row.month) for row in backup.monthly_mileages} |
                                 {(int(row.date[:4]), int(row.date[5:7])) for row in new_runs}) - set(periods)),
             "new_reports": sum((row.year, row.month) not in reports for row in backup.monthly_reports),
             "new_goal": bool(backup.running_goal and not plan.goal),
+            "new_race_goal": bool(backup.race_goal and not plan.race_goal),
             "unchanged_shoes": sum(row is not None and row.id not in plan.changes.shoes for _, row in matched_shoes) if mode == "update" else 0,
             "unchanged_runs": sum(plan.run_targets[row.id] in plan.runs and plan.run_targets[row.id] not in plan.changes.runs for row in backup.runs) if mode == "update" else 0,
             "unchanged_months": sum((row.year, row.month) in periods and (row.year, row.month) not in plan.changes.months for row in backup.monthly_mileages) if mode == "update" else 0,
             "unchanged_reports": sum((row.year, row.month) in reports and (row.year, row.month) not in plan.changes.reports for row in backup.monthly_reports) if mode == "update" else 0,
             "unchanged_goal": bool(mode == "update" and backup.running_goal and plan.goal and not plan.changes.goal),
+            "unchanged_race_goal": bool(mode == "update" and backup.race_goal and plan.race_goal
+                                        and not plan.changes.race_goal),
             "preserved_deleted_runs": sum(target is not None and target not in plan.runs for target in plan.run_targets.values()),
             "new_import_summaries": min(incoming_imports, available_imports),
             "skipped_import_summaries": len(backup.strava_imports) - min(incoming_imports, available_imports),
@@ -134,6 +140,6 @@ def summarize_import(plan: ImportPlan, backup: AccountBackup, config: Settings, 
             "skipped_runs": len(backup.runs) - len(new_runs),
             "monthly_records": len(backup.monthly_mileages), "reports": len(backup.monthly_reports),
             "history_records": len(backup.history), "legacy": backup.version == 1,
-            "policy": "新增並更新同來源鞋款與跑步、檔案內月份調整、目標與月報；保留額外資料及已刪除紀錄" if mode == "update"
-                      else "合併新增，保留既有鞋款、紀錄、月份調整、目標與月報"}
+            "policy": "新增並更新同來源鞋款與跑步、檔案內月份調整、目標、目標賽事與月報；保留額外資料及已刪除紀錄" if mode == "update"
+                      else "合併新增，保留既有鞋款、紀錄、月份調整、目標、目標賽事與月報"}
 

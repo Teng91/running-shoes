@@ -191,7 +191,7 @@ def test_backup_v4_round_trips_duration_and_merges_never_clear_it(client, db):
     client.post("/api/runs", headers=headers(user), json={
         "date": "2026-11-15", "km": 10, "shoe_id": shoe.id, "duration_seconds": 3330})
     archive = client.get("/api/export/account", headers=headers(user)).json()
-    assert archive["version"] == 5 and archive["runs"][0]["duration_seconds"] == 3330
+    assert archive["version"] == 6 and archive["runs"][0]["duration_seconds"] == 3330
     assert parse_backup(json.dumps(archive).encode()).runs[0].duration_seconds == 3330
     from backend.services.errors import Invalid
     with pytest.raises(Invalid):
