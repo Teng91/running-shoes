@@ -7,7 +7,15 @@ from sqlalchemy.orm import Session
 
 from backend import models
 from backend.clock import local_today
-from backend.read_models import goal_progress, highlights, mileage, shoes, spending, trends
+from backend.read_models import (
+    goal_progress,
+    highlights,
+    mileage,
+    race_plan,
+    shoes,
+    spending,
+    trends,
+)
 from backend.tools import legacy_calls
 from backend.tools.tool_definitions import TOOL_DEFINITIONS as TOOL_DEFINITIONS
 
@@ -165,6 +173,32 @@ def spending_summary(db: Session, user_id: int) -> str:
     )
 
 
+def race_training_plan(db: Session, user_id: int) -> str:
+    preparation = race_plan.race_preparation(db, user_id, local_today())
+    if preparation["goal"] is None:
+        return _json_result("race_training_plan", ok=True, goal=None,
+                            message="尚未設定目標賽事；請到訓練分析分頁的「比賽準備」按「設定比賽」。")
+    return _json_result(
+        "race_training_plan",
+        ok=True,
+        field_definitions={
+            "days_left": "距離比賽的天數，負數代表已結束",
+            "goal_pace": "目標配速，每公里秒數",
+            "zones": "依目標配速劃分的強度區間（每公里秒數）；min_pace 是快的一端",
+            "prediction": "依參考成績以 Riegel 公式預估的完賽時間；margin_seconds 正數代表比目標快",
+            "long_runs": "近 8 週長距離（≥ 比賽距離 75%）的次數與是否足夠",
+            "plan.weeks": "每週課表：km 是建議週跑量、long_km 是建議最長一次、race_pace_km 是比賽配速段；"
+                          "phase 為 build（累積）、recovery（恢復週）、peak（高峰）、taper（減量）、race（比賽週）",
+            "plan.weeks.status": "done 達成、partial 部分完成、missed 未達、current 本週進行中、upcoming 未開始",
+            "plan.baseline_km": "課表開始前 4 週的平均週跑量，課表由此每週最多增加 10%",
+            "plan.long_below_threshold": "true 代表依目前跑量，課表的最長一次仍不到比賽距離的 75%",
+            "plan": "比賽結束後為 null",
+        },
+        **{key: value for key, value in preparation.items() if key != "intensity"},
+        intensity_zones=preparation["intensity"]["zones"],
+    )
+
+
 REGISTRY: dict[str, Callable[..., str]] = {
     "list_my_shoes": list_my_shoes,
     "shoe_summary": shoe_summary,
@@ -177,6 +211,7 @@ REGISTRY: dict[str, Callable[..., str]] = {
     "training_trends": training_trends,
     "year_review": year_review,
     "spending_summary": spending_summary,
+    "race_training_plan": race_training_plan,
 }
 
 

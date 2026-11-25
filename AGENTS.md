@@ -9,6 +9,7 @@
 - `backend/forecasting.py`: shared retirement policy and batched user-scoped forecasts.
 - `backend/run_metrics.py`: canonical run duration bounds and pace (seconds per km, time-weighted averages); pace is derived, never stored (SPEC-060), and the bounds are mirrored in `frontend/app-state.js`. It also owns the activity types (SPEC-096): every type (road, trail, hike, walk) counts toward shoes, `TRAINING_ACTIVITY_TYPES` toward volume/goals/streaks and `PACE_ACTIVITY_TYPES` toward pace and race readiness; read models filter with `run_statistics.TRAINING_RUN`/`PACE_RUN`.
 - `backend/read_models/race_readiness.py`: target race, Riegel prediction, intensity zones relative to goal race pace and long-run readiness (SPEC-065); `routers/race_goal.py` and `services/race_goals.py` own the race goal reads and writes.
+- `backend/read_models/race_plan.py`: the deterministic weekly race training plan (SPEC-119); its baseline is fixed once the plan starts, so past weeks never move. `race_preparation` adds it to race readiness for `GET /api/analytics/race` and the `race_training_plan` AI tool.
 - `backend/shoe_metrics.py`: canonical shoe cost, discount and lifecycle arithmetic, plus the single 80%/90% lifespan alert thresholds (mirrored in `frontend/app-state.js`).
 - `backend/read_models/`: user-scoped native statistics shared by HTTP, reports and AI adapters; never import tools or HTTP frameworks.
 - `backend/seeding.py`: optional default data using an injected session factory.

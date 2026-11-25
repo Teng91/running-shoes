@@ -167,6 +167,14 @@ TOOL_DEFINITIONS: list[dict] = [
     {
         "type": "function",
         "function": {
+            "name": "race_training_plan",
+            "description": "以 JSON 取得目標賽事的備賽資料：倒數、目標配速與強度區間、預估完賽、長距離準備，以及每週訓練課表（建議週跑量、最長一次、比賽配速段與實際完成狀況）。",
+            "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "web_search",
             "description": "以 JSON 搜尋市售跑鞋、規格、評價或價格，結果欄位為 title、snippet、url；只在需要外部資訊時使用。",
             "parameters": {

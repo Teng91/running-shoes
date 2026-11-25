@@ -574,6 +574,21 @@ window.__appBootLegacyPoll = window.setInterval(function () {
       </form>
       <p id="race-settings-status" class="goal-settings-status" role="status"></p>
       <div class="review-grid race-cards" id="race-cards"></div>
+      <div class="chart-box race-plan" id="race-plan" hidden>
+        <div class="chart-title-row"><h3>訓練課表</h3></div>
+        <p class="chart-note" id="race-plan-note"></p>
+        <div class="table-wrap" tabindex="0" role="region" aria-label="可左右滑動的訓練課表">
+          <table class="race-plan-table">
+            <thead>
+              <tr>
+                <th>週次</th><th>週一</th><th>階段</th>
+                <th class="numeric">建議週跑量</th><th class="numeric">最長一次</th><th class="numeric">比賽配速段</th><th class="numeric">實際跑量</th><th>狀態</th>
+              </tr>
+            </thead>
+            <tbody id="race-plan-table"></tbody>
+          </table>
+        </div>
+      </div>
       <div class="charts">
         <div class="chart-box">
           <div class="chart-title-row"><h3>長距離準備（近 12 週）</h3></div>

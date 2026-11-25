@@ -89,6 +89,13 @@
     "expected_database_tools": ["spending_summary"],
     "expected_web_queries": 0,
     "tools_offered": true
+  },
+  {
+    "id": "race-training-plan",
+    "message": "我的半馬課表這週要跑多少？",
+    "expected_database_tools": ["race_training_plan"],
+    "expected_web_queries": 0,
+    "tools_offered": true
   }
 ]
 
