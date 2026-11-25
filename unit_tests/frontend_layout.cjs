@@ -364,7 +364,7 @@ async function run(engine, name) {
             peak_km: 42, longest_planned_km: 19, long_threshold_km: 15.8, long_below_threshold: false, weeks_done: 3, weeks_past: 5,
             weeks: ['build', 'build', 'build', 'recovery', 'build', 'build', 'build', 'recovery', 'build', 'peak', 'taper', 'race'].map((phase, index) => ({
               week: index + 1, week_start: new Date(Date.UTC(2026, 8, 21 + index * 7)).toISOString().slice(0, 10), phase,
-              km: phase === 'race' ? 33.7 : 28 + index, long_km: phase === 'race' ? 21.1 : 14 + (index % 3), zone_runs: { easy: 2, steady: 1, race: index % 2, fast: 0 },
+              km: phase === 'race' ? 33.7 : 28 + index, long_km: phase === 'race' ? 21.1 : 14 + (index % 3), zone_runs: { easy: 2, steady: 1, race: index % 2, fast: 0 }, quality_runs: { easy: 0, steady: phase === 'build' ? 1 : 0, race: phase === 'race' ? 0 : 1, fast: 0 },
               actual_km: index < 6 ? 25.5 + index : 0, actual_longest_km: index < 6 ? 12.4 : 0,
               adjusted: index === 5, status: ['done', 'partial', 'done', 'missed', 'done', 'current'][index] || 'upcoming' })),
           },

@@ -81,6 +81,22 @@ const plan = {
   ],
 };
 
+test('SPEC-124 the plan compares actual runs per zone with the suggested quality runs', async () => {
+  const quality = [{ steady: 1, race: 1 }, { race: 1 }, null, { race: 1 }, { race: 1 }, {}];
+  const suggested = { ...plan, weeks: plan.weeks.map((week, index) => ({ ...week,
+    quality_runs: quality[index] && { easy: 0, steady: 0, race: 0, fast: 0, ...quality[index] } })) };
+  const { context, nodes } = racePrepContext({ race: { ...race, plan: suggested }, pace });
+  await context.renderPaceAnalysis();
+  const rows = nodes['race-plan-table'].innerHTML.split('</tr>').filter(row => row.includes('<tr'));
+  assert.match(rows[0], /<span class="race-plan-zone"><i[^>]*><\/i>輕鬆 2<\/span><span class="race-plan-zone race-plan-zone-met"><i[^>]*><\/i>穩定 1\/1<\/span><span class="race-plan-zone"><i[^>]*><\/i>比賽配速 0\/1<\/span><\/td>/);
+  assert.doesNotMatch(rows[0], /更快/, 'a zone with neither runs nor a suggestion is left out');
+  assert.match(rows[1], /比賽配速 0\/1/);
+  assert.match(rows[2], /<td>—<\/td>\s*<td><span class="race-plan-status">未達/, 'a week without suggestions or timed runs shows a dash');
+  assert.match(rows[4], /減量[\s\S]*>—<\/td>\s*<td><span class="race-plan-zone"><i[^>]*><\/i>比賽配速 1<\/span><\/td>/, 'an upcoming week shows the suggestion');
+  assert.match(rows[5], /比賽週[\s\S]*<td>—<\/td>/);
+  assert.match(nodes['race-plan-note'].textContent, /還差 8\.5 km。強度建議：比賽配速 1 次（5:31–5:56），其餘輕鬆跑。課表從/);
+});
+
 test('SPEC-119 the weekly plan lays out backend targets, actual distance and status', async () => {
   const { context, nodes } = racePrepContext({ race: { ...race, plan }, pace });
   await context.renderPaceAnalysis();
@@ -96,7 +112,8 @@ test('SPEC-119 the weekly plan lays out backend targets, actual distance and sta
   assert.match(rows[5], /比賽週[\s\S]*比賽 21\.1/);
   assert.equal(nodes['race-plan-note'].textContent,
     '本週是第 4 週（恢復週）：建議 15 km、最長一次 7 km，已跑 6.5 km，還差 8.5 km。課表從 9/21 開始共 12 週，已過 3 週、達成 1 週。起點是 8/24–9/20 平均每週 12.4 km，不到 15 km 以 15 km 起算，'
-    + '每週最多加 10%，每 4 週一次恢復週，最後減量進入比賽週。輕鬆跑配速 6:26 以上；強度是每週有填時間的路跑落在各區間的次數，區間同下方強度分布。'
+    + '每週最多加 10%，每 4 週一次恢復週，最後減量進入比賽週。輕鬆跑配速 6:26 以上；強度欄是「實際／建議」次數：每週 1 次比賽配速跑，'
+    + '累積期跑量夠時再加 1 次更快或穩定的跑步，其餘輕鬆跑，比賽週只有比賽；每次有填時間的路跑依平均配速歸到下方強度分布的區間。'
     + '達到建議跑量與最長一次的 9 成算達成。依目前跑量，課表最長只排到 11 km，不到比賽距離 75% 的 15.8 km；'
     + '可以考慮選較晚的比賽或較短的距離。');
 

@@ -14,6 +14,9 @@ same data always gives the same plan and past weeks never move:
 - A build week whose two previous weeks reached less than 60% of their distance starts again
   from what was actually run, and the weeks after it grow from there; weeks that already
   started keep their targets, so only the weeks ahead move (SPEC-123).
+- Every week suggests how many runs to do in each intensity zone (SPEC-124): build weeks one
+  race-pace run plus one faster (5K/10K) or steady (half/full) run, a single race-pace run in
+  light weeks and below 25 km, nothing extra in race week; the rest is easy running.
 - When the longest planned run stays below 75% of the race, the plan says which longer plan
   length or weekly base would reach it (SPEC-122).
 
@@ -57,6 +60,9 @@ PARTIAL_SHARE = 0.6
 ADAPT_WEEKS = 2
 
 
+# Weeks below this distance get a single quality run (SPEC-124).
+TWO_QUALITY_MIN_KM = 25
+
 MIN_PLAN_WEEKS = 4
 MAX_PLAN_WEEKS = 24
 # The highest weekly base the long-run suggestion searches (SPEC-122).
@@ -69,14 +75,15 @@ class Profile:
     peak_km: int
     long_peak_km: int
     taper: tuple[float, ...]  # share of peak volume in each week between the build and race week
+    second_quality: str  # the zone of a build week's second quality run (SPEC-124)
 
 
 # Upper distance (km) for each profile: 5K, 10K, half and full marathon.
 PROFILES = (
-    (5.5, Profile(weeks=8, peak_km=30, long_peak_km=10, taper=(0.7,))),
-    (10.5, Profile(weeks=10, peak_km=40, long_peak_km=14, taper=(0.7,))),
-    (21.5, Profile(weeks=12, peak_km=50, long_peak_km=19, taper=(0.75,))),
-    (float("inf"), Profile(weeks=16, peak_km=65, long_peak_km=32, taper=(0.8, 0.6))),
+    (5.5, Profile(weeks=8, peak_km=30, long_peak_km=10, taper=(0.7,), second_quality="fast")),
+    (10.5, Profile(weeks=10, peak_km=40, long_peak_km=14, taper=(0.7,), second_quality="fast")),
+    (21.5, Profile(weeks=12, peak_km=50, long_peak_km=19, taper=(0.75,), second_quality="steady")),
+    (float("inf"), Profile(weeks=16, peak_km=65, long_peak_km=32, taper=(0.8, 0.6), second_quality="steady")),
 )
 
 
@@ -171,6 +178,17 @@ def _long_run_options(profile: Profile, total: int, base: float, long_base: floa
     return longer, higher
 
 
+def _quality_runs(profile: Profile, week: dict) -> dict[str, int]:
+    """Suggested runs per intensity zone for one week; the rest of the week is easy (SPEC-124)."""
+    counts = {key: 0 for key, _, _, _ in ZONES}
+    if week["phase"] == "race":
+        return counts
+    counts["race"] = 1
+    if week["phase"] in {"build", "peak"} and week["km"] >= TWO_QUALITY_MIN_KM:
+        counts[profile.second_quality] += 1
+    return counts
+
+
 def _zone_runs(timed_runs: list[tuple[date, float, int]], pace_goal: float) -> dict[str, int]:
     """Road runs with a time per intensity zone, the same zones as the readiness chart (SPEC-121)."""
     counts = {key: 0 for key, _, _, _ in ZONES}
@@ -222,7 +240,8 @@ def build_plan(goal: dict, runs: list[tuple[date, float]], as_of: date,
         week_end = min(week_start + timedelta(days=6), as_of)
         timed = [run for run in timed_runs or [] if week_start <= run[0] <= week_end]
         week = {"week": offset + 1, "week_start": week_start.isoformat(), **planned,
-                "actual_km": actual_km, "actual_longest_km": longest, "zone_runs": _zone_runs(timed, goal_pace(goal))}
+                "quality_runs": _quality_runs(profile, planned), "actual_km": actual_km, "actual_longest_km": longest,
+                "zone_runs": _zone_runs(timed, goal_pace(goal))}
         week["status"] = _status(week, week_start, as_of)
         weeks.append(week)
     longest_planned = _longest_planned(weeks)
