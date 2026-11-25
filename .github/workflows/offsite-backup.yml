@@ -83,3 +83,26 @@ jobs:
           if-no-files-found: error
           retention-days: 30
           compression-level: 0
+
+  # SPEC-116: GitHub silently disables every scheduled workflow of a public repository
+  # after 60 days without a commit, and scheduled runs do not count as activity. This
+  # job re-enables both scheduled workflows each day without creating a commit. It is
+  # separate so that only it holds actions: write (the backup job keeps contents: read)
+  # and a failed re-enable only warns, never failing or blocking the backup.
+  keep-schedules-enabled:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Re-enable the scheduled workflows
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for workflow in offsite-backup.yml verify.yml; do
+            if gh api -X PUT "repos/$GITHUB_REPOSITORY/actions/workflows/$workflow/enable" > /dev/null; then
+              echo "Re-enabled the schedule of $workflow"
+            else
+              echo "::warning::Could not re-enable the schedule of $workflow"
+            fi
+          done

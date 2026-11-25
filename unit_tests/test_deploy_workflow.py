@@ -167,6 +167,25 @@ def test_daily_offsite_backup_uploads_only_an_encrypted_archive():
         assert leak not in steps, leak
 
 
+def test_offsite_backup_keeps_every_scheduled_workflow_enabled():
+    """SPEC-116: GitHub disables schedules after 60 days without a commit; re-enable them daily."""
+    code = "\n".join(line for line in OFFSITE.splitlines() if not line.lstrip().startswith("#"))
+    backup, keepalive = code.split("\n  keep-schedules-enabled:\n", 1)
+    assert "actions: write" not in backup, "the job that touches production keeps read-only permissions"
+    assert re.search(r"^    permissions:\n      actions: write$", keepalive, re.M)
+    assert "needs:" not in keepalive, "the re-enable runs even when the backup fails"
+    assert "GH_TOKEN: ${{ github.token }}" in keepalive and "secrets." not in keepalive
+    assert 'gh api -X PUT "repos/$GITHUB_REPOSITORY/actions/workflows/$workflow/enable"' in keepalive
+    assert "::warning::" in keepalive and "exit 1" not in keepalive, "a failed re-enable only warns"
+    enabled = set(re.search(r"for workflow in ([^;]+);", keepalive).group(1).split())
+    scheduled = {
+        path.name
+        for path in (ROOT / ".github" / "workflows").glob("*.yml")
+        if re.search(r"^  schedule:$", path.read_text(encoding="utf-8"), re.M)
+    }
+    assert scheduled == enabled == {"offsite-backup.yml", "verify.yml"}
+
+
 def test_every_action_from_another_repository_is_pinned_to_a_commit():
     """SPEC-087: a moved tag must not change what runs next to FLY_API_TOKEN or BACKUP_PASSPHRASE.
 

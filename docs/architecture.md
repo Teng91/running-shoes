@@ -684,6 +684,7 @@ flowchart LR
 - **v4.29.5**：草稿由功能向工作區登記（SPEC-107）。`app-workspace.js` 提供 `registerWorkspaceForm`／`registerWorkspaceEditor`／`onWorkspaceModalOpen`，目標、鞋款與帳號自行登記；依賴方向改為 feature → workspace。
 - **v4.29.4**：資料快取重設由功能登記（SPEC-106）。`app-resources.js` 提供 `registerResourceCache`，支出與目標自行登記；`refreshCoreData` 移到 `app-core.js`，工作區以資料 hook 接收資料。依賴方向改為 feature → bridge、feature → shell。
 - **v4.29.3**：後端複雜度歸零與前端共用工具（SPEC-102～105）。後端函式全部低於複雜度 10；`getThemeColor` 移到 `app-state.js`、`reviewCard` 移到 `app-charts.js`，比賽準備以 `registerPanel` 登記、表單以 `onRaceGoalShown` 接收目標。依賴方向不變。
+- **v4.29.12**：排程 workflow 每天續命（SPEC-116）。`offsite-backup.yml` 的獨立 job 以 `actions: write` 重新啟用兩個排程 workflow；備份與部署 job 的權限不變，依賴方向不變。
 - **v4.29.2**：功能自行註冊面板（SPEC-101）。`app-core.js` 提供 `registerPanel`／`registerResourceReader`／`registerDataHooks`，功能 script 登記自己的繪製、資源與資料 hook，殼層不再呼叫功能函式；依賴方向改為 feature → shell。`localDateISO` 移到 `app-state.js`。
 - **v4.29.1**：健行與步行不出現在跑步畫面（SPEC-098）。`month_run_summary` 與 `shoe_distance_mix` 套用既有的 `TRAINING_RUN`；依賴方向不變。
 - **v4.29.0**：步行類型與 Strava 健行／步行選擇匯入（SPEC-097）。`strava_import.split_shoe_only()` 在 router 的日期篩選之後套用，service 與 read model 不變。依賴方向不變。
