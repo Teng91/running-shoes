@@ -10,7 +10,13 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from backend import models
-from backend.backup_contract import ARCHIVE_LIMITS, MAX_RUN_ALIASES, ArchiveBudget, validate_export
+from backend.backup_contract import (
+    ARCHIVE_LIMITS,
+    MAX_RUN_ALIASES,
+    RACE_GOAL_FIELDS,
+    ArchiveBudget,
+    validate_export,
+)
 from backend.clock import APP_TIMEZONE
 from backend.exporting import export_filename, generate_shoe_rows
 from backend.read_models.goal_progress import yearly_goal_km
@@ -70,10 +76,11 @@ def _account_export_snapshot(db: Session, user: models.User, *, now: datetime | 
     goal = db.query(models.RunningGoal).filter(
         models.RunningGoal.user_id == user.id
     ).first()
+    race_goal = db.query(models.RaceGoal).filter(models.RaceGoal.user_id == user.id).first()
     aliases = export_run_aliases(db, user.id, user.backup_id, MAX_RUN_ALIASES)
     payload = {
         "format": "running-shoes-account-backup",
-        "version": 5,
+        "version": 6,
         "source_id": user.backup_id,
         "exported_at": exported_at.isoformat(),
         "username": user.username,
@@ -81,6 +88,7 @@ def _account_export_snapshot(db: Session, user: models.User, *, now: datetime | 
         "runs": rows(models.Run, "runs", lambda run: {**_serialize_run(run), "aliases": aliases.get(run.id, [])}),
         "monthly_mileages": rows(models.MonthlyMileage, "monthly_mileages", _serialize_month),
         "running_goal": _serialize_goal(goal),
+        "race_goal": _serialize_race_goal(race_goal),
         "monthly_reports": rows(models.MonthlyReport, "monthly_reports", _serialize_report),
         "strava_imports": rows(models.StravaImport, "strava_imports", _serialize_strava_import),
         "history": rows(models.AuditEvent, "history", _serialize_history) if include_history else [],
@@ -197,6 +205,13 @@ def _serialize_month(row: models.MonthlyMileage) -> dict[str, Any]:
         "year": row.year, "month": row.month, "km": row.km,
         "adjustment_km": row.adjustment_km,
     }
+
+
+def _serialize_race_goal(goal: models.RaceGoal | None) -> dict[str, Any] | None:
+    """SPEC-126: the target race without its row identity or write version."""
+    if goal is None:
+        return None
+    return {name: getattr(goal, name) for name in RACE_GOAL_FIELDS}
 
 
 def _serialize_goal(goal: models.RunningGoal | None) -> dict[str, Any] | None:

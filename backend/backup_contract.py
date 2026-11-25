@@ -1,4 +1,4 @@
-"""Bounded, credential-free account archive contract (v1 through v5)."""
+"""Bounded, credential-free account archive contract (v1 through v6)."""
 
 import json
 import math
@@ -59,6 +59,16 @@ class BackupGoal(BaseModel):
     yearly_km: float = Field(gt=0, le=1_200_000, allow_inf_nan=False)
 
 
+class BackupRaceGoal(schemas.RaceGoalUpdate):
+    """SPEC-126: the target race as `PUT /api/race-goal` accepts it, without the write version."""
+    model_config = ConfigDict(extra="forbid")
+    expected_version: None = Field(default=None, exclude=True)
+
+
+# The stored race goal columns an archive carries (SPEC-126).
+RACE_GOAL_FIELDS = tuple(name for name in BackupRaceGoal.model_fields if name != "expected_version")
+
+
 class BackupReport(BaseModel):
     model_config = ConfigDict(extra="forbid")
     year: schemas.ReasonableYear
@@ -100,7 +110,7 @@ class BackupHistory(BaseModel):
 class AccountBackup(BaseModel):
     model_config = ConfigDict(extra="forbid")
     format: Literal["running-shoes-account-backup"]
-    version: Literal[1, 2, 3, 4, 5]
+    version: Literal[1, 2, 3, 4, 5, 6]
     source_id: str | None = Field(default=None, min_length=16, max_length=80, pattern=r"^[A-Za-z0-9._:-]+$")
     exported_at: datetime
     username: str = Field(max_length=50)
@@ -108,6 +118,7 @@ class AccountBackup(BaseModel):
     runs: list[BackupRun] = Field(max_length=ARCHIVE_LIMITS["runs"])
     monthly_mileages: list[BackupMonth] = Field(max_length=ARCHIVE_LIMITS["monthly_mileages"])
     running_goal: BackupGoal | None = None
+    race_goal: BackupRaceGoal | None = None
     monthly_reports: list[BackupReport] = Field(default_factory=list, max_length=ARCHIVE_LIMITS["monthly_reports"])
     strava_imports: list[BackupImport] = Field(default_factory=list, max_length=ARCHIVE_LIMITS["strava_imports"])
     history: list[BackupHistory] = Field(default_factory=list, max_length=ARCHIVE_LIMITS["history"])
@@ -116,7 +127,7 @@ class AccountBackup(BaseModel):
     def validate_graph(self):
         """Identities, version features, references and totals must agree before anything is merged."""
         if self.version >= 2 and not self.source_id:
-            raise ValueError("備份 v2–v5 缺少 source_id")
+            raise ValueError("備份 v2 以上缺少 source_id")
         self._check_unique_keys()
         self._check_run_features()
         self._check_run_aliases()
@@ -137,14 +148,16 @@ class AccountBackup(BaseModel):
                 raise ValueError("備份含有重複識別碼或月份")
 
     def _check_run_features(self) -> None:
-        """Aliases need v3, moving time v4 and activity types v5."""
+        """Aliases need v3, moving time v4, activity types v5 and the target race v6."""
         alias_count = sum(len(row.aliases) for row in self.runs)
         if alias_count > MAX_RUN_ALIASES or (self.version < 3 and alias_count):
             raise ValueError("跑步來源別名版本或容量不正確")
         if self.version < 4 and any(row.duration_seconds is not None for row in self.runs):
             raise ValueError("跑步時間只能出現在 v4 以上備份")
         if self.version < 5 and any(row.activity_type != DEFAULT_ACTIVITY_TYPE for row in self.runs):
-            raise ValueError("運動類型只能出現在 v5 備份")
+            raise ValueError("運動類型只能出現在 v5 以上備份")
+        if self.version < 6 and self.race_goal is not None:
+            raise ValueError("目標賽事只能出現在 v6 備份")
 
     def _check_run_aliases(self) -> None:
         identities = {row.id for row in self.runs}
@@ -219,6 +232,9 @@ def _check_json(value, depth=0):
 
 def backup_fingerprint(backup: AccountBackup) -> str:
     payload = backup.model_dump(mode="json")
+    if backup.version < 6:
+        # Archives before SPEC-126 have no target race; keep their fingerprints stable.
+        payload.pop("race_goal", None)
     for run in payload["runs"]:
         if backup.version < 3:
             run.pop("aliases", None)
