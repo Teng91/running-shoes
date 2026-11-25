@@ -11,6 +11,13 @@
 
 Asset 4.29.12／shell v118、schema 13 不變，可直接回滾至 v4.29.11 image；移除這個 job 不影響備份。
 
+### AI 模型清單的排行榜備援（SPEC-118，v4.29.14）
+
+- `backend/llm.py` 的 `_fetch_free_models` 先取本日總使用量前 50 名中的免費工具模型；交集為空時，改取整份當日排行榜中用量最高的 5 個免費工具模型（`_FALLBACK_MODEL_LIMIT`）。
+- 價格與工具支援仍以即時目錄為準，不在當日排行榜上的模型不列入；整份排行榜都沒有時，仍沿用一小時內的舊清單，之後停止 AI 呼叫。
+
+Asset 4.29.14／shell v120、schema 13 不變，可直接回滾至 v4.29.13 image。
+
 ### 現役與退役跑鞋表格對齊（SPEC-117，v4.29.13）
 
 - 退役跑鞋表格新增「預估退役」欄，退役鞋顯示「已退役」；兩張表改由 `app-dashboard.js` 的 `shoeTableRow` 產生，並共用 `shoe-list-table` 的 `<colgroup>` 欄寬（`06-shoes.css`）。

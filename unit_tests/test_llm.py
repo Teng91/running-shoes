@@ -225,6 +225,50 @@ def test_fetch_free_models_only_keeps_free_tool_models_in_overall_top_50(monkeyp
     ]
 
 
+def _ranking_fetch(monkeypatch, catalog_ids, ranking):
+    """Patch the catalog and ranking responses; ``ranking`` is [(slug, tokens)]."""
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    models_response = MagicMock()
+    models_response.json.return_value = {"data": [
+        {"id": model_id, "name": model_id, "pricing": {"prompt": "0", "completion": "0"},
+         "supported_parameters": ["tools"]}
+        for model_id in catalog_ids
+    ]}
+    ranking_response = MagicMock()
+    ranking_response.json.return_value = {
+        "data": [{"date": "2026-10-03", "model_permaslug": slug, "total_tokens": str(tokens)}
+                 for slug, tokens in ranking],
+        "meta": {"end_date": "2026-10-03"},
+    }
+    monkeypatch.setattr(llm.httpx, "get", MagicMock(side_effect=[models_response, ranking_response]))
+
+
+def test_spec118_falls_back_to_most_used_free_models_outside_the_top_50(monkeypatch):
+    paid = [(f"vendor/paid-{index}", 10_000 - index) for index in range(50)]
+    free = [f"vendor/free-{index}:free" for index in range(7)]
+    _ranking_fetch(monkeypatch, [*free, "vendor/unranked:free"],
+                   [*paid, *[(slug, 100 - index) for index, slug in enumerate(reversed(free))]])
+
+    # Ranking order, capped at five; a free model absent from today's ranking never appears.
+    assert [model["id"] for model in llm._fetch_free_models()] == [
+        "vendor/free-6:free", "vendor/free-5:free", "vendor/free-4:free",
+        "vendor/free-3:free", "vendor/free-2:free",
+    ]
+
+
+def test_spec118_fallback_is_unused_when_the_top_50_has_a_free_model(monkeypatch):
+    paid = [(f"vendor/paid-{index}", 10_000 - index) for index in range(49)]
+    _ranking_fetch(monkeypatch, ["vendor/top:free", "vendor/outside:free"],
+                   [*paid, ("vendor/top:free", 100), ("vendor/outside:free", 99)])
+    assert [model["id"] for model in llm._fetch_free_models()] == ["vendor/top:free"]
+
+
+def test_spec118_no_free_model_in_the_whole_ranking_still_returns_nothing(monkeypatch):
+    _ranking_fetch(monkeypatch, ["vendor/unranked:free"],
+                   [(f"vendor/paid-{index}", 10_000 - index) for index in range(80)])
+    assert llm._fetch_free_models() == []
+
+
 def test_fetch_free_models_requires_api_key(monkeypatch):
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
 
