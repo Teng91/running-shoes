@@ -807,7 +807,7 @@ def test_portable_source_recovery_aliases_roundtrip(workspace):
             history.restore_deleted(db, uid, event.id, workspace.config)
             return old_id
         original = export(1)
-        assert original['version'] == 5
+        assert original['version'] == 6
         apply(original, 'portable-first-import')
         source_old = recover(1)
         restored = export(1)
@@ -943,6 +943,8 @@ def test_legacy_archive_fingerprint_excludes_v3_defaults(workspace, version):
         row.pop('activity_type', None)
     parsed = parse_backup(json.dumps(payload).encode())
     original = parsed.model_dump(mode='json')
+    # SPEC-126: archives before v6 hash as before, without the target race field.
+    original.pop('race_goal')
     for row in original['runs']:
         row.pop('aliases')
         row.pop('duration_seconds')
@@ -1155,7 +1157,7 @@ def test_backup_v5_round_trips_activity_type(workspace):
             runs.create_run(db, 1, schemas.RunCreate(shoe_id=shoe.id, date=day, km=km, activity_type=kind),
                             max_runs=5000)
         payload = exports.build_account_export(db, db.get(models.User, 1))[0]
-        assert payload["version"] == 5
+        assert payload["version"] == 6
         assert [run["activity_type"] for run in payload["runs"]] == ["road", "trail", "hike"]
         assert payload["monthly_mileages"] == [{"year": 2026, "month": 3, "km": 22, "adjustment_km": 0}]
 
@@ -1176,3 +1178,64 @@ def test_backup_v5_round_trips_activity_type(workspace):
         # Merging an old archive into the account that already labels the runs keeps the labels.
         merge = account_restore.preview_restore(db, 2, json.dumps(legacy).encode(), workspace.config, "update")
         assert merge["summary"]["updated_runs"] == 0
+
+
+RACE = {"race_name": "示範半馬", "race_date": "2027-03-07", "distance_km": 21.0975, "target_seconds": 7200,
+        "reference_distance_km": 10.0, "reference_seconds": 3000, "reference_temperature_c": 18.0, "plan_weeks": 10}
+
+
+def test_backup_v6_round_trips_the_race_goal(workspace):
+    """SPEC-126 AC-1/AC-2: the target race is exported, merged only when missing and updated only in update mode."""
+    from datetime import date
+
+    from backend import schemas
+    from backend.services import race_goals
+
+    def restore(db, payload, mode, key):
+        preview = account_restore.preview_restore(db, 2, json.dumps(payload).encode(), workspace.config, mode)
+        account_restore.apply_restore(db, 2, preview["token"], key, workspace.config)
+        db.expire_all()
+        return preview["summary"]
+
+    def stored(db):
+        row = db.query(models.RaceGoal).filter_by(user_id=2).one()
+        return {name: getattr(row, name) for name in RACE}, row.version
+
+    with workspace.sessions() as db:
+        race_goals.save_race_goal(db, 1, schemas.RaceGoalUpdate(**RACE), date(2026, 11, 25))
+        payload = archive(db)
+        assert payload["version"] == 6 and payload["race_goal"] == RACE
+
+        summary = restore(db, payload, "merge", "race-merge-new")
+        assert (summary["new_race_goal"], summary["updated_race_goal"]) == (True, False)
+        assert stored(db) == (RACE, 1)
+
+        # A merge keeps the receiving account's own race goal.
+        race_goals.save_race_goal(db, 2, schemas.RaceGoalUpdate(**{**RACE, "target_seconds": 6900}), date(2026, 11, 25))
+        summary = restore(db, payload, "merge", "race-merge-kept")
+        assert summary["new_race_goal"] is False
+        assert stored(db) == ({**RACE, "target_seconds": 6900}, 2)
+
+        # An update overwrites it from the archive, then reports it unchanged.
+        summary = restore(db, payload, "update", "race-update")
+        assert (summary["updated_race_goal"], summary["unchanged_race_goal"]) == (True, False)
+        assert stored(db) == (RACE, 3)
+        summary = restore(db, payload, "update", "race-update-again")
+        assert (summary["updated_race_goal"], summary["unchanged_race_goal"]) == (False, True)
+        assert stored(db) == (RACE, 3)
+
+
+def test_only_v6_archives_carry_a_valid_race_goal(workspace):
+    """SPEC-126 AC-3: earlier versions stay valid without it, and the race goal is validated like the API."""
+    with workspace.sessions() as db:
+        payload = archive(db)
+    older = {**{key: value for key, value in payload.items() if key != "race_goal"}, "version": 5}
+    assert parse_backup(json.dumps(older).encode()).race_goal is None
+    for bad in ({**payload, "version": 5, "race_goal": RACE},
+                {**payload, "race_goal": {**RACE, "plan_weeks": 3}},
+                {**payload, "race_goal": {**RACE, "target_seconds": 30}},
+                {**payload, "race_goal": {**RACE, "expected_version": 4}},
+                {**payload, "race_goal": {**RACE, "version": 2}}):
+        with pytest.raises(Invalid):
+            parse_backup(json.dumps(bad).encode())
+    assert parse_backup(json.dumps({**payload, "race_goal": {**RACE, "plan_weeks": None}}).encode()).race_goal.plan_weeks is None

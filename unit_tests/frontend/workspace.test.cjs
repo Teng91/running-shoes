@@ -364,9 +364,11 @@ test('SPEC-029 import modes own their previews and confirmation', async () => {
   assert.match(requested, /\?mode=update$/);
   resolvePreview({ token: 'synthetic', summary: { mode: 'update', source_username: 'cloud-user', exported_at: '2026-10-24',
     new_shoes: 0, new_runs: 0, updated_shoes: 1, updated_runs: 2, updated_months: 1, updated_reports: 1, updated_goal: true,
-    policy: '更新', monthly_records: 1, reports: 1, history_records: 0, new_import_summaries: 0, skipped_import_summaries: 0 } });
+    updated_race_goal: true, new_race_goal: false, unchanged_race_goal: false, policy: '更新', monthly_records: 1, reports: 1, history_records: 0, new_import_summaries: 0, skipped_import_summaries: 0 } });
   await reading;
   assert.match(elements['restore-preview'].textContent, /cloud-user.*localhost:8000.*local-user.*更新 1 雙鞋、2 筆跑步/);
+  // SPEC-126: the preview names the target race beside the running goal.
+  assert.match(elements['restore-preview'].textContent, /1 份月報及跑量目標與目標賽事。另新增 0 個月份、0 份月報。/);
   await context.applyAccountRestore(); assert.equal(posts, 0, 'cancel leaves data unchanged');
   accepted = true; await context.applyAccountRestore();
   assert.equal(posts, 1);
