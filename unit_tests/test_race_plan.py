@@ -222,3 +222,18 @@ def test_a_short_long_run_says_which_plan_length_or_base_reaches_it():
     started = build_plan({**full, "race_date": "2026-12-20", "plan_weeks": 8}, [], as_of)
     assert started["started"] and started["long_below_threshold"]
     assert (started["long_weeks_needed"], started["long_base_needed_km"]) == (None, None)
+
+
+def test_every_week_suggests_runs_per_intensity_zone():
+    # SPEC-124: one race-pace run a week, a second quality run in build weeks from 25 km, none in race week.
+    half = build_plan(HALF, weekly_runs(date(2026, 9, 1), date(2026, 11, 26), 20), date(2026, 11, 25))
+    suggested = [(week["phase"], week["km"], {key: count for key, count in week["quality_runs"].items() if count})
+                 for week in half["weeks"]]
+    assert suggested[:5] == [("build", 20, {"race": 1}), ("build", 22, {"race": 1}), ("build", 24, {"race": 1}),
+                             ("recovery", 19, {"race": 1}), ("build", 27, {"steady": 1, "race": 1})]
+    assert suggested[-2:] == [("taper", 23, {"race": 1}), ("race", 30, {})]
+    assert all(week["quality_runs"]["easy"] == 0 for week in half["weeks"]), "easy running fills the rest"
+    ten = build_plan({**HALF, "distance_km": 10, "race_date": "2027-02-07"},
+                     weekly_runs(date(2026, 9, 1), date(2026, 11, 26), 30), date(2026, 11, 25))
+    assert ten["weeks"][0]["quality_runs"] == {"easy": 0, "steady": 0, "race": 1, "fast": 1}
+    assert ten["weeks"][3]["phase"] == "recovery" and ten["weeks"][3]["quality_runs"]["fast"] == 0

@@ -159,12 +159,26 @@ function renderRaceCards(race) {
 const RACE_PLAN_PHASES = { build: '累積', recovery: '恢復週', peak: '高峰', taper: '減量', race: '比賽週' };
 const RACE_PLAN_STATUS = { done: '達成', partial: '部分完成', missed: '未達', current: '本週', upcoming: '' };
 
-// SPEC-121: a started week's timed road runs per intensity zone, the zones of the chart below.
+// SPEC-121/124: a started week's timed road runs per intensity zone against the suggested runs
+// ("actual/suggested"); an upcoming week shows the suggestion only.
 function racePlanZoneText(week, zones) {
-  if (week.status === 'upcoming') return '—';
-  const parts = zones.filter(zone => week.zone_runs?.[zone.key])
-    .map(zone => `<span class="race-plan-zone"><i style="background:${zoneColor(zone.key)}"></i>${esc(zone.label)} ${week.zone_runs[zone.key]}</span>`);
+  const started = week.status !== 'upcoming';
+  const parts = zones.map(zone => {
+    const target = week.quality_runs?.[zone.key] || 0;
+    const actual = started ? week.zone_runs?.[zone.key] || 0 : 0;
+    if (!target && !actual) return '';
+    const count = !started ? target : target ? `${actual}/${target}` : actual;
+    const met = started && target && actual >= target ? ' race-plan-zone-met' : '';
+    return `<span class="race-plan-zone${met}"><i style="background:${zoneColor(zone.key)}"></i>${esc(zone.label)} ${count}</span>`;
+  });
   return parts.join('') || '—';
+}
+
+// SPEC-124: this week's suggested quality runs with their pace ranges.
+function racePlanQualityText(week, zones) {
+  const runs = zones.filter(zone => week.quality_runs?.[zone.key])
+    .map(zone => `${zone.label} ${week.quality_runs[zone.key]} 次（${zoneRangeText(zone)}）`);
+  return runs.length ? `強度建議：${runs.join('、')}，其餘輕鬆跑。` : '';
 }
 
 function renderRacePlan(race) {
@@ -190,24 +204,24 @@ function renderRacePlan(race) {
   document.getElementById('race-plan-note').textContent = racePlanText(race);
 }
 
-function racePlanCurrentText(plan) {
+function racePlanCurrentText(plan, zones) {
   const week = plan.weeks.find(row => row.status === 'current');
   if (!week) return '';
   const left = Math.round((week.km - week.actual_km) * 10) / 10;
   const progress = left > 0 ? `已跑 ${Number(week.actual_km).toFixed(1)} km，還差 ${left.toFixed(1)} km` : `已跑 ${Number(week.actual_km).toFixed(1)} km，達到建議跑量`;
   const long = week.phase === 'race' ? `比賽 ${Number(week.long_km).toFixed(1)} km` : `最長一次 ${week.long_km} km`;
-  return `本週是第 ${week.week} 週（${RACE_PLAN_PHASES[week.phase] || week.phase}）：建議 ${week.km} km、${long}，${progress}。`;
+  return `本週是第 ${week.week} 週（${RACE_PLAN_PHASES[week.phase] || week.phase}）：建議 ${week.km} km、${long}，${progress}。${racePlanQualityText(week, zones)}`;
 }
 
 function racePlanText(race) {
   const plan = race.plan;
   const easy = race.zones.find(zone => zone.key === 'easy');
-  const parts = [racePlanCurrentText(plan), plan.started
+  const parts = [racePlanCurrentText(plan, race.zones), plan.started
     ? `課表從 ${raceShortDate(plan.start_date)} 開始共 ${plan.weeks_total} 週，已過 ${plan.weeks_past} 週、達成 ${plan.weeks_done} 週。`
     : `課表會從 ${raceShortDate(plan.start_date)} 開始，共 ${plan.weeks_total} 週。`];
   const floor = plan.baseline_km < 15 ? '，不到 15 km 以 15 km 起算' : '';
   parts.push(`起點是 ${raceShortDate(plan.baseline_start)}–${raceShortDate(plan.baseline_end)} 平均每週 ${Number(plan.baseline_km).toFixed(1)} km${floor}，每週最多加 10%，每 4 週一次恢復週，最後減量進入比賽週。`);
-  parts.push(`輕鬆跑配速 ${paceClock(easy?.min_pace)} 以上；強度是每週有填時間的路跑落在各區間的次數，區間同下方強度分布。達到建議跑量與最長一次的 9 成算達成。`);
+  parts.push(`輕鬆跑配速 ${paceClock(easy?.min_pace)} 以上；強度欄是「實際／建議」次數：每週 1 次比賽配速跑，累積期跑量夠時再加 1 次更快或穩定的跑步，其餘輕鬆跑，比賽週只有比賽；每次有填時間的路跑依平均配速歸到下方強度分布的區間。達到建議跑量與最長一次的 9 成算達成。`);
   if (!plan.weeks_chosen) {
     parts.push(`課表週數沿用${raceDistanceName(race.goal.distance_km)}預設的 ${plan.default_weeks} 週；按「調整比賽」可以改成 4～24 週，例如從本週開始的 ${Math.max(4, plan.weeks_until_race)} 週。`);
   }

@@ -649,6 +649,7 @@ h1 { font-size: 28px; font-weight: 800; letter-spacing: .01em; margin-bottom: 4p
 .race-plan-missed .race-plan-status { border-color: rgba(255, 77, 94, .45); background: rgba(255, 77, 94, .12); }
 .race-plan-zone { display: inline-flex; align-items: center; gap: 4px; margin-right: 10px; white-space: nowrap; }
 .race-plan-zone i { width: 8px; height: 8px; border-radius: 2px; }
+.race-plan-zone-met { font-weight: 600; }
 
 /* Source: css/04-runs.css */
 /* Run log */
