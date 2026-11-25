@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from backend import models, schemas
 from backend.auth import get_current_user
+from backend.clock import local_today
 from backend.dependencies import get_db
 from backend.read_models.race_readiness import race_goal_values
 from backend.routers.errors import service_errors
@@ -30,7 +31,7 @@ def save_race_goal(
     db: Session = Depends(get_db),
 ):
     with service_errors():
-        return race_goals.save_race_goal(db, current_user.id, payload)
+        return race_goals.save_race_goal(db, current_user.id, payload, local_today())
 
 
 @router.delete("")

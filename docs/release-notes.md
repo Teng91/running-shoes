@@ -4,6 +4,12 @@
 每版的摘要見 [CHANGELOG.md](../CHANGELOG.md)；目前的功能與操作方式以 [README](../README.md) 為準。
 這裡保留當時的文字，後續版本可能已調整其中的行為。
 
+### 留白的課表週數由後端決定（SPEC-125，v5.0.6）
+
+- `services/race_goals.save_race_goal` 收到 `plan_weeks: null` 時，以 `read_models/race_plan.suggested_plan_weeks` 存入剩下週數（最多距離預設、至少 4 週），與網頁 `suggestedPlanWeeks` 相同；SPEC-120 以前存成 null 的目標不改寫，仍用距離預設週數。
+- 還原模式文字改為「v2 以後」，README 開發歷程與課表說明補齊。
+- 沒有 schema 變更，可直接回滾至 v5.0.5 image。Asset 5.0.6／shell v127。
+
 ### 課表每週建議強度次數（SPEC-124，v5.0.5）
 
 - 每週新增 `quality_runs`（各強度區間的建議次數，`easy` 一律 0 代表其餘輕鬆跑）：比賽週全為 0；其他週 `race` 1，累積與高峰週跑量至少 25 km 時再加 1 次 `Profile.second_quality`（5K／10K 為 `fast`、半馬／全馬為 `steady`）。

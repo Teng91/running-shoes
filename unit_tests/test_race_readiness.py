@@ -7,9 +7,11 @@ import pytest
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 
+from backend.clock import local_today
 from backend.database import configure_sqlite_connection
 from backend.migrations import run_startup_migrations, schema_version
 from backend.models import RaceGoal, Run
+from backend.read_models.race_plan import suggested_plan_weeks
 from backend.read_models.race_readiness import predict_seconds, race_readiness, zone_for
 from unit_tests.test_run_pace import client, headers, owner
 
@@ -26,7 +28,9 @@ def test_race_goal_is_saved_versioned_validated_and_user_scoped(client, db):
 
     saved = client.put("/api/race-goal", headers=headers(user), json={**HALF, "race_name": "  示範半馬 "})
     assert saved.status_code == 200, saved.text
-    assert saved.json() == {**HALF, "plan_weeks": None, "version": 1}
+    # SPEC-125: a goal saved without a plan length stores the one the form would suggest.
+    weeks = suggested_plan_weeks(HALF["distance_km"], date.fromisoformat(HALF["race_date"]), local_today())
+    assert saved.json() == {**HALF, "plan_weeks": weeks, "version": 1}
     stale = client.put("/api/race-goal", headers=headers(user), json={**HALF, "expected_version": 0})
     assert stale.status_code == 409
     updated = client.put("/api/race-goal", headers=headers(user), json={**HALF, "target_seconds": 7100, "expected_version": 1})

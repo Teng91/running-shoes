@@ -4,7 +4,8 @@ The plan is a deterministic function of the race goal and the runner's own volum
 same data always gives the same plan and past weeks never move:
 
 - The plan starts the runner's chosen number of weeks before race week (4–24, including race
-  week); a goal without a choice uses its distance's default.
+  week); a goal saved without a choice stores `suggested_plan_weeks` (SPEC-125), so only goals
+  saved before SPEC-125 may lack one and use the distance's default.
 - Its baseline is the average weekly distance of the four weeks before the plan starts (or
   before this week, while the plan has not started), so it no longer changes once it starts.
 - Build weeks grow at most 10% a week, every fourth week is a lighter recovery week, then the
@@ -89,6 +90,16 @@ PROFILES = (
 
 def profile_for(distance_km: float) -> Profile:
     return next(profile for limit, profile in PROFILES if distance_km <= limit)
+
+
+def suggested_plan_weeks(distance_km: float, race_day: date, today: date) -> int:
+    """The weeks left until race week, at most the distance's default (SPEC-125).
+
+    A goal saved without a length stores this, as the race goal form does, so the plan start
+    is fixed when the goal is saved instead of moving as the race comes closer.
+    """
+    weeks_until_race = (_monday(race_day) - _monday(today)).days // 7 + 1
+    return max(MIN_PLAN_WEEKS, min(profile_for(distance_km).weeks, weeks_until_race))
 
 
 def _km(value: float) -> int:

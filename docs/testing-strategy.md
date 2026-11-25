@@ -301,6 +301,10 @@ SPEC-032：合成資料驗證歷史筆數上限（v4.7.3 起 10,000／10,001）�
 
 [規格與具名案例](specs/116-keep-scheduled-workflows-enabled.md) 以文字解析 `offsite-backup.yml`：續命 job 不依賴備份 job、只有它有 `actions: write`、只用 `GITHUB_TOKEN` 不用 secret、失敗只發警告，且 repo 裡每個有 `schedule` 的 workflow 都在它的重新啟用清單中。
 
+## SPEC-125 留白的課表週數由後端決定
+
+[規格與具名案例](specs/125-plan-weeks-default-and-docs.md) 以剩下 5 週、半年後、比賽週內與比賽已過的日期確認建議週數和網頁規則相同，並以不帶 `plan_weeks` 的 API 存檔確認存入建議週數，一週後課表的週數與起點不變。
+
 ## SPEC-124 課表每週建議強度次數
 
 [規格與具名案例](specs/124-plan-quality-runs.md) 以半馬與 10K 課表確認各階段的建議次數（25 km 門檻、恢復與減量週只排一次、比賽週沒有）；前端測試確認「實際／建議」次數、達成加粗、未開始的週顯示建議，以及本週說明的配速範圍。

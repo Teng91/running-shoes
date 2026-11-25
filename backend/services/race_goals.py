@@ -1,18 +1,25 @@
 """User-scoped target-race writes with optimistic concurrency (SPEC-065)."""
 
+from datetime import date
+
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
 from backend import models, schemas
+from backend.read_models.race_plan import suggested_plan_weeks
 from backend.read_models.race_readiness import race_goal_values
 from backend.services.errors import Conflict
 from backend.services.transactions import write_transaction
 
 
-def save_race_goal(db: Session, user_id: int, payload: schemas.RaceGoalUpdate) -> dict:
+def save_race_goal(db: Session, user_id: int, payload: schemas.RaceGoalUpdate, today: date) -> dict:
     with write_transaction(db, user_id, reason="race_goal.update"):
         values = payload.model_dump()
         expected_version = values.pop("expected_version", None)
+        if values["plan_weeks"] is None:
+            # SPEC-125: store the length the race goal form suggests, so every client agrees.
+            values["plan_weeks"] = suggested_plan_weeks(
+                values["distance_km"], date.fromisoformat(values["race_date"]), today)
         if expected_version is None:
             current = db.query(models.RaceGoal.version).filter(models.RaceGoal.user_id == user_id).scalar()
             expected_version = int(current or 0)
