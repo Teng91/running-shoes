@@ -11,7 +11,7 @@ def test_docs_harness_reads_frontend_test_count():
 
 
 def test_docs_harness_reads_agent_tool_count():
-    assert check_docs.agent_tool_count() == 12
+    assert check_docs.agent_tool_count() == 13
 
 
 def test_docs_harness_reads_layout_matrix_count():

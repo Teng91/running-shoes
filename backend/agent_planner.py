@@ -37,6 +37,8 @@ _CATEGORY_TERMS = ("缺什麼", "缺少", "類別", "覆蓋", "補鞋")
 _GOAL_TERMS = ("目標", "達標", "達成")
 _TREND_TERMS = ("趨勢", "暴增", "連續", "每週", "週跑量", "星期", "最長", "訓練量")
 _REVIEW_TERMS = ("回顧", "今年跑", "去年", "這一年", "整年")
+# SPEC-119: the target race, its readiness and the weekly training plan.
+_RACE_TERMS = ("比賽", "課表", "半馬", "全馬", "馬拉松", "備賽", "賽前", "減量")
 _SPENDING_TERMS = ("花費", "支出", "花了", "花多少", "預算")
 _PERSONAL_MARKERS = ("我", "我的", "目前", "最近", "今年", "本週", "這週")
 _USAGE_ANALYTICS_TERMS = (
@@ -114,6 +116,7 @@ _PERSONAL_TOOL_TERMS: tuple[tuple[Any, str], ...] = (
     (_TREND_TERMS, "training_trends"),
     (_REVIEW_TERMS, "year_review"),
     (_SPENDING_TERMS, "spending_summary"),
+    (_RACE_TERMS, "race_training_plan"),
 )
 
 

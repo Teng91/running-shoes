@@ -112,6 +112,7 @@ async function renderPaceAnalysis() {
     muted: getThemeColor('--chart-muted', '#6b7684'),
   };
   renderRaceCards(race);
+  renderRacePlan(race);
   if (race.goal) {
     renderRaceLongRunChart(race, colors);
     renderRaceIntensityChart(race, colors);
@@ -152,6 +153,48 @@ function renderRaceCards(race) {
   cards.push(reviewCard('長距離準備', `${long.count} <small>/ ${long.target_count} 次</small>`,
     `<span class="review-sub ${longState}">近 ${long.weeks} 週 ≥ ${esc(Number(long.threshold_km).toFixed(1))} km</span><br>最長 ${esc(Number(long.longest_recent?.km || 0).toFixed(1))} km（比賽距離的 ${long.longest_recent_percent}%）`));
   target.innerHTML = cards.join('');
+}
+
+// ---------- weekly training plan (SPEC-119) ----------
+const RACE_PLAN_PHASES = { build: '累積', recovery: '恢復週', peak: '高峰', taper: '減量', race: '比賽週' };
+const RACE_PLAN_STATUS = { done: '達成', partial: '部分完成', missed: '未達', current: '本週', upcoming: '' };
+
+function renderRacePlan(race) {
+  const section = document.getElementById('race-plan');
+  const plan = race.plan;
+  section.hidden = !plan;
+  if (!plan) { document.getElementById('race-plan-table').innerHTML = ''; return; }
+  document.getElementById('race-plan-table').innerHTML = plan.weeks.map(week => {
+    const started = week.status !== 'upcoming';
+    const actual = started ? `${Number(week.actual_km).toFixed(1)}<small> · 最長 ${Number(week.actual_longest_km).toFixed(1)}</small>` : '—';
+    const longText = week.phase === 'race' ? `比賽 ${Number(week.long_km).toFixed(1)}` : `${week.long_km}`;
+    return `<tr class="race-plan-${esc(week.status)}${week.phase === 'recovery' || week.phase === 'taper' ? ' race-plan-light' : ''}">
+      <td>第 ${week.week} 週</td>
+      <td>${esc(raceShortDate(week.week_start))}</td>
+      <td>${esc(RACE_PLAN_PHASES[week.phase] || week.phase)}</td>
+      <td class="numeric">${week.km}</td>
+      <td class="numeric">${esc(longText)}</td>
+      <td class="numeric">${week.race_pace_km ? week.race_pace_km : '—'}</td>
+      <td class="numeric">${actual}</td>
+      <td>${RACE_PLAN_STATUS[week.status] ? `<span class="race-plan-status">${esc(RACE_PLAN_STATUS[week.status])}</span>` : ''}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('race-plan-note').textContent = racePlanText(race);
+}
+
+function racePlanText(race) {
+  const plan = race.plan;
+  const easy = race.zones.find(zone => zone.key === 'easy');
+  const parts = [plan.started
+    ? `課表從 ${raceShortDate(plan.start_date)} 開始共 ${plan.weeks_total} 週，已過 ${plan.weeks_past} 週、達成 ${plan.weeks_done} 週。`
+    : `課表會從 ${raceShortDate(plan.start_date)} 開始，共 ${plan.weeks_total} 週。`];
+  const floor = plan.baseline_km < 15 ? '，不到 15 km 以 15 km 起算' : '';
+  parts.push(`起點是 ${raceShortDate(plan.baseline_start)}–${raceShortDate(plan.baseline_end)} 平均每週 ${Number(plan.baseline_km).toFixed(1)} km${floor}，每週最多加 10%，每 4 週一次恢復週，最後減量進入比賽週。`);
+  parts.push(`輕鬆跑配速 ${paceClock(easy?.min_pace)} 以上，比賽配速段跑 ${paceClock(race.goal_pace)}/km；達到建議跑量與最長一次的 9 成算達成。`);
+  if (plan.long_below_threshold) {
+    parts.push(`依目前跑量，課表最長只排到 ${plan.longest_planned_km} km，不到比賽距離 75% 的 ${Number(plan.long_threshold_km).toFixed(1)} km，可以考慮放寬目標時間或選較晚的比賽。`);
+  }
+  return parts.join('');
 }
 
 // ---------- long runs ----------

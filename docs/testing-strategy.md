@@ -301,6 +301,10 @@ SPEC-032：合成資料驗證歷史筆數上限（v4.7.3 起 10,000／10,001）�
 
 [規格與具名案例](specs/116-keep-scheduled-workflows-enabled.md) 以文字解析 `offsite-backup.yml`：續命 job 不依賴備份 job、只有它有 `actions: write`、只用 `GITHUB_TOKEN` 不用 secret、失敗只發警告，且 repo 裡每個有 `schedule` 的 workflow 都在它的重新啟用清單中。
 
+## SPEC-119 比賽訓練課表
+
+[規格與具名案例](specs/119-race-training-plan.md) 以純函式測試課表的成長、恢復週、減量與比賽週，新手的最低起點與長距離不足提醒，已過週次的達成狀態與起點固定；API 測試確認課表只算自己的路跑與越野跑。前端測試確認課表只排版後端數字，版面測試在每種寬度載入 12 週課表；Agent eval 確認課表問題會呼叫 `race_training_plan`。
+
 ## SPEC-118 AI 模型清單的排行榜備援
 
 [規格與具名案例](specs/118-free-model-ranking-fallback.md) 以假的模型目錄與排行榜回應測試：前 50 名有免費工具模型時不啟用備援；沒有時依排行榜用量取前 5 個，且不列入排行榜外的模型；整份排行榜都沒有時回傳空清單。

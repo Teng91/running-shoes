@@ -358,6 +358,16 @@ async function run(engine, name) {
             long_runs: { weeks: 8, threshold_km: 15.8, target_count: 2, count: 1, runs: [{ date: '2026-10-25', km: 16, pace: 338 }],
               longest_recent: { date: '2026-10-25', km: 16, pace: 338 }, longest_ever: { date: '2025-12-20', km: 21.1, pace: 395 },
               longest_recent_percent: 76, enough: false, last_long_run_by: '2026-11-29', weekly, average_weekly_km: 31.68 },
+            // SPEC-119: the weekly plan table lays out at every width.
+            plan: {
+            weeks_total: 12, start_date: '2026-09-21', started: true, baseline_km: 28.4, baseline_start: '2026-08-24', baseline_end: '2026-09-20',
+            peak_km: 42, longest_planned_km: 19, long_threshold_km: 15.8, long_below_threshold: false, weeks_done: 3, weeks_past: 5,
+            weeks: ['build', 'build', 'build', 'recovery', 'build', 'build', 'build', 'recovery', 'build', 'peak', 'taper', 'race'].map((phase, index) => ({
+              week: index + 1, week_start: new Date(Date.UTC(2026, 8, 21 + index * 7)).toISOString().slice(0, 10), phase,
+              km: phase === 'race' ? 33.7 : 28 + index, long_km: phase === 'race' ? 21.1 : 14 + (index % 3), race_pace_km: phase === 'build' ? 5 : 0,
+              actual_km: index < 6 ? 25.5 + index : 0, actual_longest_km: index < 6 ? 12.4 : 0,
+              status: ['done', 'partial', 'done', 'missed', 'done', 'current'][index] || 'upcoming' })),
+          },
           } });
         }
         const contentTypes = { '.html': 'text/html', '.js': 'application/javascript', '.mjs': 'application/javascript', '.css': 'text/css',
@@ -454,6 +464,7 @@ async function run(engine, name) {
               await page.locator('#cancel-race-btn').click();
               assert.equal(await page.locator('#race-settings').isHidden(), true, 'cancel closes the race editor');
               assert.match(await page.locator('#race-cards').innerText(), /1:54:44/);
+              assert.equal(await page.locator('#race-plan-table tr').count(), 12, 'the weekly plan is shown');
             }
             assert.equal(await page.locator('.tab-panel.active canvas').count(), expected);
             assert.equal(await page.evaluate(() => Object.values(chartInstances).filter(c => c.canvas.getClientRects().length).length), expected, 'all charts initialized with data');

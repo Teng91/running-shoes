@@ -636,6 +636,18 @@ h1 { font-size: 28px; font-weight: 800; letter-spacing: .01em; margin-bottom: 4p
   .goal-hero-percent { font-size: 20px; }
 }
 
+/* SPEC-119: weekly race training plan */
+.race-plan { margin-bottom: 16px; }
+.race-plan[hidden] { display: none; }
+.race-plan .chart-note { margin-top: 0; }
+.race-plan-table small { color: var(--text-dim); font-size: 11px; }
+.race-plan-light td { color: var(--text-dim); }
+.race-plan-current td { background: rgba(var(--accent-rgb), .08); font-weight: 700; }
+.race-plan-status { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; border: 1px solid var(--border-strong); }
+.race-plan-done .race-plan-status { border-color: var(--accent-line); background: rgba(var(--accent-rgb), .16); }
+.race-plan-partial .race-plan-status { border-color: rgba(255, 138, 31, .45); background: rgba(255, 138, 31, .12); }
+.race-plan-missed .race-plan-status { border-color: rgba(255, 77, 94, .45); background: rgba(255, 77, 94, .12); }
+
 /* Source: css/04-runs.css */
 /* Run log */
 /* SPEC-084: the getting-started card for new accounts. */
