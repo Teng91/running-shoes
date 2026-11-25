@@ -98,6 +98,9 @@ _REMOVED_MODELS = {"openrouter/free"}
 _MODELS_URL = "https://openrouter.ai/api/v1/models?supported_parameters=tools"
 _RANKINGS_URL = "https://openrouter.ai/api/v1/datasets/rankings-daily"
 _DAILY_USAGE_POOL_LIMIT = 50
+# SPEC-118: when no free tool model is in the top 50, fall back to the most-used
+# free tool models anywhere in today's ranking, at most this many.
+_FALLBACK_MODEL_LIMIT = 5
 
 # OpenAI SDK 2.47+ uses httpx2 internally while older supported releases use
 # httpx. A plain number is accepted by both clients and keeps the application
@@ -106,12 +109,14 @@ _LLM_TIMEOUT_SECONDS = 90.0
 
 
 def _fetch_free_models() -> list[dict[str, str]]:
-    """抓取今日使用量前 50 名中的免費工具模型。
+    """抓取今日使用量前 50 名中的免費工具模型；前 50 名沒有時，改取整份排行榜的前 5 個。
 
     Pricing and tool support come from the live catalog. Popularity comes from
     ``rankings-daily``: rank every model first, keep the top 50, then intersect
     that pool with the free, tool-capable catalog. This avoids presenting
-    obscure catalog entries as today's usable models.
+    obscure catalog entries as today's usable models. When that intersection is
+    empty (SPEC-118), the whole ranking is intersected instead and the most-used
+    free tool models are kept; models absent from today's ranking never appear.
     """
     cfg = _PROVIDER_CONFIG[LLMProvider.openrouter]
     api_key = current_config().api_key
@@ -131,9 +136,17 @@ def _fetch_free_models() -> list[dict[str, str]]:
     except (httpx.HTTPError, TypeError, ValueError, KeyError) as exc:
         raise LLMError(f"抓取 OpenRouter 本日模型排行榜失敗：{exc}") from exc
 
-    ranked_slugs = sorted(totals, key=lambda slug: (-totals[slug], slug))[
-        :_DAILY_USAGE_POOL_LIMIT
-    ]
+    ranked_slugs = sorted(totals, key=lambda slug: (-totals[slug], slug))
+    models = _ranked_free_models(ranked_slugs[:_DAILY_USAGE_POOL_LIMIT], models_by_id, model_keys)
+    if models:
+        return models
+    return _ranked_free_models(ranked_slugs, models_by_id, model_keys)[:_FALLBACK_MODEL_LIMIT]
+
+
+def _ranked_free_models(
+    ranked_slugs: list[str], models_by_id: dict[str, dict[str, str]], model_keys: dict[str, str],
+) -> list[dict[str, str]]:
+    """Free tool models in ranking order, each once."""
     models: list[dict[str, str]] = []
     seen: set[str] = set()
     for ranked_slug in ranked_slugs:
