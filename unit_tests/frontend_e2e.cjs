@@ -200,12 +200,20 @@ async function run() {
       await updatedShoeRow.getByRole('button', { name: '編輯' }).click();
       await page.locator('#btn-move').click();
       await page.locator('#retired-table').getByText('Browser Runner v2', { exact: true }).waitFor();
-      assert.equal(await page.locator('#retired-table tr').first().locator('td').count(), 10);
+      const retiredRow = page.locator('#retired-table tr').filter({ hasText: 'Browser Runner v2' });
+      assert.equal(await retiredRow.locator('td').count(), 11);
+      assert.equal((await retiredRow.locator('td').nth(8).textContent()).trim(), '已退役'); // SPEC-117
       await assertPurchaseDetails(page, '已退役');
       await page.locator('.tab[data-tab="shoes"]').click();
-      await page.locator('#retired-table tr').filter({ hasText: 'Browser Runner v2' }).getByRole('button', { name: '編輯' }).click();
-      await page.locator('#modal').getByRole('button', { name: '刪除' }).click();
+      await retiredRow.getByRole('button', { name: '編輯' }).click();
+      await page.locator('#btn-move').click();
+      await page.locator('#shoe-table').getByText('Browser Runner v2', { exact: true }).waitFor();
       await page.locator('#retired-table').getByText('Browser Runner v2', { exact: true }).waitFor({ state: 'detached' });
+      const restoredRow = page.locator('#shoe-table tr').filter({ hasText: 'Browser Runner v2' });
+      assert.notEqual((await restoredRow.locator('td').nth(8).textContent()).trim(), '已退役');
+      await restoredRow.getByRole('button', { name: '編輯' }).click();
+      await page.locator('#modal').getByRole('button', { name: '刪除' }).click();
+      await page.locator('#shoe-table').getByText('Browser Runner v2', { exact: true }).waitFor({ state: 'detached' });
       await page.locator('.tab[data-tab="shoes"]').click();
       await page.locator('#spending-table').getByText('Browser Runner v2', { exact: true }).waitFor({ state: 'detached' });
 

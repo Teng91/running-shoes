@@ -196,54 +196,44 @@ function renderAlerts() {
   }).join('');
 }
 
-function renderTable() {
-  if (preserveInlineTable('shoe-table')) return;
-  const tbody = document.getElementById('shoe-table');
-  inlineTableRows.set('shoe-table', coreData.shoes.map(shoe => ({ ...shoe })));
-  tbody.innerHTML = coreData.shoes.map((s, i) => {
-    const c = calc(s);
-    const pc = progressColor(c.lifeProgress);
-    const bc = shoeColor(s.id);
-    return `<tr>
+// Active and retired tables share one column layout so they line up (SPEC-117); a retired
+// shoe shows「已退役」where an active one shows its forecast retirement date.
+function shoeTableRow(s, i, table) {
+  const retired = table === 'retired-table';
+  const c = calc(s);
+  const pc = progressColor(c.lifeProgress);
+  const bc = shoeColor(s.id);
+  const editAction = retired ? 'data-click="edit-retired-shoe"' : 'data-click="edit-shoe"';
+  const retireCell = retired ? '<td>已退役</td>'
+    : `<td title="${forecastSourceText(s.forecast_source)}">${fmtDate(c.retireDate)}</td>`;
+  return `<tr>
       <td><span class="brand-dot" style="background:${bc}"></span><span class="brand">${esc(s.brand)}</span></td>
       <td><span>${esc(s.model)}</span>${s.nickname ? `<br><small>${esc(s.nickname)}</small>` : ''}</td>
       <td>${esc(s.date.replace(/-/g,'/'))}</td>
-      <td class="editable numeric" data-dblclick="inline-edit" data-table="shoe-table" data-index="${i}" data-field="mileage">${formatShoeMileage(s.mileage)}</td>
+      <td class="editable numeric" data-dblclick="inline-edit" data-table="${table}" data-index="${i}" data-field="mileage">${formatShoeMileage(s.mileage)}</td>
       <td class="numeric">${fmtCostPerKm(c.costPerKm)}</td>
-      <td class="editable numeric" data-dblclick="inline-edit" data-table="shoe-table" data-index="${i}" data-field="expected_mileage">${s.expected_mileage}</td>
+      <td class="editable numeric" data-dblclick="inline-edit" data-table="${table}" data-index="${i}" data-field="expected_mileage">${s.expected_mileage}</td>
       <td class="numeric">${fmtCostPerKm(c.expectedCost)}</td>
       <td class="numeric" style="color:${pc}">${fmtPct(c.lifeProgress)}</td>
-      <td title="${forecastSourceText(s.forecast_source)}">${fmtDate(c.retireDate)}</td>
+      ${retireCell}
       <td>${esc(shoeCategories(s).join(', ') || '未分類')}</td>
       <td>
         <button class="btn btn-sm" data-click="open-shoe-analytics" data-shoe-id="${s.id}">分析</button>
-        <button class="btn btn-sm btn-edit" data-click="edit-shoe" data-index="${i}">編輯</button>
+        <button class="btn btn-sm btn-edit" ${editAction} data-index="${i}">編輯</button>
       </td>
     </tr>`;
-  }).join('');
+}
+
+function renderTable() {
+  if (preserveInlineTable('shoe-table')) return;
+  inlineTableRows.set('shoe-table', coreData.shoes.map(shoe => ({ ...shoe })));
+  document.getElementById('shoe-table').innerHTML = coreData.shoes.map((s, i) => shoeTableRow(s, i, 'shoe-table')).join('');
 }
 
 function renderRetiredTable() {
   if (preserveInlineTable('retired-table')) return;
-  const tbody = document.getElementById('retired-table');
   inlineTableRows.set('retired-table', coreData.retiredShoes.map(shoe => ({ ...shoe })));
-  tbody.innerHTML = coreData.retiredShoes.map((s, i) => {
-    const c = calc(s);
-    const pc = progressColor(c.lifeProgress);
-    const bc = shoeColor(s.id);
-    return `<tr>
-      <td><span class="brand-dot" style="background:${bc}"></span><span class="brand">${esc(s.brand)}</span></td>
-      <td><span>${esc(s.model)}</span>${s.nickname ? `<br><small>${esc(s.nickname)}</small>` : ''}</td>
-      <td>${esc(s.date.replace(/-/g,'/'))}</td>
-      <td class="editable numeric" data-dblclick="inline-edit" data-table="retired-table" data-index="${i}" data-field="mileage">${formatShoeMileage(s.mileage)}</td>
-      <td class="numeric">${fmtCostPerKm(c.costPerKm)}</td>
-      <td class="editable numeric" data-dblclick="inline-edit" data-table="retired-table" data-index="${i}" data-field="expected_mileage">${s.expected_mileage}</td>
-      <td class="numeric">${fmtCostPerKm(c.expectedCost)}</td>
-      <td class="numeric" style="color:${pc}">${fmtPct(c.lifeProgress)}</td>
-      <td>${esc(shoeCategories(s).join(', ') || '未分類')}</td>
-      <td><button class="btn btn-sm" data-click="open-shoe-analytics" data-shoe-id="${s.id}">分析</button> <button class="btn btn-sm btn-edit" data-click="edit-retired-shoe" data-index="${i}">編輯</button></td>
-    </tr>`;
-  }).join('');
+  document.getElementById('retired-table').innerHTML = coreData.retiredShoes.map((s, i) => shoeTableRow(s, i, 'retired-table')).join('');
 }
 
 // SPEC-101: the shoes tab opens with the cards, alerts and tables; every applied resource redraws.

@@ -47,7 +47,7 @@ async function assertLayout(page, label) {
       const overflowing = [...document.querySelectorAll('body *')].filter(node => visible(node) && !node.closest('.table-wrap, pre') && (node.getBoundingClientRect().right > innerWidth + 1 || node.getBoundingClientRect().left < -1 || node.scrollWidth > node.clientWidth + 1));
       problems.push(`page overflow ${document.documentElement.scrollWidth}/${innerWidth}: ` + overflowing.slice(0, 8).map(node => node.id || node.className || node.tagName).join(', '));
     }
-    for (const [id, expected] of [['shoe-table', 11], ['retired-table', 10], ['spending-table', 9]]) {
+    for (const [id, expected] of [['shoe-table', 11], ['retired-table', 11], ['spending-table', 9]]) {
       const tbody = document.getElementById(id);
       if (!visible(tbody.closest('table'))) continue;
       const headers = [...tbody.closest('table').querySelectorAll('thead th')].map(th => th.textContent);

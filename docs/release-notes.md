@@ -11,6 +11,13 @@
 
 Asset 4.29.12／shell v118、schema 13 不變，可直接回滾至 v4.29.11 image；移除這個 job 不影響備份。
 
+### 現役與退役跑鞋表格對齊（SPEC-117，v4.29.13）
+
+- 退役跑鞋表格新增「預估退役」欄，退役鞋顯示「已退役」；兩張表改由 `app-dashboard.js` 的 `shoeTableRow` 產生，並共用 `shoe-list-table` 的 `<colgroup>` 欄寬（`06-shoes.css`）。
+- 退役鞋仍不預估退役日（SPEC-055），API 與資料不變。
+
+Asset 4.29.13／shell v119、schema 13 不變，可直接回滾至 v4.29.12 image。
+
 ### 單一使用者的宣告歸位（SPEC-115，v4.29.11）
 
 - `BRAND_COLORS` 從 `app-state.js` 移到 `app-dashboard.js`；`byDate`（`app-state.js`）與 `fmtMoney`（`app-dashboard.js`）移到 `app-spending.js`；`monthRuns` 從 `app-runs.js` 移到 `app-run-insights.js`。

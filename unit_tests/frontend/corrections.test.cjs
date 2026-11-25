@@ -61,7 +61,7 @@ test('SPEC-055 a retired shoe analysis says retired instead of forecasting a dat
   context.renderShoeAnalytics(idle);
   assert.match(elements['shoe-analysis-content'].innerHTML, /預估退役<\/div><div class="insight-card-value">—<\/div><div class="insight-card-sub">近 90 天沒穿，偶爾穿的鞋不預估/);
   assert.equal(context.forecastSourceText('idle_90_days'), '近 90 天沒穿，不預估');
-  assert.match(extract('renderTable'), /title="\$\{forecastSourceText\(s\.forecast_source\)\}"/);
+  assert.match(extract('shoeTableRow'), /title="\$\{forecastSourceText\(s\.forecast_source\)\}"/);
 });
 
 test('SPEC-055 the Strava preview explains activities deleted earlier', () => {

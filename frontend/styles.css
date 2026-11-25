@@ -1038,6 +1038,15 @@ body.light-theme .modal-overlay { background: rgba(11, 16, 21, .45); }
   .charts-3col { grid-template-columns: 1fr; }
 }
 
+/* Active and retired shoe tables share these column widths so their columns line up (SPEC-117). */
+.shoe-list-table .col-brand { width: 11%; }
+.shoe-list-table .col-model { width: 13%; }
+.shoe-list-table .col-date { width: 9%; }
+.shoe-list-table .col-num { width: 7.5%; }
+.shoe-list-table .col-retire { width: 9%; }
+.shoe-list-table .col-category { width: 8%; }
+.shoe-list-table .col-actions { width: 12.5%; }
+
 /* Source: css/07-agent.css */
 /* Agent Chat styles */
 .agent-panel { flex-direction: column; flex: 1; min-height: 0; }
