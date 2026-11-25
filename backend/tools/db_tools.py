@@ -193,6 +193,8 @@ def race_training_plan(db: Session, user_id: int) -> str:
             "plan.baseline_km": "課表開始前 4 週的平均週跑量，課表由此每週最多增加 10%",
             "plan.weeks_total": "課表週數（含比賽週）；weeks_chosen 為 false 時沿用距離預設的 default_weeks，使用者可在比賽設定改成 4～24 週",
             "plan.long_below_threshold": "true 代表依目前跑量，課表的最長一次仍不到比賽距離的 75%",
+            "plan.long_weeks_needed": "最長一次不足時，課表改成幾週就排得到（仍從本週以後開始）；null 代表拉長也不夠",
+            "plan.long_base_needed_km": "最長一次不足且課表尚未開始時，平常週跑量提高到幾 km 就排得到；null 代表不適用",
             "plan": "比賽結束後為 null",
         },
         **{key: value for key, value in preparation.items() if key != "intensity"},

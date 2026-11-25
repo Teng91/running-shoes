@@ -10,6 +10,9 @@ same data always gives the same plan and past weeks never move:
 - Build weeks grow at most 10% a week, every fourth week is a lighter recovery week, then the
   plan tapers into race week. The long run grows the same way, is at most half the week, and
   the last full long run ends at least two weeks before the race (as race readiness asks).
+  A long run that already exceeds the distance's usual peak is kept, never cut (SPEC-122).
+- When the longest planned run stays below 75% of the race, the plan says which longer plan
+  length or weekly base would reach it (SPEC-122).
 
 Volume counts every training activity (`TRAINING_RUN`); the AI coach only explains the numbers.
 """
@@ -51,6 +54,8 @@ PARTIAL_SHARE = 0.6
 
 MIN_PLAN_WEEKS = 4
 MAX_PLAN_WEEKS = 24
+# The highest weekly base the long-run suggestion searches (SPEC-122).
+MAX_SUGGESTED_BASE_KM = 150
 
 
 @dataclass(frozen=True)
@@ -86,6 +91,8 @@ def _planned_weeks(profile: Profile, total: int, base: float, long_base: float, 
     # Taper and race week follow the highest volume the plan reaches, so a short plan never
     # tapers above its own peak week (SPEC-121).
     peak = max(base, min(profile.peak_km, base * MAX_PEAK_GROWTH))
+    # A long run already above the distance's usual peak is kept, never cut (SPEC-122).
+    long_peak = max(profile.long_peak_km, long_base)
     build_count = total - len(profile.taper) - 1
     weeks: list[dict] = []
     volume, long = base, long_base
@@ -96,7 +103,7 @@ def _planned_weeks(profile: Profile, total: int, base: float, long_base: float, 
         else:
             if index:
                 volume = min(peak, volume * WEEKLY_GROWTH)
-                long = min(profile.long_peak_km, max(long * WEEKLY_GROWTH, long + 1))
+                long = min(long_peak, max(long * WEEKLY_GROWTH, long + 1))
             long = min(long, volume * LONG_RUN_MAX_SHARE) if index else long
             week_km, long_km = volume, long
         weeks.append({"phase": "recovery" if recovery else "build", "km": _km(week_km), "long_km": _km(long_km)})
@@ -107,6 +114,31 @@ def _planned_weeks(profile: Profile, total: int, base: float, long_base: float, 
     weeks.append({"phase": "race", "km": _km(volume * RACE_WEEK_EASY_SHARE + distance),
                   "long_km": round_metric(distance, 1)})
     return weeks
+
+
+def _longest_planned(weeks: list[dict]) -> float:
+    return max(week["long_km"] for week in weeks if week["phase"] != "race")
+
+
+def _long_run_options(profile: Profile, total: int, base: float, long_base: float, distance: float,
+                      threshold: float, weeks_until_race: int, started: bool) -> tuple[int | None, int | None]:
+    """The shortest plan length and the lowest weekly base whose plan reaches `threshold` (SPEC-122).
+
+    A longer plan is only offered while it can still start this week or later, and a higher base
+    only before the plan starts, because a started plan keeps its baseline.
+    """
+    def reaches(weeks: int, weekly: float, long: float) -> bool:
+        return _longest_planned(_planned_weeks(profile, weeks, weekly, long, distance)) >= threshold
+
+    longer = next((weeks for weeks in range(total + 1, min(MAX_PLAN_WEEKS, weeks_until_race) + 1)
+                   if reaches(weeks, base, long_base)), None)
+    if started:
+        return longer, None
+    # A higher base keeps the runner's own long-run share of the week.
+    share = long_base / base
+    higher = next((weekly for weekly in range(int(base) + 1, MAX_SUGGESTED_BASE_KM + 1)
+                   if reaches(total, weekly, max(MIN_LONG_KM, weekly * share))), None)
+    return longer, higher
 
 
 def _zone_runs(timed_runs: list[tuple[date, float, int]], pace_goal: float) -> dict[str, int]:
@@ -158,13 +190,18 @@ def build_plan(goal: dict, runs: list[tuple[date, float]], as_of: date,
                 "zone_runs": _zone_runs(timed, goal_pace(goal))}
         week["status"] = _status(week, week_start, as_of)
         weeks.append(week)
-    longest_planned = max(week["long_km"] for week in weeks if week["phase"] != "race")
+    longest_planned = _longest_planned(weeks)
     long_threshold = round_metric(distance * LONG_RUN_SHARE, 1)
+    weeks_until_race = (race_monday - _monday(as_of)).days // 7 + 1
+    longer, higher = (None, None)
+    if longest_planned < long_threshold:
+        longer, higher = _long_run_options(profile, total, base, long_base, distance, long_threshold,
+                                           weeks_until_race, start <= as_of)
     return {
         "weeks_total": total,
         "weeks_chosen": goal.get("plan_weeks") is not None,
         "default_weeks": profile.weeks,
-        "weeks_until_race": (race_monday - _monday(as_of)).days // 7 + 1,
+        "weeks_until_race": weeks_until_race,
         "start_date": start.isoformat(),
         "started": start <= as_of,
         "baseline_km": round_metric(baseline, 1),
@@ -174,6 +211,8 @@ def build_plan(goal: dict, runs: list[tuple[date, float]], as_of: date,
         "longest_planned_km": longest_planned,
         "long_threshold_km": long_threshold,
         "long_below_threshold": longest_planned < long_threshold,
+        "long_weeks_needed": longer,
+        "long_base_needed_km": higher,
         "weeks_done": sum(week["status"] == "done" for week in weeks),
         "weeks_past": sum(week["status"] in {"done", "partial", "missed"} for week in weeks),
         "weeks": weeks,

@@ -4,6 +4,12 @@
 每版的摘要見 [CHANGELOG.md](../CHANGELOG.md)；目前的功能與操作方式以 [README](../README.md) 為準。
 這裡保留當時的文字，後續版本可能已調整其中的行為。
 
+### 課表保留長跑並說明怎樣排得到長距離（SPEC-122，v5.0.3）
+
+- `_planned_weeks` 的長跑上限改為距離預設高峰與起點長跑取大者；之前 10K 課表會把 20 km 的長跑降到 14 km。
+- `plan` 新增 `long_weeks_needed`（從本週以後開始仍排得到的最短週數）與 `long_base_needed_km`（課表尚未開始時需要的平常週跑量），只在 `long_below_threshold` 時有值；前端與 AI 工具依此提示。
+- 沒有 schema 變更，可直接回滾至 v5.0.2 image。Asset 5.0.3／shell v124。
+
 ### 排程 workflow 每天續命（SPEC-116，v4.29.12）
 
 - `offsite-backup.yml` 新增 `keep-schedules-enabled` job，與 `backup` 平行執行，job 權限只有 `actions: write`，以 `GITHUB_TOKEN` 呼叫 `PUT /repos/{repo}/actions/workflows/{file}/enable` 重新啟用 `offsite-backup.yml` 與 `verify.yml`；失敗只印 `::warning::`。備份 job 仍只有 `contents: read`。

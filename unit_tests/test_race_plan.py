@@ -167,3 +167,32 @@ def test_race_training_plan_tool_reads_the_same_plan(db):
     assert "intensity" not in result and len(result["intensity_zones"]) == 4
     assert agent_planner.build_query_plan("我的半馬課表這週要跑多少？").database_tools == ("race_training_plan",)
     assert "race_training_plan" in {tool["function"]["name"] for tool in db_tools.TOOL_DEFINITIONS}
+
+
+def test_an_experienced_runner_keeps_a_long_run_above_the_distance_peak():
+    # SPEC-122: 40 km weeks with a 20 km Sunday long run, ten weeks before a 10K (long peak 14).
+    goal = {**HALF, "race_date": "2027-02-07", "distance_km": 10}
+    plan = build_plan(goal, weekly_runs(date(2026, 10, 1), date(2026, 11, 25), 40), date(2026, 11, 25))
+    build = [week for week in plan["weeks"] if week["phase"] in {"build", "peak"}]
+    assert [week["long_km"] for week in build] == [20] * len(build), "the long run is never cut to 14 km"
+    assert plan["long_below_threshold"] is False
+    assert (plan["long_weeks_needed"], plan["long_base_needed_km"]) == (None, None)
+
+
+def test_a_short_long_run_says_which_plan_length_or_base_reaches_it():
+    as_of = date(2026, 11, 25)
+    full = {**HALF, "distance_km": 42.195}
+    # A beginner sixteen weeks out: only a 42 km base gets the long run to 75% of the marathon.
+    beginner = build_plan({**full, "race_date": "2027-03-21"}, [], as_of)
+    assert (beginner["longest_planned_km"], beginner["long_threshold_km"]) == (11, 31.6)
+    assert (beginner["long_weeks_needed"], beginner["long_base_needed_km"]) == (None, 42)
+    # An 8-week plan from 44 km weeks stops at 29 km; 9 weeks or a 48 km base reach 31.6 km.
+    runs = weekly_runs(date(2026, 10, 1), date(2026, 11, 25), 44)
+    short = build_plan({**full, "race_date": "2027-06-20", "plan_weeks": 8}, runs, as_of)
+    assert (short["longest_planned_km"], short["weeks_until_race"]) == (29, 30)
+    assert (short["long_weeks_needed"], short["long_base_needed_km"]) == (9, 48)
+    assert build_plan({**full, "race_date": "2027-06-20", "plan_weeks": 9}, runs, as_of)["long_below_threshold"] is False
+    # A started plan keeps its baseline and cannot start earlier, so it offers neither.
+    started = build_plan({**full, "race_date": "2026-12-20", "plan_weeks": 8}, [], as_of)
+    assert started["started"] and started["long_below_threshold"]
+    assert (started["long_weeks_needed"], started["long_base_needed_km"]) == (None, None)

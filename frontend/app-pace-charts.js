@@ -211,10 +211,17 @@ function racePlanText(race) {
   if (!plan.weeks_chosen) {
     parts.push(`課表週數沿用${raceDistanceName(race.goal.distance_km)}預設的 ${plan.default_weeks} 週；按「調整比賽」可以改成 4～24 週，例如從本週開始的 ${Math.max(4, plan.weeks_until_race)} 週。`);
   }
-  if (plan.long_below_threshold) {
-    parts.push(`依目前跑量，課表最長只排到 ${plan.longest_planned_km} km，不到比賽距離 75% 的 ${Number(plan.long_threshold_km).toFixed(1)} km，可以考慮放寬目標時間或選較晚的比賽。`);
-  }
+  if (plan.long_below_threshold) parts.push(racePlanLongText(plan));
   return parts.join('');
+}
+
+// SPEC-122: the backend says which plan length or weekly base would reach the long-run threshold.
+function racePlanLongText(plan) {
+  const options = [];
+  if (plan.long_weeks_needed) options.push(`把課表拉長到 ${plan.long_weeks_needed} 週（按「調整比賽」）`);
+  if (plan.long_base_needed_km) options.push(`先把平常週跑量提高到約 ${plan.long_base_needed_km} km`);
+  const advice = options.length ? `${options.join('，或')}，就排得到。` : '可以考慮選較晚的比賽或較短的距離。';
+  return `依目前跑量，課表最長只排到 ${plan.longest_planned_km} km，不到比賽距離 75% 的 ${Number(plan.long_threshold_km).toFixed(1)} km；${advice}`;
 }
 
 // ---------- long runs ----------

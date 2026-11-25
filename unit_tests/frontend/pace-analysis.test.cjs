@@ -97,8 +97,17 @@ test('SPEC-119 the weekly plan lays out backend targets, actual distance and sta
   assert.equal(nodes['race-plan-note'].textContent,
     '本週是第 4 週（恢復週）：建議 15 km、最長一次 7 km，已跑 6.5 km，還差 8.5 km。課表從 9/21 開始共 12 週，已過 3 週、達成 1 週。起點是 8/24–9/20 平均每週 12.4 km，不到 15 km 以 15 km 起算，'
     + '每週最多加 10%，每 4 週一次恢復週，最後減量進入比賽週。輕鬆跑配速 6:26 以上；強度是每週有填時間的路跑落在各區間的次數，區間同下方強度分布。'
-    + '達到建議跑量與最長一次的 9 成算達成。依目前跑量，課表最長只排到 11 km，不到比賽距離 75% 的 15.8 km，'
-    + '可以考慮放寬目標時間或選較晚的比賽。');
+    + '達到建議跑量與最長一次的 9 成算達成。依目前跑量，課表最長只排到 11 km，不到比賽距離 75% 的 15.8 km；'
+    + '可以考慮選較晚的比賽或較短的距離。');
+
+  // SPEC-122: a plan that has not started says which longer plan or weekly base reaches the threshold.
+  const options = racePrepContext({ race: { ...race, plan: { ...plan, started: false, long_weeks_needed: 9, long_base_needed_km: 48 } }, pace });
+  await options.context.renderPaceAnalysis();
+  assert.match(options.nodes['race-plan-note'].textContent,
+    /不到比賽距離 75% 的 15\.8 km；把課表拉長到 9 週（按「調整比賽」），或先把平常週跑量提高到約 48 km，就排得到。$/);
+  const baseOnly = racePrepContext({ race: { ...race, plan: { ...plan, started: false, long_weeks_needed: null, long_base_needed_km: 42 } }, pace });
+  await baseOnly.context.renderPaceAnalysis();
+  assert.match(baseOnly.nodes['race-plan-note'].textContent, /15\.8 km；先把平常週跑量提高到約 42 km，就排得到。$/);
 
   // A goal saved before plan lengths existed keeps the default and says how to change it.
   const legacy = racePrepContext({ race: { ...race, plan: { ...plan, weeks_chosen: false } }, pace });

@@ -301,6 +301,10 @@ SPEC-032：合成資料驗證歷史筆數上限（v4.7.3 起 10,000／10,001）�
 
 [規格與具名案例](specs/116-keep-scheduled-workflows-enabled.md) 以文字解析 `offsite-backup.yml`：續命 job 不依賴備份 job、只有它有 `actions: write`、只用 `GITHUB_TOKEN` 不用 secret、失敗只發警告，且 repo 裡每個有 `schedule` 的 workflow 都在它的重新啟用清單中。
 
+## SPEC-122 課表保留長跑並說明怎樣排得到長距離
+
+[規格與具名案例](specs/122-plan-long-run-floor-and-options.md) 以每週 40 km、長跑 20 km 的 10K 課表確認長跑不會降到預設高峰，並以新手全馬、8 週全馬與已開始的課表確認回傳的最短週數與週跑量；前端測試確認提示依兩個欄位組合文字。
+
 ## SPEC-121 課表的每週強度次數與減量修正
 
 [規格與具名案例](specs/121-plan-zone-counts-and-taper.md) 以回報的 4 週半馬課表確認減量週低於高峰週，並以各區間一次的計時路跑確認每週強度次數（越野跑與今天之後的紀錄不計）；前端測試確認強度欄略過 0 次、未開始的週顯示「—」。
