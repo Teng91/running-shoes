@@ -6,7 +6,12 @@ from datetime import date, timedelta
 from backend import agent_planner, agent_tools
 from backend.clock import local_today
 from backend.models import RaceGoal, Run
-from backend.read_models.race_plan import build_plan, profile_for, race_preparation
+from backend.read_models.race_plan import (
+    build_plan,
+    profile_for,
+    race_preparation,
+    suggested_plan_weeks,
+)
 from backend.tools import db_tools
 from unit_tests.test_run_pace import client, headers, owner
 
@@ -126,6 +131,29 @@ def test_plan_weeks_are_saved_with_the_goal(client, db):
     assert saved.json()["plan_weeks"] == 9
     assert client.get("/api/race-goal", headers=headers(user)).json()["plan_weeks"] == 9
     assert race_preparation(db, user.id, date(2099, 4, 1))["plan"]["weeks_total"] == 9
+
+
+def test_suggested_plan_weeks_follow_the_race_goal_form_rule():
+    # Same rule as the form's suggestedPlanWeeks: the weeks left, at most the default, at least 4.
+    today = date(2026, 11, 25)  # a Wednesday
+    assert suggested_plan_weeks(21.0975, date(2026, 12, 27), today) == 5
+    assert suggested_plan_weeks(21.0975, date(2027, 6, 6), today) == 12
+    assert suggested_plan_weeks(42.195, date(2026, 11, 29), today) == 4
+    assert suggested_plan_weeks(5, date(2026, 11, 20), today) == 4
+
+
+def test_the_api_stores_suggested_plan_weeks_so_the_plan_start_stays_put(client, db):
+    user, _ = owner(db, "plan-weeks-blank")
+    today = local_today()
+    race_day = today + timedelta(weeks=5)
+    saved = client.put("/api/race-goal", headers=headers(user), json={**HALF, "race_date": race_day.isoformat()})
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["plan_weeks"] == suggested_plan_weeks(HALF["distance_km"], race_day, today) == 6
+    plan = race_preparation(db, user.id, today)["plan"]
+    assert (plan["weeks_total"], plan["weeks"][0]["status"]) == (6, "current")
+    # A week later the stored length keeps the same start instead of shrinking with the weeks left.
+    later = race_preparation(db, user.id, today + timedelta(weeks=1))["plan"]
+    assert (later["weeks_total"], later["start_date"]) == (6, plan["start_date"])
 
 
 def test_a_short_plan_never_tapers_above_its_own_peak_and_counts_zones():
