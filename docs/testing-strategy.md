@@ -301,6 +301,10 @@ SPEC-032：合成資料驗證歷史筆數上限（v4.7.3 起 10,000／10,001）�
 
 [規格與具名案例](specs/116-keep-scheduled-workflows-enabled.md) 以文字解析 `offsite-backup.yml`：續命 job 不依賴備份 job、只有它有 `actions: write`、只用 `GITHUB_TOKEN` 不用 secret、失敗只發警告，且 repo 裡每個有 `schedule` 的 workflow 都在它的重新啟用清單中。
 
+## SPEC-117 現役與退役跑鞋表格對齊
+
+[規格與具名案例](specs/117-aligned-shoe-tables.md) 的前端測試確認兩張表標題相同、各 11 欄，退役鞋第 9 欄為「已退役」且共用欄寬；瀏覽器 E2E 把鞋移至退役再移回現役，兩邊各自顯示正確。
+
 ## SPEC-115 單一使用者的宣告歸位
 
 [規格與具名案例](specs/115-single-consumer-declarations.md) 的架構測試確認基準降為 166 個名稱；支出、鞋款顏色與跑步紀錄的既有測試在搬移後原封不動通過。

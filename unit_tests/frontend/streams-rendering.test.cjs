@@ -140,11 +140,11 @@ test('shoe purchase columns live only in spending details, with aligned table ro
     getThemeColor: (_, fallback) => fallback, shoeCategories: s => s.categories,
   });
   vm.runInContext(['esc', 'calc', 'fmtPct', 'fmtCostPerKm', 'fmtDate', 'forecastSourceText', 'floorShoeKm', 'formatShoeMileage',
-    'renderTable', 'renderRetiredTable'].map(extract).join('\n'), context);
+    'shoeTableRow', 'renderTable', 'renderRetiredTable'].map(extract).join('\n'), context);
   context.renderTable();
   context.renderRetiredTable();
   // SPEC-050: the planned monthly km is edited in the shoe form, not shown as a column.
-  for (const [id, count] of [['shoe-table', 11], ['retired-table', 10]]) {
+  for (const [id, count] of [['shoe-table', 11], ['retired-table', 11]]) {
     const headers = tableHeaders(id);
     assert.equal(headers.length, count);
     assert.ok(['尺寸', '買價', '原價', '折數', '月跑量'].every(label => !headers.includes(label)));
@@ -155,6 +155,16 @@ test('shoe purchase columns live only in spending details, with aligned table ro
     assert.match(elements[id].innerHTML, />分析<\/button>/);
     assert.match(elements[id].innerHTML, />編輯<\/button>/);
   }
+  // SPEC-117: both tables share one column layout; a retired shoe says「已退役」instead of a forecast.
+  assert.deepEqual(tableHeaders('retired-table'), tableHeaders('shoe-table'));
+  assert.equal(tableHeaders('shoe-table')[8], '預估退役');
+  const cells = id => [...elements[id].innerHTML.matchAll(/<td\b[^>]*>([\s\S]*?)<\/td>/g)].map(match => match[1].trim());
+  assert.equal(cells('retired-table')[8], '已退役');
+  assert.notEqual(cells('shoe-table')[8], '已退役');
+  assert.match(elements['retired-table'].innerHTML, /data-click="edit-retired-shoe"/);
+  assert.match(elements['shoe-table'].innerHTML, /data-click="edit-shoe"/);
+  assert.equal((htmlSource.match(/<table class="shoe-list-table">/g) || []).length, 2);
+  assert.match(styleSource, /\.shoe-list-table \.col-num \{ width: 7\.5%; \}/);
   assert.deepEqual(tableHeaders('spending-table'),
     ['日期', '品牌', '鞋款', '尺寸', '買價', '原價', '折數', '類別', '狀態']);
 });

@@ -287,7 +287,8 @@ window.__appBootLegacyPoll = window.setInterval(function () {
       </div>
       <p class="table-scroll-hint">欄位較多時，可左右滑動表格查看。</p>
       <div class="table-wrap" tabindex="0" role="region" aria-label="可左右滑動的資料表">
-        <table>
+        <table class="shoe-list-table">
+          <colgroup><col class="col-brand"><col class="col-model"><col class="col-date"><col span="5" class="col-num"><col class="col-retire"><col class="col-category"><col class="col-actions"></colgroup>
           <thead>
             <tr>
               <th>品牌</th><th>鞋款</th><th>購買日期</th>
@@ -305,12 +306,13 @@ window.__appBootLegacyPoll = window.setInterval(function () {
       </div>
       <p class="table-scroll-hint">欄位較多時，可左右滑動表格查看。</p>
       <div class="table-wrap" tabindex="0" role="region" aria-label="可左右滑動的資料表">
-        <table>
+        <table class="shoe-list-table">
+          <colgroup><col class="col-brand"><col class="col-model"><col class="col-date"><col span="5" class="col-num"><col class="col-retire"><col class="col-category"><col class="col-actions"></colgroup>
           <thead>
             <tr>
               <th>品牌</th><th>鞋款</th><th>購買日期</th>
               <th class="numeric">跑鞋里程</th><th class="numeric">每km成本</th><th class="numeric">預期里程</th><th class="numeric">預期成本</th><th class="numeric">生命進度</th>
-              <th>類別</th><th></th>
+              <th>預估退役</th><th>類別</th><th></th>
             </tr>
           </thead>
           <tbody id="retired-table"></tbody>
