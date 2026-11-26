@@ -5,7 +5,11 @@ from sqlalchemy.engine import Engine
 from backend import models
 
 AUDITED = {"shoes": models.Shoe, "runs": models.Run,
-           "monthly_mileages": models.MonthlyMileage, "running_goals": models.RunningGoal}
+           "monthly_mileages": models.MonthlyMileage, "running_goals": models.RunningGoal,
+           # SPEC-128: the target race shows in the history and a deleted one can be recovered.
+           "race_goals": models.RaceGoal}
+# Entities whose events a v6 account archive carries; race goal events stay out of backups.
+ARCHIVED_HISTORY_ENTITIES = ("shoes", "runs", "monthly_mileages", "running_goals")
 
 
 def install_audit_triggers(engine: Engine) -> None:

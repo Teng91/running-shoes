@@ -301,6 +301,10 @@ SPEC-032：合成資料驗證歷史筆數上限（v4.7.3 起 10,000／10,001）�
 
 [規格與具名案例](specs/116-keep-scheduled-workflows-enabled.md) 以文字解析 `offsite-backup.yml`：續命 job 不依賴備份 job、只有它有 `actions: write`、只用 `GITHUB_TOKEN` 不用 secret、失敗只發警告，且 repo 裡每個有 `schedule` 的 workflow 都在它的重新啟用清單中。
 
+## SPEC-128 目標賽事的異動歷史與誤刪復原
+
+[規格與具名案例](specs/128-race-goal-history.md) 以 API 新增、修改與刪除目標賽事，確認異動歷史的三筆事件與欄位、只有刪除可以復原、復原後內容與版本正確且不能復原兩次；已有新目標時回 409，其他帳號看不到也不能復原；帳號備份不含目標賽事的歷史。前端測試確認歷史顯示「目標賽事」，復原後讓比賽準備重新讀取。
+
 ## SPEC-127 訓練課表排版移到 native module
 
 [規格與具名案例](specs/127-race-plan-view-module.md) 直接匯入 `runtime/race-plan-view.mjs`，確認沒有課表時回傳 null、日期等格式由注入的函式決定、模組不使用 DOM 或網路，且過期的請求不寫入畫面；既有 SPEC-119～124 的前端測試改由同一個模組排版，文字完全不變。

@@ -678,6 +678,7 @@ flowchart LR
 - **限流**：`rate_limits.consume()` 把同一請求的所有視窗放在一個交易，滿了就整筆回滾；限額來自 `app.state.settings`，不再保留記憶體桶。SPEC-071 再加上 AI 的每帳號與全站 24 小時視窗，限流桶保留 24 小時。
 - **稽核 trigger**：每次啟動依目前欄位重建，避免舊欄位清單使快照不完整或使寫入失敗。
 - **Strava**：`strava_import.parse_activity_dates()` 把 UTC 時間戳轉為 `clock.APP_TIMEZONE` 日期。`date_corrections()` 只修正仍停在舊 UTC 日期的既有活動，`services/strava_imports.py` 在匯入交易中移動日期與月跑量。
+- **v5.2.0**：目標賽事納入稽核與誤刪復原（SPEC-128）。`audit_schema.AUDITED` 加入 `race_goals`，`services/history.py` 新增 `_restore_race_goal`；`services/exports.py` 只匯出 `ARCHIVED_HISTORY_ENTITIES` 的歷史，備份 v6 不變。前端 `app-history.js` 在復原目標賽事後讓比賽準備的資料失效。依賴方向不變。
 - **v5.1.1**：訓練課表排版移到 native module（SPEC-127）。`runtime/race-plan-view.mjs` 依 `GET /api/analytics/race` 的 `plan` 產生表格列與說明文字，不碰 DOM，格式函式由 `app-pace-charts.js` 注入；`app-pace-charts.js` 只在第一次顯示課表時載入它並寫入 DOM。沒有新增 classic script 共用名稱，依賴方向不變：classic bridge → native view。
 - **v5.1.0**：備份包含目標賽事（SPEC-126）。`backup_contract` v6 新增 `race_goal`，`services/exports.py`、`account_import_plan`、`account_import_changes` 與 `account_import` 以跑量目標相同的單列方式處理；依賴方向不變。
 - **v5.0.1**：課表週數與 IndexedDB 重試（SPEC-120）。Schema 14 新增 `race_goals.plan_weeks`（回滾腳本 `scripts/rollback_schema_fourteen.sql`），`race_plan` 以它決定課表長度；`app-local-store.js` 遇到 WebKit 的 `UnknownError` 換新連線重試一次。依賴方向不變。

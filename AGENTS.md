@@ -41,7 +41,7 @@
 - `backend/llm.py`: OpenRouter adapter with a process-wide model cache; `create_app` injects the API key, `OR_MODEL` and output-token limit as `LLMConfig` (SPEC-093), and the module never reads the environment itself; users only see `user_facing_error()` text, raw provider error bodies go to the server log.
 - `backend/services/fingerprints.py`: canonical payload fingerprints for receipts, backups and import plans; `mutation_receipts` is the only keyed receipt and operation keys never replace authentication.
 - `backend/services/retention.py`: per-account caps for audit events, receipts and run tombstones, applied inside `write_transaction`.
-- `backend/audit_schema.py`: same-transaction domain audit and revision triggers; never audit credentials.
+- `backend/audit_schema.py`: same-transaction domain audit and revision triggers; never audit credentials. Race goals are audited and recoverable (SPEC-128) but their events stay out of v6 archives (`ARCHIVED_HISTORY_ENTITIES`).
 - `backend/backup_contract.py`: bounded, credential-free v1–v6 account archives (v4 adds run `duration_seconds`, v5 adds run `activity_type`, v6 adds the `race_goal`, SPEC-126).
 - `backend/services/operations.py`: operation identities, expected versions, transactional receipts.
 - `backend/services/account_restore.py`: user-bound preview, source mappings and atomic non-destructive merges.

@@ -16,7 +16,7 @@ async function loadWorkspaceHistory(more = false) {
     for (const event of result.value.rows) {
       const row = document.createElement('div'); row.className = 'workspace-item';
       const text = document.createElement('p');
-      const labels = { shoes: '鞋款', runs: '跑步', monthly_mileages: '月跑量', running_goals: '目標' };
+      const labels = { shoes: '鞋款', runs: '跑步', monthly_mileages: '月跑量', running_goals: '目標', race_goals: '目標賽事' };
       const actions = { insert: '新增', update: '更新', delete: '刪除' };
       const changes = Object.keys(event.after || {}).filter(key => !['id', 'version'].includes(key)
         && JSON.stringify(event.before?.[key]) !== JSON.stringify(event.after[key]));
@@ -37,6 +37,8 @@ async function loadWorkspaceHistory(more = false) {
               committed = true;
             }
             if (!isCurrentAuthSession(session)) return;
+            // SPEC-128: a recovered target race is read by race preparation, not the core data.
+            if (event.entity === 'race_goals') invalidateDataResources(['race-readiness', 'pace-analysis']);
             await refreshCoreData();
             if (!isCurrentAuthSession(session)) return;
             await loadWorkspaceHistory();

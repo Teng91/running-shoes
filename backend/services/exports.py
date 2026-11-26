@@ -10,6 +10,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from backend import models
+from backend.audit_schema import ARCHIVED_HISTORY_ENTITIES
 from backend.backup_contract import (
     ARCHIVE_LIMITS,
     MAX_RUN_ALIASES,
@@ -63,7 +64,11 @@ def _account_export_snapshot(db: Session, user: models.User, *, now: datetime | 
     def rows(model, collection, serialize):
         limit = ARCHIVE_LIMITS[collection]
         result: list[dict[str, Any]] = []
-        query = db.query(model).filter_by(user_id=user.id).order_by(model.id).limit(limit + 1)
+        query = db.query(model).filter_by(user_id=user.id)
+        if model is models.AuditEvent:
+            # SPEC-128: the v6 archive carries history for these entities only.
+            query = query.filter(models.AuditEvent.entity.in_(ARCHIVED_HISTORY_ENTITIES))
+        query = query.order_by(model.id).limit(limit + 1)
         for row in query.yield_per(100):
             if len(result) == limit:
                 label = {"shoes": "鞋款", "runs": "跑步", "monthly_mileages": "月跑量", "monthly_reports": "月報", "strava_imports": "匯入摘要", "history": "異動歷史"}[collection]
