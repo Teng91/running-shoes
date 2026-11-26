@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 
 from backend import models
 from backend.credentials import get_password_hash
-from backend.services.accounts import MIN_PASSWORD_LENGTH, find_user
+from backend.services.accounts import MIN_PASSWORD_LENGTH, find_user, username_key
 from backend.services.errors import Conflict, Invalid
 from backend.services.transactions import write_transaction
 
@@ -159,10 +159,15 @@ def attempt_key(db: Session, identifier: str) -> str:
     """Rate-limit key for reset-code attempts: the account when it exists (SPEC-085).
 
     Username and email share one budget; an unknown identifier gets its own key, so
-    the limit behaves the same whether or not the account exists.
+    the limit behaves the same whether or not the account exists. An unknown identifier is
+    folded like the lookup itself (emails lowered, names A–Z only, SPEC-131), so spellings the
+    lookup treats as one identifier share one budget.
     """
     user = _account(db, identifier)
-    return f"user:{user.id}" if user is not None else "name:" + identifier.strip().casefold()
+    if user is not None:
+        return f"user:{user.id}"
+    value = identifier.strip()
+    return "name:" + (value.lower() if "@" in value else username_key(value))
 
 
 def request_password_reset(db: Session, identifier: str, *, send: Send, secret_key: str) -> dict:
