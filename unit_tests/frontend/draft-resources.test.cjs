@@ -47,12 +47,12 @@ test('SPEC-024 goal drafts survive redraw and save acknowledgements', async () =
   const elements = nodes(), pending = deferred(), writes = [];
   const context = vm.createContext({ document: { getElementById: id => elements[id] },
     runningGoal: { version: 1, start_year: 2026, monthly_km: 125 }, selectedYear: 2026,
-    monthlyMileages: [], goalProgressCache: new Map(), loadGoalProgress() {}, invalidatePanels() {},
+    monthlyMileages: [], goalProgressCache: new Map(), loadGoalProgress() {},
     apiPut: (_, payload) => { writes.push(payload); return writes.length === 1 ? pending.promise : Promise.resolve({ ...payload, version: 3 }); },
   });
   vm.runInContext('let goalSaveOperation = null, goalProgressRequestId = 0;\n' +
     [extract('renderGoalProgress'), extract('saveRunningGoal')].join('\n'), context);
-  context.renderActivePanel = () => context.renderGoalProgress();
+  context.refreshPanels = () => context.renderGoalProgress();
   context.renderGoalProgress(); elements['goal-monthly-km'].value = '180';
   elements['goal-settings'].hidden = true; // collapsed as in the template
   context.renderGoalProgress(); assert.equal(elements['goal-monthly-km'].value, '180');
@@ -122,7 +122,7 @@ test('SPEC-024 independent resource failures preserve successful data and releva
 test('SPEC-024 coalesced dashboard loads apply run rows once despite partial failures', async () => {
   const elements = nodes(), calls = [];
   const context = runContext({ document: { getElementById: id => elements[id] },
-    goalProgressCache: new Map(), selectedRunMonth: () => '2026-10', render() {}, loadStravaHistory() {}, console: { error() {} },
+    goalProgressCache: new Map(), selectedRunMonth: () => '2026-10', refreshPanels() {}, loadStravaHistory() {}, console: { error() {} },
     apiGet: async url => { calls.push(url); if (url === '/running-goal') throw Error('goal offline'); return url === '/monthly-mileage' ? [{ year: 2026 }] : []; },
     fetchRunPage: async () => { calls.push('page'); return { rows: [{ id: 42 }], hasMore: false }; },
   });

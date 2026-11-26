@@ -74,15 +74,8 @@ function shoeName(shoeId) {
 }
 
 // ====== Render ======
-function render(resource = null) {
-  const todayStr = localDateISO().replace(/-/g, '/');
-  document.getElementById('today-label').textContent = '資料日期：' + todayStr;
-  // Shoes arrive sorted by purchase date from applyCoreResource (SPEC-094).
-  invalidatePanels(resource);
-  renderActivePanel();
-  noteOnboardingData(resource);
-}
-
+// Shoes arrive sorted by purchase date from applyCoreResource (SPEC-094); the shell redraws
+// this panel through refreshPanels (SPEC-135).
 function renderCards() {
   const allShoes = [...coreData.shoes, ...coreData.retiredShoes];
   let totalMileage = 0, totalPrice = 0;
@@ -240,4 +233,3 @@ function renderRetiredTable() {
 registerPanel('shoes', { render: () => {
   renderCards(); renderAlerts(); renderCategorySummary(); renderTable(); renderRetiredTable();
 } });
-registerDataHooks({ arrived: resource => render(resource) });

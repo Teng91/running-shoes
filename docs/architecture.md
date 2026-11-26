@@ -276,8 +276,9 @@ flowchart LR
 
 `app-state.js` 只保存共享 state、常數與有 try/catch 的 localStorage 存取函式；`app-api.js` 是 transport adapter；`app-auth.js` 管理 session
 transition；`app-core.js` 組合畫面資料但不承擔 feature-specific rendering：功能 script 載入時以 `registerPanel()`（繪製、分頁打開前準備、重畫鍵）、
-`registerResourceReader()`（`loadData()` 的額外資源，例如跑步紀錄）與 `registerDataHooks()`（資源到達、整體失效、匯入紀錄）登記自己，
-殼層不以名稱呼叫任何功能函式，依賴方向是 feature → shell（SPEC-101）。跑步 CRUD、Strava 與洞察分別位於
+`registerResourceReader()`（`loadData()` 的額外資源，例如跑步紀錄）與 `registerDataHooks()`（資源到達、整體失效、`refreshPanels()` 重繪後、匯入紀錄）登記自己，
+殼層不以名稱呼叫任何功能函式，依賴方向是 feature → shell（SPEC-101）。資料變更後的重繪只有 `app-core.refreshPanels(resource)` 一個入口（SPEC-135）；
+對話框以 `registerDialog()` 登記關閉方式，其他 script 用 `closeDialog(id)`；自動更新前的忙碌判斷以 `registerBusyCheck()` 登記，`app-updates.js` 只問 `featureBusy()`（SPEC-135）。跑步 CRUD、Strava 與洞察分別位於
 三個 module，降低修改匯入功能時誤動月曆或編輯流程的風險。
 
 ### SPEC-017：真正的依賴與狀態邊界
@@ -678,6 +679,7 @@ flowchart LR
 - **限流**：`rate_limits.consume()` 把同一請求的所有視窗放在一個交易，滿了就整筆回滾；限額來自 `app.state.settings`，不再保留記憶體桶。SPEC-071 再加上 AI 的每帳號與全站 24 小時視窗，限流桶保留 24 小時。
 - **稽核 trigger**：每次啟動依目前欄位重建，避免舊欄位清單使快照不完整或使寫入失敗。
 - **Strava**：`strava_import.parse_activity_dates()` 把 UTC 時間戳轉為 `clock.APP_TIMEZONE` 日期。`date_corrections()` 只修正仍停在舊 UTC 日期的既有活動，`services/strava_imports.py` 在匯入交易中移動日期與月跑量。
+- **v5.2.7**：對話框、更新忙碌判斷與重繪改由功能登記（SPEC-135）。`app-lifecycle.js` 擁有 `registerDialog`／`closeDialog` 與 `registerBusyCheck`／`featureBusy`，`app-dialogs.js`、`app.js`、`app-updates.js` 不再提功能的函式或狀態；`app-agent.js` 以 `onAuthView` 恢復對話；`app-core.refreshPanels()` 取代看板的 `render()`。依賴方向改為 feature → lifecycle、feature → shell，`cross_script_names` 163 → 153。
 - **v5.2.6**：帳號識別碼的瀏覽器設定與前端解耦（SPEC-134）。`app-onboarding.js`、`app-strava.js`、`app-agent.js` 的 localStorage／sessionStorage 鍵改用 `captureAuthSession().account`；`raceGoalSaving` 由 `app-race-goal.js`、`registrationMode` 由 `app-account.js` 持有（註冊表單只讀 `#reg-invite-group` 的 `data-required`），其他功能經 `app-auth.js` 的 `signOutWithNotice`／`showLoginNotice` 回到登入畫面，`formatLocalTimestamp` 移到 `app-dates.js`，`cross_script_names` 166 → 163。正式映像帶所有 `scripts/*.sql` 回滾腳本，基底映像以 digest 固定。依賴方向不變。
 - **v5.2.2**：程式碼檢查修正（SPEC-130）。帳號名稱折疊規則移到 `settings.account_name_key()`，`services/accounts.py` 與管理員判斷共用；`tools/legacy_calls.py` 新增 `first_call_end()`。依賴方向不變（services → settings）。
 - **v5.2.1**：本機資料依帳號識別碼分區（SPEC-129）。`app-session.js` 從 token 取得伺服器寫法的名稱與 `aid`，`app-workspace.js` 以 `origin|aid:<backup_id>` 分區，`workspace-controller.attach` 透過 `app-local-store.adopt()` 併入舊的名稱分區。依賴方向不變。

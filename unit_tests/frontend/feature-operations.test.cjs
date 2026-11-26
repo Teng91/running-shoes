@@ -62,7 +62,7 @@ test('SPEC-023 shoe selectors distinguish duplicate models and escape nicknames'
 function refreshContext() {
   const elements = nodes(), calls = [];
   const context = runContext({ document: { getElementById: id => elements[id] }, console: { error: assert.fail },
-    selectedRunMonth: () => '2026-10', render() {}, loadStravaHistory: () => calls.push('history'),
+    selectedRunMonth: () => '2026-10', refreshPanels() {}, loadStravaHistory: () => calls.push('history'),
     apiGet: async url => { calls.push(url); return url === '/monthly-mileage' ? [{ year: 2026, km: 100 }] : []; },
     fetchRunPage: async () => { calls.push('page'); return { rows: [], hasMore: false }; },
     goalProgressCache: new Map([['retained', 1]]),

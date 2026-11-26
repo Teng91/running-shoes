@@ -5,6 +5,11 @@ let agentController = null;
 let agentRetryHistory = [];
 
 registerFeatureReset('agent-chat', resetAgentChat);
+// SPEC-135: a streaming answer or unsent text postpones an automatic update (SPEC-059).
+registerBusyCheck(() => Boolean(agentController) || Boolean(document.getElementById('agent-input')?.value.trim()));
+// SPEC-135: the conversation follows the app view; sign-in no longer calls the agent by name.
+// A session's end already reset it, so only this account's saved turns come back.
+onAuthView({ appShown: () => { restoreAgentChat(); void loadAgentModels(); } });
 
 const AGENT_GREETING = '你好！我是跑鞋助手，可以幫你查詢跑鞋資料、分析跑量、推薦新鞋。有什麼想問的嗎？';
 // SPEC-059: completed turns live in this tab's sessionStorage, so a reload (including an
@@ -46,6 +51,8 @@ function saveAgentChat() {
 
 // Rebuild the saved turns for the same account after a reload; anything else is discarded.
 function restoreAgentChat() {
+  // The app view can open twice in one start (init's offline fallback); never duplicate turns.
+  if (agentHistory.length) return;
   let saved = null;
   try { saved = JSON.parse(sessionStorage.getItem(AGENT_CHAT_STORAGE_KEY) || 'null'); } catch {}
   const account = captureAuthSession().account;

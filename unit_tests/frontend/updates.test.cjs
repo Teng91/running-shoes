@@ -1,5 +1,5 @@
 // SPEC-059: apply a new version by itself at safe moments, and keep AI turns across reloads.
-const { test, assert, vm, extract, htmlSource, source } = require('./helpers.cjs');
+const { test, assert, vm, extract, htmlSource, source, featureRegistrations } = require('./helpers.cjs');
 
 const constant = name => source.match(new RegExp(`const ${name} = [^\\n]+`))[0];
 const MINUTE = 60 * 1000;
@@ -32,10 +32,13 @@ function updateContext({ version = 'v1', storage = new Map(), globals = {} } = {
       removeItem: key => storage.delete(key),
     },
     setInterval() {}, setTimeout: (fn, ms) => timers.push({ fn, ms }), clearTimeout() {},
-    Date: { now: () => clock.now }, ...globals,
+    Date: { now: () => clock.now },
+    // SPEC-135: the state each feature's busy check reads; a case passes its own in globals.
+    agentController: null, reportGenerationController: null, activeHttpRequests: new Set(), inlineEditors: new Map(), ...globals,
   });
-  vm.runInContext([constant('APP_UPDATE_ATTEMPT_KEY'), ...['initializeAppUpdates', 'appUpdateBusy',
-    'readAppUpdateAttempt', 'writeAppUpdateAttempt', 'showAppUpdate', 'applyAppUpdate'].map(extract)].join('\n'), context);
+  vm.runInContext([constant('APP_UPDATE_ATTEMPT_KEY'), 'const busyChecks = [];', ...['registerBusyCheck', 'featureBusy',
+    'initializeAppUpdates', 'appUpdateBusy', 'readAppUpdateAttempt', 'writeAppUpdateAttempt', 'showAppUpdate', 'applyAppUpdate'].map(extract),
+  featureRegistrations(/^registerBusyCheck\(/gm)].join('\n'), context);
   context.initializeAppUpdates();
   return {
     context, elements, storage, timers, clock,
@@ -181,6 +184,12 @@ test('SPEC-059 completed AI turns survive a reload for the same account only', (
   assert.match(extract('resetAgentChat'), /agentHistory = \[\];[\s\S]*saveAgentChat\(\);/);
   // SPEC-111: the completed answer is saved by the turn's finishing step.
   assert.match(extract('finishAgentAnswer'), /if \(turn\.fullText && result\.completed\) \{\s*agentHistory = [^\n]+\n\s*saveAgentChat\(\);/);
-  assert.equal(extract('init').match(/showAppView\(\{ keepBoot: true \}\);\s*restoreAgentChat\(\);/g).length, 2);
+  // SPEC-135: the conversation comes back whenever the app view opens, and only once.
+  assert.match(source, /^onAuthView\(\{ appShown: \(\) => \{ restoreAgentChat\(\); void loadAgentModels\(\); \} \}\);$/m);
+  assert.doesNotMatch(extract('init') + extract('handleLogin') + extract('handleRegister'), /AgentChat|loadAgentModels/);
+  vm.runInContext("agentHistory = [{ role: 'user', content: 'x' }]", context);
+  container.children = [];
+  context.restoreAgentChat();
+  assert.equal(container.children.length, 0, 'an open conversation is never appended twice');
   assert.doesNotMatch(extract('saveAgentChat') + extract('restoreAgentChat'), /localStorage|indexedDB/);
 });

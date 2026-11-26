@@ -115,7 +115,7 @@ test('SPEC-080 the login page has no change-password form; signed-in users chang
         ? { ok: false, status: 401, json: async () => ({ detail: 'Incorrect username or old password' }) }
         : { ok: true, json: async () => ({ ok: true }) };
     },
-    closeWorkspaceModal: () => calls.push('close'), signOutWithNotice: text => calls.push('logout', 'login', text),
+    closeDialog: id => calls.push(`close ${id}`), signOutWithNotice: text => calls.push('logout', 'login', text),
   });
   vm.runInContext(extract('changePassword'), context);
   elements['account-old-password'].value = 'wrong-pass';
@@ -126,6 +126,6 @@ test('SPEC-080 the login page has no change-password form; signed-in users chang
   elements['account-old-password'].value = 'pass1234';
   await context.changePassword();
   assert.equal(JSON.stringify(calls[1][1]), JSON.stringify({ username: 'Demo', old_password: 'pass1234', new_password: 'brand-new-pass' }));
-  assert.equal(JSON.stringify(calls.slice(-4)), JSON.stringify(['close', 'logout', 'login', '密碼已更改，請用新密碼重新登入']));
+  assert.equal(JSON.stringify(calls.slice(-4)), JSON.stringify(['close workspace-modal', 'logout', 'login', '密碼已更改，請用新密碼重新登入']));
   assert.equal(elements['account-new-password'].value, '', 'password fields are cleared');
 });

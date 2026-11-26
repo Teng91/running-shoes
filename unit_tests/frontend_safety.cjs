@@ -131,7 +131,7 @@ module.exports = async function checkFrontendSafety(browser, baseUrl) {
       toggleTheme();
       check(created.slice(count).every(id => id === 'chart-run-shoes'), 'theme only redraws visible charts');
       const afterTheme = created.length;
-      render();
+      refreshPanels();
       check(created.slice(afterTheme).every(id => id === 'chart-run-shoes'), 'data render must leave hidden charts untouched');
 
       // A late annual read must not construct a chart after leaving monthly.

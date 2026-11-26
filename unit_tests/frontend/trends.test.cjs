@@ -156,7 +156,7 @@ function shoesPanelContext() {
     ${panelWiring()}
     ${['invalidatePanels', 'renderActivePanel', ...TIMELINE_STEPS, 'renderDistanceMix'].map(extract).join('\n')}`, context);
   const settle = () => new Promise(resolve => setImmediate(resolve));
-  // Mirrors loadData's applyResource: accept (cache hooks run), then render(resource).
+  // Mirrors loadData's applyResource: accept (cache hooks run), then refreshPanels(resource).
   context.arrive = async (resource, value) => {
     const result = await context.resourceStore.read(resource, { loader: async () => value });
     context.resourceStore.accept([result]);

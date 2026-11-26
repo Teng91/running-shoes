@@ -82,16 +82,9 @@ function initializeAppUpdates() {
 
 // SPEC-059: never reload over work that the reload would interrupt or lose. Form drafts and
 // completed AI turns survive a reload; a streaming answer, an open dialog or typed text do not.
+// SPEC-135: each feature registers its own check (registerBusyCheck); this script names none.
 function appUpdateBusy() {
-  if (typeof agentController !== 'undefined' && agentController) return true;
-  if (typeof reportGenerationController !== 'undefined' && reportGenerationController) return true;
-  if (typeof activeHttpRequests !== 'undefined' && activeHttpRequests.size) return true;
-  if (typeof inlineEditors !== 'undefined' && inlineEditors.size) return true;
-  if (document.querySelector('.modal-overlay.active')) return true;
-  if (document.getElementById('agent-input')?.value.trim()) return true;
-  const auth = document.getElementById('auth-view');
-  return Boolean(auth && auth.style.display !== 'none'
-    && [...auth.querySelectorAll('input')].some(input => input.value));
+  return Boolean(document.querySelector('.modal-overlay.active')) || featureBusy();
 }
 
 function readAppUpdateAttempt() {

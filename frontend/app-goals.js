@@ -208,8 +208,7 @@ async function saveRunningGoal() {
       setGoalSettingsOpen(false);
       if (hadFocus) document.getElementById('goal-edit-toggle').focus();
     }
-    invalidatePanels();
-    renderActivePanel();
+    refreshPanels();
   } catch (error) {
     if (error.name === 'AbortError' || goalSaveOperation !== operation || !isCurrentAuthSession(operation.session)) return;
     status.textContent = error.message || '目標儲存失敗。';

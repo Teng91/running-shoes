@@ -41,6 +41,8 @@ function featureContext(globals = {}) {
     onAuthView() {},
     // SPEC-113: whole scripts register their UI actions on load.
     registerUiActions() {},
+    // SPEC-135: whole scripts register their dialogs and update busy checks on load.
+    registerDialog() {}, registerBusyCheck() {},
     getSelectedCategories: () => [], ...rest });
   seedCoreData(context, core);
   context.seedCoreData = fields => seedCoreData(context, fields);
@@ -200,7 +202,7 @@ function transportContext() {
   const context = vm.createContext({
     // SPEC-108: a real event target, so a 401 reaches the sign-out listener like in the page.
     window: Object.assign(new EventTarget(), { location: { origin: 'http://test.local' } }), Event,
-    DOMException, FormData, Blob, AbortController, setTimeout, clearTimeout, registerFeatureReset() {},
+    DOMException, FormData, Blob, AbortController, setTimeout, clearTimeout, registerFeatureReset() {}, registerBusyCheck() {},
     clearCalls: 0, loginCalls: 0,
   });
   vm.runInContext(`let authToken = 'A', authGeneration = 1;

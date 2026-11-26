@@ -115,6 +115,9 @@ registerFeatureReset('account-export', () => {
   button.disabled = false; button.textContent = '下載目前帳號資料 JSON';
 });
 
+// SPEC-135: Escape closes this dialog through the shared registry (app-lifecycle.js).
+registerDialog('export-modal', { close: closeExportModal, backdrop: true });
+
 // SPEC-113: this feature's delegated UI actions; markup names them with data-click and the like.
 registerUiActions({
   click: {

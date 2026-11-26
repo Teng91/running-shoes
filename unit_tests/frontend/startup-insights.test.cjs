@@ -78,7 +78,7 @@ test('failed reload retains previous data and exposes a retry; recovery hides er
   const error = { hidden: true };
   const context = runContext({
     document: { getElementById: () => error }, console: { error() {}, warn() {} },
-    apiGet: async () => { throw new Error('offline'); }, render() {},
+    apiGet: async () => { throw new Error('offline'); }, refreshPanels() {},
     selectedRunMonth: () => '2026-10', fetchRunPage: async () => { throw new Error('offline'); },
     goalProgressCache: new Map(), loadStravaHistory() {},
     yearlyRunsCache: new Map(),

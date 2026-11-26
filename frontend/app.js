@@ -1,17 +1,4 @@
-// Application bootstrap and global dialog event wiring.
-document.getElementById('export-modal').addEventListener('click', e => {
-  if (e.target.id === 'export-modal') closeExportModal();
-});
-document.getElementById('run-modal').addEventListener('click', e => {
-  if (e.target.id === 'run-modal') closeRunModal();
-});
-document.getElementById('shoe-analysis-modal').addEventListener('click', e => {
-  if (e.target.id === 'shoe-analysis-modal') closeShoeAnalytics();
-});
-
-document.getElementById('workspace-modal').addEventListener('click', event => {
-  if (event.target.id === 'workspace-modal') closeWorkspaceModal();
-});
+// Application bootstrap; dialogs close through the registry in app-lifecycle.js (SPEC-135).
 
 // Check stored token on load
 async function init() {
@@ -33,8 +20,6 @@ async function init() {
         authenticatedFetch(API_BASE + '/auth/me', { headers: authHeaders(), signal }));
       if (!response.ok) throw new Error('驗證服務暫時無法使用');
       showAppView({ keepBoot: true });
-      restoreAgentChat();
-      loadAgentModels();
       await loadData();
       hideAppBoot();
     } catch (error) {
@@ -42,8 +27,6 @@ async function init() {
       // 離線或伺服器暫時無法連線時保留 token，避免 PWA 被迫重新登入。
       console.warn('無法驗證登入狀態，保留目前工作階段:', error);
       showAppView({ keepBoot: true });
-      restoreAgentChat();
-      loadAgentModels();
       await loadData();
       hideAppBoot();
     }

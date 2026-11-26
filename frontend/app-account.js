@@ -140,7 +140,7 @@ async function deleteAccount() {
   status.textContent = '';
   // The server data is gone; drop this device's drafts and queue for the account too.
   try { await localWorkspace.controller?.clear(); } catch {}
-  closeWorkspaceModal();
+  closeDialog('workspace-modal');
   signOutWithNotice('帳號已刪除。');
 }
 
@@ -163,7 +163,7 @@ async function logoutEverywhere() {
     logoutEverywhereRunning = false;
   }
   status.textContent = '';
-  closeWorkspaceModal();
+  closeDialog('workspace-modal');
   signOutWithNotice('已登出所有裝置，請重新登入。');
 }
 
@@ -318,7 +318,7 @@ async function changePassword() {
   }
   for (const id of ids) document.getElementById(id).value = '';
   status.textContent = '';
-  closeWorkspaceModal();
+  closeDialog('workspace-modal');
   signOutWithNotice('密碼已更改，請用新密碼重新登入');
 }
 
@@ -327,6 +327,9 @@ onWorkspaceModalOpen(() => { void renderEmailSection(); });
 
 // SPEC-108: the admin entry follows the signed-in account; the sign-up form asks for the mode.
 onAuthView({ appShown: () => { void refreshAdminEntry(); }, registerShown: () => { void loadRegistrationMode(); } });
+
+// SPEC-135: Escape closes this dialog through the shared registry (app-lifecycle.js).
+registerDialog('admin-modal', { close: closeAdminModal });
 
 // SPEC-113: this feature's delegated UI actions; markup names them with data-click and the like.
 registerUiActions({

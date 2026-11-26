@@ -333,6 +333,9 @@ function setStravaMappingDisabled(disabled) {
 // SPEC-101: a dashboard load that refreshes history reloads the Strava import list.
 registerDataHooks({ history: () => loadStravaHistory() });
 
+// SPEC-135: Escape closes this dialog through the shared registry (app-lifecycle.js).
+registerDialog('strava-modal', { close: closeStravaModal });
+
 // SPEC-113: this feature's delegated UI actions; markup names them with data-click and the like.
 registerUiActions({
   click: {

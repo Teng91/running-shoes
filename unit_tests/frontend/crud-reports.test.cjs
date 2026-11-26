@@ -38,7 +38,7 @@ test('inline edits send only the changed field and guard duplicate commits', asy
   const writes = [];
   const shoe = { id: 1, price: 20, mileage: 100, version: 3 };
   const context = vm.createContext({
-    document: { createElement: () => input }, render() {}, alert() {},
+    document: { createElement: () => input }, refreshPanels() {}, alert() {},
     loadData: async () => {},
     apiPut: async (url, payload) => { writes.push({ url, payload }); },
   });

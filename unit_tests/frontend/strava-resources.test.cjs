@@ -89,7 +89,7 @@ test('SPEC-025 resource completion is delivered before slow peers', async () => 
 test('SPEC-025 dashboard renders fast resources while a peer remains pending', async () => {
   const elements = nodes(), slow = deferred(); let renders = 0, boots = 0;
   const context = runContext({ document: { getElementById: id => elements[id] }, selectedRunMonth: () => '2026-10',
-    goalProgressCache: new Map(), render: () => renders++, hideAppBoot: () => boots++, loadStravaHistory() {},
+    goalProgressCache: new Map(), refreshPanels: () => renders++, hideAppBoot: () => boots++, loadStravaHistory() {},
     apiGet: async url => url === '/running-goal' ? slow.promise : [], fetchRunPage: async () => ({ rows: [{ id: 42 }], hasMore: false }) });
   vm.runInContext(`let selectedYear;
     let spendingLoadRequestId=0, spendingLoadPending=false, goalProgressRequestId=0;

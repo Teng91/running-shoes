@@ -32,7 +32,7 @@ test('SPEC-101 features register their panels and data in script order; the shel
   const order = [];
   const hooks = ['renderCards', 'renderAlerts', 'renderCategorySummary', 'renderTable', 'renderRetiredTable',
     'renderCharts', 'renderSpendingCharts', 'populateRunShoeSelects', 'renderRunLog', 'renderHomeSummary',
-    'renderOnboarding', 'renderMonthlyCharts', 'prepareGoalForm', 'loadStravaHistory', 'render'];
+    'renderOnboarding', 'renderMonthlyCharts', 'prepareGoalForm', 'loadStravaHistory', 'noteOnboardingData'];
   let active = 'shoes';
   const context = runContext({ document: { querySelector: () => ({ dataset: { panel: active } }) },
     Chart() {}, localDateISO: () => '2026-10-19', selectedRunMonth: () => '2026-10',
@@ -53,8 +53,9 @@ test('SPEC-101 features register their panels and data in script order; the shel
   assert.deepEqual([...panels.keys()].sort(), ['monthly', 'report', 'runs', 'shoes']);
   assert.deepEqual([...readers.keys()], ['runs']);
   panels.get('monthly').forEach(hook => hook.enter?.());
-  vm.runInContext('dataHooks', context).forEach(hook => { hook.arrived?.('goal'); hook.history?.(); });
-  assert.deepEqual(order.splice(0), ['prepareGoalForm', 'loadStravaHistory', 'render(goal)']);
+  // SPEC-135: the shell's redraw reaches the getting-started card through its refreshed hook.
+  vm.runInContext('dataHooks', context).forEach(hook => { hook.arrived?.('goal'); hook.history?.(); hook.refreshed?.('goal'); });
+  assert.deepEqual(order.splice(0), ['prepareGoalForm', 'loadStravaHistory', 'noteOnboardingData(goal)']);
   // A full redraw drops an in-flight annual run read.
   const before = context.runController.state.annualRequest;
   context.invalidatePanels(); assert.equal(context.runController.state.annualRequest, before + 1);
@@ -66,7 +67,7 @@ test('SPEC-101 features register their panels and data in script order; the shel
 test('SPEC-106 features own their cache resets and the workspace hears only current data', async () => {
   const arrived = [];
   const context = runContext({ goalProgressRequestId: 0, spendingLoadRequestId: 4, spendingLoadPending: true,
-    spendingSummary: { total_paid: 10 }, render() {}, workspaceDataArrived: (...args) => arrived.push(args) });
+    spendingSummary: { total_paid: 10 }, refreshPanels() {}, workspaceDataArrived: (...args) => arrived.push(args) });
   assert.deepEqual([...vm.runInContext('resourceCacheHooks.map(([name]) => name)', context)], ['goal', 'spending']);
   // Accepting shoes resets spending; accepting the goal resets goal progress (resource-store policy).
   const accept = async (resource, value) => context.resourceStore.accept(

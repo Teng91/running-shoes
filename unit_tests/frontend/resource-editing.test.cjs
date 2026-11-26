@@ -23,7 +23,7 @@ test('SPEC-026 inline editors defer table replacement and retain the original ve
   const input = { focus() {}, addEventListener: (name, fn) => { handlers[name] = fn; } };
   const el = { querySelector: () => null, closest: () => ({ id: table }), appendChild() {}, innerHTML: '' };
   const context = vm.createContext({ document: { createElement: () => input, getElementById: assert.fail },
-    loadData: async () => {}, render() {}, alert: assert.fail,
+    loadData: async () => {}, refreshPanels() {}, alert: assert.fail,
     apiPut: async (url, payload) => writes.push({ url, ...payload }),
   });
   vm.runInContext([extract('inlineEditRow'), extract('renderTable'), extract('renderRetiredTable')].join('\n'), context);
@@ -43,7 +43,7 @@ test('SPEC-026 inline lifecycle cancels blur writes before removing account DOM'
   let reset, handler; const writes = [];
   const context = vm.createContext({ registerFeatureReset: (_, callback) => { reset = callback; },
     document: { createElement: () => ({ focus() {}, addEventListener: (name, callback) => { if (name === 'blur') handler = callback; } }) },
-    apiPut: (...args) => writes.push(args), render() {}, loadData() {},
+    apiPut: (...args) => writes.push(args), refreshPanels() {}, loadData() {},
   });
   vm.runInContext(fs.readFileSync('frontend/app-inline-editors.js', 'utf8') + '\n' + extract('inlineEditRow'), context);
   await context.inlineEditRow([{ id: 1, mileage: 100, version: 1 }], 0, 'mileage', { querySelector: () => null, appendChild() {}, closest: () => ({ id: 'shoe-table' }) });

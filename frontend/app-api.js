@@ -3,6 +3,8 @@ const API_BASE = window.location.origin + '/api';
 const authenticatedResponses = new WeakMap();
 const JSON_TIMEOUT_MS = 20_000;
 const activeHttpRequests = new Set();
+// SPEC-135: a request in flight postpones an automatic update (SPEC-059).
+registerBusyCheck(() => activeHttpRequests.size > 0);
 const mutationKeys = new Map();
 function newOperationKey() {
   return globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}-${Math.random()}`;
