@@ -35,9 +35,11 @@ function resetAgentChat() {
 
 function saveAgentChat() {
   try {
-    if (!agentHistory.length || !currentUser) sessionStorage.removeItem(AGENT_CHAT_STORAGE_KEY);
+    // SPEC-134: the turns belong to the account ID (SPEC-129), not to its name.
+    const account = captureAuthSession().account;
+    if (!agentHistory.length || !account) sessionStorage.removeItem(AGENT_CHAT_STORAGE_KEY);
     else sessionStorage.setItem(AGENT_CHAT_STORAGE_KEY, JSON.stringify({
-      user: currentUser, history: agentHistory.slice(-AGENT_CHAT_STORED_TURNS),
+      account, history: agentHistory.slice(-AGENT_CHAT_STORED_TURNS),
     }));
   } catch {}
 }
@@ -46,7 +48,8 @@ function saveAgentChat() {
 function restoreAgentChat() {
   let saved = null;
   try { saved = JSON.parse(sessionStorage.getItem(AGENT_CHAT_STORAGE_KEY) || 'null'); } catch {}
-  const turns = saved && saved.user === currentUser && Array.isArray(saved.history)
+  const account = captureAuthSession().account;
+  const turns = saved && account && saved.account === account && Array.isArray(saved.history)
     ? saved.history.filter(turn => ['user', 'assistant'].includes(turn?.role) && typeof turn.content === 'string' && turn.content)
     : [];
   if (!turns.length) {

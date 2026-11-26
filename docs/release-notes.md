@@ -4,6 +4,13 @@
 每版的摘要見 [CHANGELOG.md](../CHANGELOG.md)；目前的功能與操作方式以 [README](../README.md) 為準。
 這裡保留當時的文字，後續版本可能已調整其中的行為。
 
+### 帳號識別碼的瀏覽器設定、回滾腳本與前端解耦（SPEC-134，v5.2.6）
+
+- `app-onboarding.js`、`app-strava.js`、`app-agent.js` 以 `captureAuthSession().account`（SPEC-129 的 `aid`）作為 localStorage／sessionStorage 的鍵；舊的名稱鍵中只有「略過引導」會被同名帳號接手一次，Strava 日期範圍回到預設、AI 對話暫存捨棄（重新整理後不恢復一次）。
+- Dockerfile 以 `scripts/*.sql` 複製所有回滾腳本，基底 `python:3.11-slim` 以 digest 固定，`.github/dependabot.yml` 新增每月一個 docker PR。
+- `raceGoalSaving` 移到 `app-race-goal.js`、`registrationMode` 移到 `app-account.js`（註冊表單只讀 `#reg-invite-group` 的 `data-required`）；`app-auth.js` 提供 `signOutWithNotice`／`showLoginNotice`；`formatLocalTimestamp` 移到 `app-dates.js`。`cross_script_names` 166 → 163。
+- 沒有 schema 變更，可直接回滾至 v5.2.5 image。Asset 5.2.6／shell v136。
+
 ### 月報額度、報告清單、支出平均與下載連結（SPEC-133，v5.2.5）
 
 - `routers/reports.generate_monthly_report` 先驗證月份與模型再扣 AI 額度；`app-reports.loadReportHistory()` 以請求序號忽略舊回應；`spending.average_monthly_paid` 以月份金額總和計算；匯出 60 秒後才釋放 blob URL。

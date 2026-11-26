@@ -22,7 +22,7 @@ test('SPEC-019 storage invalidation never deletes the replacement tab credential
     localStorage: storage, authToken: 'A', currentUser: 'alice',
     clearAuth: options => cleared.push(options), showLoginView() {}, showAuthError: text => notices.push(text),
   });
-  vm.runInContext(['readStoredValue', 'isLocalStorageEvent', 'initializeAuthSync'].map(extract).join('\n'), context);
+  vm.runInContext(['readStoredValue', 'isLocalStorageEvent', 'signOutWithNotice', 'initializeAuthSync'].map(extract).join('\n'), context);
   context.initializeAuthSync();
   listeners.storage({ storageArea: storage, key: 'theme' }); assert.equal(cleared.length, 0);
   for (const key of ['token', 'username', null]) listeners.storage({ storageArea: storage, key });

@@ -76,14 +76,14 @@
 - `frontend/runtime/run-controller.mjs`: native run state/operation owner with injected transport, session and key factory; DOM remains in the bridge.
 - `frontend/runtime/strava-controller.mjs`: native Strava preview/import/window ownership; DOM remains in `app-strava.js`.
 - `frontend/app-lifecycle.js`: compatibility bridge, reset registration and the panel/data registry (`registerPanel`, `registerResourceReader`, `registerDataHooks`); it loads right after `app-boot.js` (the startup shell, which calls no feature function) because a script may call, while it loads, only functions of earlier scripts (`architecture-check` enforces it, SPEC-106).
-- `frontend/app-dates.js`: calendar parsing, cross-day limits and draft-safe foreground refresh.
+- `frontend/app-dates.js`: calendar parsing, cross-day limits, draft-safe foreground refresh and the shared server-timestamp formatter `formatLocalTimestamp` (SPEC-134).
 - `frontend/app-dialogs.js`: modal semantics and keyboard/focus lifecycle.
 - `frontend/app-updates.js`: shell version diagnostics, open-app deployment checks (focus, visibility, reconnect, 30 min), automatic reload at safe moments (background, untouched after returning, 5 idle minutes; postponed by `appUpdateBusy()`) and the update prompt (SPEC-049, SPEC-059).
 - `frontend/app-boot.js`: startup loading, stylesheet readiness, timeout, and retry state.
 - `frontend/app-state.js`: shared browser state (`coreData` is the core data store's read-only view; never declare core data globals again), presentation constants and the guarded localStorage helpers (`readStoredValue` and friends); classic scripts never touch `localStorage` outside a try (SPEC-087).
 - `frontend/app-api.js`: authenticated JSON and upload transport helpers.
 - `frontend/app-session.js`: the signed-in identity (`authToken`, `currentUser`, `authGeneration`, `captureAuthSession`/`isCurrentAuthSession`/`requireAuthSession`), written only by its `startAuthSession`/`endAuthSession` (`architecture-check` rejects other writes, SPEC-109); the name is the server spelling from the token's `sub`, and `captureAuthSession().account` is the token's never-reused `aid` (SPEC-129); loads right after `app-state.js`. A 401 is the window event `auth-session-expired`, dispatched by `app-api.js` and handled by `app-auth.js` (SPEC-108).
-- `frontend/app-auth.js`: sign-in forms and account transitions; features register what happens around sign-in with `onAuthView` (SPEC-108).
+- `frontend/app-auth.js`: sign-in forms and account transitions; features register what happens around sign-in with `onAuthView` (SPEC-108) and leave the app only through `signOutWithNotice`/`showLoginNotice` (SPEC-134). Browser settings of an account are keyed by `captureAuthSession().account`, never by the name (SPEC-134).
 - `frontend/app-streams.js`: shared authenticated SSE decoding, cancellation, and terminal state.
 - `frontend/app-inline-editors.js`: live table DOM ownership and immutable row snapshots across refreshes.
 - `frontend/runtime/workspace-controller.mjs`: injected account drafts, leases and durable run queue.

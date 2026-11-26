@@ -678,6 +678,7 @@ flowchart LR
 - **限流**：`rate_limits.consume()` 把同一請求的所有視窗放在一個交易，滿了就整筆回滾；限額來自 `app.state.settings`，不再保留記憶體桶。SPEC-071 再加上 AI 的每帳號與全站 24 小時視窗，限流桶保留 24 小時。
 - **稽核 trigger**：每次啟動依目前欄位重建，避免舊欄位清單使快照不完整或使寫入失敗。
 - **Strava**：`strava_import.parse_activity_dates()` 把 UTC 時間戳轉為 `clock.APP_TIMEZONE` 日期。`date_corrections()` 只修正仍停在舊 UTC 日期的既有活動，`services/strava_imports.py` 在匯入交易中移動日期與月跑量。
+- **v5.2.6**：帳號識別碼的瀏覽器設定與前端解耦（SPEC-134）。`app-onboarding.js`、`app-strava.js`、`app-agent.js` 的 localStorage／sessionStorage 鍵改用 `captureAuthSession().account`；`raceGoalSaving` 由 `app-race-goal.js`、`registrationMode` 由 `app-account.js` 持有（註冊表單只讀 `#reg-invite-group` 的 `data-required`），其他功能經 `app-auth.js` 的 `signOutWithNotice`／`showLoginNotice` 回到登入畫面，`formatLocalTimestamp` 移到 `app-dates.js`，`cross_script_names` 166 → 163。正式映像帶所有 `scripts/*.sql` 回滾腳本，基底映像以 digest 固定。依賴方向不變。
 - **v5.2.2**：程式碼檢查修正（SPEC-130）。帳號名稱折疊規則移到 `settings.account_name_key()`，`services/accounts.py` 與管理員判斷共用；`tools/legacy_calls.py` 新增 `first_call_end()`。依賴方向不變（services → settings）。
 - **v5.2.1**：本機資料依帳號識別碼分區（SPEC-129）。`app-session.js` 從 token 取得伺服器寫法的名稱與 `aid`，`app-workspace.js` 以 `origin|aid:<backup_id>` 分區，`workspace-controller.attach` 透過 `app-local-store.adopt()` 併入舊的名稱分區。依賴方向不變。
 - **v5.2.0**：目標賽事納入稽核與誤刪復原（SPEC-128）。`audit_schema.AUDITED` 加入 `race_goals`，`services/history.py` 新增 `_restore_race_goal`；`services/exports.py` 只匯出 `ARCHIVED_HISTORY_ENTITIES` 的歷史，備份 v6 不變。前端 `app-history.js` 在復原目標賽事後讓比賽準備的資料失效。依賴方向不變。

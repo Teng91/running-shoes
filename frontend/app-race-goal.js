@@ -5,6 +5,10 @@ const RACE_PLAN_DEFAULT_WEEKS = [[5.5, 8], [10.5, 10], [21.5, 12], [Infinity, 16
 const RACE_PLAN_MIN_WEEKS = 4;
 const RACE_PLAN_MAX_WEEKS = 24;
 
+// SPEC-134: a save or delete in flight; owned here, where it is written.
+let raceGoalSaving = false;
+registerFeatureReset('race-goal-form', () => { raceGoalSaving = false; });
+
 // Weeks from this week to race week, both included, in the app's calendar (SPEC-093).
 function racePlanWeeksUntil(raceDate) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(raceDate)) return null;

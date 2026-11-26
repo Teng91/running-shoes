@@ -4,13 +4,12 @@
 // Pace axes are reversed so that faster is higher.
 let racePrepRequestId = 0;
 let raceGoal = null;
-let raceGoalSaving = false;
 const PACE_CHART_KEYS = ['paceTrend', 'raceLong', 'raceIntensity'];
 const PACE_DAY_MS = 86400000;
 const RACE_DISTANCES = { '21.0975': '半馬', '10': '10K', '5': '5K', '42.195': '全馬' };
 const RACE_ZONE_COLORS = { easy: ['--chart-2', '#2fd8f0'], steady: ['--chart-line', '#ffd23f'], race: ['--chart-1', '#c8ff3c'], fast: ['--chart-warn', '#ff8a1f'] };
 
-registerFeatureReset('race-prep', () => { raceGoal = null; raceGoalSaving = false; racePrepRequestId++; });
+registerFeatureReset('race-prep', () => { raceGoal = null; racePrepRequestId++; });
 
 function paceClock(seconds) {
   if (!Number.isFinite(seconds) || seconds <= 0) return '—';

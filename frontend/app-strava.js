@@ -1,5 +1,11 @@
 // Strava CSV preview, mapping, and import UI.
 let stravaController = null;
+// SPEC-134: the last date range is remembered per account ID (SPEC-129), not per name.
+function stravaRangeKey() {
+  const account = captureAuthSession().account;
+  return account ? `strava-import-range:aid:${account}` : null;
+}
+
 async function initializeStravaFeature() {
   const version = document.querySelector('meta[name="app-asset-version"]').content;
   const { createStravaController } = await import('./runtime/strava-controller.mjs?v=' + encodeURIComponent(version));
@@ -43,9 +49,9 @@ function openStravaModal() {
   const walkHike = document.getElementById('strava-walk-hike');
   if (walkHike) walkHike.hidden = true;
   renderStravaImportHistory();
-  const rangeKey = `strava-import-range:${currentUser || 'anonymous'}`;
+  const rangeKey = stravaRangeKey();
   let savedRange = null;
-  try { savedRange = JSON.parse(localStorage.getItem(rangeKey)); } catch {}
+  try { savedRange = rangeKey ? JSON.parse(readStoredValue(rangeKey)) : null; } catch {}
   // Calendar arithmetic on the service's date (SPEC-093), not the device's zone.
   const calendar = appCalendarDate();
   const defaultStart = new Date(calendar.year, calendar.month - 1 - 13, 1);
@@ -111,10 +117,8 @@ async function previewStravaFile() {
   const summary = document.getElementById('strava-summary');
   const error = document.getElementById('strava-error');
   const mapping = document.getElementById('strava-mapping');
-  writeStoredValue(
-    `strava-import-range:${currentUser || 'anonymous'}`,
-    JSON.stringify({ start: startDate, end: endDate }),
-  );
+  const rangeKey = stravaRangeKey();
+  if (rangeKey) writeStoredValue(rangeKey, JSON.stringify({ start: startDate, end: endDate }));
   const operation = stravaController.beginPreview();
   summary.innerHTML = '';
   mapping.innerHTML = '';

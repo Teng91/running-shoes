@@ -301,6 +301,10 @@ SPEC-032：合成資料驗證歷史筆數上限（v4.7.3 起 10,000／10,001）�
 
 [規格與具名案例](specs/116-keep-scheduled-workflows-enabled.md) 以文字解析 `offsite-backup.yml`：續命 job 不依賴備份 job、只有它有 `actions: write`、只用 `GITHUB_TOKEN` 不用 secret、失敗只發警告，且 repo 裡每個有 `schedule` 的 workflow 都在它的重新啟用清單中。
 
+## SPEC-134 帳號識別碼的瀏覽器設定、回滾腳本與前端解耦
+
+[規格與具名案例](specs/134-account-keyed-settings-and-decoupling.md) 確認略過引導、Strava 日期範圍與 AI 對話暫存依帳號識別碼保存、同名新帳號不沿用、舊的略過紀錄接手一次，以及正式映像內含所有回滾腳本且基底以 digest 固定。
+
 ## SPEC-133 月報額度、報告清單、支出平均與下載連結
 
 [規格與具名案例](specs/133-report-spending-download-nits.md) 確認被拒絕的月報請求不扣額度、較舊的報告清單回應不覆蓋較新的、日期格式不正確的鞋款只算進總額，以及下載連結不會在點擊後立即釋放。

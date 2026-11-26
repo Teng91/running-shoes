@@ -43,8 +43,6 @@ function finishAuthOperation(operation) {
   setAuthControlsDisabled(false);
 }
 
-// SPEC-075: 'invite', 'open' or 'closed'; null until the server answers.
-let registrationMode = null;
 const AUTH_INPUT_IDS = [
   'login-username', 'login-password',
   'reg-username', 'reg-password', 'reg-password2', 'reg-invite',
@@ -72,11 +70,7 @@ function clearAuth({ persist = true } = {}) {
 }
 
 function initializeAuthSync() {
-  const invalidate = () => {
-    clearAuth({ persist: false });
-    showLoginView();
-    showAuthError('其他分頁已變更登入狀態，請重新登入。');
-  };
+  const invalidate = () => signOutWithNotice('其他分頁已變更登入狀態，請重新登入。', { persist: false });
   window.addEventListener('storage', event => {
     if (isLocalStorageEvent(event) && [null, 'token', 'username'].includes(event.key)) invalidate();
   });
@@ -129,6 +123,19 @@ function showRegisterForm() {
   if (resetForm) resetForm.style.display = 'none';
   hideRegError();
   runAuthViewHooks('registerShown');
+}
+
+// SPEC-134: the entry points other features use to leave the app or return to sign-in with a
+// notice, so none of them sequences clearAuth, showLoginView and showAuthError itself.
+function signOutWithNotice(message, { persist = true } = {}) {
+  clearAuth({ persist });
+  showLoginView();
+  showAuthError(message);
+}
+
+function showLoginNotice(message) {
+  showLoginForm();
+  showAuthError(message);
 }
 
 function showAuthError(msg) { const el = document.getElementById('auth-error'); el.textContent = msg; el.style.display = 'block'; }
@@ -204,7 +211,9 @@ async function handleRegister() {
   const password2 = document.getElementById('reg-password2').value;
   const inviteCode = document.getElementById('reg-invite')?.value.trim() || '';
   if (!username || !password) { showRegError('請輸入帳號和密碼'); return; }
-  if (registrationMode === 'invite' && !inviteCode) { showRegError('請輸入邀請碼'); return; }
+  // SPEC-134: app-account.js marks the invite field required when the server is invite-only.
+  const inviteRequired = document.getElementById('reg-invite-group')?.dataset?.required === 'true';
+  if (inviteRequired && !inviteCode) { showRegError('請輸入邀請碼'); return; }
   if (password.length < 8) { showRegError('密碼至少 8 個字元'); return; }
   if (password !== password2) { showRegError('兩次密碼不一致'); return; }
   const operation = beginAuthOperation();
@@ -231,7 +240,7 @@ async function handleRegister() {
     });
     if (!isCurrentAuthOperation(operation)) return;
     if (!loginRes.ok) {
-      hideAppBoot(); showLoginForm(); showAuthError('註冊成功！請登入'); return;
+      showLoginNotice('註冊成功！請登入'); return;
     }
     const data = await loginRes.json();
     if (!isCurrentAuthOperation(operation)) return;

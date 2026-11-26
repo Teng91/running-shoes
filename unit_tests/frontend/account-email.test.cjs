@@ -2,7 +2,7 @@
 const { runContext, test, assert, vm, extract, htmlSource } = require('./helpers.cjs');
 
 function nodes() {
-  return new Proxy({}, { get: (target, id) => target[id] ||= { id, value: '', textContent: '', innerHTML: '', hidden: false, style: {} } });
+  return new Proxy({}, { get: (target, id) => target[id] ||= { id, value: '', textContent: '', innerHTML: '', hidden: false, style: {}, dataset: {} } });
 }
 
 function emailContext(elements, globals = {}) {
@@ -44,7 +44,7 @@ test('SPEC-079 password reset sends the code request, answers neutrally and need
         : { ok: true, json: async () => ({ ok: true }) };
     },
     translateError: value => (value === 'Incorrect or expired code' ? '驗證碼錯誤或已過期' : value),
-    cancelAuthOperation() {}, showLoginForm: () => calls.push('login'), showAuthError: text => calls.push(text),
+    cancelAuthOperation() {}, showLoginNotice: text => calls.push('login', text),
   });
   elements['login-username'].value = 'Friend';
   await context.showResetForm();
@@ -115,8 +115,7 @@ test('SPEC-080 the login page has no change-password form; signed-in users chang
         ? { ok: false, status: 401, json: async () => ({ detail: 'Incorrect username or old password' }) }
         : { ok: true, json: async () => ({ ok: true }) };
     },
-    closeWorkspaceModal: () => calls.push('close'), clearAuth: () => calls.push('logout'),
-    showLoginView: () => calls.push('login'), showAuthError: text => calls.push(text),
+    closeWorkspaceModal: () => calls.push('close'), signOutWithNotice: text => calls.push('logout', 'login', text),
   });
   vm.runInContext(extract('changePassword'), context);
   elements['account-old-password'].value = 'wrong-pass';
