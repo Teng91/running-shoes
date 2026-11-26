@@ -359,9 +359,10 @@ def _record_assistant_turn(messages: list[dict], turn: _Turn) -> None:
         })
         return
     turn.tool_calls = db_tools.parse_tool_calls(turn.content)[:1]
-    last_close = turn.content.rfind("</tool>")
-    clean_content = turn.content[:last_close + len("</tool>")] if last_close != -1 else turn.content
-    messages.append({"role": "assistant", "content": clean_content})
+    # The history ends with the one call that runs; later calls and text the model wrote after
+    # it never happened.
+    end = db_tools.first_tool_call_end(turn.content)
+    messages.append({"role": "assistant", "content": turn.content if end is None else turn.content[:end]})
 
 
 def _run_tool_calls(run: _AgentRun, turn: _Turn) -> Generator[str, None, bool | None]:

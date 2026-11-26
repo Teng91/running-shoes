@@ -224,5 +224,9 @@ def parse_tool_calls(text: str) -> list[dict]:
     return legacy_calls.parse_tool_calls(text, set(REGISTRY) | {"web_search"})
 
 
+def first_tool_call_end(text: str) -> int | None:
+    return legacy_calls.first_call_end(text, set(REGISTRY) | {"web_search"})
+
+
 def strip_tool_markers(text: str) -> str:
     return legacy_calls.strip_tool_markers(text, set(REGISTRY) | {"web_search"})

@@ -30,16 +30,10 @@ def _bare_json_calls(text: str, allowed_names: set[str]) -> Iterator[tuple[int, 
             yield start, end, name, payload.get("arguments", {})
 
 
-def parse_tool_calls(text: str, allowed_names: set[str]) -> list[dict]:
-    """Parse legacy XML markers and bare JSON tool-call fallbacks.
-
-    Some free models ignore native function calling and emit
-    ``{"tool":"web_search","arguments":{...}}`` as content. Only registered
-    tool names are accepted, and identical calls are deduplicated.
-    """
+def _positioned_calls(text: str, allowed_names: set[str]) -> list[tuple[int, int, dict]]:
+    """Every recognized call as ``(start, end, call)``, in text order."""
     allowed_names = set(allowed_names)
-    positioned_calls: list[tuple[int, dict]] = []
-
+    positioned: list[tuple[int, int, dict]] = []
     for match in _XML_CALL.finditer(text):
         name = match.group(1)
         if name not in allowed_names:
@@ -50,20 +44,34 @@ def parse_tool_calls(text: str, allowed_names: set[str]) -> list[dict]:
             args = {}
         if not isinstance(args, dict):
             args = {}
-        positioned_calls.append((match.start(), {"name": name, "arguments": args}))
-
-    for start, _end, name, arguments in _bare_json_calls(text, allowed_names):
+        positioned.append((match.start(), match.end(), {"name": name, "arguments": args}))
+    for start, end, name, arguments in _bare_json_calls(text, allowed_names):
         if isinstance(arguments, dict):
-            positioned_calls.append((start, {"name": name, "arguments": arguments}))
+            positioned.append((start, end, {"name": name, "arguments": arguments}))
+    return sorted(positioned, key=lambda item: item[0])
 
+
+def parse_tool_calls(text: str, allowed_names: set[str]) -> list[dict]:
+    """Parse legacy XML markers and bare JSON tool-call fallbacks.
+
+    Some free models ignore native function calling and emit
+    ``{"tool":"web_search","arguments":{...}}`` as content. Only registered
+    tool names are accepted, and identical calls are deduplicated.
+    """
     out = []
     seen = set()
-    for _start, call in sorted(positioned_calls, key=lambda item: item[0]):
+    for _start, _end, call in _positioned_calls(text, allowed_names):
         key = (call["name"], json.dumps(call["arguments"], sort_keys=True, ensure_ascii=False))
         if key not in seen:
             seen.add(key)
             out.append(call)
     return out
+
+
+def first_call_end(text: str, allowed_names: set[str]) -> int | None:
+    """Where the first recognized call ends, so a history can stop at the call that ran."""
+    calls = _positioned_calls(text, allowed_names)
+    return calls[0][1] if calls else None
 
 
 def strip_tool_markers(text: str, allowed_names: set[str]) -> str:

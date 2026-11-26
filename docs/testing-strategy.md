@@ -301,6 +301,10 @@ SPEC-032：合成資料驗證歷史筆數上限（v4.7.3 起 10,000／10,001）�
 
 [規格與具名案例](specs/116-keep-scheduled-workflows-enabled.md) 以文字解析 `offsite-backup.yml`：續命 job 不依賴備份 job、只有它有 `actions: write`、只用 `GITHUB_TOKEN` 不用 secret、失敗只發警告，且 repo 裡每個有 `schedule` 的 workflow 都在它的重新啟用清單中。
 
+## SPEC-130 程式碼檢查修正
+
+[規格與具名案例](specs/130-review-findings.md) 以兩個文字呼叫與呼叫後自編文字確認對話紀錄只留第一個呼叫，以重複與分段的串流片段確認工具名稱，以「失敗後沒有結果」確認搜尋狀態且不含原始錯誤，以 `Strasse`／`Straße` 確認管理員比對，並確認自動邀請碼撞到時重抽、Strava 預覽總筆數包含被排除的健行與步行。
+
 ## SPEC-129 本機資料依帳號識別碼分區
 
 [規格與具名案例](specs/129-local-data-account-key.md) 以合成 token 確認登入後的名稱是伺服器的寫法、session 帶出帳號識別碼，無法解析的 token 保留輸入的名稱；工作區分區是 `aid:` 且只併入同網站、名稱只差 A–Z 大小寫的舊分區；controller 與 IndexedDB 在同一個交易內併入舊紀錄、新紀錄優先、lease 保留，重複執行不再移動。瀏覽器 E2E 改以帳號識別碼等待分區。

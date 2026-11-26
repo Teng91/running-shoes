@@ -4,6 +4,15 @@
 每版的摘要見 [CHANGELOG.md](../CHANGELOG.md)；目前的功能與操作方式以 [README](../README.md) 為準。
 這裡保留當時的文字，後續版本可能已調整其中的行為。
 
+### 程式碼檢查修正（SPEC-130，v5.2.2）
+
+- `agent._record_assistant_turn` 以 `legacy_calls.first_call_end()` 把文字工具呼叫的紀錄截到第一個呼叫結束；`llm._merged_name()` 處理重複或累積送出的串流工具名稱。
+- `search_tool` 在任何一次成功回應後清除錯誤；`request_failed` 的 `error` 固定為 `search provider unavailable`，原文寫入伺服器 log。
+- `settings.account_name_key()` 同時用於 `ADMIN_USERNAMES`、`is_admin()` 與 `accounts.username_key()`。
+- `invites._unused_generated_code()` 最多抽 5 次；`routers/strava._preview_upload` 在排除健行與步行時把它們算進 `total_rows`。
+- 檢查提到的「晚上12:15 解析為中午」不修：ICU 的 zh-Hant 時段把 00:00–05:00 寫成「凌晨」或「午夜」，「晚上」只涵蓋 19–24 點。
+- 沒有 schema 變更，可直接回滾至 v5.2.1 image。Asset 5.2.2／shell v132。
+
 ### 本機資料依帳號識別碼分區（SPEC-129，v5.2.1）
 
 - `app-session.js` 讀取伺服器簽發的 token 內容（不驗證簽章，只用來分區與顯示）：`startAuthSession` 以 `sub` 作為帳號名稱，`captureAuthSession()` 多了 `account`（`aid`，也就是 `backup_id`）。

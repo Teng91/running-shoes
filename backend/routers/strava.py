@@ -83,6 +83,9 @@ def _preview_upload(db: Session, user_id: int, raw: bytes, start_date: str, end_
     result["walk_hike_count"] = walk_hike_count
     result["walk_hike_km"] = walk_hike_km
     result["walk_hike_included"] = include_walks_hikes
+    if not include_walks_hikes:
+        # SPEC-130: rows left out are still rows of the file in range.
+        result["total_rows"] = len(rows) + invalid + walk_hike_count
     return result
 
 

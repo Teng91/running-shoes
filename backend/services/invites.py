@@ -50,6 +50,24 @@ def _out(invite: models.Invite, now: datetime) -> dict:
     }
 
 
+# SPEC-130: a generated code that happens to match an existing invite is drawn again.
+GENERATED_CODE_ATTEMPTS = 5
+
+
+def _generated_code() -> str:
+    return "".join(secrets.choice(CODE_ALPHABET) for _ in range(CODE_LENGTH))
+
+
+def _unused_generated_code(db: Session) -> str:
+    """A random code no invite uses yet; after a few collisions the last one is reported."""
+    code = _generated_code()
+    for _ in range(GENERATED_CODE_ATTEMPTS - 1):
+        if db.query(models.Invite.id).filter(models.Invite.code_hash == code_hash(code)).first() is None:
+            break
+        code = _generated_code()
+    return code
+
+
 def create_invite(db: Session, *, note: str, max_uses: int, days: int, code: str = "") -> dict:
     custom = normalize_code(code)
     if code.strip() and not (CUSTOM_CODE_LENGTH[0] <= len(custom) <= CUSTOM_CODE_LENGTH[1]
@@ -59,9 +77,9 @@ def create_invite(db: Session, *, note: str, max_uses: int, days: int, code: str
         raise Invalid(f"max_uses must be between 1 and {MAX_USES}")
     if not 1 <= days <= MAX_DAYS:
         raise Invalid(f"days must be between 1 and {MAX_DAYS}")
-    code = custom or "".join(secrets.choice(CODE_ALPHABET) for _ in range(CODE_LENGTH))
     now = _now()
     with write_transaction(db):
+        code = custom or _unused_generated_code(db)
         if db.query(models.Invite).filter(models.Invite.code_hash == code_hash(code)).first():
             raise Conflict(DUPLICATE_CODE)
         invite = models.Invite(code_hash=code_hash(code), note=note.strip()[:60], max_uses=max_uses,

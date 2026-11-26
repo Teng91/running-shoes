@@ -141,8 +141,18 @@ def test_web_search_handles_exception_gracefully():
     with patch("ddgs.DDGS", return_value=fake_ddgs):
         out = json.loads(search_tool.web_search("任何查詢"))
     assert out["status"] == "request_failed"
-    assert out["error"] == "blocked"
+    # The provider's text (which can name proxies or hosts) stays in the server log.
+    assert out["error"] == search_tool.SEARCH_UNAVAILABLE
     assert out["attempts"] == search_tool.SEARCH_ATTEMPTS
+
+
+def test_a_failed_attempt_then_an_empty_answer_is_no_results():
+    fake_ddgs = MagicMock()
+    fake_ddgs.__enter__.return_value.text.side_effect = [RuntimeError("timeout via http://proxy.internal:8080"), []]
+    with patch("ddgs.DDGS", return_value=fake_ddgs):
+        out = json.loads(search_tool.web_search("沒有結果的查詢"))
+    assert out["status"] == "no_results"
+    assert "proxy" not in json.dumps(out)
 
 
 def test_web_search_retries_transient_failure_then_succeeds():
