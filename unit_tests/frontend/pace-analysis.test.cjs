@@ -237,6 +237,17 @@ test('SPEC-127 the plan view module lays out a plan without the DOM and a stale 
   assert.equal(nodes['race-plan-table'].innerHTML, 'kept', 'a superseded request leaves the plan alone');
 });
 
+test('SPEC-132 the plan module is imported while the page loads and retried after a failed load', async () => {
+  // Every other native module is imported at startup; the plan view must not wait for a later deployment.
+  assert.match(readText('frontend/app-pace-charts.js'), /^let racePlanModuleLoading = loadRacePlanModule\(\);$/m);
+  const { context, nodes } = racePrepContext({ race: { ...race, plan }, pace });
+  vm.runInContext('racePlanModule = null; racePlanModuleLoading = Promise.resolve(null); loadRacePlanModule = () => { racePlanModule = installedRacePlanModule; return Promise.resolve(racePlanModule); };', context);
+  await context.renderRacePlan({ ...race, plan }, vm.runInContext('racePrepRequestId', context));
+  assert.equal(nodes['race-plan'].hidden, false, 'a failed first load is tried again');
+  vm.runInContext('racePlanModule = null; racePlanModuleLoading = Promise.resolve(null); loadRacePlanModule = () => Promise.resolve(null);', context);
+  await assert.rejects(context.renderRacePlan({ ...race, plan }, 0), /課表模組載入失敗/);
+});
+
 test('SPEC-065 an account without times shows a hint instead of a pace trend', async () => {
   const empty = { ...pace, timed_run_count: 0, summary: null, runs: [], rolling: [] };
   const { context, nodes, charts } = racePrepContext({ race: { as_of: '2026-11-17', goal: null }, pace: empty });

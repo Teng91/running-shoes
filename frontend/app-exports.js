@@ -19,6 +19,8 @@ async function doExport() {
 
   const btn = document.querySelector('#export-modal .btn-primary');
   const originalText = btn.textContent;
+  // SPEC-132: like the account backup, a file that arrives after sign-out is never saved.
+  const session = captureAuthSession();
   btn.disabled = true;
   btn.textContent = '匯出中';
 
@@ -47,6 +49,7 @@ async function doExport() {
 
     // Download the file
     const blob = await readAuthenticatedBody(res, 'blob');
+    if (!isCurrentAuthSession(session)) return;
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;

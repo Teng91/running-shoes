@@ -4,6 +4,13 @@
 每版的摘要見 [CHANGELOG.md](../CHANGELOG.md)；目前的功能與操作方式以 [README](../README.md) 為準。
 這裡保留當時的文字，後續版本可能已調整其中的行為。
 
+### 月報、跑鞋匯出與課表模組載入修正（SPEC-132，v5.2.4）
+
+- `app-reports.loadSavedReport()` 在產生月報期間不讀取已儲存的報告。
+- `app-exports.doExport()` 在收到檔案後確認登入工作階段未改變才下載。
+- `app-pace-charts.js` 載入時就呼叫 `loadRacePlanModule()`；`renderRacePlan` 等待它，失敗時重試一次。所有 native module 都在頁面載入時匯入，新的 service worker 刪掉舊快取後，舊頁面不會再載入新版模組。
+- 沒有 schema 變更，可直接回滾至 v5.2.3 image。Asset 5.2.4／shell v134。
+
 ### README 開發歷程與重設密碼次數分組（SPEC-131，v5.2.3）
 
 - `email_codes.attempt_key()` 對不存在的識別字：含 `@` 轉小寫，其他用 `accounts.username_key()`，取代 `casefold()`；存在的帳號仍是 `user:<id>`。

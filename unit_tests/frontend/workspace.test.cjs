@@ -414,6 +414,28 @@ test('SPEC-029 workspace download reports results and ignores a replaced session
   assert.equal(elements['workspace-export'].disabled, false);
 });
 
+test('SPEC-132 a shoe export that arrives after sign-out is never downloaded', async () => {
+  const elements = new Proxy({}, { get: (rows, id) => rows[id] ||= { value: id === 'export-format' ? 'csv' : 'active', disabled: false, textContent: '', classList: { add() {}, remove() {} } } });
+  const button = { disabled: false, textContent: '匯出' };
+  let session = {}, downloads = 0;
+  const gate = deferred();
+  const context = vm.createContext({ document: { getElementById: id => elements[id], querySelector: () => button,
+      body: { appendChild() {}, removeChild() {} }, createElement: () => ({ click() { downloads++; } }) },
+    window: { URL: { createObjectURL: () => 'blob:synthetic', revokeObjectURL() {} } },
+    API_BASE: '/api', authHeaders: () => ({}), localDateISO: () => '2026-11-26', console, URLSearchParams,
+    captureAuthSession: () => session, isCurrentAuthSession: value => value === session, registerFeatureReset() {},
+    authenticatedFetch: () => gate.promise, readAuthenticatedBody: async () => ({}), closeExportModal() {} });
+  vm.runInContext(fs.readFileSync('frontend/app-exports.js', 'utf8'), context);
+  const exporting = context.doExport();
+  session = {};
+  gate.resolve({ ok: true, headers: { get: () => null } });
+  await exporting;
+  assert.equal(downloads, 0, "the previous account's file is not saved into the next session");
+  context.authenticatedFetch = async () => ({ ok: true, headers: { get: () => null } });
+  await context.doExport();
+  assert.equal(downloads, 1);
+});
+
 test('SPEC-030 local clearing preserves replacement sessions and newer input', async () => {
   for (const switched of [false, true]) for (const failed of [false, true]) {
     let session = {}, complete, reject, persisted = 0, errors = 0, clears = 0;

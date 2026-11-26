@@ -106,6 +106,8 @@ function onReportHistoryChange() {
 }
 
 async function loadSavedReport() {
+  // SPEC-132: a generation owns the report view until it ends; its own completion reloads.
+  if (reportGenerationController) return;
   const parts = reportMonthParts();
   if (!parts) return;
   const requestedMonth = selectedReportMonth();

@@ -107,6 +107,23 @@ test('monthly report requests abort stale loads and lock selectors while streami
   assert.match(generate, /setReportControlsDisabled\(false\)/);
 });
 
+test('SPEC-132 opening the report tab during a generation leaves the streaming report alone', async () => {
+  let fetches = 0;
+  const content = { textContent: '串流中的報告' };
+  const context = vm.createContext({ document: { getElementById: id => id === 'report-content' ? content : { value: '2026-10', textContent: '' } },
+    authenticatedFetch: async () => { fetches++; return { status: 404 }; }, API_BASE: '/api', authHeaders: () => ({}),
+    AbortController, reportLoadRequestId: 0, reportLoadController: null, reportGenerationController: {},
+    reportMonthParts: () => ['2026', '10'], selectedReportMonth: () => '2026-10', reportMonthLabel: value => value, setReportStatus() {} });
+  vm.runInContext(extract('loadSavedReport'), context);
+  await context.loadSavedReport();
+  assert.equal(fetches, 0);
+  assert.equal(content.textContent, '串流中的報告');
+  context.reportGenerationController = null;
+  await context.loadSavedReport();
+  assert.equal(fetches, 1);
+  assert.match(content.textContent, /此月份尚無報告/);
+});
+
 test('the report month defaults to the last complete month', () => {
   const context = vm.createContext({ Date });
   vm.runInContext(extract('previousMonthValue'), context);

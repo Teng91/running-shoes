@@ -102,7 +102,7 @@
 - `frontend/app-shoe-charts.js`: shoe lifecycle, cost, retirement, and allocation charts.
 - `frontend/app-monthly-charts.js`: month/year selectors, monthly/annual/year-over-year mileage charts and the year in review.
 - `frontend/app-trend-charts.js`: training trends: heatmap, weekly load and long run, weekday distribution and the cumulative year line (SPEC-090).
-- `frontend/app-pace-charts.js`: shared race state, race readiness cards and pace trend charts (SPEC-065); the plan's layout lives in `runtime/race-plan-view.mjs`.
+- `frontend/app-pace-charts.js`: shared race state, race readiness cards and pace trend charts (SPEC-065); the plan's layout lives in `runtime/race-plan-view.mjs`, imported while the page loads like every native module, so a later deployment cannot hand an old page a newer module (SPEC-132).
 - `frontend/app-race-goal.js`: the race goal form: open, validate, save and delete (SPEC-090).
 - `frontend/app-spending.js`: spending cards, charts, and table.
 - `frontend/app-actions.js`: dispatches delegated `data-click`/`data-change`/… UI actions; each feature registers its own with `registerUiActions` (`app-lifecycle.js`) while it loads, and the table is frozen here (SPEC-113); markup and generated rows never contain inline JavaScript handlers (the page CSP blocks them).

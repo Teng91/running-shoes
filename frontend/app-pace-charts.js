@@ -162,16 +162,28 @@ function renderRaceCards(race) {
 
 // ---------- weekly training plan (SPEC-119) ----------
 // SPEC-127: runtime/race-plan-view.mjs lays the plan out; this bridge only loads it and writes the DOM.
+// SPEC-132: like every other native module it is imported while the page loads, so it comes from
+// this page's shell; a deployment that activates later cannot hand an old page a newer module.
 let racePlanModule = null;
+let racePlanModuleLoading = loadRacePlanModule();
+
+function loadRacePlanModule() {
+  try {
+    const version = document.querySelector('meta[name="app-asset-version"]')?.content || '';
+    return import('./runtime/race-plan-view.mjs?v=' + encodeURIComponent(version))
+      .then(module => { racePlanModule = module; return module; }, () => null);
+  } catch {
+    return Promise.resolve(null);
+  }
+}
 
 async function renderRacePlan(race, requestId) {
   const section = document.getElementById('race-plan');
   const table = document.getElementById('race-plan-table');
   if (!race.plan) { section.hidden = true; table.innerHTML = ''; return; }
-  if (!racePlanModule) {
-    const version = document.querySelector('meta[name="app-asset-version"]')?.content || '';
-    racePlanModule = await import('./runtime/race-plan-view.mjs?v=' + encodeURIComponent(version));
-  }
+  // A failed first load (e.g. offline before the shell was cached) is tried again.
+  if (!racePlanModule && !await racePlanModuleLoading) racePlanModuleLoading = loadRacePlanModule();
+  if (!racePlanModule && !await racePlanModuleLoading) throw new Error('課表模組載入失敗');
   if (requestId !== racePrepRequestId) return;
   const view = racePlanModule.racePlanView(race, { esc, paceClock, zoneColor, zoneRangeText, raceShortDate, raceDistanceName });
   section.hidden = false;
