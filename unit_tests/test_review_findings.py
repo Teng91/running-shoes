@@ -3,7 +3,7 @@
 from types import SimpleNamespace
 
 from backend import agent, llm
-from backend.services import invites
+from backend.services import email_codes, invites
 from backend.settings import Settings, account_name_key
 from backend.tools import db_tools
 
@@ -57,3 +57,10 @@ def test_a_generated_invite_code_that_collides_is_drawn_again(db, monkeypatch):
     monkeypatch.setattr(invites, "_generated_code", lambda: next(draws))
     second = invites.create_invite(db, note="second", max_uses=1, days=1)
     assert second["code"] == "ABCD-2345"
+
+
+def test_unknown_reset_identifiers_share_a_budget_like_the_lookup(db):
+    """SPEC-131: an unknown name or email is folded the way the account lookup folds it."""
+    assert email_codes.attempt_key(db, " Ghost ") == email_codes.attempt_key(db, "ghost") == "name:ghost"
+    assert email_codes.attempt_key(db, "Ärger") != email_codes.attempt_key(db, "ärger"), "only A-Z ignore case"
+    assert email_codes.attempt_key(db, "Ghost@Example.COM") == "name:ghost@example.com"

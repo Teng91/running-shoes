@@ -4,6 +4,11 @@
 每版的摘要見 [CHANGELOG.md](../CHANGELOG.md)；目前的功能與操作方式以 [README](../README.md) 為準。
 這裡保留當時的文字，後續版本可能已調整其中的行為。
 
+### README 開發歷程與重設密碼次數分組（SPEC-131，v5.2.3）
+
+- `email_codes.attempt_key()` 對不存在的識別字：含 `@` 轉小寫，其他用 `accounts.username_key()`，取代 `casefold()`；存在的帳號仍是 `user:<id>`。
+- README 開發歷程新增 v5.1–5.2。沒有 schema 變更，可直接回滾至 v5.2.2 image。Asset 5.2.3／shell v133。
+
 ### 程式碼檢查修正（SPEC-130，v5.2.2）
 
 - `agent._record_assistant_turn` 以 `legacy_calls.first_call_end()` 把文字工具呼叫的紀錄截到第一個呼叫結束；`llm._merged_name()` 處理重複或累積送出的串流工具名稱。
