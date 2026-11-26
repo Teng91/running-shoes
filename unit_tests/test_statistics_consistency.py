@@ -92,6 +92,13 @@ def test_spending_read_model_uses_calendar_months_and_user_scope(db, user_with_t
     assert result["average_discount_percent"] == 80
     assert result["highest_month"] == {"year": 2026, "month": 3, "total_paid": 800}
 
+    # SPEC-133: a legacy shoe without a valid purchase date counts in the totals but not in the
+    # monthly average, so the average matches the months it is divided over.
+    db.add(models.Shoe(user_id=user.id, brand="A", model="Legacy", date="2024/05/01", price=400))
+    db.commit()
+    legacy = spending_summary(db, user.id, today=date(2026, 10, 20))
+    assert (legacy["total_paid"], legacy["month_span"], legacy["average_monthly_paid"]) == (1200, 8, 100)
+
 
 def test_spending_summary_api_and_empty_history(stats_client):
     client, headers = stats_client

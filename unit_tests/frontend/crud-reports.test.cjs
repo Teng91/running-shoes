@@ -124,6 +124,25 @@ test('SPEC-132 opening the report tab during a generation leaves the streaming r
   assert.match(content.textContent, /此月份尚無報告/);
 });
 
+test('SPEC-133 an older report history response never replaces a newer one', async () => {
+  const select = { children: [], replaceChildren() { this.children = []; }, appendChild(option) { this.children.push(option.value); } };
+  const responses = [];
+  const session = {};
+  const context = vm.createContext({ document: { getElementById: () => select, createElement: () => ({}) },
+    API_BASE: '/api', authHeaders: () => ({}), console, reportMonthLabel: value => value,
+    captureAuthSession: () => session, isCurrentAuthSession: value => value === session,
+    authenticatedFetch: () => new Promise(resolve => responses.push(resolve)),
+    readAuthenticatedBody: async res => res.rows });
+  vm.runInContext('let reportHistoryRequestId = 0;\n' + extract('loadReportHistory'), context);
+  const older = context.loadReportHistory();
+  const newer = context.loadReportHistory();
+  responses[1]({ ok: true, rows: [{ year: 2026, month: 10 }, { year: 2026, month: 9 }] });
+  await newer;
+  responses[0]({ ok: true, rows: [{ year: 2026, month: 9 }] });
+  await older;
+  assert.deepEqual(select.children, ['', '2026-10', '2026-09'], 'the newer list, with the month just generated, stays');
+});
+
 test('the report month defaults to the last complete month', () => {
   const context = vm.createContext({ Date });
   vm.runInContext(extract('previousMonthValue'), context);

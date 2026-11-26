@@ -4,6 +4,12 @@
 每版的摘要見 [CHANGELOG.md](../CHANGELOG.md)；目前的功能與操作方式以 [README](../README.md) 為準。
 這裡保留當時的文字，後續版本可能已調整其中的行為。
 
+### 月報額度、報告清單、支出平均與下載連結（SPEC-133，v5.2.5）
+
+- `routers/reports.generate_monthly_report` 先驗證月份與模型再扣 AI 額度；`app-reports.loadReportHistory()` 以請求序號忽略舊回應；`spending.average_monthly_paid` 以月份金額總和計算；匯出 60 秒後才釋放 blob URL。
+- 檢查另外提到的兩項維持原狀：較新的月報請求失敗不恢復舊請求的儲存資格（SPEC-026 的設計）；備份內月報與 Strava 匯入時間沿用 UTC 無時區格式，避免改變 v6 檔案。
+- 沒有 schema 變更，可直接回滾至 v5.2.4 image。Asset 5.2.5／shell v135。
+
 ### 月報、跑鞋匯出與課表模組載入修正（SPEC-132，v5.2.4）
 
 - `app-reports.loadSavedReport()` 在產生月報期間不讀取已儲存的報告。

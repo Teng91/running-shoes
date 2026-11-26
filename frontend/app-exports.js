@@ -56,7 +56,8 @@ async function doExport() {
     a.download = filename;
     document.body.appendChild(a);
     a.click();
-    window.URL.revokeObjectURL(url);
+    // SPEC-133: some WebKit builds cancel a download whose URL is revoked at once.
+    setTimeout(() => window.URL.revokeObjectURL(url), 60000);
     document.body.removeChild(a);
 
     closeExportModal();
@@ -96,7 +97,8 @@ async function exportAccountData(fromWorkspace = false) {
     document.body.appendChild(link);
     link.click();
     link.remove();
-    window.URL.revokeObjectURL(url);
+    // SPEC-133: some WebKit builds cancel a download whose URL is revoked at once.
+    setTimeout(() => window.URL.revokeObjectURL(url), 60000);
     if (fromWorkspace) error.textContent = '資料檔案已交給瀏覽器，請查看下載項目。' + (includeHistory ? '已包含異動歷史。' : '此檔案不含異動歷史。') + '可在本機版登入後選擇此 JSON 匯入。';
     else closeExportModal();
   } catch (e) {

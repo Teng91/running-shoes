@@ -14,6 +14,8 @@ async function bindRestoreController(context) {
   vm.runInContext('accountRestore = injectedRestore;', context);
   return context.injectedRestore;
 }
+// SPEC-133: downloads revoke their blob URL later; tests record the delay instead of waiting.
+const revoked = [], delayed = [];
 function memoryStore() {
   const rows = new Map(); let tail = Promise.resolve(), fail = false;
   function write(fn) {
@@ -393,7 +395,8 @@ test('SPEC-029 workspace download reports results and ignores a replaced session
   let session = {}, resets, downloads = 0;
   const context = vm.createContext({ document: { getElementById: id => elements[id], body: { appendChild() {} },
     createElement: () => ({ click() { downloads++; }, remove() {} }) },
-    window: { URL: { createObjectURL: () => 'blob:synthetic', revokeObjectURL() {} } },
+    window: { URL: { createObjectURL: () => 'blob:synthetic', revokeObjectURL() { revoked.push('now'); } } },
+    setTimeout: (callback, delay) => { delayed.push(delay); },
     API_BASE: '/api', authHeaders: () => ({}), localDateISO: () => '2026-10-24',
     captureAuthSession: () => session, isCurrentAuthSession: value => value === session,
     registerFeatureReset: (_, reset) => { resets = reset; },
@@ -402,6 +405,7 @@ test('SPEC-029 workspace download reports results and ignores a replaced session
   vm.runInContext(fs.readFileSync('frontend/app-exports.js', 'utf8'), context);
   await context.exportAccountData(true);
   assert.equal(downloads, 1); assert.match(elements['workspace-export-status'].textContent, /查看下載項目/);
+  assert.equal(revoked.length, 0, 'the blob URL outlives the click'); assert.ok(delayed.at(-1) >= 1000);
   context.authenticatedFetch = async () => { throw Error('offline'); };
   await context.exportAccountData(true);
   assert.match(elements['workspace-export-status'].textContent, /offline/);
@@ -421,7 +425,8 @@ test('SPEC-132 a shoe export that arrives after sign-out is never downloaded', a
   const gate = deferred();
   const context = vm.createContext({ document: { getElementById: id => elements[id], querySelector: () => button,
       body: { appendChild() {}, removeChild() {} }, createElement: () => ({ click() { downloads++; } }) },
-    window: { URL: { createObjectURL: () => 'blob:synthetic', revokeObjectURL() {} } },
+    window: { URL: { createObjectURL: () => 'blob:synthetic', revokeObjectURL() { revoked.push('now'); } } },
+    setTimeout: (callback, delay) => { delayed.push(delay); },
     API_BASE: '/api', authHeaders: () => ({}), localDateISO: () => '2026-11-26', console, URLSearchParams,
     captureAuthSession: () => session, isCurrentAuthSession: value => value === session, registerFeatureReset() {},
     authenticatedFetch: () => gate.promise, readAuthenticatedBody: async () => ({}), closeExportModal() {} });
@@ -571,7 +576,8 @@ test('SPEC-032 downloads explicitly omit history and show capacity errors', asyn
   let url, downloads = 0, ok = true, created;
   const context = vm.createContext({ document: { getElementById: id => elements[id], body: { appendChild() {} },
     createElement: () => created = { click() { downloads++; }, remove() {} } },
-    window: { URL: { createObjectURL: () => 'blob:synthetic', revokeObjectURL() {} } },
+    window: { URL: { createObjectURL: () => 'blob:synthetic', revokeObjectURL() { revoked.push('now'); } } },
+    setTimeout: (callback, delay) => { delayed.push(delay); },
     API_BASE: '/api', authHeaders: () => ({}), localDateISO: () => '2026-10-24',
     captureAuthSession: () => ({}), isCurrentAuthSession: () => true, registerFeatureReset() {},
     authenticatedFetch: async path => { url = path; return { ok, status: 400, headers: { get: () => 'attachment; filename="synthetic_without_history.json"' } }; },
