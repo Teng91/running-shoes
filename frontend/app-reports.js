@@ -3,6 +3,9 @@
 let reportLoadRequestId = 0;
 let reportLoadController = null;
 let reportGenerationRequestId = 0;
+let reportGenerationController = null;
+// SPEC-135: a report still generating postpones an automatic update (SPEC-059).
+registerBusyCheck(() => Boolean(reportGenerationController));
 registerFeatureReset('monthly-reports', () => {
   reportLoadRequestId += 1;
   reportLoadController?.abort();

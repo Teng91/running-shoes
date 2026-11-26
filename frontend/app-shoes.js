@@ -29,12 +29,12 @@ async function inlineEditRow(arr, idx, field, el) {
         if (operations.current(operation) && e.name !== 'AbortError') alert(e.message || '更新失敗');
       }
     }
-    if (operations.current(operation)) render('shoes');
+    if (operations.current(operation)) refreshPanels('shoes');
   };
   input.addEventListener('blur', commit);
   input.addEventListener('keydown', e => {
     if (e.key === 'Enter') commit();
-    if (e.key === 'Escape') { committed = true; finishInlineEdit(editor); render('shoes'); }
+    if (e.key === 'Escape') { committed = true; finishInlineEdit(editor); refreshPanels('shoes'); }
   });
   el.innerHTML = '';
   el.appendChild(input);
@@ -287,6 +287,9 @@ registerWorkspaceEditor('shoe', {
     if (draft.categories) document.querySelectorAll('#f-category-group input').forEach(input => { input.checked = draft.categories.includes(input.value); });
   },
 });
+
+// SPEC-135: Escape closes this dialog through the shared registry (app-lifecycle.js).
+registerDialog('modal', { close: closeModal });
 
 // SPEC-113: this feature's delegated UI actions; markup names them with data-click and the like.
 registerUiActions({

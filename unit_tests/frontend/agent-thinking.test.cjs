@@ -99,7 +99,7 @@ function agentContext() {
     requireAuthSession: session => { if (!session?.current) throw new DOMException('stale', 'AbortError'); },
     readAuthenticatedError: async response => response.json(),
     captureAuthSession: () => ({ current: true, account: 'aid-runner' }), isCurrentAuthSession: session => session.current,
-    registerFeatureReset() {}, registerUiActions() {}, renderMarkdown: text => `<p>${text}</p>`, esc: text => String(text),
+    registerFeatureReset() {}, registerUiActions() {}, registerBusyCheck() {}, onAuthView() {}, renderMarkdown: text => `<p>${text}</p>`, esc: text => String(text),
     API_BASE: '/api', authToken: 'synthetic-token', currentUser: 'runner',
   });
   context.authenticatedFetch = async (url, options) => {

@@ -84,9 +84,38 @@ function registerResourceReader(name, reader) {
 
 // hooks: { arrived(resource, value, current) after a resource is applied (current: the value
 // still matches the screen's scope), invalidated() on a full redraw,
+// refreshed(resource) after the shell's refreshPanels redraw (SPEC-135),
 // history() when a load also refreshes the import history }.
 function registerDataHooks(hooks) {
   dataHooks.push(hooks);
+}
+
+// SPEC-135: each feature registers how its dialog closes, by overlay ID. app-dialogs.js closes the
+// topmost one on Escape, and a backdrop click closes the dialogs registered with backdrop: true.
+// Another script closes a dialog with closeDialog(id), never with the owner's own close function.
+const dialogClosers = new Map();
+
+function registerDialog(id, { close, backdrop = false }) {
+  if (dialogClosers.has(id)) throw new Error('Dialog registered twice: ' + id);
+  dialogClosers.set(id, { close, backdrop });
+}
+
+function closeDialog(id, { fromBackdrop = false } = {}) {
+  const dialog = dialogClosers.get(id);
+  if (!dialog) throw new Error('Unknown dialog: ' + id);
+  if (!fromBackdrop || dialog.backdrop) dialog.close();
+}
+
+// SPEC-135: features register what an automatic update must not interrupt (SPEC-059): a
+// streaming answer, a request in flight, typed text. app-updates.js asks featureBusy().
+const busyChecks = [];
+
+function registerBusyCheck(check) {
+  busyChecks.push(check);
+}
+
+function featureBusy() {
+  return busyChecks.some(check => check());
 }
 
 // SPEC-113: delegated UI actions by event type. Each feature registers the actions its markup

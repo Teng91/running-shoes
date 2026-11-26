@@ -14,6 +14,12 @@ function runAuthViewHooks(name) {
   authViewHooks[name].forEach(hook => hook());
 }
 
+// SPEC-135: text typed into a sign-in form postpones an automatic update (SPEC-059).
+registerBusyCheck(() => {
+  const auth = document.getElementById('auth-view');
+  return Boolean(auth && auth.style.display !== 'none' && [...auth.querySelectorAll('input')].some(input => input.value));
+});
+
 function setAuthControlsDisabled(disabled) {
   document.querySelectorAll('#auth-view button[type="submit"]').forEach(button => { button.disabled = disabled; });
 }
@@ -88,7 +94,7 @@ function showAppView({ keepBoot = false } = {}) {
   document.getElementById('auth-view').style.display = 'none';
   document.getElementById('app-view').style.display = '';
   document.getElementById('user-label').textContent = currentUser || '';
-  render();
+  refreshPanels();
   runAuthViewHooks('appShown');
   if (!keepBoot) hideAppBoot();
 }
@@ -187,10 +193,8 @@ async function handleLogin() {
     setAuth(data.access_token, username);
     authenticatedSession = captureAuthSession();
     resetAuthInputs();
-    resetAgentChat();
     resetAppLayout();
     showAppView({ keepBoot: true });
-    loadAgentModels();
     await loadData();
     if (!isCurrentAuthSession(authenticatedSession)) return;
     hideAppBoot();
@@ -249,7 +253,6 @@ async function handleRegister() {
     resetAuthInputs();
     resetAppLayout();
     showAppView({ keepBoot: true });
-    loadAgentModels();
     await loadData();
     if (!isCurrentAuthSession(authenticatedSession)) return;
     hideAppBoot();

@@ -3,12 +3,6 @@ function initializeDialogs() {
   const overlays = [...document.querySelectorAll('.modal-overlay')];
   const returnFocus = new Map();
   let lastTrigger = null;
-  const closers = {
-    modal: closeModal, 'run-modal': closeRunModal,
-    'strava-modal': closeStravaModal, 'export-modal': closeExportModal,
-    'shoe-analysis-modal': closeShoeAnalytics, 'workspace-modal': closeWorkspaceModal,
-    'admin-modal': closeAdminModal,
-  };
   const active = () => overlays.filter(overlay => overlay.classList.contains('active')).at(-1);
   const focusables = overlay => [...overlay.querySelectorAll('button, input, select, textarea, a[href], [tabindex]')]
     .filter(node => !node.disabled && node.tabIndex >= 0 && node.getClientRects().length);
@@ -25,6 +19,10 @@ function initializeDialogs() {
     dialog.setAttribute('aria-modal', 'true');
     dialog.setAttribute('aria-labelledby', title.id);
     dialog.tabIndex = -1;
+    // SPEC-135: only dialogs registered with backdrop: true close on a click outside them.
+    overlay.addEventListener('click', event => {
+      if (event.target === overlay) closeDialog(overlay.id, { fromBackdrop: true });
+    });
   }
   const observer = new MutationObserver(() => {
     const opened = [], closed = [];
@@ -52,7 +50,7 @@ function initializeDialogs() {
     if (!overlay) return;
     if (event.key === 'Escape') {
       event.preventDefault(); event.stopPropagation();
-      closers[overlay.id]();
+      closeDialog(overlay.id);
     } else if (event.key === 'Tab') {
       const nodes = focusables(overlay);
       const index = nodes.indexOf(document.activeElement);

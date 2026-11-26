@@ -60,7 +60,7 @@ test('SPEC-017 cross-day limits advance without resetting drafts, month, or tab'
   const context = vm.createContext({ window: { addEventListener: (name, fn) => listeners[name] = fn },
     document: { getElementById: id => nodes[id], addEventListener: (name, fn) => events[name] = fn, visibilityState: 'visible' },
     localDateISO: () => today, authToken: 'synthetic', dashboardAnalyticsCache: new Map(), goalProgressCache: new Map(),
-    invalidatePanels() {}, renderActivePanel: () => renders++,
+    refreshPanels: () => renders++,
   });
   vm.runInContext(fs.readFileSync('frontend/app-dates.js', 'utf8'), context);
   nodes['run-date'].value = '2026-10-18'; nodes['run-month'].value = '2026-08';

@@ -100,7 +100,7 @@ function activateLocalWorkspace() {
     localWorkspace.restoring = true;
     try {
       for (const row of records.filter(row => row.key[1] === 'resource')) {
-        if (applyLocalResource(row.key[2], row.value)) render(row.key[2]);
+        if (applyLocalResource(row.key[2], row.value)) refreshPanels(row.key[2]);
       }
       const draft = records.find(row => row.key[1] === 'drafts')?.value;
       if (draft) {
@@ -402,6 +402,9 @@ registerDataHooks({ arrived: (resource, value, current) => { if (current) worksp
 
 // SPEC-108: drafts are saved before a session ends, and the workspace attaches when the app opens.
 onAuthView({ sessionEnding: () => persistWorkspaceDrafts(), appShown: () => { void activateLocalWorkspace(); } });
+
+// SPEC-135: Escape closes this dialog through the shared registry (app-lifecycle.js).
+registerDialog('workspace-modal', { close: closeWorkspaceModal, backdrop: true });
 
 // SPEC-113: this feature's delegated UI actions; markup names them with data-click and the like.
 registerUiActions({

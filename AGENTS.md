@@ -75,10 +75,10 @@
 - `frontend/runtime/feature-lifecycle.mjs`: DOM-independent native module for feature lifecycle ownership.
 - `frontend/runtime/run-controller.mjs`: native run state/operation owner with injected transport, session and key factory; DOM remains in the bridge.
 - `frontend/runtime/strava-controller.mjs`: native Strava preview/import/window ownership; DOM remains in `app-strava.js`.
-- `frontend/app-lifecycle.js`: compatibility bridge, reset registration and the panel/data registry (`registerPanel`, `registerResourceReader`, `registerDataHooks`); it loads right after `app-boot.js` (the startup shell, which calls no feature function) because a script may call, while it loads, only functions of earlier scripts (`architecture-check` enforces it, SPEC-106).
+- `frontend/app-lifecycle.js`: compatibility bridge, reset registration, the panel/data registry (`registerPanel`, `registerResourceReader`, `registerDataHooks`), the dialog registry (`registerDialog`, `closeDialog`) and the update busy checks (`registerBusyCheck`, `featureBusy`) (SPEC-135); it loads right after `app-boot.js` (the startup shell, which calls no feature function) because a script may call, while it loads, only functions of earlier scripts (`architecture-check` enforces it, SPEC-106).
 - `frontend/app-dates.js`: calendar parsing, cross-day limits, draft-safe foreground refresh and the shared server-timestamp formatter `formatLocalTimestamp` (SPEC-134).
-- `frontend/app-dialogs.js`: modal semantics and keyboard/focus lifecycle.
-- `frontend/app-updates.js`: shell version diagnostics, open-app deployment checks (focus, visibility, reconnect, 30 min), automatic reload at safe moments (background, untouched after returning, 5 idle minutes; postponed by `appUpdateBusy()`) and the update prompt (SPEC-049, SPEC-059).
+- `frontend/app-dialogs.js`: modal semantics and keyboard/focus lifecycle; Escape and backdrop clicks close through the dialog registry, so it names no feature (SPEC-135).
+- `frontend/app-updates.js`: shell version diagnostics, open-app deployment checks (focus, visibility, reconnect, 30 min), automatic reload at safe moments (background, untouched after returning, 5 idle minutes; postponed by `appUpdateBusy()`: an open dialog or a feature's registered busy check, SPEC-135) and the update prompt (SPEC-049, SPEC-059).
 - `frontend/app-boot.js`: startup loading, stylesheet readiness, timeout, and retry state.
 - `frontend/app-state.js`: shared browser state (`coreData` is the core data store's read-only view; never declare core data globals again), presentation constants and the guarded localStorage helpers (`readStoredValue` and friends); classic scripts never touch `localStorage` outside a try (SPEC-087).
 - `frontend/app-api.js`: authenticated JSON and upload transport helpers.
@@ -93,7 +93,7 @@
 - `frontend/app-account-restore.js`: restore preview/window/session ownership.
 - `frontend/runtime/account-restore-controller.mjs`: injected restore operation, session and preview cleanup ownership; no DOM or browser transport.
 - `frontend/app-history.js`: audit paging and recover-deletion presentation.
-- `frontend/app-core.js`: dashboard shell, theme, tabs, and aggregate data loading. Features register what they draw and load (`registerPanel`, `registerResourceReader`, `registerDataHooks`); the shell never calls a feature function by name (SPEC-101).
+- `frontend/app-core.js`: dashboard shell, theme, tabs, and aggregate data loading. Features register what they draw and load (`registerPanel`, `registerResourceReader`, `registerDataHooks`); the shell never calls a feature function by name (SPEC-101), and features redraw after a data change only through `refreshPanels(resource)` (SPEC-135).
 - `frontend/app-dashboard.js`: dashboard cards, alerts, and shoe tables.
 - `frontend/app-onboarding.js`: the new-account getting-started card, derived only from loaded shoes, monthly mileage and the goal (SPEC-084).
 - `frontend/app-exports.js`: authenticated shoe exports and account backup downloads.
@@ -107,8 +107,8 @@
 - `frontend/app-spending.js`: spending cards, charts, and table.
 - `frontend/app-actions.js`: dispatches delegated `data-click`/`data-change`/… UI actions; each feature registers its own with `registerUiActions` (`app-lifecycle.js`) while it loads, and the table is frozen here (SPEC-113); markup and generated rows never contain inline JavaScript handlers (the page CSP blocks them).
 - `frontend/offline.html`: script-free offline fallback with its own strict CSP.
-- `frontend/app.js`: bootstrap and global dialog event wiring.
-- `frontend/app-agent.js`: AI conversation and streaming presentation; completed turns persist in this tab's `sessionStorage` (never localStorage) and are cleared on logout or account switch (SPEC-059).
+- `frontend/app.js`: bootstrap.
+- `frontend/app-agent.js`: AI conversation and streaming presentation; completed turns persist in this tab's `sessionStorage` (never localStorage) and are cleared on logout or account switch (SPEC-059); they come back through `onAuthView({ appShown })`, not from sign-in code (SPEC-135).
 - `frontend/app-models.js`: shared provider/model menus.
 - `frontend/app-markdown.js`: safe rendering of untrusted Markdown.
 - `frontend/app-reports.js`: monthly report loading, generation, and streaming UI.

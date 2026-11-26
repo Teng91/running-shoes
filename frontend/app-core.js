@@ -15,6 +15,15 @@ function invalidatePanels(resource = null) {
   for (const name of dependencies[resource] || []) renderedPanels.delete(name);
 }
 
+// SPEC-135: the one redraw after data changed (resource: what changed, null for everything).
+// Features call it instead of the dashboard; data hooks hear it as refreshed(resource).
+function refreshPanels(resource = null) {
+  document.getElementById('today-label').textContent = '資料日期：' + localDateISO().replace(/-/g, '/');
+  invalidatePanels(resource);
+  renderActivePanel();
+  dataHooks.forEach(hook => hook.refreshed?.(resource));
+}
+
 function resetPanelRendering() {
   invalidatePanels();
   renderedPanels.clear();
@@ -131,6 +140,7 @@ async function loadData({ mutation = null } = {}) {
     const current = !reader?.current || reader.current(scopes[resource]);
     if (reader && current) reader.apply(value);
     dataHooks.forEach(hook => hook.arrived?.(resource, value, current));
+    refreshPanels(resource);
     // A slow optional source must not hold an otherwise usable screen behind boot.
     if (typeof hideAppBoot === 'function') hideAppBoot();
   };

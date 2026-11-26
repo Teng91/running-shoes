@@ -309,6 +309,9 @@ async function renderHomeSummary() {
 // SPEC-101: the runs tab shows this month's log and the home summary.
 registerPanel('runs', { render: () => { renderRunLog(); renderHomeSummary(); } });
 
+// SPEC-135: Escape closes this dialog through the shared registry (app-lifecycle.js).
+registerDialog('shoe-analysis-modal', { close: closeShoeAnalytics, backdrop: true });
+
 // SPEC-113: this feature's delegated UI actions; markup names them with data-click and the like.
 registerUiActions({
   click: {

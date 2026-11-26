@@ -932,6 +932,7 @@ test('SPEC-108 runs and sign-in hooks reach the workspace only through registrat
     populateRunShoeSelects: id => calls.push(`shoes ${id}`), updateRunActivityHint: prefix => calls.push(`hint ${prefix}`),
     applyCoreResource() {}, inlineEditors: new Map(), activateLocalWorkspace: async () => calls.push('activate'),
     refreshAdminEntry: async () => calls.push('admin'), loadRegistrationMode: async () => calls.push('mode'),
+    restoreAgentChat: () => calls.push('chat'), loadAgentModels: async () => calls.push('models'),
   });
   vm.runInContext(fs.readFileSync('frontend/app-workspace.js', 'utf8'), context);
   context.persistWorkspaceDrafts = () => calls.push('persist');
@@ -948,12 +949,13 @@ test('SPEC-108 runs and sign-in hooks reach the workspace only through registrat
   assert.equal(elements['edit-run-duration'].value, '3000s'); assert.equal(elements['edit-run-km'].value, '12');
   assert.equal(context.applyLocalResource('runs', { month: '2026-11', rows: [1], summary: {}, hasMore: false }), true);
   assert.deepEqual(JSON.parse(JSON.stringify(context.runController.state)), { rows: [1], summary: {}, hasMore: false, offset: 0 });
-  // Sign-in hooks: drafts are saved before a session ends; workspace then account react to the app view.
+  // Sign-in hooks: drafts are saved before a session ends; workspace, account, then the AI
+  // conversation (SPEC-135) react to the app view.
   vm.runInContext(`const authViewHooks = { sessionEnding: [], appShown: [], registerShown: [] };
     ${['onAuthView', 'runAuthViewHooks'].map(extract).join('\n')}
     ${featureRegistrations(/^onAuthView\(/gm)}
     runAuthViewHooks('sessionEnding'); runAuthViewHooks('appShown'); runAuthViewHooks('registerShown');`, context);
-  assert.deepEqual(calls, ['persist', 'activate', 'admin', 'mode']);
+  assert.deepEqual(calls, ['persist', 'activate', 'admin', 'chat', 'models', 'mode']);
   for (const [file, names] of [['frontend/app-workspace.js', /runController|selectedRunMonth|allRunShoes|formatRunDuration|populateRunShoeSelects|updateRunActivityHint/],
     ['frontend/app-auth.js', /persistWorkspaceDrafts|activateLocalWorkspace|refreshAdminEntry|loadRegistrationMode|function captureAuthSession/],
     ['frontend/app-api.js', /clearAuth|showLoginView/]]) {

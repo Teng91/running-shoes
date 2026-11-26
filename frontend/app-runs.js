@@ -442,6 +442,9 @@ registerWorkspaceEditor('run', {
   restored: () => updateRunActivityHint('edit-run'),
 });
 
+// SPEC-135: Escape closes this dialog through the shared registry (app-lifecycle.js).
+registerDialog('run-modal', { close: closeRunModal, backdrop: true });
+
 // SPEC-113: this feature's delegated UI actions; markup names them with data-click and the like.
 registerUiActions({
   click: {

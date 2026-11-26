@@ -32,8 +32,7 @@ function resumeCalendarDay() {
   if (!refreshDateLimits() || !authToken) return;
   // Invalidate date-based results, but leave tab, month, input values and drafts alone.
   resourceStore.invalidate(['dashboard-analytics', 'goal-progress']);
-  invalidatePanels();
-  renderActivePanel();
+  refreshPanels();
 }
 
 window.addEventListener('focus', resumeCalendarDay);

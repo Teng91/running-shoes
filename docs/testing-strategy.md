@@ -301,6 +301,10 @@ SPEC-032：合成資料驗證歷史筆數上限（v4.7.3 起 10,000／10,001）�
 
 [規格與具名案例](specs/116-keep-scheduled-workflows-enabled.md) 以文字解析 `offsite-backup.yml`：續命 job 不依賴備份 job、只有它有 `actions: write`、只用 `GITHUB_TOKEN` 不用 secret、失敗只發警告，且 repo 裡每個有 `schedule` 的 workflow 都在它的重新啟用清單中。
 
+## SPEC-135 對話框、更新忙碌判斷與重繪改由功能登記
+
+[規格與具名案例](specs/135-feature-registries.md) 以頁面上的每個 `.modal-overlay` 確認各有一個登記、Escape 與點背景經登記的關閉函式（點背景只關原本的四個）；SPEC-059 的忙碌案例改由各功能登記的判斷驅動；並確認 `refreshPanels()` 更新資料日期、只重繪受影響的目前面板且通知 `refreshed` hook，共用 script 不提任何功能的函式或狀態。
+
 ## SPEC-134 帳號識別碼的瀏覽器設定、回滾腳本與前端解耦
 
 [規格與具名案例](specs/134-account-keyed-settings-and-decoupling.md) 確認略過引導、Strava 日期範圍與 AI 對話暫存依帳號識別碼保存、同名新帳號不沿用、舊的略過紀錄接手一次，以及正式映像內含所有回滾腳本且基底以 digest 固定。

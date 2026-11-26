@@ -111,7 +111,7 @@ test('SPEC-075 deleting the account needs the password and signs out only after 
   const { context } = accountContext(elements, {
     apiPost: async (url, body) => { calls.push([url, body]); if (fail) throw new Error('Incorrect password'); return { ok: true }; },
     localWorkspace: { controller: { clear: async () => calls.push('clear') } },
-    closeWorkspaceModal: () => calls.push('close'), signOutWithNotice: text => calls.push('logout', 'login', text),
+    closeDialog: id => calls.push(`close ${id}`), signOutWithNotice: text => calls.push('logout', 'login', text),
   });
   await context.deleteAccount();
   assert.deepEqual(calls, [], 'no password, no request');
@@ -122,7 +122,7 @@ test('SPEC-075 deleting the account needs the password and signs out only after 
   fail = false;
   elements['delete-account-password'].value = 'pass1234';
   await context.deleteAccount();
-  assert.deepEqual(calls.slice(-5), ['clear', 'close', 'logout', 'login', '帳號已刪除。']);
+  assert.deepEqual(calls.slice(-5), ['clear', 'close workspace-modal', 'logout', 'login', '帳號已刪除。']);
   assert.equal(elements['delete-account-password'].value, '');
 });
 
@@ -149,7 +149,7 @@ test('SPEC-088 logging out everywhere asks first and signs this device out only 
   const { context } = accountContext(elements, {
     confirm: () => answer,
     apiPost: async (url, body) => { calls.push([url, body]); if (fail) throw new Error('synthetic offline'); return { ok: true }; },
-    closeWorkspaceModal: () => calls.push('close'), signOutWithNotice: text => calls.push('logout', 'login', text),
+    closeDialog: id => calls.push(`close ${id}`), signOutWithNotice: text => calls.push('logout', 'login', text),
   });
   await context.logoutEverywhere();
   assert.deepEqual(calls, [], 'cancelling sends nothing');
@@ -160,7 +160,7 @@ test('SPEC-088 logging out everywhere asks first and signs this device out only 
   fail = false;
   await context.logoutEverywhere();
   assert.deepEqual(JSON.parse(JSON.stringify(calls.at(-5))), ['/auth/logout-all', {}]);
-  assert.deepEqual(calls.slice(-4), ['close', 'logout', 'login', '已登出所有裝置，請重新登入。']);
+  assert.deepEqual(calls.slice(-4), ['close workspace-modal', 'logout', 'login', '已登出所有裝置，請重新登入。']);
   assert.match(htmlSource, /data-click="logout-everywhere"/);
 });
 
@@ -170,7 +170,7 @@ test('SPEC-092 a second click while logging out everywhere sends nothing', async
   const { context } = accountContext(elements, {
     confirm: () => { confirms++; return true; },
     apiPost: () => { posts++; return new Promise(resolve => { release = resolve; }); },
-    closeWorkspaceModal() {}, signOutWithNotice() {},
+    closeDialog() {}, signOutWithNotice() {},
   });
   const first = context.logoutEverywhere();
   await context.logoutEverywhere();
