@@ -1,5 +1,6 @@
 // Account partitions, durable drafts and an at-least-once queue with atomic leases.
 // Storage and transport are injected; no browser globals or credentials are stored.
+// attach(account, isLegacy) first moves older partitions of the same account in (SPEC-129).
 export function createWorkspaceController({ storage, session, clock, newKey, send, changed = () => {}, committed = () => {} }) {
   let owner = null, generation = 0;
   const valid = ticket => owner === ticket && ticket && session.current(ticket.session);
@@ -29,9 +30,10 @@ export function createWorkspaceController({ storage, session, clock, newKey, sen
   let flushing = null;
   return Object.freeze({
     get account() { return valid(owner) ? owner.account : null; },
-    async attach(account) {
+    async attach(account, isLegacy = null) {
       const ticket = { account, session: session.capture(), generation: ++generation };
       owner = ticket;
+      if (isLegacy) await storage.adopt(account, isLegacy);
       const records = await storage.list(account);
       return valid(ticket) ? records : [];
     },

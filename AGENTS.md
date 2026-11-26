@@ -82,13 +82,13 @@
 - `frontend/app-boot.js`: startup loading, stylesheet readiness, timeout, and retry state.
 - `frontend/app-state.js`: shared browser state (`coreData` is the core data store's read-only view; never declare core data globals again), presentation constants and the guarded localStorage helpers (`readStoredValue` and friends); classic scripts never touch `localStorage` outside a try (SPEC-087).
 - `frontend/app-api.js`: authenticated JSON and upload transport helpers.
-- `frontend/app-session.js`: the signed-in identity (`authToken`, `currentUser`, `authGeneration`, `captureAuthSession`/`isCurrentAuthSession`/`requireAuthSession`), written only by its `startAuthSession`/`endAuthSession` (`architecture-check` rejects other writes, SPEC-109); loads right after `app-state.js`. A 401 is the window event `auth-session-expired`, dispatched by `app-api.js` and handled by `app-auth.js` (SPEC-108).
+- `frontend/app-session.js`: the signed-in identity (`authToken`, `currentUser`, `authGeneration`, `captureAuthSession`/`isCurrentAuthSession`/`requireAuthSession`), written only by its `startAuthSession`/`endAuthSession` (`architecture-check` rejects other writes, SPEC-109); the name is the server spelling from the token's `sub`, and `captureAuthSession().account` is the token's never-reused `aid` (SPEC-129); loads right after `app-state.js`. A 401 is the window event `auth-session-expired`, dispatched by `app-api.js` and handled by `app-auth.js` (SPEC-108).
 - `frontend/app-auth.js`: sign-in forms and account transitions; features register what happens around sign-in with `onAuthView` (SPEC-108).
 - `frontend/app-streams.js`: shared authenticated SSE decoding, cancellation, and terminal state.
 - `frontend/app-inline-editors.js`: live table DOM ownership and immutable row snapshots across refreshes.
 - `frontend/runtime/workspace-controller.mjs`: injected account drafts, leases and durable run queue.
 - `frontend/app-local-store.js`: atomic IndexedDB adapter; reopens closed connections and retries a WebKit `UnknownError` once on a fresh connection (SPEC-120); credentials never belong in records.
-- `frontend/app-workspace.js`: account cache, draft and queue DOM bridge; other features register their drafts (`registerWorkspaceForm`, `registerWorkspaceEditor`, `onWorkspaceModalOpen`) instead of the workspace reaching into their forms (SPEC-107).
+- `frontend/app-workspace.js`: account cache, draft and queue DOM bridge; the IndexedDB partition is `origin|aid:<backup id>`, and partitions saved under any A–Z spelling of the name are adopted once (SPEC-129); other features register their drafts (`registerWorkspaceForm`, `registerWorkspaceEditor`, `onWorkspaceModalOpen`) instead of the workspace reaching into their forms (SPEC-107).
 - `frontend/app-account.js`: sign-up invite field, admin invite/password panel and account deletion (SPEC-075).
 - `frontend/app-account-restore.js`: restore preview/window/session ownership.
 - `frontend/runtime/account-restore-controller.mjs`: injected restore operation, session and preview cleanup ownership; no DOM or browser transport.
