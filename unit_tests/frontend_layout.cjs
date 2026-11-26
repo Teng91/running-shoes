@@ -539,8 +539,9 @@ async function run(engine, name) {
             await buttons.evaluateAll(nodes => nodes.forEach(node => { node.disabled = true; }));
             await assertLayout(page, `${name} ${theme} ${width} ${id} disabled`);
             await buttons.evaluateAll((nodes, states) => nodes.forEach((node, index) => { node.disabled = states[index]; }), disabled);
-            await page.evaluate(id => document.getElementById(id).classList.remove('active'), id);
-            if (id === 'shoe-analysis-modal') await page.evaluate(() => closeShoeAnalytics());
+            // SPEC-135: Escape closes every dialog through the close function its feature registered.
+            await page.keyboard.press('Escape');
+            assert.equal(await page.locator(`#${id}.active`).count(), 0, `${name} ${theme} ${width} ${id} closes on Escape`);
           }
           await selectTab(page, 'shoes');
           await page.evaluate(() => inlineEditRow(inlineTableRows.get('shoe-table'), 0, 'mileage', document.querySelector('#shoe-table .editable')));
