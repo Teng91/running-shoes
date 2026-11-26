@@ -301,6 +301,10 @@ SPEC-032：合成資料驗證歷史筆數上限（v4.7.3 起 10,000／10,001）�
 
 [規格與具名案例](specs/116-keep-scheduled-workflows-enabled.md) 以文字解析 `offsite-backup.yml`：續命 job 不依賴備份 job、只有它有 `actions: write`、只用 `GITHUB_TOKEN` 不用 secret、失敗只發警告，且 repo 裡每個有 `schedule` 的 workflow 都在它的重新啟用清單中。
 
+## SPEC-132 月報、跑鞋匯出與課表模組載入
+
+[規格與具名案例](specs/132-report-export-plan-module-fixes.md) 確認產生月報期間不讀取已儲存的報告、換帳號後才收到的跑鞋匯出不下載，以及課表模組在載入時就開始匯入、失敗時重試。
+
 ## SPEC-131 重設密碼次數分組
 
 [規格與具名案例](specs/131-readme-history-and-reset-limits.md) 確認不存在的名稱只忽略 A–Z 大小寫與頭尾空白、email 忽略大小寫。
