@@ -615,6 +615,28 @@ test('SPEC-033 deletion recovery retries reads after a committed write', async (
   assert.equal(posts, 1); assert.equal(reads, 2);
 });
 
+test('SPEC-128 a recovered race goal is labelled and refreshes race preparation', async () => {
+  const makeElement = () => ({ children: [], textContent: '', disabled: false,
+    append(...items) { this.children.push(...items); }, replaceChildren() { this.children = []; this.textContent = ''; } });
+  const elements = { 'workspace-history': makeElement(), 'history-more': makeElement() };
+  const invalidated = [];
+  const context = vm.createContext({
+    document: { getElementById: id => elements[id], createElement: makeElement },
+    captureAuthSession: () => ({}), isCurrentAuthSession: () => true, registerFeatureReset() {},
+    formatLocalTimestamp: value => value, newOperationKey: () => 'recover-race-operation',
+    apiPost: async () => {}, loadData: async () => {},
+    invalidateDataResources: resources => invalidated.push(...resources),
+    apiGet: async () => ({ rows: [{ id: 7, entity: 'race_goals', entity_id: 3, action: 'delete', reason: 'race_goal.delete',
+      before: { race_name: '示範半馬' }, after: null, can_restore: true }], next_cursor: null }),
+  });
+  vm.runInContext(fs.readFileSync('frontend/app-history.js', 'utf8'), context);
+  await context.loadWorkspaceHistory();
+  const row = elements['workspace-history'].children[0];
+  assert.match(row.children[0].textContent, /目標賽事 #3 · 刪除 · race_goal\.delete/);
+  await row.children[1].onclick();
+  assert.deepEqual(invalidated, ['race-readiness', 'pace-analysis']);
+});
+
 test('SPEC-034 manual empty sync refreshes cloud and rejects foreign notifications', async () => {
   const fixture = workspaceSyncContext(), { context, elements } = fixture;
   await context.syncWorkspace({ manual: true });

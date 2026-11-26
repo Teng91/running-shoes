@@ -4,6 +4,12 @@
 每版的摘要見 [CHANGELOG.md](../CHANGELOG.md)；目前的功能與操作方式以 [README](../README.md) 為準。
 這裡保留當時的文字，後續版本可能已調整其中的行為。
 
+### 目標賽事的異動歷史與誤刪復原（SPEC-128，v5.2.0）
+
+- `audit_schema.AUDITED` 加入 `race_goals`，啟動時建立 `audit_race_goals_insert`／`update`／`delete` trigger；`history.can_restore` 允許復原刪除事件，`_restore_race_goal` 在帳號沒有目標賽事時以原欄位重建（版本加 1），已有時回 409。
+- 帳號備份只匯出 `ARCHIVED_HISTORY_ENTITIES`（鞋款、跑步、月跑量、跑量目標）的歷史，v6 格式不變，舊版仍能匯入新下載的備份。
+- 沒有 schema 變更。回滾至 v5.1.1 image 時，舊版啟動不會刪除新的 trigger，之後的目標賽事異動仍會寫入 `race_goals` 事件，而舊版下載備份會因不認得這種歷史而失敗。回滾後請在正式資料庫執行一次：`DROP TRIGGER IF EXISTS audit_race_goals_insert; DROP TRIGGER IF EXISTS audit_race_goals_update; DROP TRIGGER IF EXISTS audit_race_goals_delete; DELETE FROM audit_events WHERE entity = 'race_goals';`（先備份）。Asset 5.2.0／shell v130。
+
 ### 訓練課表排版移到 native module（SPEC-127，v5.1.1）
 
 - 新的 `runtime/race-plan-view.mjs` 匯出 `racePlanView(race, format)`，回傳課表表格列（HTML）與說明文字；`esc`、`paceClock`、`zoneColor`、`zoneRangeText`、`raceShortDate`、`raceDistanceName` 由呼叫端注入，所以 classic script 共用名稱維持 166 個。

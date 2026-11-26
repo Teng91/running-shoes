@@ -6,6 +6,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from backend import models
+from backend.backup_contract import RACE_GOAL_FIELDS
 from backend.run_metrics import DEFAULT_ACTIVITY_TYPE
 from backend.services.errors import Conflict, Invalid, NotFound
 from backend.services.identifiers import allocate_id
@@ -18,7 +19,7 @@ from backend.settings import Settings
 def can_restore(event: models.AuditEvent) -> bool:
     if event.restored or event.imported or not event.before_json:
         return False
-    if event.entity in {"runs", "monthly_mileages"} and event.action == "delete":
+    if event.entity in {"runs", "monthly_mileages", "race_goals"} and event.action == "delete":
         return True
     if event.entity == "shoes":
         return bool(event.after_json and event.after_json.get("is_deleted")
@@ -111,4 +112,16 @@ def _restore_month(db: Session, user_id: int, event: models.AuditEvent, data: di
     return row
 
 
-_RESTORERS = {"runs": _restore_run, "shoes": _restore_shoe, "monthly_mileages": _restore_month}
+def _restore_race_goal(db: Session, user_id: int, event: models.AuditEvent, data: dict, config: Settings) -> Any:
+    """SPEC-128: a deleted target race comes back, unless the account already set a new one."""
+    if db.query(models.RaceGoal.id).filter_by(user_id=user_id).first() is not None:
+        raise Conflict("已經有新的目標賽事，請先刪除或直接修改")
+    row = models.RaceGoal(user_id=user_id, version=data["version"] + 1,
+                          **{name: data.get(name) for name in RACE_GOAL_FIELDS})
+    db.add(row)
+    db.flush()
+    return row
+
+
+_RESTORERS = {"runs": _restore_run, "shoes": _restore_shoe, "monthly_mileages": _restore_month,
+              "race_goals": _restore_race_goal}
