@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [5.1.1] - 2026-11-26
+
+### Changed
+- 訓練課表的排版移到獨立的 native module（SPEC-127），畫面不變：`runtime/race-plan-view.mjs` 產生課表表格與說明文字，不碰 DOM；`app-pace-charts.js` 從 406 行降到約 340 行，只負責載入與寫入畫面。Asset 5.1.1／shell v129，schema 14 不變。
+
 ## [5.1.0] - 2026-11-25
 
 ### Added

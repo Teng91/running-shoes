@@ -3,6 +3,12 @@ const { test, assert, vm, readText, htmlSource, extract } = require('./helpers.c
 
 const esc = value => String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
+// SPEC-127: the plan view is a native module; the test VM cannot import, so it is installed directly.
+let racePlanModule;
+require('node:test').before(async () => {
+  racePlanModule = await import('../../frontend/runtime/race-plan-view.mjs');
+});
+
 function racePrepContext({ race, pace, puts = [], deletes = [] }) {
   const nodes = new Proxy({}, { get: (target, id) => target[id] ||= {
     id, value: '', textContent: '', innerHTML: '', hidden: false, disabled: false, options: [],
@@ -32,6 +38,8 @@ function racePrepContext({ race, pace, puts = [], deletes = [] }) {
   vm.runInContext(extract('reviewCard'), context);
   vm.runInContext(readText('frontend/app-pace-charts.js'), context);
   vm.runInContext(readText('frontend/app-race-goal.js'), context);
+  context.installedRacePlanModule = racePlanModule;
+  vm.runInContext('racePlanModule = installedRacePlanModule;', context);
   return { context, nodes, charts, reads };
 }
 
@@ -210,6 +218,23 @@ test('SPEC-065 without a race goal only the pace trend is drawn and the form inv
   assert.equal(nodes['race-edit-toggle'].textContent, '設定比賽');
   assert.equal(charts[0].config.data.datasets.length, 2, 'no goal pace line');
   assert.match(nodes['pace-trend-note'].textContent, /設定比賽目標後，點會依強度上色/);
+});
+
+test('SPEC-127 the plan view module lays out a plan without the DOM and a stale render writes nothing', async () => {
+  const format = { esc, paceClock: () => '6:26', zoneColor: () => 'red', zoneRangeText: () => '5:31–5:56',
+    raceShortDate: iso => iso.slice(5), raceDistanceName: () => '半馬' };
+  assert.equal(racePlanModule.racePlanView({ ...race, plan: null }, format), null);
+  const view = racePlanModule.racePlanView({ ...race, plan }, format);
+  assert.equal(view.rows.split('</tr>').filter(row => row.includes('<tr')).length, 6);
+  assert.match(view.rows, /<td>09-21<\/td>/, 'dates come from the injected formatter');
+  assert.match(view.note, /^本週是第 4 週（恢復週）/);
+  assert.ok(Object.isFrozen(racePlanModule.RACE_PLAN_PHASES));
+  assert.doesNotMatch(readText('frontend/runtime/race-plan-view.mjs'), /document|window|fetch\(/);
+
+  const { context, nodes } = racePrepContext({ race: { ...race, plan }, pace });
+  nodes['race-plan-table'].innerHTML = 'kept';
+  await context.renderRacePlan({ ...race, plan }, -1);
+  assert.equal(nodes['race-plan-table'].innerHTML, 'kept', 'a superseded request leaves the plan alone');
 });
 
 test('SPEC-065 an account without times shows a hint instead of a pace trend', async () => {

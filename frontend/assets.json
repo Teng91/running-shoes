@@ -1,6 +1,6 @@
 {
-  "version": "5.1.0",
-  "cache_name": "running-shoes-shell-v128",
+  "version": "5.1.1",
+  "cache_name": "running-shoes-shell-v129",
   "scripts": [
     "app-boot.js",
     "app-lifecycle.js",
@@ -50,7 +50,8 @@
     "runtime/strava-controller.mjs",
     "runtime/workspace-controller.mjs",
     "runtime/account-restore-controller.mjs",
-    "runtime/core-data.mjs"
+    "runtime/core-data.mjs",
+    "runtime/race-plan-view.mjs"
   ],
   "styles": [
     "css/01-foundation.css",

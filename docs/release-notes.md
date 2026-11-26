@@ -4,6 +4,12 @@
 每版的摘要見 [CHANGELOG.md](../CHANGELOG.md)；目前的功能與操作方式以 [README](../README.md) 為準。
 這裡保留當時的文字，後續版本可能已調整其中的行為。
 
+### 訓練課表排版移到 native module（SPEC-127，v5.1.1）
+
+- 新的 `runtime/race-plan-view.mjs` 匯出 `racePlanView(race, format)`，回傳課表表格列（HTML）與說明文字；`esc`、`paceClock`、`zoneColor`、`zoneRangeText`、`raceShortDate`、`raceDistanceName` 由呼叫端注入，所以 classic script 共用名稱維持 166 個。
+- `app-pace-charts.js` 第一次顯示課表時以 `import()` 載入模組（同時列入 service worker 預先快取），載入期間若已有更新的請求就不寫入。畫面與文字不變。
+- 沒有 schema 或 API 變更，可直接回滾至 v5.1.0 image。Asset 5.1.1／shell v129。
+
 ### 帳號備份包含目標賽事（SPEC-126，v5.1.0）
 
 - 備份格式 v6 新增 `race_goal`（`BackupRaceGoal`，沿用 `RaceGoalUpdate` 驗證）；v6 以前的檔案不可帶它，指紋去掉這個欄位，與先前相同。

@@ -70,6 +70,7 @@
 - `frontend/runtime/resource-store.mjs`: DOM-independent resource/session ownership, pending read coalescing and cache invalidation policy.
 - `frontend/app-resources.js`: native resource bridge and legacy cache adapters; it alone installs the core data store (`useCoreDataStore`) and feeds it (`applyCoreResource`, logout reset) (SPEC-094, SPEC-095).
 - `frontend/runtime/core-data.mjs`: DOM-independent store of the core data (shoes, monthly mileage, goal, Strava history, spending): load rules, defaults and a read-only view with frozen arrays; scripts read it as `coreData.<field>`, and `architecture-check` rejects writes and reads of the removed globals.
+- `frontend/runtime/race-plan-view.mjs`: DOM-independent layout of the weekly race plan's table rows and note (SPEC-127); `app-pace-charts.js` imports it on first use and injects the formatters.
 - `scripts/browser_runner.py`: outer browser deadlines and bounded process-tree cleanup.
 - `frontend/runtime/feature-lifecycle.mjs`: DOM-independent native module for feature lifecycle ownership.
 - `frontend/runtime/run-controller.mjs`: native run state/operation owner with injected transport, session and key factory; DOM remains in the bridge.
@@ -101,7 +102,7 @@
 - `frontend/app-shoe-charts.js`: shoe lifecycle, cost, retirement, and allocation charts.
 - `frontend/app-monthly-charts.js`: month/year selectors, monthly/annual/year-over-year mileage charts and the year in review.
 - `frontend/app-trend-charts.js`: training trends: heatmap, weekly load and long run, weekday distribution and the cumulative year line (SPEC-090).
-- `frontend/app-pace-charts.js`: shared race state, race readiness cards and pace trend charts (SPEC-065).
+- `frontend/app-pace-charts.js`: shared race state, race readiness cards and pace trend charts (SPEC-065); the plan's layout lives in `runtime/race-plan-view.mjs`.
 - `frontend/app-race-goal.js`: the race goal form: open, validate, save and delete (SPEC-090).
 - `frontend/app-spending.js`: spending cards, charts, and table.
 - `frontend/app-actions.js`: dispatches delegated `data-click`/`data-change`/… UI actions; each feature registers its own with `registerUiActions` (`app-lifecycle.js`) while it loads, and the table is frozen here (SPEC-113); markup and generated rows never contain inline JavaScript handlers (the page CSP blocks them).
