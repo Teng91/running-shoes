@@ -482,8 +482,16 @@ def _merge_tool_call_deltas(parts: dict[int, dict[str, str]], tool_calls: list) 
             part["id"] = tool_call.id
         function = getattr(tool_call, "function", None)
         if function:
-            part["name"] += getattr(function, "name", None) or ""
+            part["name"] = _merged_name(part["name"], getattr(function, "name", None) or "")
             part["arguments"] += getattr(function, "arguments", None) or ""
+
+
+def _merged_name(current: str, piece: str) -> str:
+    """Some providers send the name in pieces, others repeat the whole (or growing) name in
+    every chunk; a piece that already starts with the name so far replaces it."""
+    if current and piece.startswith(current):
+        return piece
+    return current + piece
 
 
 def _finished_tool_calls(parts: dict[int, dict[str, str]]) -> list[dict[str, Any]]:

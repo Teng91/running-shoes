@@ -35,8 +35,20 @@ def _registration_mode(values: Mapping[str, str]) -> str:
     return mode if mode in REGISTRATION_MODES else "closed"
 
 
+_ASCII_LOWER = str.maketrans("ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz")
+
+
+def account_name_key(name: str) -> str:
+    """An account name's identity: trimmed, with only A–Z lowered, like SQLite's lower() (SPEC-093).
+
+    Admin names use the same rule (SPEC-130), so "Straße" and "STRASSE", two different accounts,
+    can never both match one admin name the way Python's casefold() would make them.
+    """
+    return name.strip().translate(_ASCII_LOWER)
+
+
 def _admin_usernames(values: Mapping[str, str]) -> frozenset[str]:
-    return frozenset(name.strip().casefold() for name in values.get("ADMIN_USERNAMES", "").split(",") if name.strip())
+    return frozenset(account_name_key(name) for name in values.get("ADMIN_USERNAMES", "").split(",") if name.strip())
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,7 +102,7 @@ class Settings:
         return bool(self.smtp_username and self.smtp_password)
 
     def is_admin(self, username: str) -> bool:
-        return username.casefold() in self.admin_usernames
+        return account_name_key(username) in self.admin_usernames
 
     @property
     def is_production(self) -> bool:

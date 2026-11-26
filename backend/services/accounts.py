@@ -11,14 +11,12 @@ from backend.database import Base
 from backend.services import invites
 from backend.services.errors import CapacityExceeded, Conflict, Invalid, NotFound, Unauthorized
 from backend.services.transactions import write_transaction
+from backend.settings import account_name_key
 
 MIN_PASSWORD_LENGTH = 8
 REGISTRATION_CLOSED = "Registration is closed"
 USERNAME_TAKEN = "Username already registered"
 ADMIN_CANNOT_DELETE = "Admin accounts cannot be deleted"
-
-
-_ASCII_LOWER = str.maketrans("ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz")
 
 
 def username_key(username: str) -> str:
@@ -28,7 +26,7 @@ def username_key(username: str) -> str:
     folds A–Z. Python's lower() also folds letters such as "Ä", so "Ärger" could not log in
     with the name it registered. Matching SQLite keeps lookup, uniqueness and lockouts one rule.
     """
-    return username.strip().translate(_ASCII_LOWER)
+    return account_name_key(username)
 
 
 def find_user(db: Session, username: str) -> models.User | None:
@@ -45,7 +43,7 @@ def _unknown_user_hash() -> str:
 
 def register(db: Session, username: str, password: str, *, max_users: int,
              mode: str = "open", invite_code: str = "", admin_names: frozenset[str] = frozenset()):
-    """Create an account; ``admin_names`` are the case-folded ``ADMIN_USERNAMES``.
+    """Create an account; ``admin_names`` are the ``ADMIN_USERNAMES`` keys (``account_name_key``).
 
     SPEC-085/093: sign-up never lets anyone claim an admin name that is not registered yet
     (or no longer is), because admin rights follow the name. The only exception is the very
@@ -75,7 +73,7 @@ def register(db: Session, username: str, password: str, *, max_users: int,
             invites.redeem_invite(db, invite_code)
         user_count = db.query(models.User).count()
         bootstrap = mode == "open" and user_count == 0
-        if find_user(db, username) or (username.casefold() in admin_names and not bootstrap):
+        if find_user(db, username) or (username_key(username) in admin_names and not bootstrap):
             raise Invalid(USERNAME_TAKEN)
         if user_count >= max_users:
             raise CapacityExceeded("Registration capacity has been reached")

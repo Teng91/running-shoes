@@ -674,6 +674,7 @@ def test_strava_walks_and_hikes_are_opt_in(client, db, user_with_token):
     preview = _post_strava(client, "/api/runs/import/strava/preview", token, csv_content).json()
     assert (preview["importable_count"], preview["importable_km"]) == (1, 10)
     assert (preview["walk_hike_count"], preview["walk_hike_km"], preview["walk_hike_included"]) == (2, 10.5, False)
+    assert preview["total_rows"] == 3, "SPEC-130: hikes and walks left out still count as rows of the file"
     assert [group["km"] for group in preview["gear_groups"]] == [10]
     result = _post_strava(client, "/api/runs/import/strava", token, csv_content, mapping=mapping).json()
     assert (result["imported"], result["skipped_walk_hike"], result["synced_mileage"]) == (1, 2, 10)
@@ -684,6 +685,7 @@ def test_strava_walks_and_hikes_are_opt_in(client, db, user_with_token):
     included = _post_strava(client, "/api/runs/import/strava/preview", token, csv_content,
                             include_walks_hikes="true").json()
     assert (included["importable_count"], included["duplicate_count"], included["walk_hike_included"]) == (2, 1, True)
+    assert included["total_rows"] == 3
     result = _post_strava(client, "/api/runs/import/strava", token, csv_content, mapping=mapping,
                           include_walks_hikes="true").json()
     assert (result["imported"], result["skipped_walk_hike"], result["synced_mileage"]) == (2, 0, 10.5)

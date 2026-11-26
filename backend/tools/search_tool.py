@@ -8,6 +8,7 @@
 """
 
 import json
+import logging
 import time
 from datetime import UTC, datetime
 from hashlib import sha256
@@ -16,6 +17,9 @@ from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
 MAX_RESULTS = 5
+logger = logging.getLogger(__name__)
+# The provider's own error text can name proxies or internal URLs; the model and browser get this.
+SEARCH_UNAVAILABLE = "search provider unavailable"
 SEARCH_ATTEMPTS = 2
 SEARCH_CACHE_TTL_SECONDS = 15 * 60
 PRICE_CACHE_TTL_SECONDS = 5 * 60
@@ -216,11 +220,12 @@ def web_search(query: str, max_results: int = MAX_RESULTS) -> str:
     results, last_error, attempts = _search_with_retry(DDGS, normalized_query, max_results)
     if not results:
         if last_error is not None:
+            logger.warning("web search failed after %s attempts: %s", attempts, last_error[:500])
             return _result(
                 ok=False,
                 status="request_failed",
                 query=normalized_query,
-                error=last_error[:500],
+                error=SEARCH_UNAVAILABLE,
                 attempts=attempts,
             )
         return _result(
@@ -276,6 +281,8 @@ def _search_with_retry(ddgs_class: Any, normalized_query: str, max_results: int)
         except Exception as exc:  # noqa: BLE001
             last_error = str(exc)
             continue
+        # An attempt that answered, even with nothing, means the search worked.
+        last_error = None
         if results:
             break
     return results, last_error, attempts
