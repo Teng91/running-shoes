@@ -2,6 +2,9 @@
 
 // SPEC-079: whether the server can email codes (forgot password, email binding).
 let mailEnabled = false;
+// SPEC-075: 'invite', 'open' or 'closed'; null until the server answers. SPEC-134: owned here;
+// sign-up reads only the invite group's data-required.
+let registrationMode = null;
 
 async function loadRegistrationMode() {
   const group = document.getElementById('reg-invite-group');
@@ -20,6 +23,7 @@ async function loadRegistrationMode() {
   }
   const closed = registrationMode === 'closed';
   group.hidden = registrationMode === 'open' || closed;
+  group.dataset.required = String(registrationMode === 'invite');
   note.hidden = !closed;
   note.textContent = closed ? '目前不開放註冊。' : '';
   if (submit) submit.disabled = closed;
@@ -137,9 +141,7 @@ async function deleteAccount() {
   // The server data is gone; drop this device's drafts and queue for the account too.
   try { await localWorkspace.controller?.clear(); } catch {}
   closeWorkspaceModal();
-  clearAuth();
-  showLoginView();
-  showAuthError('帳號已刪除。');
+  signOutWithNotice('帳號已刪除。');
 }
 
 // SPEC-088: end every session of the account without changing the password.
@@ -162,9 +164,7 @@ async function logoutEverywhere() {
   }
   status.textContent = '';
   closeWorkspaceModal();
-  clearAuth();
-  showLoginView();
-  showAuthError('已登出所有裝置，請重新登入。');
+  signOutWithNotice('已登出所有裝置，請重新登入。');
 }
 
 // ===== SPEC-079: email binding and forgot password =====
@@ -234,8 +234,7 @@ async function handleResetPassword() {
     return;
   }
   for (const id of ['reset-code', 'reset-new-password', 'reset-new-password2']) document.getElementById(id).value = '';
-  showLoginForm();
-  showAuthError('密碼已重設，請用新密碼登入');
+  showLoginNotice('密碼已重設，請用新密碼登入');
 }
 
 let emailRequestId = 0;
@@ -320,9 +319,7 @@ async function changePassword() {
   for (const id of ids) document.getElementById(id).value = '';
   status.textContent = '';
   closeWorkspaceModal();
-  clearAuth();
-  showLoginView();
-  showAuthError('密碼已更改，請用新密碼重新登入');
+  signOutWithNotice('密碼已更改，請用新密碼重新登入');
 }
 
 // SPEC-107: the account settings show the email section whenever they open.

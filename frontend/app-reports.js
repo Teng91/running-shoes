@@ -29,15 +29,6 @@ function previousMonthValue(now = new Date()) {
   return prevYear + '-' + String(prevMonth).padStart(2, '0');
 }
 
-function formatLocalTimestamp(value) {
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return String(value || '');
-  return parsed.toLocaleString('zh-TW', {
-    year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit',
-  });
-}
-
 function reportMonthLabel(value) {
   const parts = String(value || '').split('-');
   if (parts.length !== 2 || !parts[0] || !parts[1]) return '';

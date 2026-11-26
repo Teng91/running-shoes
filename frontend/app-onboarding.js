@@ -14,12 +14,23 @@ function onboardingSteps() {
   };
 }
 
+// SPEC-134: keyed by the account's never-reused ID (SPEC-129), so a deleted account's name
+// coming back as another account does not inherit the choice. A choice saved under the
+// name before SPEC-134 is adopted once by the account signed in with that name.
 function onboardingKey() {
-  return `onboarding-dismissed:${String(currentUser || '').toLowerCase()}`;
+  const account = captureAuthSession().account;
+  return account ? `onboarding-dismissed:aid:${account}` : null;
 }
 
 function onboardingDismissed() {
-  try { return localStorage.getItem(onboardingKey()) === '1'; } catch { return false; }
+  const key = onboardingKey();
+  if (!key) return false;
+  if (readStoredValue(key) === '1') return true;
+  const legacyKey = `onboarding-dismissed:${String(currentUser || '').toLowerCase()}`;
+  if (readStoredValue(legacyKey) !== '1') return false;
+  writeStoredValue(key, '1');
+  removeStoredValue(legacyKey);
+  return true;
 }
 
 function noteOnboardingData(resource) {
@@ -49,7 +60,8 @@ function renderOnboarding() {
 }
 
 function dismissOnboarding() {
-  try { localStorage.setItem(onboardingKey(), '1'); } catch {}
+  const key = onboardingKey();
+  if (key) writeStoredValue(key, '1');
   renderOnboarding();
   document.getElementById('run-date')?.focus();
 }

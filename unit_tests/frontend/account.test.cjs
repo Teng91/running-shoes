@@ -2,7 +2,7 @@
 const { runContext, test, assert, vm, extract, htmlSource, source, authOperationContext } = require('./helpers.cjs');
 
 function nodes() {
-  return new Proxy({}, { get: (target, id) => target[id] ||= { id, value: '', textContent: '', innerHTML: '', hidden: false, style: {},
+  return new Proxy({}, { get: (target, id) => target[id] ||= { id, value: '', textContent: '', innerHTML: '', hidden: false, style: {}, dataset: {},
     classList: { names: new Set(), add(name) { this.names.add(name); }, remove(name) { this.names.delete(name); } } } });
 }
 
@@ -24,6 +24,7 @@ test('SPEC-075 the sign-up form asks for an invite only when the server requires
     const { context, submit } = accountContext(elements, { fetch: async () => ({ ok: true, json: async () => ({ mode }) }) });
     await context.loadRegistrationMode();
     assert.equal(elements['reg-invite-group'].hidden, inviteHidden, mode);
+    assert.equal(elements['reg-invite-group'].dataset.required, String(mode === 'invite'), `SPEC-134 ${mode}`);
     assert.equal(submit.disabled, closed, mode);
     assert.equal(elements['reg-mode-note'].hidden, !closed, mode);
   }
@@ -31,6 +32,7 @@ test('SPEC-075 the sign-up form asks for an invite only when the server requires
   const { context } = accountContext(elements, { fetch: async () => { throw new TypeError('offline'); } });
   await context.loadRegistrationMode();
   assert.equal(elements['reg-invite-group'].hidden, false, 'offline keeps the invite field');
+  assert.equal(elements['reg-invite-group'].dataset.required, 'false', 'offline keeps the field optional');
   assert.match(htmlSource, /id="reg-invite"/);
   assert.doesNotMatch(htmlSource, /placeholder="例如 [A-Z0-9]{4}-/, 'SPEC-076 the sign-up form shows no code that looks real');
   assert.equal((htmlSource.match(/<details class="auth-privacy">/g) || []).length, 2, 'login and sign-up show the privacy notice');
@@ -38,7 +40,8 @@ test('SPEC-075 the sign-up form asks for an invite only when the server requires
 
 test('SPEC-075 registration sends the invite code and requires it in invite mode', async () => {
   const { context, elements, state } = authOperationContext();
-  vm.runInContext('registrationMode = "invite"', context);
+  // SPEC-134: sign-up reads only the group's data-required that app-account.js sets.
+  elements['reg-invite-group'].dataset = { required: 'true' };
   elements['reg-username'].value = 'Friend';
   elements['reg-password'].value = elements['reg-password2'].value = 'password';
   const bodies = [];
@@ -108,8 +111,7 @@ test('SPEC-075 deleting the account needs the password and signs out only after 
   const { context } = accountContext(elements, {
     apiPost: async (url, body) => { calls.push([url, body]); if (fail) throw new Error('Incorrect password'); return { ok: true }; },
     localWorkspace: { controller: { clear: async () => calls.push('clear') } },
-    closeWorkspaceModal: () => calls.push('close'), clearAuth: () => calls.push('logout'),
-    showLoginView: () => calls.push('login'), showAuthError: text => calls.push(text),
+    closeWorkspaceModal: () => calls.push('close'), signOutWithNotice: text => calls.push('logout', 'login', text),
   });
   await context.deleteAccount();
   assert.deepEqual(calls, [], 'no password, no request');
@@ -132,7 +134,7 @@ test('SPEC-085 an admin who tries to delete the account is told why and stays si
   const { context } = accountContext(elements, {
     translateError: translations.translateError,
     apiPost: async () => { throw new Error('Admin accounts cannot be deleted'); },
-    clearAuth: () => calls.push('logout'),
+    signOutWithNotice: () => calls.push('logout'),
   });
   elements['delete-account-password'].value = 'pass1234';
   await context.deleteAccount();
@@ -147,8 +149,7 @@ test('SPEC-088 logging out everywhere asks first and signs this device out only 
   const { context } = accountContext(elements, {
     confirm: () => answer,
     apiPost: async (url, body) => { calls.push([url, body]); if (fail) throw new Error('synthetic offline'); return { ok: true }; },
-    closeWorkspaceModal: () => calls.push('close'), clearAuth: () => calls.push('logout'),
-    showLoginView: () => calls.push('login'), showAuthError: text => calls.push(text),
+    closeWorkspaceModal: () => calls.push('close'), signOutWithNotice: text => calls.push('logout', 'login', text),
   });
   await context.logoutEverywhere();
   assert.deepEqual(calls, [], 'cancelling sends nothing');
@@ -169,7 +170,7 @@ test('SPEC-092 a second click while logging out everywhere sends nothing', async
   const { context } = accountContext(elements, {
     confirm: () => { confirms++; return true; },
     apiPost: () => { posts++; return new Promise(resolve => { release = resolve; }); },
-    closeWorkspaceModal() {}, clearAuth() {}, showLoginView() {}, showAuthError() {},
+    closeWorkspaceModal() {}, signOutWithNotice() {},
   });
   const first = context.logoutEverywhere();
   await context.logoutEverywhere();

@@ -190,7 +190,9 @@ def test_strava_upload_lets_browser_set_multipart_content_type():
 def test_strava_frontend_uses_account_range_and_automatic_mileage_sync():
     source = FRONTEND_SOURCE
 
-    assert "strava-import-range:${currentUser" in source
+    # SPEC-134: the remembered range belongs to the account ID, not to the name.
+    assert "strava-import-range:aid:${account}" in source
+    assert "strava-import-range:${currentUser" not in source
     assert 'id="strava-start-date" type="date" value=' not in source
     assert 'id="strava-end-date" type="date" value=' not in source
     assert 'id="strava-sync-mileage"' not in source

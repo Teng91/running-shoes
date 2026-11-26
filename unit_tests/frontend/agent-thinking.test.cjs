@@ -98,7 +98,7 @@ function agentContext() {
     authenticatedResponses: new WeakMap(),
     requireAuthSession: session => { if (!session?.current) throw new DOMException('stale', 'AbortError'); },
     readAuthenticatedError: async response => response.json(),
-    captureAuthSession: () => ({ current: true }), isCurrentAuthSession: session => session.current,
+    captureAuthSession: () => ({ current: true, account: 'aid-runner' }), isCurrentAuthSession: session => session.current,
     registerFeatureReset() {}, registerUiActions() {}, renderMarkdown: text => `<p>${text}</p>`, esc: text => String(text),
     API_BASE: '/api', authToken: 'synthetic-token', currentUser: 'runner',
   });

@@ -1,7 +1,7 @@
 // SPEC-084: the getting-started card for new accounts.
 const { test, assert, vm, readText, htmlSource } = require('./helpers.cjs');
 
-function onboardingContext({ user = 'Friend', stored = {} } = {}) {
+function onboardingContext({ user = 'Friend', account = 'aid-friend', stored = {} } = {}) {
   const storage = new Map(Object.entries(stored));
   const steps = {};
   const card = {
@@ -24,7 +24,10 @@ function onboardingContext({ user = 'Friend', stored = {} } = {}) {
   const context = vm.createContext({
     registerFeatureReset: (name, reset) => { context.reset = reset; },
     document: { getElementById: id => elements[id] },
-    localStorage: { getItem: key => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value) },
+    readStoredValue: key => storage.get(key) ?? null,
+    writeStoredValue: (key, value) => storage.set(key, String(value)),
+    removeStoredValue: key => storage.delete(key),
+    captureAuthSession: () => ({ account }),
     switchTab: name => calls.push(['tab', name]), toggleGoalSettings: open => calls.push(['goal', open]),
   });
   context.seedCoreData({ runningGoal: { version: 0, monthly_km: 125 } });
@@ -77,9 +80,9 @@ test('SPEC-084 an established account never sees the card and skipping is rememb
   assert.equal(fresh.card.hidden, false);
   fresh.context.dismissOnboarding();
   assert.equal(fresh.card.hidden, true);
-  assert.equal(fresh.storage.get('onboarding-dismissed:friend'), '1');
+  assert.equal(fresh.storage.get('onboarding-dismissed:aid:aid-friend'), '1');
 
-  const other = onboardingContext({ user: 'Other', stored: { 'onboarding-dismissed:friend': '1' } });
+  const other = onboardingContext({ user: 'Other', account: 'aid-other', stored: { 'onboarding-dismissed:aid:aid-friend': '1' } });
   ['shoes', 'monthly', 'goal'].forEach(resource => other.context.noteOnboardingData(resource));
   assert.equal(other.card.hidden, false, 'skipping on one account does not hide it for another');
 });
@@ -92,4 +95,22 @@ test('SPEC-084 the step buttons open the shoe form, the run form, Strava and the
   assert.deepEqual(calls, [['tab', 'monthly'], ['goal', true]]);
   assert.match(htmlSource, /<section class="onboarding" id="onboarding" hidden[\s\S]*?data-click="add-shoe">新增跑鞋[\s\S]*?data-click="onboarding-log-run"[\s\S]*?data-click="open-strava">從 Strava 匯入[\s\S]*?data-click="onboarding-set-goal"[\s\S]*?<\/section>\s*<div class="run-hero">/);
   assert.match(htmlSource, /data-click="dismiss-onboarding">略過引導</);
+});
+
+test('SPEC-134 skipping belongs to the account ID: a reused name starts fresh, a pre-SPEC-134 choice is adopted once', () => {
+  const ready = context => ['shoes', 'monthly', 'goal'].forEach(resource => context.noteOnboardingData(resource));
+  const reused = onboardingContext({ user: 'Friend', account: 'aid-new', stored: { 'onboarding-dismissed:aid:aid-old': '1' } });
+  ready(reused.context);
+  assert.equal(reused.card.hidden, false, "a new account under a deleted account's name does not inherit its choice");
+
+  const legacy = onboardingContext({ user: 'Friend', account: 'aid-friend', stored: { 'onboarding-dismissed:friend': '1' } });
+  ready(legacy.context);
+  assert.equal(legacy.card.hidden, true);
+  assert.equal(legacy.storage.get('onboarding-dismissed:aid:aid-friend'), '1');
+  assert.equal(legacy.storage.has('onboarding-dismissed:friend'), false, 'the name key is adopted once, then removed');
+
+  const signedOut = onboardingContext({ account: null });
+  ready(signedOut.context);
+  signedOut.context.dismissOnboarding();
+  assert.equal(signedOut.storage.size, 0, 'nothing is stored without an account ID');
 });

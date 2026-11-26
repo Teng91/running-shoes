@@ -6,6 +6,17 @@ function calendarMonthParts(value) {
   return match ? { year: Number(match[1]), month: Number(match[2]) } : null;
 }
 
+// A server timestamp (an instant, not a calendar date) in the viewer's clock; shared by the
+// report and history views (SPEC-134, moved from app-reports.js).
+function formatLocalTimestamp(value) {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return String(value || '');
+  return parsed.toLocaleString('zh-TW', {
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit',
+  });
+}
+
 function refreshDateLimits() {
   const today = localDateISO();
   ['run-date', 'edit-run-date', 'strava-start-date', 'strava-end-date'].forEach(id => {

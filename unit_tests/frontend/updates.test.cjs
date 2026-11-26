@@ -142,12 +142,14 @@ test('SPEC-059 completed AI turns survive a reload for the same account only', (
       removeItem: key => storage.delete(key),
     },
     renderMarkdown: text => `<p>${text}</p>`,
+    captureAuthSession: () => ({ account: context.account }),
   });
-  vm.runInContext(`let agentHistory = []; let currentUser = 'demo';\n${constant('AGENT_CHAT_STORAGE_KEY')}\n${constant('AGENT_CHAT_STORED_TURNS')}\n`
+  context.account = 'aid-demo';
+  vm.runInContext(`let agentHistory = [];\n${constant('AGENT_CHAT_STORAGE_KEY')}\n${constant('AGENT_CHAT_STORED_TURNS')}\n`
     + ['saveAgentChat', 'restoreAgentChat', 'addAgentMessage'].map(extract).join('\n'), context);
   vm.runInContext(`agentHistory = [{ role: 'user', content: '<b>今年跑多少</b>' }, { role: 'assistant', content: '**1200 km**' }]`, context);
   context.saveAgentChat();
-  assert.deepEqual(JSON.parse(storage.get('agent-chat')).user, 'demo');
+  assert.deepEqual(JSON.parse(storage.get('agent-chat')).account, 'aid-demo');
 
   vm.runInContext('agentHistory = []', context);
   context.restoreAgentChat();
@@ -158,14 +160,16 @@ test('SPEC-059 completed AI turns survive a reload for the same account only', (
   assert.equal(answer.className, 'agent-message bot');
   assert.equal(answer.children[0].innerHTML, '<p>**1200 km**</p>', 'answers use the safe Markdown renderer');
 
-  // Another account in this tab, malformed data, or a reset conversation restores nothing.
+  // Another account in this tab (even one reusing a deleted account's name, since only the
+  // never-reused ID counts), malformed data, or a reset conversation restores nothing.
   container.children = [];
-  vm.runInContext("agentHistory = []; currentUser = 'other'", context);
+  vm.runInContext('agentHistory = []', context);
+  context.account = 'aid-other';
   context.restoreAgentChat();
   assert.equal(container.children.length, 0);
   assert.equal(storage.has('agent-chat'), false, 'a foreign conversation is discarded');
   storage.set('agent-chat', '{bad json');
-  vm.runInContext("currentUser = 'demo'", context);
+  context.account = 'aid-demo';
   context.restoreAgentChat();
   assert.equal(container.children.length, 0);
   vm.runInContext("agentHistory = [{ role: 'user', content: 'x' }]", context);

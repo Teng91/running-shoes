@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+## [5.2.6] - 2026-11-26
+
+### Fixed
+- 新手引導的「略過」、Strava 匯入的日期範圍與 AI 對話暫存改依帳號識別碼保存，同名重新註冊的新帳號不會沿用舊帳號的設定；先前以名稱保存的「略過」會由同名帳號接手一次（SPEC-134）。
+
+### Changed
+- 正式映像內含所有文件化的 schema 回滾腳本，基底映像以 digest 固定並由 Dependabot 每月更新（SPEC-134）。
+- 前端解耦：比賽目標的儲存狀態、註冊方式改由寫入它的 script 持有；其他功能以 `signOutWithNotice`／`showLoginNotice` 回到登入畫面；`formatLocalTimestamp` 移到 `app-dates.js`。跨 script 名稱 166 → 163（SPEC-134）。
+
 ## [5.2.5] - 2026-11-26
 
 ### Fixed

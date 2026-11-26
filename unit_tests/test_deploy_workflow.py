@@ -201,3 +201,19 @@ def test_every_action_from_another_repository_is_pinned_to_a_commit():
     for name, action, comment in remote:
         assert re.fullmatch(r"[\w.-]+/[\w./-]+@[0-9a-f]{40}", action), f"{name}: {action} is not pinned to a commit"
         assert re.fullmatch(r" # v?\d+(?:[.]\d+)*", comment), f"{name}: {action} must name its release"
+
+
+def test_image_ships_every_rollback_script_and_pins_its_base_by_digest():
+    """SPEC-134: a production rollback needs no file transfer, and every build gets the same base."""
+    dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
+    copy = re.search(r"^COPY scripts/database_backup\.py (.*) scripts/$", dockerfile, re.M)
+    assert copy is not None and "scripts/*.sql" in copy.group(1).split()
+    documented = set(re.findall(r"scripts/(rollback_[a-z_]+\.sql)", (ROOT / "AGENTS.md").read_text(encoding="utf-8")))
+    shipped = {path.name for path in (ROOT / "scripts").glob("*.sql")}
+    assert documented and documented <= shipped
+    assert not any(pattern.strip() in {"scripts/", "scripts/*.sql", "*.sql"}
+                   for pattern in (ROOT / ".dockerignore").read_text(encoding="utf-8").splitlines())
+    base = re.search(r"^FROM (\S+)$", dockerfile, re.M)
+    assert base is not None and re.fullmatch(r"python:3\.11-slim@sha256:[0-9a-f]{64}", base.group(1))
+    dependabot = (ROOT / ".github" / "dependabot.yml").read_text(encoding="utf-8")
+    assert re.search(r"- package-ecosystem: docker\n\s+directory: \"/\"", dependabot)
