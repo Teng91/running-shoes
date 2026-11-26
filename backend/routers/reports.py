@@ -25,7 +25,6 @@ def generate_monthly_report(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    enforce_agent_request_limits(request, current_user.id)
     today = local_today()
     if (payload.year, payload.month) > (today.year, today.month):
         raise HTTPException(status_code=422, detail="未來月份無法產生報告")
@@ -33,6 +32,8 @@ def generate_monthly_report(
         model = llm.resolve_allowed_model(llm.LLMProvider.openrouter, payload.model)
     except llm.LLMError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    # SPEC-133: a request refused above never spends the AI quota.
+    enforce_agent_request_limits(request, current_user.id)
     user_id = current_user.id
     return StreamingResponse(
         report_sse(generate_report(

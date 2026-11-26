@@ -283,6 +283,26 @@ def test_generate_report_rejects_future_month(client, user_with_token, mock_llm)
     assert mock_llm.call_count == 0
 
 
+def test_refused_report_requests_never_spend_the_ai_quota(client, user_with_token, mock_llm, monkeypatch):
+    """SPEC-133: the future-month and model checks run before the AI rate limits."""
+    _user, token = user_with_token
+    spent = []
+    monkeypatch.setattr(report_routes, "enforce_agent_request_limits", lambda request, user_id: spent.append(user_id))
+    now = datetime.now(UTC)
+    future = client.post("/api/reports/generate", headers=_auth_header(token),
+                         json={"year": now.year + 1, "month": now.month})
+    assert future.status_code == 422
+
+    def refuse(provider, model):
+        raise llm.LLMError("model not allowed")
+
+    monkeypatch.setattr(llm, "resolve_allowed_model", refuse)
+    refused = client.post("/api/reports/generate", headers=_auth_header(token),
+                          json={"year": 2026, "month": 6, "model": "vendor/retired"})
+    assert refused.status_code == 400
+    assert spent == []
+
+
 def test_generate_report_uses_taipei_calendar_day(
     client, user_with_token, mock_llm, monkeypatch
 ):

@@ -54,7 +54,9 @@ def spending_summary(db: Session, user_id: int, *, today: date | None = None) ->
         "total_original": original,
         "savings": round_metric(original - paid, 2),
         "average_discount_percent": round_metric(paid / original * 100, 1) if original > 0 else None,
-        "average_monthly_paid": round_metric(paid / span, 2) if span else 0.0,
+        # SPEC-133: a shoe without a valid purchase date is in the totals but in no month, so the
+        # average divides only what the months hold.
+        "average_monthly_paid": round_metric(sum(row["total_paid"] for row in monthly) / span, 2) if span else 0.0,
         "start_month": f"{first['year']:04d}-{first['month']:02d}" if first else None,
         "month_span": span,
         "highest_month": {key: highest[key] for key in ("year", "month", "total_paid")}

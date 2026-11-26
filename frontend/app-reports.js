@@ -72,14 +72,18 @@ function renderReport(report) {
     ' · 更新於 ' + formatLocalTimestamp(report.updated_at), 'success');
 }
 
+// SPEC-133: an older history response that arrives last never replaces a newer one.
+let reportHistoryRequestId = 0;
+
 async function loadReportHistory() {
   const session = captureAuthSession();
+  const requestId = ++reportHistoryRequestId;
   const select = document.getElementById('report-history');
   try {
     const res = await authenticatedFetch(API_BASE + '/reports', { headers: authHeaders() });
     if (!res.ok) return;
     const rows = await readAuthenticatedBody(res);
-    if (!isCurrentAuthSession(session)) return;
+    if (!isCurrentAuthSession(session) || requestId !== reportHistoryRequestId) return;
     select.replaceChildren();
     const placeholder = document.createElement('option');
     placeholder.value = '';
