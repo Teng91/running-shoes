@@ -4,6 +4,13 @@
 每版的摘要見 [CHANGELOG.md](../CHANGELOG.md)；目前的功能與操作方式以 [README](../README.md) 為準。
 這裡保留當時的文字，後續版本可能已調整其中的行為。
 
+### 本機資料依帳號識別碼分區（SPEC-129，v5.2.1）
+
+- `app-session.js` 讀取伺服器簽發的 token 內容（不驗證簽章，只用來分區與顯示）：`startAuthSession` 以 `sub` 作為帳號名稱，`captureAuthSession()` 多了 `account`（`aid`，也就是 `backup_id`）。
+- `app-workspace.js` 的 IndexedDB 分區從 `origin|輸入的名稱` 改為 `origin|aid:<backup_id>`；`workspace-controller.attach(account, isLegacy)` 先以 `app-local-store.adopt()` 在一個交易內把同網站、名稱只差 A–Z 大小寫的舊分區併入（新分區已有的紀錄優先，lease 隨紀錄移動）。
+- 舊分區是在這版之前存的，無法分辨是否來自已刪除的同名帳號，所以會併入一次；舊帳號的待送跑步送出時會因鞋款不屬於新帳號被伺服器拒絕，顯示為需處理。之後新舊帳號不再共用分區。
+- 沒有 schema 或 API 變更。回滾到 v5.2.0 後，舊版讀 `origin|名稱` 分區，看不到這版之後存在 `aid:` 分區的草稿與待送跑步（資料仍在 IndexedDB，升回這版即可看到）。Asset 5.2.1／shell v131。
+
 ### 目標賽事的異動歷史與誤刪復原（SPEC-128，v5.2.0）
 
 - `audit_schema.AUDITED` 加入 `race_goals`，啟動時建立 `audit_race_goals_insert`／`update`／`delete` trigger；`history.can_restore` 允許復原刪除事件，`_restore_race_goal` 在帳號沒有目標賽事時以原欄位重建（版本加 1），已有時回 409。

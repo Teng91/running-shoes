@@ -37,6 +37,14 @@ function memoryStore() {
       rows.set(serial(key), structuredClone(value)); return structuredClone(value);
     }); },
     move(key, change) { return write(() => { const value = change(structuredClone(rows.get(serial(key)))); rows.set(serial(value.key), structuredClone(value)); rows.delete(serial(key)); return value; }); },
+    adopt(account, isLegacy) { return write(() => {
+      const own = new Set([...rows.values()].filter(row => row.key[0] === account).map(row => serial(row.key.slice(1))));
+      for (const row of [...rows.values()]) {
+        if (row.key[0] === account || !isLegacy(row.key[0])) continue;
+        if (!own.has(serial(row.key.slice(1)))) { rows.set(serial([account, ...row.key.slice(1)]), { ...row, key: [account, ...row.key.slice(1)] }); own.add(serial(row.key.slice(1))); }
+        rows.delete(serial(row.key));
+      }
+    }); },
     clear(account, validate) { return write(() => { const own = [...rows.values()].filter(row => row.key[0] === account); validate?.(own); own.forEach(row => rows.delete(serial(row.key))); }); },
   };
 }
@@ -712,6 +720,7 @@ function fakeIndexedDB() {
         tx.objectStore = () => ({
           index: () => ({ getAll: account => request(() => [...rows.values()].filter(row => row.account === account).map(row => structuredClone(row))) }),
           get: key => request(() => structuredClone(rows.get(JSON.stringify(key)))),
+          getAll: () => request(() => [...rows.values()].map(row => structuredClone(row))),
           put: value => { rows.set(JSON.stringify(value.key), structuredClone(value)); },
           delete: key => { rows.delete(JSON.stringify(key)); },
         });
@@ -773,6 +782,71 @@ test('SPEC-120 the local workspace store retries WebKit internal IndexedDB error
   // Only one retry: a backend that keeps failing still reports the error.
   fake.fail.open = true; fake.fail.transaction = true;
   await assert.rejects(store.list('synthetic-A', 'queue'), /internal error/);
+});
+
+function syntheticToken(claims) {
+  const part = Buffer.from(JSON.stringify(claims)).toString('base64url');
+  return `header.${part}.signature`;
+}
+
+test('SPEC-129 the session takes the server spelling of the name and the permanent account ID from the token', () => {
+  const stored = new Map();
+  const context = require('node:vm').createContext({ atob, TextDecoder, Uint8Array,
+    localStorage: { getItem: key => stored.get(key) ?? null, setItem: (key, value) => stored.set(key, value), removeItem: key => stored.delete(key) } });
+  for (const file of ['app-lifecycle.js', 'app-state.js', 'app-session.js']) require('node:vm').runInContext(fs.readFileSync(path.join(__dirname, '../../frontend', file), 'utf8'), context);
+  context.startAuthSession(syntheticToken({ sub: 'Rünner', aid: 'backup-synthetic-1' }), 'rünner');
+  assert.equal(require('node:vm').runInContext('currentUser', context), 'Rünner', 'the name is the server spelling, not what was typed');
+  assert.equal(stored.get('username'), 'Rünner');
+  assert.equal(context.captureAuthSession().account, 'backup-synthetic-1');
+  context.startAuthSession('not-a-token', 'typed');
+  assert.equal(require('node:vm').runInContext('currentUser', context), 'typed', 'an unreadable token keeps the typed name');
+  assert.equal(context.captureAuthSession().account, null);
+});
+
+test('SPEC-129 the workspace partition is the account ID and adopts any spelling of the same name once', async () => {
+  const attached = [];
+  const context = vm.createContext({ document: { getElementById: () => ({ value: '', dataset: {} }), querySelectorAll: () => [] },
+    window: { location: { origin: 'https://example.test' } }, currentUser: 'Runner', authToken: 'token',
+    captureAuthSession: () => ({ account: 'backup-synthetic-1' }), isCurrentAuthSession: () => false,
+    registerFeatureReset() {}, newOperationKey: () => 'key', structuredClone, inlineEditors: new Map(), attached });
+  vm.runInContext(fs.readFileSync('frontend/app-workspace.js', 'utf8'), context);
+  vm.runInContext('localWorkspace.ready = true; localWorkspace.controller = { attach: async (...args) => { attached.push(args); return []; } };', context);
+  await context.activateLocalWorkspace();
+  const [account, legacy] = attached[0];
+  assert.equal(account, 'https://example.test|aid:backup-synthetic-1');
+  assert.equal(legacy('https://example.test|runner'), true);
+  assert.equal(legacy('https://example.test|RUNNER'), true);
+  assert.equal(legacy('https://example.test|Rünner'), false, 'only A-Z ignore case, like the server');
+  assert.equal(legacy('https://example.test|other'), false);
+  assert.equal(legacy('https://example.test|aid:backup-synthetic-2'), false, 'another account ID is never adopted');
+  assert.equal(legacy('https://other.test|runner'), false, 'another site is never adopted');
+
+  // The controller moves those partitions in before reading; records already in the account win.
+  const fixture = await setup();
+  await fixture.storage.update(['legacy-Runner', 'queue', 'op-1'], () => ({ key: ['legacy-Runner', 'queue', 'op-1'], status: 'pending' }));
+  await fixture.storage.update(['legacy-runner', 'drafts', 'forms'], () => ({ key: ['legacy-runner', 'drafts', 'forms'], value: { forms: { run: { 'run-km': '5' } } } }));
+  await fixture.storage.update(['aid:1', 'drafts', 'forms'], () => ({ key: ['aid:1', 'drafts', 'forms'], value: { forms: {} } }));
+  await fixture.storage.update(['legacy-other', 'queue', 'op-2'], () => ({ key: ['legacy-other', 'queue', 'op-2'], status: 'pending' }));
+  const controller = fixture.create();
+  const records = await controller.attach('aid:1', name => ['legacy-Runner', 'legacy-runner'].includes(name));
+  assert.deepEqual(records.map(row => row.key.join('/')).sort(), ['aid:1/drafts/forms', 'aid:1/queue/op-1']);
+  assert.deepEqual(records.find(row => row.key[1] === 'drafts').value.forms, {}, 'the account record wins over a legacy one');
+  assert.deepEqual([...fixture.storage.rows.values()].map(row => row.key[0]).sort(), ['aid:1', 'aid:1', 'legacy-other']);
+});
+
+test('SPEC-129 the IndexedDB store adopts legacy partitions in one transaction', async () => {
+  const fake = fakeIndexedDB();
+  const context = require('node:vm').createContext({ indexedDB: fake.indexedDB, setTimeout, clearTimeout, queueMicrotask, structuredClone });
+  require('node:vm').runInContext(fs.readFileSync(path.join(__dirname, '../../frontend/app-local-store.js'), 'utf8'), context);
+  const store = await context.openLocalWorkspaceStore();
+  await store.update(['site|Runner', 'queue', 'op-1'], () => ({ status: 'pending', lease: 'tab', leaseUntil: 5 }));
+  await store.update(['site|other', 'queue', 'op-2'], () => ({ status: 'pending' }));
+  assert.equal(await store.adopt('site|aid:1', name => name === 'site|Runner'), 1);
+  const moved = await store.list('site|aid:1', 'queue');
+  assert.deepEqual(moved.map(row => [row.key, row.account, row.lease]), [[['site|aid:1', 'queue', 'op-1'], 'site|aid:1', 'tab']]);
+  assert.equal((await store.list('site|Runner')).length, 0);
+  assert.equal((await store.list('site|other')).length, 1);
+  assert.equal(await store.adopt('site|aid:1', name => name === 'site|Runner'), 0, 'adopting again moves nothing');
 });
 
 test('SPEC-107 the goal form, shoe editor and account view register their workspace drafts', async () => {

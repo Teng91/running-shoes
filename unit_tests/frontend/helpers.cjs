@@ -203,6 +203,7 @@ function transportContext() {
     clearCalls: 0, loginCalls: 0,
   });
   vm.runInContext(`let authToken = 'A', authGeneration = 1;
+    ${extract('authTokenClaims')}
     ${extract('captureAuthSession')}
     ${extract('isCurrentAuthSession')}
     ${extract('requireAuthSession')}

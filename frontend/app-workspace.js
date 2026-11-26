@@ -86,10 +86,16 @@ function activateLocalWorkspace() {
   const session = captureAuthSession();
   if (localWorkspace.session && isCurrentAuthSession(localWorkspace.session)) return localWorkspace.activating || Promise.resolve();
   localWorkspace.session = session;
-  localWorkspace.account = `${window.location.origin}|${currentUser}`;
+  // SPEC-129: the partition is the account's permanent ID, so another spelling of the name or a
+  // new account reusing a deleted name never shares it; older name partitions are moved in once.
+  // Names match like the server's: only A–Z ignore case (SPEC-093).
+  const origin = window.location.origin, nameKey = text => text.replace(/[A-Z]/g, letter => letter.toLowerCase());
+  localWorkspace.account = session.account ? `${origin}|aid:${session.account}` : `${origin}|${currentUser}`;
+  const legacy = session.account ? partition => partition.startsWith(origin + '|') && !partition.startsWith(origin + '|aid:')
+    && nameKey(partition.slice(origin.length + 1)) === nameKey(String(currentUser)) : null;
   localWorkspace.fresh.clear(); localWorkspace.edited.clear(); localWorkspace.editors = {};
   localWorkspace.activating = (async () => {
-    const records = await localWorkspace.controller.attach(localWorkspace.account);
+    const records = await localWorkspace.controller.attach(localWorkspace.account, legacy);
     if (!isCurrentAuthSession(session)) return;
     localWorkspace.restoring = true;
     try {

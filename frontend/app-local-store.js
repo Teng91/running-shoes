@@ -120,6 +120,25 @@ function workspaceStoreRecords(transaction) {
         store.put({ ...value, account: key[0] }); store.delete(key);
       }, done, fail));
     },
+    // SPEC-129: moves records of legacy partitions (isLegacy(name)) into `account` in one
+    // transaction; a record the account already has wins, and leases travel with the record.
+    adopt(account, isLegacy) {
+      return transaction('readwrite', (store, done) => {
+        const request = store.getAll();
+        request.onsuccess = () => {
+          const rows = request.result;
+          const own = new Set(rows.filter(row => row.account === account).map(row => JSON.stringify(row.key.slice(1))));
+          let moved = 0;
+          for (const row of rows) {
+            if (row.account === account || !isLegacy(row.account)) continue;
+            const rest = JSON.stringify(row.key.slice(1));
+            if (!own.has(rest)) { store.put({ ...row, key: [account, ...row.key.slice(1)], account }); own.add(rest); moved++; }
+            store.delete(row.key);
+          }
+          done(moved);
+        };
+      });
+    },
     clear(account, validate = () => {}) {
       return transaction('readwrite', (store, done, fail) => {
         const request = store.index('account').getAll(account);

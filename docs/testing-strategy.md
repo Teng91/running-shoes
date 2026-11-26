@@ -301,6 +301,10 @@ SPEC-032：合成資料驗證歷史筆數上限（v4.7.3 起 10,000／10,001）�
 
 [規格與具名案例](specs/116-keep-scheduled-workflows-enabled.md) 以文字解析 `offsite-backup.yml`：續命 job 不依賴備份 job、只有它有 `actions: write`、只用 `GITHUB_TOKEN` 不用 secret、失敗只發警告，且 repo 裡每個有 `schedule` 的 workflow 都在它的重新啟用清單中。
 
+## SPEC-129 本機資料依帳號識別碼分區
+
+[規格與具名案例](specs/129-local-data-account-key.md) 以合成 token 確認登入後的名稱是伺服器的寫法、session 帶出帳號識別碼，無法解析的 token 保留輸入的名稱；工作區分區是 `aid:` 且只併入同網站、名稱只差 A–Z 大小寫的舊分區；controller 與 IndexedDB 在同一個交易內併入舊紀錄、新紀錄優先、lease 保留，重複執行不再移動。瀏覽器 E2E 改以帳號識別碼等待分區。
+
 ## SPEC-128 目標賽事的異動歷史與誤刪復原
 
 [規格與具名案例](specs/128-race-goal-history.md) 以 API 新增、修改與刪除目標賽事，確認異動歷史的三筆事件與欄位、只有刪除可以復原、復原後內容與版本正確且不能復原兩次；已有新目標時回 409，其他帳號看不到也不能復原；帳號備份不含目標賽事的歷史。前端測試確認歷史顯示「目標賽事」，復原後讓比賽準備重新讀取。

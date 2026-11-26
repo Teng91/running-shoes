@@ -97,7 +97,8 @@ module.exports = async function checkWorkspace(browser, baseUrl) {
       await page.getByRole('button', { name: '登出', exact: true }).click();
       await page.locator('#login-username').fill(user.username); await page.locator('#login-password').fill(password);
       await page.locator('#login-form').getByRole('button', { name: '登入', exact: true }).click();
-      await page.waitForFunction(name => currentUser === name && localWorkspace.controller?.account?.endsWith('|' + name), user.username);
+      // SPEC-129: the partition is the signed-in account's permanent ID.
+      await page.waitForFunction(name => currentUser === name && localWorkspace.controller?.account === location.origin + '|aid:' + captureAuthSession().account, user.username);
       await page.evaluate(() => localWorkspace.activating);
     }
     await login(b);
