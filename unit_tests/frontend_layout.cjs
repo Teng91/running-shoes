@@ -423,7 +423,7 @@ async function run(engine, name) {
         document.querySelector('#strava-mapping').innerHTML = '<div class="strava-group"><div>Very long imported shoe name from Strava</div><select><option>Very long matching running shoe name</option></select></div>';
         renderStravaImportHistory();
         document.querySelectorAll('input[type="date"]').forEach(e => { e.value = '2026-09-06'; });
-        render();
+        refreshPanels();
         window.layoutAnalytics = {
           comparison: { label: '較上月同期', delta_km: -23.45, through_day: 19, previous_km: 80.52 },
           recent_7_days: { km: 6.4, delta_km: -25.72 },
@@ -573,7 +573,7 @@ async function run(engine, name) {
       await page.evaluate(() => {
         applyCoreResource('shoes', [[], []]); applyCoreResource('monthly', []);
         applyCoreResource('spending', { ...coreData.spendingSummary, monthly: [] });
-        runController.state.rows = []; render();
+        runController.state.rows = []; refreshPanels();
       });
       for (const tab of ['runs', 'shoes', 'monthly', 'report']) {
         await selectTab(page, tab);

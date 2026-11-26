@@ -65,7 +65,7 @@ async function inspect(browser,baseUrl,scenario){
    // then assert that a removed option did not silently choose its successor.
    await page.waitForFunction(()=>!document.querySelector('#run-shoe option[value="1"]'));
    assert.equal(await page.locator('#run-shoe').inputValue(),'');
-   await page.evaluate(()=>render());
+   await page.evaluate(()=>refreshPanels());
    assert.equal(await page.locator('#run-shoe').inputValue(),'');
    await page.locator('#add-run-btn').click(); assert.deepEqual(writes,[]);
    await page.locator('#run-shoe').selectOption('2');
@@ -90,7 +90,7 @@ async function inspect(browser,baseUrl,scenario){
    holdAnnual=true;await page.evaluate(()=>switchTab('monthly'));await started.promise;
    await page.evaluate(()=>loadData());
    assert.equal(annualCalls,2,'one new read after run-resource invalidation');
-   await page.evaluate(()=>{for(let i=0;i<5;i++)render();});
+   await page.evaluate(()=>{for(let i=0;i<5;i++)refreshPanels();});
    assert.equal(annualCalls,2,'redraws share the pending annual read');
    gate.resolve(); await page.waitForFunction(()=>activeHttpRequests.size===0);
    console.log('PASS',browser.browserType().name(),'SPEC-026 annual reads coalesced across redraws');
