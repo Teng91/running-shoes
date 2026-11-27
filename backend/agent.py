@@ -112,7 +112,10 @@ def _execute_tool_safely(
 ) -> str:
     try:
         return _execute_tool(name, arguments, db, user_id)
-    except Exception:  # noqa: BLE001
+    except Exception:
+        # SPEC-140: the model only sees a neutral failure; the server log keeps the cause.
+        # Arguments are model-written and may quote the user, so only the tool name is logged.
+        logger.exception("Agent tool %s failed", name)
         rollback = getattr(db, "rollback", None)
         if callable(rollback):
             try:

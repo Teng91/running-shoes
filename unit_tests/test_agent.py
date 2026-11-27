@@ -412,6 +412,18 @@ def test_execute_tool_safely_contains_failures_and_rolls_back(monkeypatch):
     assert event["message"] == "資料工具執行失敗"
 
 
+def test_execute_tool_safely_logs_the_cause_without_arguments(monkeypatch, caplog):
+    """SPEC-140: the server log names the tool and keeps the traceback; model-written arguments stay out."""
+    monkeypatch.setattr(agent, "_execute_tool", MagicMock(side_effect=RuntimeError("tool bug")))
+    caplog.set_level("ERROR", logger=agent.logger.name)
+
+    agent._execute_tool_safely("shoe_summary", {"shoe_name": "private user text"}, MagicMock(), 7)
+
+    assert [record.getMessage() for record in caplog.records] == ["Agent tool shoe_summary failed"]
+    assert caplog.records[0].exc_info[0] is RuntimeError
+    assert "private user text" not in caplog.text
+
+
 def test_tool_done_event_marks_structured_search_failure():
     event = _events([
         agent_protocol.tool_done_event(

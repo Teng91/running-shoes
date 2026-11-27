@@ -1,10 +1,14 @@
 """Report orchestration emits domain events without HTTP or LLM dependencies."""
 
+import logging
 from collections.abc import Callable, Generator, Iterable
 
 from sqlalchemy.orm import Session
 
 from backend.services.report_storage import begin_generation, persist_current_report
+
+# SPEC-140: users see a neutral message; the cause goes to the server log (no report text).
+logger = logging.getLogger("running_shoes.reports")
 
 
 class ReportModelError(Exception):
@@ -20,7 +24,8 @@ def generate_report(
         stats = build_stats()
         # Neither a reader snapshot nor a writer reservation spans the LLM wait.
         db.rollback()
-    except Exception:  # noqa: BLE001
+    except Exception:
+        logger.exception("Report preparation failed for %04d-%02d", year, month)
         db.rollback()
         yield {"type": "error", "text": "報告準備失敗，請稍後再試。"}
         return
@@ -33,7 +38,8 @@ def generate_report(
     except ReportModelError as exc:
         yield {"type": "error", "text": str(exc)}
         return
-    except Exception:  # noqa: BLE001
+    except Exception:
+        logger.exception("Report model stream failed for %04d-%02d", year, month)
         yield {"type": "error", "text": "報告產生失敗，請稍後再試。"}
         return
 
@@ -43,7 +49,8 @@ def generate_report(
         return
     try:
         updated_at = persist_current_report(db, user_id, year, month, token, content, model, stats)
-    except Exception:  # noqa: BLE001
+    except Exception:
+        logger.exception("Report save failed for %04d-%02d", year, month)
         db.rollback()
         yield {"type": "error", "text": "報告產生成功，但儲存失敗，請重新產生。"}
         return

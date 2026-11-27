@@ -8,10 +8,10 @@ from sqlalchemy.orm import Session
 from backend import models
 from backend.read_models.rounding import round_metric
 from backend.strava_import import (
-    _normalize_gear,
     date_corrections,
     duration_backfills,
     manual_matches,
+    normalize_gear,
 )
 
 
@@ -82,7 +82,7 @@ def build_preview(
     )
     shoes_by_key: dict[str, list[models.Shoe]] = {}
     for shoe in shoes:
-        key = _normalize_gear(f"{shoe.brand} {shoe.model}")
+        key = normalize_gear(f"{shoe.brand} {shoe.model}")
         if key:
             shoes_by_key.setdefault(key, []).append(shoe)
     groups: dict[str, dict[str, object]] = {}
@@ -118,7 +118,7 @@ def build_preview(
         group["conflict_count"] = int(cast(int, group.get("conflict_count", 0))) + 1
     for group in groups.values():
         group.setdefault("conflict_count", 0)
-        candidates = shoes_by_key.get(_normalize_gear(str(group["gear"])), [])
+        candidates = shoes_by_key.get(normalize_gear(str(group["gear"])), [])
         suggested_shoe = candidates[0] if len(candidates) == 1 else None
         group["suggested_shoe_id"] = suggested_shoe.id if suggested_shoe else None
         group["shoe_name"] = (

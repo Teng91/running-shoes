@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [5.3.6] - 2026-11-28
+
+### Fixed
+- 月報產生與 AI 工具的非預期錯誤現在會寫入伺服器紀錄（階段、年月或工具名稱與 traceback，不含月報內容與工具參數），使用者看到的訊息不變（SPEC-140）。
+
+### Changed
+- 後端模組不再使用其他模組的私有函式（`normalize_gear`、`validate_completed_run_date` 改為公開），`architecture-check` 會擋下新的違規。Asset 5.3.6／shell v144，schema 14 不變。
+
 ## [5.3.5] - 2026-11-28
 
 ### Fixed

@@ -228,3 +228,18 @@ def test_tool_adapters_never_build_queries(tmp_path, monkeypatch):
     tools.mkdir(parents=True)
     (tools / "adapter.py").write_text("def names(db):\n    return db.query(1).all()\n", encoding="utf-8")
     assert check_architecture.tool_query_violations(tools) == ["backend/tools/adapter.py:2"]
+
+
+def test_private_helpers_stay_in_their_module(tmp_path, monkeypatch):
+    """SPEC-140: importing or calling another module's underscore name is reported."""
+    assert check_architecture.private_import_violations(check_architecture.ROOT / "backend") == []
+    monkeypatch.setattr(check_architecture, "ROOT", tmp_path)
+    backend = tmp_path / "backend"
+    backend.mkdir()
+    (backend / "parser.py").write_text("def _key(value):\n    return value\n", encoding="utf-8")
+    (backend / "importer.py").write_text("from backend.parser import _key\n", encoding="utf-8")
+    (backend / "caller.py").write_text(
+        "from backend import parser\n\ndef run(value):\n    return parser._key(value), parser.__name__\n",
+        encoding="utf-8")
+    assert check_architecture.private_import_violations(backend) == [
+        "backend/caller.py:4 uses parser._key", "backend/importer.py:1 imports _key"]
