@@ -99,11 +99,11 @@ test('SPEC-124 the plan compares actual runs per zone with the suggested quality
   const { context, nodes } = racePrepContext({ race: { ...race, plan: suggested }, pace });
   await context.renderPaceAnalysis();
   const rows = nodes['race-plan-table'].innerHTML.split('</tr>').filter(row => row.includes('<tr'));
-  assert.match(rows[0], /<span class="race-plan-zone"><i[^>]*><\/i>輕鬆 2<\/span><span class="race-plan-zone race-plan-zone-met"><i[^>]*><\/i>穩定 1\/1<\/span><span class="race-plan-zone"><i[^>]*><\/i>比賽配速 0\/1<\/span><\/td>/);
+  assert.match(rows[0], /<span class="race-plan-zone"><i[^>]*><\/i>輕鬆 2\/0<\/span><span class="race-plan-zone race-plan-zone-met"><i[^>]*><\/i>穩定 1\/1<\/span><span class="race-plan-zone"><i[^>]*><\/i>比賽配速 0\/1<\/span><\/td>/);
   assert.doesNotMatch(rows[0], /更快/, 'a zone with neither runs nor a suggestion is left out');
   assert.match(rows[1], /比賽配速 0\/1/);
   assert.match(rows[2], /<td>—<\/td>\s*<td><span class="race-plan-status">未達/, 'a week without suggestions or timed runs shows a dash');
-  assert.match(rows[4], /減量[\s\S]*>—<\/td>\s*<td><span class="race-plan-zone"><i[^>]*><\/i>比賽配速 1<\/span><\/td>/, 'an upcoming week shows the suggestion');
+  assert.match(rows[4], /減量[\s\S]*>—<\/td>\s*<td><span class="race-plan-zone"><i[^>]*><\/i>比賽配速 0\/1<\/span><\/td>/, 'an upcoming week uses the same actual/suggested format');
   assert.match(rows[5], /比賽週[\s\S]*<td>—<\/td>/);
   assert.match(nodes['race-plan-note'].textContent, /還差 8\.5 km。強度建議：比賽配速 1 次（5:31–5:56），其餘輕鬆跑。課表從/);
 });
@@ -114,7 +114,7 @@ test('SPEC-119 the weekly plan lays out backend targets, actual distance and sta
   assert.equal(nodes['race-plan'].hidden, false);
   const rows = nodes['race-plan-table'].innerHTML.split('</tr>').filter(row => row.includes('<tr'));
   assert.equal(rows.length, 6);
-  assert.match(rows[0], /class="race-plan-done"[\s\S]*第 1 週[\s\S]*9\/21[\s\S]*累積[\s\S]*>15<[\s\S]*15\.2<small> · 最長 7\.0<\/small>[\s\S]*輕鬆 2<\/span>[\s\S]*穩定 1<\/span><\/td>[\s\S]*達成/);
+  assert.match(rows[0], /class="race-plan-done"[\s\S]*第 1 週[\s\S]*9\/21[\s\S]*累積[\s\S]*>15<[\s\S]*15\.2<small> · 最長 7\.0<\/small>[\s\S]*輕鬆 2\/0<\/span>[\s\S]*穩定 1\/0<\/span><\/td>[\s\S]*達成/);
   assert.doesNotMatch(rows[0], /比賽配速 0|更快 0/, 'zones without runs are left out');
   assert.match(rows[1], /部分完成/);
   assert.match(rows[2], /class="race-plan-missed"[\s\S]*<td>—<\/td>[\s\S]*未達/, 'a week without timed runs shows a dash');

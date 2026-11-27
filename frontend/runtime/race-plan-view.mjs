@@ -7,15 +7,15 @@ export const RACE_PLAN_STATUS = Object.freeze({ done: '達成', partial: '部分
 
 const phaseName = phase => RACE_PLAN_PHASES[phase] || phase;
 
-// SPEC-121/124: a started week's timed road runs per intensity zone against the suggested runs
-// ("actual/suggested"); an upcoming week shows the suggestion only.
+// SPEC-121/124: every zone with runs or a suggestion shows "actual/suggested" (e.g. 0/1, 1/0, 1/1),
+// started or upcoming, so the column stays consistent.
 function zoneText(week, zones, format) {
   const started = week.status !== 'upcoming';
   const parts = zones.map(zone => {
     const target = week.quality_runs?.[zone.key] || 0;
     const actual = started ? week.zone_runs?.[zone.key] || 0 : 0;
     if (!target && !actual) return '';
-    const count = !started ? target : target ? `${actual}/${target}` : actual;
+    const count = `${actual}/${target}`;
     const met = started && target && actual >= target ? ' race-plan-zone-met' : '';
     return `<span class="race-plan-zone${met}"><i style="background:${format.zoneColor(zone.key)}"></i>${format.esc(zone.label)} ${count}</span>`;
   });
