@@ -301,6 +301,10 @@ SPEC-032：合成資料驗證歷史筆數上限（v4.7.3 起 10,000／10,001）�
 
 [規格與具名案例](specs/116-keep-scheduled-workflows-enabled.md) 以文字解析 `offsite-backup.yml`：續命 job 不依賴備份 job、只有它有 `actions: write`、只用 `GITHUB_TOKEN` 不用 secret、失敗只發警告，且 repo 裡每個有 `schedule` 的 workflow 都在它的重新啟用清單中。
 
+## SPEC-136 個人最佳
+
+[規格與具名案例](specs/136-personal-bests.md) 以不同長度的合成路跑確認較長的跑步以平均配速換算成較短距離、量短 1% 以內仍算、更短的不算、同秒數時日期早的在前且每個距離只留 3 筆；沒有時間、越野、步行、未來日期與另一個帳號的跑步不算。前端確認卡片排版（鞋款名稱跳脫、取自較長跑步的距離、沒有紀錄時的提示）、跑步或鞋款重新載入後重讀，以及按鈕只填參考成績、不送出。
+
 ## SPEC-135 對話框、更新忙碌判斷與重繪改由功能登記
 
 [規格與具名案例](specs/135-feature-registries.md) 以頁面上的每個 `.modal-overlay` 確認各有一個登記、Escape 與點背景經登記的關閉函式（點背景只關原本的四個）；SPEC-059 的忙碌案例改由各功能登記的判斷驅動；並確認 `refreshPanels()` 更新資料日期、只重繪受影響的目前面板且通知 `refreshed` hook，共用 script 不提任何功能的函式或狀態。

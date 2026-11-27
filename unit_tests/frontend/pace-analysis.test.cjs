@@ -9,7 +9,7 @@ require('node:test').before(async () => {
   racePlanModule = await import('../../frontend/runtime/race-plan-view.mjs');
 });
 
-function racePrepContext({ race, pace, puts = [], deletes = [] }) {
+function racePrepContext({ race, pace, bests = null, puts = [], deletes = [] }) {
   const nodes = new Proxy({}, { get: (target, id) => target[id] ||= {
     id, value: '', textContent: '', innerHTML: '', hidden: false, disabled: false, options: [],
     insertAdjacentHTML(_, html) { this.options.push({ value: /value="([^"]*)"/.exec(html)[1] }); },
@@ -26,7 +26,10 @@ function racePrepContext({ race, pace, puts = [], deletes = [] }) {
     Chart, esc, console: { error() {} }, chartInstances: {}, registerFeatureReset() {},
     getThemeColor: (token, fallback) => fallback, confirm: () => true,
     invalidateDataResources: () => {}, localDateISO: () => '2026-11-17',
-    apiGet: async path => { reads.push(path); return path === '/analytics/race' ? race : pace; },
+    apiGet: async path => {
+      reads.push(path);
+      return { '/analytics/race': race, '/analytics/personal-bests': bests }[path] || pace;
+    },
     apiPut: async (path, payload) => { puts.push({ path, payload }); return { version: 1, ...payload }; },
     apiDelete: async path => { deletes.push(path); return { deleted: true }; },
     document: {
@@ -294,6 +297,68 @@ test('SPEC-065 the race form validates its fields and saves the parsed goal', as
     assert.match(nodes['race-settings-status'].textContent, message);
   }
   assert.equal(puts.length, 2, 'invalid forms never reach the API');
+});
+
+// SPEC-136: the backend ranks the bests; a longer run holds a shorter best at its average pace.
+const bests = { as_of: '2026-11-17', top_count: 3, distances: [
+  { key: '5k', label: '5K', distance_km: 5, bests: [
+    { rank: 1, seconds: 1350, pace: 270, date: '2026-04-03', run_km: 4.97, from_longer_run: false, shoe: 'Mizuno <b>Sky</b>' },
+    { rank: 2, seconds: 1375, pace: 275, date: '2026-04-05', run_km: 16, from_longer_run: true, shoe: 'Mizuno Sky' },
+    { rank: 3, seconds: 1400, pace: 280, date: '2026-03-01', run_km: 21.1, from_longer_run: true, shoe: 'Mizuno Sky' },
+  ] },
+  { key: '10k', label: '10K', distance_km: 10, bests: [] },
+  { key: '15k', label: '15K', distance_km: 15, bests: [] },
+  { key: 'half', label: '半馬', distance_km: 21.0975, bests: [
+    { rank: 1, seconds: 5907, pace: 280, date: '2026-03-01', run_km: 25, from_longer_run: true, shoe: 'Mizuno Sky' },
+  ] },
+] };
+
+test('SPEC-136 personal bests lay out the backend ranking, the runners-up and the source run', async () => {
+  const { context, nodes, reads } = racePrepContext({ race, pace, bests });
+  await context.renderPersonalBests();
+  assert.deepEqual(reads, ['/analytics/personal-bests']);
+  const cards = nodes['personal-bests'].innerHTML.split('<div class="review-card').slice(1);
+  assert.equal(cards.length, 4, 'one card per distance, in the backend order');
+  const [five, ten, , half] = cards;
+  assert.match(five, /review-label">5K<\/div><div class="review-value">22:30<\/div>/);
+  assert.match(five, /4:30 \/km · 2026\/4\/3<br>Mizuno &lt;b&gt;Sky&lt;\/b&gt;<\/div>/, 'the shoe name is escaped');
+  assert.doesNotMatch(five, /取自/, 'a run of about the distance needs no source note');
+  assert.match(five, /<ol class="pb-others"><li><span>2\. 22:55<\/span><span>2026\/4\/5 · 16\.0 km<\/span><\/li><li><span>3\. 23:20<\/span><span>2026\/3\/1 · 21\.1 km<\/span><\/li><\/ol>/);
+  assert.match(five, /data-click="use-personal-best" data-km="5" data-seconds="1350" data-label="5K">設為比賽參考成績<\/button>/);
+  assert.match(ten, /review-value">—<\/div><div class="review-sub">還沒有 10 km 以上、有時間的路跑<\/div>/);
+  assert.doesNotMatch(ten, /button/, 'nothing to hand to the race form');
+  assert.match(half, /1:38:27[\s\S]*取自 25\.0 km 的跑步/);
+  assert.match(half, /data-km="21\.0975" data-seconds="5907" data-label="半馬"/);
+  assert.doesNotMatch(half, /pb-others/);
+
+  // Cached until the shoes or runs arrive again, as after a run is saved or a shoe renamed.
+  await context.renderPersonalBests();
+  assert.equal(reads.length, 1);
+  context.resourceStore.accept([await context.resourceStore.read('shoes', { loader: async () => [] })], 'run');
+  await context.renderPersonalBests();
+  assert.equal(reads.length, 2);
+  assert.match(htmlSource, /id="pb-title"[^>]*>個人最佳<\/h2>[\s\S]*id="personal-bests"[\s\S]*id="race-title"/, 'above race prep');
+});
+
+test('SPEC-136 a personal best fills the race form reference result and saves nothing', async () => {
+  const puts = [];
+  const { context, nodes } = racePrepContext({ race, pace, bests, puts });
+  await context.renderPaceAnalysis();
+  assert.equal(nodes['race-ref-temp'].value, '28');
+  context.usePersonalBest({ dataset: { km: '5', seconds: '1350', label: '5K' } });
+  assert.equal(nodes['race-settings'].hidden, false, 'the closed form opens');
+  assert.deepEqual(['race-ref-distance', 'race-ref-time', 'race-ref-temp'].map(id => nodes[id].value), ['5', '22:30', '']);
+  assert.equal(nodes['race-target'].value, '2:00:00', 'the rest of the goal stays');
+  assert.equal(nodes['race-settings-status'].textContent, '已帶入 5K 個人最佳 22:30 當參考成績，按「儲存」後更新預估完賽。');
+
+  // While the form is open, only the reference changes; what the user typed stays.
+  nodes['race-target'].value = '1:55:00';
+  context.usePersonalBest({ dataset: { km: '21.0975', seconds: '5907', label: '半馬' } });
+  assert.deepEqual(['race-ref-distance', 'race-ref-time', 'race-target'].map(id => nodes[id].value), ['21.0975', '1:38:27', '1:55:00']);
+  context.usePersonalBest({ dataset: { km: '', seconds: '5907', label: '半馬' } });
+  assert.equal(nodes['race-ref-distance'].value, '21.0975', 'a malformed button changes nothing');
+  assert.equal(puts.length, 0, 'nothing is saved until 儲存');
+  assert.match(readText('frontend/app-race-goal.js'), /'use-personal-best': element => usePersonalBest\(element\)/);
 });
 
 test('SPEC-064 classic scripts never redeclare a top-level name from another script', () => {

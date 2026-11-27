@@ -4,6 +4,12 @@
 每版的摘要見 [CHANGELOG.md](../CHANGELOG.md)；目前的功能與操作方式以 [README](../README.md) 為準。
 這裡保留當時的文字，後續版本可能已調整其中的行為。
 
+### 個人最佳（SPEC-136，v5.3.0）
+
+- 新的 `read_models/personal_bests.py` 與唯讀 API `GET /api/analytics/personal-bests`：只讀有時間的路跑，不短於該距離 99% 的跑步以平均配速換算成 5K、10K、15K、半馬的時間，每個距離取最快 3 筆，同秒數時日期早的在前。紀錄沒有分段，所以算不出一場跑步中最快的一段；較長跑步換算出的時間不會比它的平均配速快。
+- 訓練分析分頁在比賽準備上方顯示四張卡片（不需要 Chart.js）；快取 `personal-bests` 跟著 `dashboard` 失效。「設為比賽參考成績」由 `app-race-goal.js` 填入參考距離與時間並清掉氣溫，不自動儲存。`cross_script_names` 維持 153。
+- 沒有 schema 變更，可直接回滾至 v5.2.7 image。Asset 5.3.0／shell v138。
+
 ### 對話框、更新忙碌判斷與重繪改由功能登記（SPEC-135，v5.2.7）
 
 - `app-lifecycle.js` 新增 `registerDialog`／`closeDialog` 與 `registerBusyCheck`／`featureBusy`；七個對話框各自登記，點背景關閉改由 `initializeDialogs()` 統一監聽，仍只有紀錄編輯、匯出、跑鞋分析、資料與同步四個會關；`appUpdateBusy()` 只剩開著的對話框加 `featureBusy()`，`reportGenerationController` 移到 `app-reports.js`。

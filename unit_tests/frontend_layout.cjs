@@ -325,6 +325,19 @@ async function run(engine, name) {
             days_since_last_run: index === 2 ? 87 : 7, idle: index === 2,
           })),
         } });
+        if (url.pathname === '/api/analytics/personal-bests') {
+          // SPEC-136: full cards with runners-up and a long shoe name, plus one distance without a best.
+          const entry = (km, rank, seconds, date, runKm, longer) => ({ rank, seconds, pace: Math.round(seconds / km), date,
+            run_km: runKm, from_longer_run: longer, shoe: 'ASICS Superblast 2（長距離與比賽日的主力鞋）' });
+          return route.fulfill({ json: { as_of: '2026-10-27', top_count: 3, distances: [
+            { key: '5k', label: '5K', distance_km: 5, bests: [entry(5, 1, 1350, '2026-04-03', 5.01, false),
+              entry(5, 2, 1375, '2026-10-25', 16, true), entry(5, 3, 1400, '2025-12-20', 21.1, true)] },
+            { key: '10k', label: '10K', distance_km: 10, bests: [entry(10, 1, 2750, '2026-10-25', 16, true),
+              entry(10, 2, 2800, '2025-12-20', 21.1, true), entry(10, 3, 3120, '2026-09-14', 10.02, false)] },
+            { key: '15k', label: '15K', distance_km: 15, bests: [entry(15, 1, 4125, '2026-10-25', 16, true)] },
+            { key: 'half', label: '半馬', distance_km: 21.0975, bests: [] },
+          ] } });
+        }
         if (url.pathname === '/api/analytics/pace') {
           // SPEC-065: a populated trend whose points carry intensity zones and a goal pace.
           const days = Array.from({ length: 120 }, (_, index) => new Date(Date.UTC(2025, 6, 1 + index * 4)).toISOString().slice(0, 10));
@@ -465,6 +478,15 @@ async function run(engine, name) {
               assert.equal(await page.locator('#race-settings').isHidden(), true, 'cancel closes the race editor');
               assert.match(await page.locator('#race-cards').innerText(), /1:54:44/);
               assert.equal(await page.locator('#race-plan-table tr').count(), 12, 'the weekly plan is shown');
+              // SPEC-136: personal best cards lay out at every width and hand a best to the race form.
+              await page.waitForFunction(() => document.querySelectorAll('#personal-bests .pb-card').length === 3);
+              assert.match(await page.locator('#personal-bests').innerText(), /22:30[\s\S]*還沒有 21\.1 km 以上/);
+              if (screenshots && [390, 1440].includes(width)) await page.locator('.pb-section').screenshot({ path: path.join(screenshots, `${name}-${theme}-personal-bests-${width}.png`) });
+              await page.locator('#personal-bests .pb-use').first().click();
+              assert.equal(await page.locator('#race-ref-time').inputValue(), '22:30');
+              await assertLayout(page, `${name} ${theme} ${width} personal best in the race form`);
+              await page.locator('#cancel-race-btn').click();
+              assert.equal(await page.locator('#race-ref-time').inputValue(), '52:00', 'cancel restores the saved reference');
             }
             assert.equal(await page.locator('.tab-panel.active canvas').count(), expected);
             assert.equal(await page.evaluate(() => Object.values(chartInstances).filter(c => c.canvas.getClientRects().length).length), expected, 'all charts initialized with data');
