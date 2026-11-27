@@ -4,6 +4,11 @@
 每版的摘要見 [CHANGELOG.md](../CHANGELOG.md)；目前的功能與操作方式以 [README](../README.md) 為準。
 這裡保留當時的文字，後續版本可能已調整其中的行為。
 
+### 課表強度欄統一為實際／建議格式（SPEC-124，v5.3.4）
+
+- `runtime/race-plan-view.mjs` 的 `zoneText()` 改為所有有紀錄或有建議的區間都顯示 `${actual}/${target}`（例如 `輕鬆 1/0`、`比賽配速 0/1`），包括建議次數為 0 的區間與未開始的週；達成加粗與「—」條件不變。
+- 沒有 schema 或 API 變更，可直接回滾至 v5.3.3 image。Asset 5.3.4／shell v142。
+
 ### 移除跑鞋「月跑量」欄位（SPEC-138，v5.3.3）
 
 - `shoe-modal.html`、`app-shoes.js` 與 `app-workspace.js` 移除 `#f-monthly` 欄位與相關草稿／移動處理；`ShoeModal.move()` 只送 `is_retired` 與 `expected_version`，不再把退役鞋的 `monthly_km` 歸零或於回到現役時補平均。
