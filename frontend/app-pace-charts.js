@@ -147,9 +147,11 @@ async function renderPersonalBests() {
   document.getElementById('personal-bests').innerHTML = bests.distances.map(personalBestCard).join('');
 }
 
-function personalBestDate(iso) {
-  const [year, month, day] = String(iso).split('-').map(Number);
-  return `${year}/${month}/${day}`;
+// Every result names its date and its run's distance, the same way for the best and the
+// runners-up, whether the run was about the distance or a longer one (SPEC-136, v5.3.1).
+function personalBestRun(entry) {
+  const [year, month, day] = String(entry.date).split('-').map(Number);
+  return `${year}/${month}/${day} · ${Number(entry.run_km).toFixed(1)} km`;
 }
 
 function personalBestCard(distance) {
@@ -158,12 +160,11 @@ function personalBestCard(distance) {
     const km = Number(distance.distance_km);
     return reviewCard(esc(distance.label), '—', `還沒有 ${esc(km.toFixed(Number.isInteger(km) ? 0 : 1))} km 以上、有時間的路跑`);
   }
-  const source = best.from_longer_run ? `<br>取自 ${esc(Number(best.run_km).toFixed(1))} km 的跑步` : '';
   const rest = others.map(entry => `<li><span>${Number(entry.rank)}. ${esc(raceClock(entry.seconds))}</span>`
-    + `<span>${esc(personalBestDate(entry.date))}${entry.from_longer_run ? ` · ${esc(Number(entry.run_km).toFixed(1))} km` : ''}</span></li>`).join('');
+    + `<span>${esc(personalBestRun(entry))}</span></li>`).join('');
   return `<div class="review-card pb-card"><div class="review-label">${esc(distance.label)}</div>`
     + `<div class="review-value">${esc(raceClock(best.seconds))}</div>`
-    + `<div class="review-sub">${esc(paceClock(best.pace))} /km · ${esc(personalBestDate(best.date))}<br>${esc(best.shoe)}${source}</div>`
+    + `<div class="review-sub">${esc(paceClock(best.pace))} /km · ${esc(personalBestRun(best))}<br>${esc(best.shoe)}</div>`
     + (rest ? `<ol class="pb-others">${rest}</ol>` : '')
     + `<button type="button" class="btn btn-sm btn-edit pb-use" data-click="use-personal-best" data-km="${esc(String(distance.distance_km))}"`
     + ` data-seconds="${esc(String(best.seconds))}" data-label="${esc(distance.label)}">設為比賽參考成績</button></div>`;

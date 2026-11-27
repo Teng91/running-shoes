@@ -303,7 +303,7 @@ test('SPEC-065 the race form validates its fields and saves the parsed goal', as
 const bests = { as_of: '2026-11-17', top_count: 3, distances: [
   { key: '5k', label: '5K', distance_km: 5, bests: [
     { rank: 1, seconds: 1350, pace: 270, date: '2026-04-03', run_km: 4.97, from_longer_run: false, shoe: 'Mizuno <b>Sky</b>' },
-    { rank: 2, seconds: 1375, pace: 275, date: '2026-04-05', run_km: 16, from_longer_run: true, shoe: 'Mizuno Sky' },
+    { rank: 2, seconds: 1375, pace: 275, date: '2026-04-05', run_km: 5.02, from_longer_run: false, shoe: 'Mizuno Sky' },
     { rank: 3, seconds: 1400, pace: 280, date: '2026-03-01', run_km: 21.1, from_longer_run: true, shoe: 'Mizuno Sky' },
   ] },
   { key: '10k', label: '10K', distance_km: 10, bests: [] },
@@ -321,13 +321,13 @@ test('SPEC-136 personal bests lay out the backend ranking, the runners-up and th
   assert.equal(cards.length, 4, 'one card per distance, in the backend order');
   const [five, ten, , half] = cards;
   assert.match(five, /review-label">5K<\/div><div class="review-value">22:30<\/div>/);
-  assert.match(five, /4:30 \/km · 2026\/4\/3<br>Mizuno &lt;b&gt;Sky&lt;\/b&gt;<\/div>/, 'the shoe name is escaped');
-  assert.doesNotMatch(five, /取自/, 'a run of about the distance needs no source note');
-  assert.match(five, /<ol class="pb-others"><li><span>2\. 22:55<\/span><span>2026\/4\/5 · 16\.0 km<\/span><\/li><li><span>3\. 23:20<\/span><span>2026\/3\/1 · 21\.1 km<\/span><\/li><\/ol>/);
+  // v5.3.1: every result names its run's distance, about the distance or longer alike.
+  assert.match(five, /4:30 \/km · 2026\/4\/3 · 5\.0 km<br>Mizuno &lt;b&gt;Sky&lt;\/b&gt;<\/div>/, 'the shoe name is escaped');
+  assert.match(five, /<ol class="pb-others"><li><span>2\. 22:55<\/span><span>2026\/4\/5 · 5\.0 km<\/span><\/li><li><span>3\. 23:20<\/span><span>2026\/3\/1 · 21\.1 km<\/span><\/li><\/ol>/);
   assert.match(five, /data-click="use-personal-best" data-km="5" data-seconds="1350" data-label="5K">設為比賽參考成績<\/button>/);
   assert.match(ten, /review-value">—<\/div><div class="review-sub">還沒有 10 km 以上、有時間的路跑<\/div>/);
   assert.doesNotMatch(ten, /button/, 'nothing to hand to the race form');
-  assert.match(half, /1:38:27[\s\S]*取自 25\.0 km 的跑步/);
+  assert.match(half, /1:38:27<\/div><div class="review-sub">4:40 \/km · 2026\/3\/1 · 25\.0 km<br>/);
   assert.match(half, /data-km="21\.0975" data-seconds="5907" data-label="半馬"/);
   assert.doesNotMatch(half, /pb-others/);
 
