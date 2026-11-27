@@ -44,9 +44,10 @@ test('SPEC-135 every dialog registers how it closes; Escape and backdrop clicks 
   documentHandlers.keydown(event);
   assert.deepEqual(closed.splice(0), ['closeRunModal']);
 
-  // A backdrop click closes only the dialogs that opt in, as before; a form with typed input stays.
+  // A backdrop click closes only the dialogs that opt in; SPEC-137 adds the shoe form, which used to
+  // close on a backdrop click through its own handler.
   for (const node of overlays) node.handlers.click({ target: node });
-  assert.deepEqual(closed.splice(0).sort(), ['closeExportModal', 'closeRunModal', 'closeShoeAnalytics', 'closeWorkspaceModal']);
+  assert.deepEqual(closed.splice(0).sort(), ['closeExportModal', 'closeModal', 'closeRunModal', 'closeShoeAnalytics', 'closeWorkspaceModal']);
   for (const node of overlays) node.handlers.click({ target: {} });
   assert.deepEqual(closed, [], 'a click inside the dialog never closes it');
 

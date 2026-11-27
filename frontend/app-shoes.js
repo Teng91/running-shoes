@@ -60,12 +60,8 @@ class ShoeModal {
     this.btnMove = document.getElementById('btn-move');
     this.titleEl = document.getElementById('modal-title');
     this.monthlyRow = document.getElementById('f-monthly').parentElement;
-
-    // 綁定一次
-    this.el.querySelector('.btn-primary').onclick = () => this.submit();
-    this.btnDelete.onclick = () => this.delete();
-    this.btnMove.onclick = () => this.move();
-    this.el.onclick = e => { if (e.target === this.el) this.close(); };
+    // SPEC-137: saving, deleting, moving and closing go through registerUiActions and
+    // registerDialog below, like every other dialog.
   }
 
   // ── 公開 API ──────────────────────────────────────────────
@@ -118,11 +114,11 @@ class ShoeModal {
 
   _updateUI({ title, showDelete, showMove, moveText, monthly, monthlyVisible }) {
     this.titleEl.textContent = title;
-    this.btnDelete.style.display = showDelete ? '' : 'none';
-    this.btnMove.style.display = showMove ? '' : 'none';
+    this.btnDelete.hidden = !showDelete;
+    this.btnMove.hidden = !showMove;
     document.getElementById('shoe-secondary-actions').hidden = !showDelete && !showMove;
     this.btnMove.textContent = moveText || '';
-    this.monthlyRow.style.display = monthlyVisible ? '' : 'none';
+    this.monthlyRow.hidden = !monthlyVisible;
     document.getElementById('f-monthly').value = monthly;
   }
 
@@ -289,7 +285,8 @@ registerWorkspaceEditor('shoe', {
 });
 
 // SPEC-135: Escape closes this dialog through the shared registry (app-lifecycle.js).
-registerDialog('modal', { close: closeModal });
+// SPEC-137: a backdrop click closes it too, as its own click handler used to.
+registerDialog('modal', { close: closeModal, backdrop: true });
 
 // SPEC-113: this feature's delegated UI actions; markup names them with data-click and the like.
 registerUiActions({
@@ -298,6 +295,11 @@ registerUiActions({
     'edit-shoe': element => openEditModal(Number(element.dataset.index)),
     'edit-retired-shoe': element => openRetiredEditModal(Number(element.dataset.index)),
     'close-shoe-modal': () => closeModal(),
+    'delete-shoe': () => shoeModal.delete(),
+    'move-shoe': () => shoeModal.move(),
+  },
+  submit: {
+    'save-shoe': () => shoeModal.submit(),
   },
   dblclick: {
     'inline-edit': element => inlineEditRow(

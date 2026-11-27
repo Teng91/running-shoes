@@ -5,8 +5,11 @@ let coreDataStore = null;
 
 async function initializeDataResources() {
   const version = document.querySelector('meta[name="app-asset-version"]').content;
-  const { createResourceStore } = await import('./runtime/resource-store.mjs?v=' + encodeURIComponent(version));
-  const { createCoreDataStore } = await import('./runtime/core-data.mjs?v=' + encodeURIComponent(version));
+  // SPEC-137: independent modules load together (the page preloads every module).
+  const [{ createResourceStore }, { createCoreDataStore }] = await Promise.all([
+    import('./runtime/resource-store.mjs?v=' + encodeURIComponent(version)),
+    import('./runtime/core-data.mjs?v=' + encodeURIComponent(version)),
+  ]);
   useCoreDataStore(createCoreDataStore());
   resourceStore = createResourceStore({ session: { capture: captureAuthSession, current: isCurrentAuthSession } });
   registerResourceCaches();

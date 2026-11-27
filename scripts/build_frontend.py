@@ -6,8 +6,11 @@ import hashlib
 import json
 import re
 from pathlib import Path
+from urllib.parse import quote
 
 ROOT = Path(__file__).resolve().parents[1]
+# The characters JavaScript's encodeURIComponent leaves as they are (besides letters and digits).
+URI_COMPONENT_SAFE = "-_.!~*'()"
 FRONTEND = ROOT / "frontend"
 STATIC_SHELL_FILES = (
     "offline.html", "manifest.webmanifest", "favicon.svg", "icons/icon-192.png",
@@ -73,6 +76,13 @@ def frontend_outputs() -> dict[Path, str]:
     html = html.replace(
         "<!-- app-scripts -->",
         "\n".join(f'<script src="/{name}?v={version}"></script>' for name in scripts),
+    ).replace(
+        # SPEC-137: every native module is imported during startup; fetching them all in parallel up
+        # front turns the chain of dynamic imports into lookups. The URL must be the one the import
+        # builds ('./runtime/x.mjs?v=' + encodeURIComponent(version)), or the browser fetches twice.
+        "<!-- module-preloads -->",
+        "\n".join(f'<link rel="modulepreload" href="/{name}?v={quote(version, safe=URI_COMPONENT_SAFE)}">'
+                  for name in modules),
     ).replace("{{asset_version}}", version)
     # Hash after every other substitution: the policy covers the final script text.
     html = html.replace("{{content_security_policy}}", content_security_policy(html))

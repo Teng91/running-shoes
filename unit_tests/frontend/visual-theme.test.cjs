@@ -52,7 +52,10 @@ test('SPEC-051 navigation and brand use line icons, and English eyebrows stay de
     // The visible label stays the last span: the mobile header copies it.
     assert.match(tab, /<span class="tab-icon" aria-hidden="true"><svg viewBox="0 0 24 24"[^>]*stroke="currentColor"[\s\S]*<\/svg><\/span><span>[^<]+<\/span><\/button>$/);
   }
-  assert.match(sidebar, /<div class="app-brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32" fill="currentColor"/);
+  assert.match(sidebar, /<div class="app-brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32" fill="currentColor" aria-hidden="true"><use href="#brand-mark"\/><\/svg>/);
+  // SPEC-137: one symbol holds the mark; the sidebar and the three sign-in screens use it.
+  assert.equal((htmlSource.match(/<use href="#brand-mark"\/>/g) || []).length, 4);
+  assert.equal((htmlSource.match(/<symbol id="brand-mark" viewBox="0 0 32 32">/g) || []).length, 1);
   assert.match(htmlSource, /<div class="app-boot-mark" aria-hidden="true"><svg/);
   assert.doesNotMatch(htmlSource, /[🏃👟📊✨🔄]/u);
   for (const [heading, eyebrow] of [['goal-title', 'ANNUAL GOAL'], ['trends-title', 'TRAINING LOAD'], ['run-table-title', 'ACTIVITIES']]) {
@@ -92,7 +95,7 @@ test('SPEC-052 home-screen icons are rendered at their declared sizes from the v
   assert.equal(fs.existsSync('frontend/icons/app-icon-source.png'), false, 'the indigo raster source is retired');
 
   const source = fs.readFileSync('frontend/icons/app-icon.svg', 'utf8');
-  const brand = htmlSource.slice(htmlSource.indexOf('<div class="app-brand-mark"'), htmlSource.indexOf('</svg>', htmlSource.indexOf('<div class="app-brand-mark"')));
+  const brand = htmlSource.slice(htmlSource.indexOf('<symbol id="brand-mark"'), htmlSource.indexOf('</symbol>', htmlSource.indexOf('<symbol id="brand-mark"')));
   // The mark group (after the background grid pattern) reuses the in-app brand paths exactly.
   assert.deepEqual(pathData(source.slice(source.indexOf('<g filter='))), pathData(brand));
   assert.match(source, /<rect width="512" height="512" fill="#07090c"\/>/, 'full-bleed opaque background for iOS and masks');
@@ -104,7 +107,7 @@ test('SPEC-052 home-screen icons are rendered at their declared sizes from the v
 
 test('SPEC-052 the browser tab uses the volt SVG mark with a PNG fallback', () => {
   const favicon = fs.readFileSync('frontend/favicon.svg', 'utf8');
-  const brand = htmlSource.slice(htmlSource.indexOf('<div class="app-brand-mark"'), htmlSource.indexOf('</svg>', htmlSource.indexOf('<div class="app-brand-mark"')));
+  const brand = htmlSource.slice(htmlSource.indexOf('<symbol id="brand-mark"'), htmlSource.indexOf('</symbol>', htmlSource.indexOf('<symbol id="brand-mark"')));
   assert.deepEqual(pathData(favicon), pathData(brand));
   assert.match(favicon, /fill="#07090c"[\s\S]*fill="#c8ff3c"/);
   assert.doesNotMatch(favicon, /#818cf8|<text/);

@@ -6,23 +6,6 @@ test('the external application script parses', () => {
   });
 });
 
-test('run history is fetched by month and paginated', async () => {
-  const calls = [];
-  const pages = [Array.from({ length: 200 }, (_, id) => ({ id })), [{ id: 201 }]];
-  const context = vm.createContext({
-    URLSearchParams,
-    apiGet: async url => { calls.push(url); return pages.shift(); },
-  });
-  vm.runInContext('const RUN_PAGE_SIZE = 200;\n' + extract('fetchRunPages'), context);
-  const rows = await context.fetchRunPages({ year: 2026, month: 8 });
-  assert.equal(rows.length, 201);
-  assert.match(calls[0], /year=2026/);
-  assert.match(calls[0], /month=8/);
-  assert.match(calls[0], /limit=200/);
-  assert.match(calls[1], /offset=200/);
-  assert.doesNotMatch(calls[0], /offset=200/);
-});
-
 test('report completion timestamps are localized by the browser', () => {
   const context = vm.createContext({ Date });
   vm.runInContext(extract('formatLocalTimestamp'), context);

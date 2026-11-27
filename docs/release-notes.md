@@ -4,6 +4,15 @@
 每版的摘要見 [CHANGELOG.md](../CHANGELOG.md)；目前的功能與操作方式以 [README](../README.md) 為準。
 這裡保留當時的文字，後續版本可能已調整其中的行為。
 
+### 前端 review 修正（SPEC-137，v5.3.2）
+
+- 新增 `--warning-text`、`--strava-text` token，錯誤字改用 `--danger-text`；刪除未使用的 `--cyan`、`--green`、`--yellow`、`--radius-sm`、`--boot-card` 與 `.inline-add`、`.metric-source` 等規則；14 條元件層級的 `[hidden]` 規則由全域規則取代；啟動畫面的版面只寫在 inline critical style。
+- 跑鞋視窗改成 `<form data-submit="save-shoe" novalidate>`，刪除、移動、儲存與關閉都經 `registerUiActions`／`registerDialog('modal', { backdrop: true })`；點背景仍會關閉（原本由自己的監聽處理）。
+- 隱私說明移到 `templates/auth-privacy.html`，logo 改用一個 `<symbol>`；inline style 改成 class，登入畫面、主畫面與註冊、重設密碼表單改用 `hidden` 屬性切換。`fetchRunPages()` 已移除。
+- `build_frontend.py` 在 `<head>` 為每個原生模組產生 `modulepreload`；`initializeFeatureLifecycle`、`initializeDataResources` 以 `Promise.all` 載入兩個模組。
+- 沒有收斂響應式斷點，也沒有延後載入 Chart.js 或合併 script，理由見 SPEC-137 的 Non-goals。
+- 沒有 schema 變更，可直接回滾至 v5.3.1 image。Asset 5.3.2／shell v140。
+
 ### 個人最佳的跑步距離（SPEC-136，v5.3.1）
 
 - `app-pace-charts.personalBestCard()` 的最佳成績與第 2、3 名都以「日期 · 跑步距離」標示，不再只在 `from_longer_run` 時才寫距離；API 不變（`from_longer_run` 仍回傳）。

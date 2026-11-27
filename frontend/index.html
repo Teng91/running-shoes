@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-2bT6CtJchO06Xn0AApmW9o5a2pDMJz9hpC08eAf5DuI=' 'sha256-03bcOQeHecByaBjKyWaE3zaVWPIlPVelCglM9pQh0BU=' 'sha256-IgIQHS5JQWyGqVRXIJS9m3tyA0JiZ2nFTbsaGJpbbDc='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'self'">
-<meta name="app-asset-version" content="5.3.1">
+<meta name="app-asset-version" content="5.3.2">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>跑鞋追蹤 Dashboard</title>
 <meta name="theme-color" content="#07090c">
@@ -25,8 +25,8 @@ try {
 </script>
 <style>
 /* Critical startup UI must not depend on the non-blocking app stylesheet. */
-:root { --boot-bg: #07090c; --boot-card: #0f1318; --boot-border: #1d242d; --boot-text: #edf1f5; --boot-dim: #8893a2; --boot-accent: #c8ff3c; }
-html.boot-light { --boot-bg: #eef1f4; --boot-card: #fff; --boot-border: #dfe4ea; --boot-text: #0b1015; --boot-dim: #5a6472; --boot-accent: #7fb000; }
+:root { --boot-bg: #07090c; --boot-border: #1d242d; --boot-text: #edf1f5; --boot-dim: #8893a2; --boot-accent: #c8ff3c; }
+html.boot-light { --boot-bg: #eef1f4; --boot-border: #dfe4ea; --boot-text: #0b1015; --boot-dim: #5a6472; --boot-accent: #7fb000; }
 body { margin: 0; opacity: 1 !important; }
 .app-boot { position: fixed; inset: 0; z-index: 2000; display: grid; place-items: center; min-height: 100vh; min-height: 100dvh; padding: 24px; box-sizing: border-box; background: var(--boot-bg); color: var(--boot-text); font-family: 'Segoe UI', system-ui, sans-serif; transition: opacity .18s ease, visibility .18s ease; }
 .app-boot-card { width: min(100%, 320px); text-align: center; }
@@ -42,7 +42,7 @@ body { margin: 0; opacity: 1 !important; }
 @keyframes app-boot-critical-run { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
 @media (prefers-reduced-motion: reduce) { .app-boot { transition: none; } .app-boot-spinner::after { animation: none; width: 100%; opacity: .45; } }
 </style>
-<link id="app-styles" rel="preload" href="/styles.css?v=5.3.1" as="style">
+<link id="app-styles" rel="preload" href="/styles.css?v=5.3.2" as="style">
 <script>
 // Non-blocking stylesheet: apply the preload once it arrives. A script rather
 // than an onload attribute, so the page CSP can allow it by hash (SPEC-054).
@@ -64,7 +64,16 @@ body { margin: 0; opacity: 1 !important; }
   } catch (error) {}
 })();
 </script>
-<noscript><link rel="stylesheet" href="/styles.css?v=5.3.1"></noscript>
+<noscript><link rel="stylesheet" href="/styles.css?v=5.3.2"></noscript>
+<link rel="modulepreload" href="/runtime/feature-lifecycle.mjs?v=5.3.2">
+<link rel="modulepreload" href="/runtime/run-controller.mjs?v=5.3.2">
+<link rel="modulepreload" href="/runtime/form-operations.mjs?v=5.3.2">
+<link rel="modulepreload" href="/runtime/resource-store.mjs?v=5.3.2">
+<link rel="modulepreload" href="/runtime/strava-controller.mjs?v=5.3.2">
+<link rel="modulepreload" href="/runtime/workspace-controller.mjs?v=5.3.2">
+<link rel="modulepreload" href="/runtime/account-restore-controller.mjs?v=5.3.2">
+<link rel="modulepreload" href="/runtime/core-data.mjs?v=5.3.2">
+<link rel="modulepreload" href="/runtime/race-plan-view.mjs?v=5.3.2">
 </head>
 <body>
 
@@ -105,12 +114,14 @@ window.__appBootLegacyPoll = window.setInterval(function () {
 </script>
 <noscript><p class="app-boot-noscript">需要啟用 JavaScript 才能使用跑鞋追蹤。</p></noscript>
 
+<svg class="svg-sprite" width="0" height="0" aria-hidden="true" focusable="false"><symbol id="brand-mark" viewBox="0 0 32 32"><path d="M6 9.5h7l-1.6 3h-7z"/><path d="M4 14.5h9l-1.6 3h-9z" opacity=".7"/><path d="M6 19.5h7l-1.6 3h-7z" opacity=".45"/><path d="M14 6h7l8 10-8 10h-7l8-10z"/></symbol></svg>
+
 <!-- Auth View -->
-<div class="container" id="auth-view" style="display:none;">
+<div class="container" id="auth-view" hidden>
 
   <!-- Login Form -->
   <form class="auth-box" id="login-form" data-submit="login">
-    <div class="auth-mark" aria-hidden="true"><svg viewBox="0 0 32 32" fill="currentColor" aria-hidden="true"><path d="M6 9.5h7l-1.6 3h-7z"/><path d="M4 14.5h9l-1.6 3h-9z" opacity=".7"/><path d="M6 19.5h7l-1.6 3h-7z" opacity=".45"/><path d="M14 6h7l8 10-8 10h-7l8-10z"/></svg></div>
+    <div class="auth-mark" aria-hidden="true"><svg viewBox="0 0 32 32" fill="currentColor" aria-hidden="true"><use href="#brand-mark"/></svg></div>
     <h1 data-eyebrow="RUN · GEAR · DATA">跑鞋追蹤</h1>
     <div class="form-group">
       <label for="login-username">帳號</label>
@@ -121,24 +132,25 @@ window.__appBootLegacyPoll = window.setInterval(function () {
       <input id="login-password" type="password" autocomplete="current-password" placeholder="Password">
     </div>
     <div class="auth-error" id="auth-error"></div>
-    <button type="submit" class="btn btn-primary" style="width:100%;margin-top:8px;">登入</button>
-    <div style="text-align:center;margin-top:12px;">
-      <a href="#" data-click="show-register-form" style="color:var(--accent-light);font-size:13px;">註冊</a>
+    <button type="submit" class="btn btn-primary btn-block auth-submit">登入</button>
+    <div class="auth-switch">
+      <a href="#" data-click="show-register-form">註冊</a>
     </div>
     <div class="auth-forgot"><a href="#" id="forgot-link" data-click="show-reset-form">忘記密碼？</a></div>
-    <details class="auth-privacy">
-      <summary>隱私說明</summary>
-      <p>這裡保存帳號、密碼的雜湊（不存原本的密碼）、跑鞋、跑步紀錄、月跑量、目標與 AI 月報。匯入 Strava CSV 時只取跑步的日期、距離、時間與鞋款，不保存檔案本身。</p>
-      <p>每個帳號只看得到自己的資料。站長可以存取伺服器上的資料庫，只用於維護與排除問題；管理員功能只能產生邀請碼和幫忙重設密碼，看不到別人的跑步資料。</p>
-      <p>使用 AI 教練或月報時，相關的跑步統計會送到 OpenRouter 上的免費模型產生回答。資料存放在 Fly.io 新加坡機房。</p>
-      <p>如果你綁定 email，只會用來寄送綁定與重設密碼的驗證碼，可以隨時移除。</p>
-      <p>登入後到「資料與同步」可以下載自己的資料，也可以永久刪除帳號與所有資料。</p>
-    </details>
+    <!-- SPEC-137: the privacy notice under the sign-in and sign-up forms; edit it here once. -->
+<details class="auth-privacy">
+  <summary>隱私說明</summary>
+  <p>這裡保存帳號、密碼的雜湊（不存原本的密碼）、跑鞋、跑步紀錄、月跑量、目標與 AI 月報。匯入 Strava CSV 時只取跑步的日期、距離、時間與鞋款，不保存檔案本身。</p>
+  <p>每個帳號只看得到自己的資料。站長可以存取伺服器上的資料庫，只用於維護與排除問題；管理員功能只能產生邀請碼和幫忙重設密碼，看不到別人的跑步資料。</p>
+  <p>使用 AI 教練或月報時，相關的跑步統計會送到 OpenRouter 上的免費模型產生回答。資料存放在 Fly.io 新加坡機房。</p>
+  <p>如果你綁定 email，只會用來寄送綁定與重設密碼的驗證碼，可以隨時移除。</p>
+  <p>登入後到「資料與同步」可以下載自己的資料，也可以永久刪除帳號與所有資料。</p>
+</details>
   </form>
 
   <!-- Register Form -->
-  <form class="auth-box" id="register-form" style="display:none;" data-submit="register">
-    <div class="auth-mark" aria-hidden="true"><svg viewBox="0 0 32 32" fill="currentColor" aria-hidden="true"><path d="M6 9.5h7l-1.6 3h-7z"/><path d="M4 14.5h9l-1.6 3h-9z" opacity=".7"/><path d="M6 19.5h7l-1.6 3h-7z" opacity=".45"/><path d="M14 6h7l8 10-8 10h-7l8-10z"/></svg></div>
+  <form class="auth-box" id="register-form" hidden data-submit="register">
+    <div class="auth-mark" aria-hidden="true"><svg viewBox="0 0 32 32" fill="currentColor" aria-hidden="true"><use href="#brand-mark"/></svg></div>
     <h1 data-eyebrow="NEW ATHLETE">註冊帳號</h1>
     <div class="form-group">
       <label for="reg-username">帳號</label>
@@ -158,30 +170,31 @@ window.__appBootLegacyPoll = window.setInterval(function () {
     </div>
     <p class="auth-note" id="reg-mode-note" role="status" hidden></p>
     <div class="auth-error" id="reg-error"></div>
-    <button type="submit" class="btn btn-primary" style="width:100%;margin-top:8px;">註冊</button>
-    <div style="text-align:center;margin-top:12px;">
-      <a href="#" data-click="show-login-form" style="color:var(--accent-light);font-size:13px;">已有帳號？登入</a>
+    <button type="submit" class="btn btn-primary btn-block auth-submit">註冊</button>
+    <div class="auth-switch">
+      <a href="#" data-click="show-login-form">已有帳號？登入</a>
     </div>
-    <details class="auth-privacy">
-      <summary>隱私說明</summary>
-      <p>這裡保存帳號、密碼的雜湊（不存原本的密碼）、跑鞋、跑步紀錄、月跑量、目標與 AI 月報。匯入 Strava CSV 時只取跑步的日期、距離、時間與鞋款，不保存檔案本身。</p>
-      <p>每個帳號只看得到自己的資料。站長可以存取伺服器上的資料庫，只用於維護與排除問題；管理員功能只能產生邀請碼和幫忙重設密碼，看不到別人的跑步資料。</p>
-      <p>使用 AI 教練或月報時，相關的跑步統計會送到 OpenRouter 上的免費模型產生回答。資料存放在 Fly.io 新加坡機房。</p>
-      <p>如果你綁定 email，只會用來寄送綁定與重設密碼的驗證碼，可以隨時移除。</p>
-      <p>登入後到「資料與同步」可以下載自己的資料，也可以永久刪除帳號與所有資料。</p>
-    </details>
+    <!-- SPEC-137: the privacy notice under the sign-in and sign-up forms; edit it here once. -->
+<details class="auth-privacy">
+  <summary>隱私說明</summary>
+  <p>這裡保存帳號、密碼的雜湊（不存原本的密碼）、跑鞋、跑步紀錄、月跑量、目標與 AI 月報。匯入 Strava CSV 時只取跑步的日期、距離、時間與鞋款，不保存檔案本身。</p>
+  <p>每個帳號只看得到自己的資料。站長可以存取伺服器上的資料庫，只用於維護與排除問題；管理員功能只能產生邀請碼和幫忙重設密碼，看不到別人的跑步資料。</p>
+  <p>使用 AI 教練或月報時，相關的跑步統計會送到 OpenRouter 上的免費模型產生回答。資料存放在 Fly.io 新加坡機房。</p>
+  <p>如果你綁定 email，只會用來寄送綁定與重設密碼的驗證碼，可以隨時移除。</p>
+  <p>登入後到「資料與同步」可以下載自己的資料，也可以永久刪除帳號與所有資料。</p>
+</details>
   </form>
 
   <!-- Forgot Password Form (SPEC-079) -->
-  <form class="auth-box" id="reset-form" style="display:none;" data-submit="reset-password">
-    <div class="auth-mark" aria-hidden="true"><svg viewBox="0 0 32 32" fill="currentColor" aria-hidden="true"><path d="M6 9.5h7l-1.6 3h-7z"/><path d="M4 14.5h9l-1.6 3h-9z" opacity=".7"/><path d="M6 19.5h7l-1.6 3h-7z" opacity=".45"/><path d="M14 6h7l8 10-8 10h-7l8-10z"/></svg></div>
+  <form class="auth-box" id="reset-form" hidden data-submit="reset-password">
+    <div class="auth-mark" aria-hidden="true"><svg viewBox="0 0 32 32" fill="currentColor" aria-hidden="true"><use href="#brand-mark"/></svg></div>
     <h1 data-eyebrow="ACCOUNT RECOVERY">忘記密碼</h1>
     <p class="auth-note">輸入帳號或已綁定的 email，驗證碼會寄到綁定的信箱。還沒綁定 email 的帳號，請找管理員產生臨時密碼。</p>
     <div class="form-group">
       <label for="reset-identifier">帳號或 email</label>
       <input id="reset-identifier" autocomplete="username" autocapitalize="none" maxlength="254">
     </div>
-    <button type="button" class="btn btn-edit" style="width:100%;" data-click="send-reset-code">寄送驗證碼</button>
+    <button type="button" class="btn btn-edit btn-block" data-click="send-reset-code">寄送驗證碼</button>
     <p class="auth-note" id="reset-sent" role="status" aria-live="polite"></p>
     <div class="form-group">
       <label for="reset-code">驗證碼</label>
@@ -196,9 +209,9 @@ window.__appBootLegacyPoll = window.setInterval(function () {
       <input id="reset-new-password2" type="password" autocomplete="new-password">
     </div>
     <div class="auth-error" id="reset-error"></div>
-    <button type="submit" class="btn btn-primary" style="width:100%;margin-top:8px;">重設密碼</button>
-    <div style="text-align:center;margin-top:12px;">
-      <a href="#" data-click="show-login-form" style="color:var(--accent-light);font-size:13px;">回登入頁</a>
+    <button type="submit" class="btn btn-primary btn-block auth-submit">重設密碼</button>
+    <div class="auth-switch">
+      <a href="#" data-click="show-login-form">回登入頁</a>
     </div>
   </form>
 
@@ -211,10 +224,10 @@ window.__appBootLegacyPoll = window.setInterval(function () {
 </div>
 
 <!-- App View -->
-<div class="app-shell" id="app-view" style="display:none;">
+<div class="app-shell" id="app-view" hidden>
   <aside class="app-sidebar">
     <div class="app-brand">
-      <div class="app-brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32" fill="currentColor" aria-hidden="true"><path d="M6 9.5h7l-1.6 3h-7z"/><path d="M4 14.5h9l-1.6 3h-9z" opacity=".7"/><path d="M6 19.5h7l-1.6 3h-7z" opacity=".45"/><path d="M14 6h7l8 10-8 10h-7l8-10z"/></svg></div>
+      <div class="app-brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32" fill="currentColor" aria-hidden="true"><use href="#brand-mark"/></svg></div>
       <div>
         <h1>跑鞋追蹤</h1>
         <p class="subtitle" id="today-label"></p>
@@ -386,7 +399,7 @@ window.__appBootLegacyPoll = window.setInterval(function () {
         </li>
         <li data-onboarding-step="goal">
           <span class="onboarding-check" aria-hidden="true">3</span>
-          <div class="onboarding-text"><strong>設定月目標</strong><p>每月想跑多少公里，「跑量與目標」頁會顯示進度。</p></div>
+          <div class="onboarding-text"><strong>設定月目標</strong><p>每月想跑多少公里，「訓練分析」頁會顯示進度。</p></div>
           <div class="onboarding-actions"><button type="button" class="btn btn-sm btn-primary" data-click="onboarding-set-goal">設定目標</button></div>
         </li>
       </ol>
@@ -528,7 +541,7 @@ window.__appBootLegacyPoll = window.setInterval(function () {
         <h2 class="trends-heading" id="pb-title" data-eyebrow="PERSONAL BESTS">個人最佳</h2>
       </div>
       <div class="review-grid pb-grid" id="personal-bests"></div>
-      <p class="chart-note" id="personal-bests-note">不分年份，取每個距離最快的前 3 名，每筆後面是那次跑步的日期與實際距離。比較長的跑步以那次的平均配速換算成該距離，例如一場半馬也能是 5K 最佳；實際分段可能更快。只算有時間的路跑，時間是移動時間。</p>
+      <p class="chart-note">不分年份，取每個距離最快的前 3 名，每筆後面是那次跑步的日期與實際距離。比較長的跑步以那次的平均配速換算成該距離，例如一場半馬也能是 5K 最佳；實際分段可能更快。只算有時間的路跑，時間是移動時間。</p>
     </section>
 
     <section class="trends-section pace-section" aria-labelledby="race-title">
@@ -691,7 +704,7 @@ window.__appBootLegacyPoll = window.setInterval(function () {
             <select id="report-history" data-change="report-history"><option value="">選擇已儲存的月份…</option></select>
           </div>
           <div class="form-group">
-            <label for="report-model">本日免費模型</label>
+            <label for="report-model">今日免費模型</label>
             <select id="report-model"></select>
           </div>
         </div>
@@ -710,10 +723,10 @@ window.__appBootLegacyPoll = window.setInterval(function () {
 
 <!-- Add/Edit Modal -->
 <div class="modal-overlay" id="modal">
-  <div class="modal">
+  <form class="modal" data-submit="save-shoe" novalidate>
     <h2 id="modal-title">新增跑鞋</h2>
+    <div class="form-group"><label for="f-nickname">暱稱（選填）</label><input id="f-nickname" maxlength="80" placeholder="例如：晨跑小白"></div>
     <div class="form-row">
-      <div class="form-group"><label for="f-nickname">暱稱（選填）</label><input id="f-nickname" maxlength="80" placeholder="例如：晨跑小白"></div>
       <div class="form-group"><label for="f-brand">品牌</label><input id="f-brand" placeholder="Mizuno"></div>
       <div class="form-group"><label for="f-model">鞋款</label><input id="f-model" placeholder="Wave Sky 7"></div>
     </div>
@@ -744,19 +757,19 @@ window.__appBootLegacyPoll = window.setInterval(function () {
     </div>
     <div class="modal-actions">
       <div class="modal-actions-secondary" id="shoe-secondary-actions" hidden>
-        <button class="btn btn-delete" id="btn-delete" style="display:none">刪除</button>
-        <button class="btn btn-edit" id="btn-move" style="display:none">移動</button>
+        <button type="button" class="btn btn-delete" id="btn-delete" data-click="delete-shoe" hidden>刪除</button>
+        <button type="button" class="btn btn-edit" id="btn-move" data-click="move-shoe" hidden>移動</button>
       </div>
       <div class="modal-actions-primary">
-        <button class="btn btn-cancel" data-click="close-shoe-modal">取消</button>
-        <button class="btn btn-primary">儲存</button>
+        <button type="button" class="btn btn-cancel" data-click="close-shoe-modal">取消</button>
+        <button type="submit" class="btn btn-primary">儲存</button>
       </div>
     </div>
-  </div>
+  </form>
 </div>
 <!-- Run Edit Modal -->
 <div class="modal-overlay" id="run-modal">
-  <form class="modal" style="width: 520px;" data-submit="save-run">
+  <form class="modal run-dialog" data-submit="save-run">
     <h2>編輯跑步紀錄</h2>
     <div class="form-row">
       <div class="form-group"><label for="edit-run-date">日期</label><input id="edit-run-date" type="date" required data-change="run-date-warning" data-form="edit-run"></div>
@@ -780,7 +793,7 @@ window.__appBootLegacyPoll = window.setInterval(function () {
 <div class="modal-overlay" id="strava-modal">
   <div class="modal strava-modal">
     <h2>匯入 Strava 跑步紀錄</h2>
-    <p style="color:var(--text-dim);font-size:13px;line-height:1.6">請選擇 Strava 匯出資料夾中的 <code>activities.csv</code>。系統會匯入跑步與越野跑；健行與步行要勾選才匯入。以活動 ID 避免重複。</p>
+    <p class="strava-intro">請選擇 Strava 匯出資料夾中的 <code>activities.csv</code>。系統會匯入跑步與越野跑；健行與步行要勾選才匯入。以活動 ID 避免重複。</p>
     <div id="strava-history" class="strava-summary"></div>
     <div class="form-group"><label for="strava-file">activities.csv</label><input id="strava-file" type="file" accept=".csv,text/csv" data-change="preview-strava"></div>
     <div class="form-row">
@@ -801,7 +814,7 @@ window.__appBootLegacyPoll = window.setInterval(function () {
 </div>
 <!-- Export Modal -->
 <div class="modal-overlay" id="export-modal">
-  <div class="modal" style="width: 380px;">
+  <div class="modal export-dialog">
     <h2 id="export-modal-title">匯出跑鞋資料</h2>
     <div class="form-group">
       <label for="export-mode">匯出範圍</label>
@@ -961,44 +974,44 @@ window.__appBootLegacyPoll = window.setInterval(function () {
 
 <script src="/vendor/chart.umd.min.js"></script>
 <script src="/vendor/marked.min.js"></script>
-<script src="/app-boot.js?v=5.3.1"></script>
-<script src="/app-lifecycle.js?v=5.3.1"></script>
-<script src="/app-state.js?v=5.3.1"></script>
-<script src="/app-session.js?v=5.3.1"></script>
-<script src="/app-api.js?v=5.3.1"></script>
-<script src="/app-auth.js?v=5.3.1"></script>
-<script src="/app-streams.js?v=5.3.1"></script>
-<script src="/app-resources.js?v=5.3.1"></script>
-<script src="/app-inline-editors.js?v=5.3.1"></script>
-<script src="/app-local-store.js?v=5.3.1"></script>
-<script src="/app-workspace.js?v=5.3.1"></script>
-<script src="/app-account.js?v=5.3.1"></script>
-<script src="/app-account-restore.js?v=5.3.1"></script>
-<script src="/app-history.js?v=5.3.1"></script>
-<script src="/app-core.js?v=5.3.1"></script>
-<script src="/app-models.js?v=5.3.1"></script>
-<script src="/app-markdown.js?v=5.3.1"></script>
-<script src="/app-agent.js?v=5.3.1"></script>
-<script src="/app-reports.js?v=5.3.1"></script>
-<script src="/app-runs.js?v=5.3.1"></script>
-<script src="/app-dates.js?v=5.3.1"></script>
-<script src="/app-strava.js?v=5.3.1"></script>
-<script src="/app-run-insights.js?v=5.3.1"></script>
-<script src="/app-shoes.js?v=5.3.1"></script>
-<script src="/app-dashboard.js?v=5.3.1"></script>
-<script src="/app-onboarding.js?v=5.3.1"></script>
-<script src="/app-exports.js?v=5.3.1"></script>
-<script src="/app-goals.js?v=5.3.1"></script>
-<script src="/app-charts.js?v=5.3.1"></script>
-<script src="/app-shoe-charts.js?v=5.3.1"></script>
-<script src="/app-monthly-charts.js?v=5.3.1"></script>
-<script src="/app-trend-charts.js?v=5.3.1"></script>
-<script src="/app-pace-charts.js?v=5.3.1"></script>
-<script src="/app-race-goal.js?v=5.3.1"></script>
-<script src="/app-spending.js?v=5.3.1"></script>
-<script src="/app-dialogs.js?v=5.3.1"></script>
-<script src="/app-updates.js?v=5.3.1"></script>
-<script src="/app-actions.js?v=5.3.1"></script>
-<script src="/app.js?v=5.3.1"></script>
+<script src="/app-boot.js?v=5.3.2"></script>
+<script src="/app-lifecycle.js?v=5.3.2"></script>
+<script src="/app-state.js?v=5.3.2"></script>
+<script src="/app-session.js?v=5.3.2"></script>
+<script src="/app-api.js?v=5.3.2"></script>
+<script src="/app-auth.js?v=5.3.2"></script>
+<script src="/app-streams.js?v=5.3.2"></script>
+<script src="/app-resources.js?v=5.3.2"></script>
+<script src="/app-inline-editors.js?v=5.3.2"></script>
+<script src="/app-local-store.js?v=5.3.2"></script>
+<script src="/app-workspace.js?v=5.3.2"></script>
+<script src="/app-account.js?v=5.3.2"></script>
+<script src="/app-account-restore.js?v=5.3.2"></script>
+<script src="/app-history.js?v=5.3.2"></script>
+<script src="/app-core.js?v=5.3.2"></script>
+<script src="/app-models.js?v=5.3.2"></script>
+<script src="/app-markdown.js?v=5.3.2"></script>
+<script src="/app-agent.js?v=5.3.2"></script>
+<script src="/app-reports.js?v=5.3.2"></script>
+<script src="/app-runs.js?v=5.3.2"></script>
+<script src="/app-dates.js?v=5.3.2"></script>
+<script src="/app-strava.js?v=5.3.2"></script>
+<script src="/app-run-insights.js?v=5.3.2"></script>
+<script src="/app-shoes.js?v=5.3.2"></script>
+<script src="/app-dashboard.js?v=5.3.2"></script>
+<script src="/app-onboarding.js?v=5.3.2"></script>
+<script src="/app-exports.js?v=5.3.2"></script>
+<script src="/app-goals.js?v=5.3.2"></script>
+<script src="/app-charts.js?v=5.3.2"></script>
+<script src="/app-shoe-charts.js?v=5.3.2"></script>
+<script src="/app-monthly-charts.js?v=5.3.2"></script>
+<script src="/app-trend-charts.js?v=5.3.2"></script>
+<script src="/app-pace-charts.js?v=5.3.2"></script>
+<script src="/app-race-goal.js?v=5.3.2"></script>
+<script src="/app-spending.js?v=5.3.2"></script>
+<script src="/app-dialogs.js?v=5.3.2"></script>
+<script src="/app-updates.js?v=5.3.2"></script>
+<script src="/app-actions.js?v=5.3.2"></script>
+<script src="/app.js?v=5.3.2"></script>
 </body>
 </html>

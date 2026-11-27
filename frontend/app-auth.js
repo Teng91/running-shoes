@@ -17,7 +17,7 @@ function runAuthViewHooks(name) {
 // SPEC-135: text typed into a sign-in form postpones an automatic update (SPEC-059).
 registerBusyCheck(() => {
   const auth = document.getElementById('auth-view');
-  return Boolean(auth && auth.style.display !== 'none' && [...auth.querySelectorAll('input')].some(input => input.value));
+  return Boolean(auth && !auth.hidden && [...auth.querySelectorAll('input')].some(input => input.value));
 });
 
 function setAuthControlsDisabled(disabled) {
@@ -84,15 +84,15 @@ function initializeAuthSync() {
 }
 
 function showLoginView() {
-  document.getElementById('auth-view').style.display = '';
-  document.getElementById('app-view').style.display = 'none';
+  document.getElementById('auth-view').hidden = false;
+  document.getElementById('app-view').hidden = true;
   showLoginForm();
   hideAppBoot();
 }
 
 function showAppView({ keepBoot = false } = {}) {
-  document.getElementById('auth-view').style.display = 'none';
-  document.getElementById('app-view').style.display = '';
+  document.getElementById('auth-view').hidden = true;
+  document.getElementById('app-view').hidden = false;
   document.getElementById('user-label').textContent = currentUser || '';
   refreshPanels();
   runAuthViewHooks('appShown');
@@ -114,19 +114,19 @@ function resetAppLayout() {
 function showLoginForm() {
   cancelAuthOperation();
   hideAppBoot();
-  document.getElementById('login-form').style.display = '';
-  document.getElementById('register-form').style.display = 'none';
+  document.getElementById('login-form').hidden = false;
+  document.getElementById('register-form').hidden = true;
   const resetForm = document.getElementById('reset-form');
-  if (resetForm) resetForm.style.display = 'none';
+  if (resetForm) resetForm.hidden = true;
   hideAuthError();
 }
 function showRegisterForm() {
   cancelAuthOperation();
   hideAppBoot();
-  document.getElementById('login-form').style.display = 'none';
-  document.getElementById('register-form').style.display = '';
+  document.getElementById('login-form').hidden = true;
+  document.getElementById('register-form').hidden = false;
   const resetForm = document.getElementById('reset-form');
-  if (resetForm) resetForm.style.display = 'none';
+  if (resetForm) resetForm.hidden = true;
   hideRegError();
   runAuthViewHooks('registerShown');
 }

@@ -143,7 +143,7 @@ function alignmentIssues() {
   const visible = node => node.getClientRects().length && getComputedStyle(node).visibility !== 'hidden';
   const box = node => node.getBoundingClientRect();
   const near = (a, b) => Math.abs(a - b) <= 1;
-  const controls = '.form-group input:not([type="checkbox"]):not([type="file"]), .form-group select, .year-select, .inline-add input, .inline-add select, .goal-settings button, .goal-heading-actions button, .inline-add button, .agent-config select, .agent-config button, .strava-group select';
+  const controls = '.form-group input:not([type="checkbox"]):not([type="file"]), .form-group select, .year-select, .goal-settings button, .goal-heading-actions button, .agent-config select, .agent-config button, .strava-group select';
   for (const node of document.querySelectorAll(controls)) {
     if (visible(node) && !near(box(node).height, 44)) issues.push(`44px control: ${node.id || node.className} is ${box(node).height}`);
   }
@@ -177,7 +177,7 @@ function alignmentIssues() {
       if (!near(box(a).top, box(b).top) || !near(box(a).bottom, box(b).bottom) || !near(box(a).width, box(b).width)) issues.push(`paired controls: ${a.id}/${b.id}`);
     }
   }
-  for (const row of document.querySelectorAll('.modal-actions, .table-header, .inline-add, .agent-config')) {
+  for (const row of document.querySelectorAll('.modal-actions, .table-header, .agent-config')) {
     if (!visible(row)) continue;
     const buttons = [...row.querySelectorAll('button')].filter(visible);
     for (const button of buttons) {
@@ -400,8 +400,8 @@ async function run(engine, name) {
       await page.locator('#app-boot').waitFor({ state: 'hidden' });
       await page.evaluate(() => {
         Chart.defaults.animation = false;
-        document.querySelector('#auth-view').style.display = 'none';
-        document.querySelector('#app-view').style.display = '';
+        document.querySelector('#auth-view').hidden = true;
+        document.querySelector('#app-view').hidden = false;
         document.querySelector('#user-label').textContent = 'runner_with_a_very_long_username';
         // SPEC-095: fixtures enter the core data store the way loaded resources do.
         const shoes = Array.from({ length: 8 }, (_, i) => ({ id: i + 1, brand: 'Mizuno',
@@ -569,13 +569,13 @@ async function run(engine, name) {
           await page.evaluate(() => inlineEditRow(inlineTableRows.get('shoe-table'), 0, 'mileage', document.querySelector('#shoe-table .editable')));
           await assertLayout(page, `${name} ${theme} ${width} shoes inline edit`);
           await page.locator('.inline-input').press('Escape');
-          await page.evaluate(() => { document.getElementById('app-view').style.display = 'none'; document.getElementById('auth-view').style.display = ''; });
+          await page.evaluate(() => { document.getElementById('app-view').hidden = true; document.getElementById('auth-view').hidden = false; });
           for (const action of ['showLoginForm', 'showRegisterForm', 'showResetForm']) {
             await page.evaluate(action => window[action](), action);
             await assertLayout(page, `${name} ${theme} ${width} ${action}`);
             if (screenshots && [390, 1440].includes(width)) await page.screenshot({ path: path.join(screenshots, `${name}-${theme}-${action}-${width}.png`), fullPage: true });
           }
-          await page.evaluate(() => { document.getElementById('app-view').style.display = ''; document.getElementById('auth-view').style.display = 'none'; });
+          await page.evaluate(() => { document.getElementById('app-view').hidden = false; document.getElementById('auth-view').hidden = true; });
           console.log(`PASS ${name} ${theme} ${width}x${height}: all tabs, populated charts, controls and dialogs`);
         }
       }
@@ -603,7 +603,7 @@ async function run(engine, name) {
         await assertLayout(page, `${name} empty ${tab}`);
       }
       await page.setViewportSize({ width: 320, height: 740 });
-      await page.evaluate(() => { document.querySelector('#app-view').style.display = 'none'; document.querySelector('#auth-view').style.display = 'block'; });
+      await page.evaluate(() => { document.querySelector('#app-view').hidden = true; document.querySelector('#auth-view').hidden = false; });
       for (const action of ['showLoginForm', 'showRegisterForm', 'showResetForm']) {
         await page.evaluate(action => window[action](), action);
         await assertLayout(page, `${name} ${action}`);

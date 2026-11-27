@@ -224,19 +224,6 @@ async function fetchRunPage({ year, month, offset = 0, day = null }) {
   return { rows: rows.slice(0, RUN_PAGE_SIZE), hasMore: rows.length > RUN_PAGE_SIZE };
 }
 
-async function fetchRunPages({ year, month = null }) {
-  const rows = [];
-  for (let offset = 0; ; offset += RUN_PAGE_SIZE) {
-    const params = new URLSearchParams({
-      year: String(year), limit: String(RUN_PAGE_SIZE), offset: String(offset),
-    });
-    if (month !== null) params.set('month', String(month));
-    const page = await apiGet('/runs?' + params.toString());
-    rows.push(...page);
-    if (page.length < RUN_PAGE_SIZE) return rows;
-  }
-}
-
 async function loadRunsForSelectedMonth({ offset = 0, day = null } = {}) {
   const requestId = ++runController.state.listRequest;
   runController.state.retryOptions = { offset, day };

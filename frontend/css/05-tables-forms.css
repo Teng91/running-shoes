@@ -48,6 +48,8 @@ body.light-theme .modal-overlay { background: rgba(11, 16, 21, .45); }
 .form-group textarea { min-height: 72px; resize: vertical; font-family: inherit; }
 .form-group textarea:focus, .form-group select:focus { outline: none; border-color: var(--accent-line); box-shadow: 0 0 0 3px rgba(var(--accent-rgb), .14); }
 .form-group input::placeholder, .form-group textarea::placeholder { color: var(--text-dim); opacity: .6; }
+.modal.export-dialog { width: 380px; }
+.modal.run-dialog { width: 520px; }
 .form-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px 12px; margin-bottom: 14px; }
 .form-row > .form-group, .run-entry-grid > .form-group { display: flex; flex-direction: column; margin-bottom: 0; }
 .form-row > .form-group > input, .form-row > .form-group > select,
@@ -55,7 +57,6 @@ body.light-theme .modal-overlay { background: rgba(11, 16, 21, .45); }
 .modal-actions { display: flex; gap: 10px; align-items: center; justify-content: flex-end; margin-top: 20px; }
 .modal-actions-secondary, .modal-actions-primary { display: flex; flex-wrap: wrap; gap: 10px; min-width: 0; }
 .modal-actions-secondary { margin-right: auto; }
-.modal-actions-secondary[hidden] { display: none; }
 .modal-actions .btn { min-height: var(--control-height); font-size: 13px; }
 .btn-cancel { background: transparent; color: var(--text); border: 1px solid var(--border-strong); }
 .btn-cancel:hover:not(:disabled) { background: var(--btn-bg); }

@@ -111,11 +111,11 @@
 }
 .user-name { color: var(--text); font-size: 13px; font-weight: 700; overflow-wrap: anywhere; }
 .user-name::before { content: "登入帳號"; display: block; margin-bottom: 3px; color: var(--text-dim); font-size: 10px; font-weight: 600; letter-spacing: .14em; }
-.sidebar-actions { display: grid; grid-template-columns: 1fr auto; gap: 6px; }
+.sidebar-actions { display: grid; }
 /* SPEC-082: light / dark / follow the system, as one segmented control. */
 .theme-choice { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2px; padding: 2px; border: 1px solid var(--border); border-radius: 8px; background: transparent; }
 .theme-option { min-height: var(--control-compact-height); padding: 4px 6px; border: 0; border-radius: 6px; background: transparent; color: var(--text-dim); font: inherit; font-size: 12px; white-space: nowrap; cursor: pointer; }
-.theme-option[aria-pressed="true"] { background: var(--accent); color: #0b1015; font-weight: 700; }
+.theme-option[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); font-weight: 700; }
 .theme-option:focus-visible { outline: 2px solid var(--accent-light); outline-offset: 1px; }
 .sidebar-actions .btn { min-height: var(--control-compact-height); padding: 6px 10px; white-space: nowrap; }
 #data-load-error, #run-load-error {
@@ -147,7 +147,6 @@
   color: var(--text);
   box-shadow: var(--shadow-pop), 0 0 0 4px rgba(var(--accent-rgb), .08);
 }
-.app-update-notice[hidden] { display: none; }
 .app-update-copy { display: grid; flex: 1 1 200px; gap: 2px; min-width: 0; }
 .app-update-copy strong { font-size: 14px; }
 .app-update-copy span { color: var(--text-dim); font-size: 12px; line-height: 1.5; }

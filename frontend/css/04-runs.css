@@ -6,13 +6,12 @@
 .onboarding-progress { color: var(--text-dim); font-size: 13px; margin-top: 2px; }
 .onboarding-steps { list-style: none; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 0; padding: 0; }
 .onboarding-steps li { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 10px; align-content: start; padding: 14px; border: 1px solid var(--border); border-radius: 14px; background: var(--card-raised); }
-.onboarding-steps li.current { border-color: var(--accent); }
+.onboarding-steps li.current { border-color: var(--accent-line); }
 .onboarding-check { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--border); font-weight: 800; font-size: 13px; }
-.onboarding-steps li.current .onboarding-check { border-color: var(--accent); color: var(--accent); }
-.onboarding-steps li.done .onboarding-check { background: var(--accent); border-color: var(--accent); color: #0b1015; }
+.onboarding-steps li.current .onboarding-check { border-color: var(--accent-line); color: var(--accent-light); }
+.onboarding-steps li.done .onboarding-check { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 .onboarding-steps li.done .onboarding-text { opacity: .65; }
 .onboarding-text p { color: var(--text-dim); font-size: 13px; margin-top: 4px; }
-.onboarding-hint[hidden] { display: none; }
 .onboarding-actions { grid-column: 2; display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
 .onboarding-steps li.done .onboarding-actions { display: none; }
 @media (max-width: 800px) {
@@ -65,7 +64,6 @@
 .run-activity-hint { display: block; margin-top: 4px; color: var(--text-dim); font-size: 0.8rem; }
 .run-activity-hint:empty { display: none; }
 .strava-walk-hike { margin: 4px 0 12px; padding: 10px 12px; border-radius: 10px; background: rgba(100, 116, 139, 0.1); }
-.strava-walk-hike[hidden] { display: none; }
 .strava-walk-hike-toggle { display: flex; align-items: center; gap: 8px; font-weight: 600; }
 .strava-walk-hike small { display: block; margin-top: 4px; color: var(--text-dim); font-size: 0.8rem; line-height: 1.5; }
 .run-activity { display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 999px; font-size: 0.72rem; font-weight: 600; background: rgba(100, 116, 139, 0.14); color: var(--text-dim); vertical-align: middle; }
@@ -102,10 +100,9 @@
 .shoe-analysis-chart { height:240px; position:relative; margin:14px 0; }
 .shoe-analysis-section { margin-top:18px; }
 .shoe-analysis-section h3 { font-size:14px; font-weight:700; margin-bottom:9px; }
-.metric-source { display:inline-block; color:var(--text-dim); font-size:10px; margin-left:5px; }
 .run-shoe-label { display: inline-flex; align-items: center; gap: 7px; }
 .run-source { display:inline-block; padding:3px 8px; border-radius:999px; font-size:11px; font-weight:600; background:var(--btn-bg); color:var(--text); border:1px solid var(--border); }
-.run-source.strava { background:rgba(252, 82, 0, .16); color:#ff7a3d; border:1px solid rgba(252, 82, 0, .3); }
+.run-source.strava { background:rgba(252, 82, 0, .16); color:var(--strava-text); border:1px solid rgba(252, 82, 0, .3); }
 .strava-last { color:var(--text-dim); font-size:12px; margin-right:10px; }
 .run-calendar { display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); gap:5px; }
 .calendar-weekday { color:var(--text-dim); text-align:center; font-size:11px; font-weight:600; letter-spacing:.06em; padding:3px; }
@@ -144,15 +141,14 @@
 .run-shoe-legend-km { font-family:var(--font-num); font-size:13px; font-weight:700; text-align:right; }
 .run-shoe-legend-count { color:var(--text-dim); text-align:right; white-space:nowrap; }
 .modal.strava-modal { width: min(680px, calc(100vw - 32px)); }
+.strava-intro { color: var(--text-dim); font-size: 13px; line-height: 1.6; }
 .strava-summary, .strava-group { background: var(--item-bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 12px; margin-top: 10px; }
-.strava-summary { color: var(--text-dim); line-height: 1.6; }
-.strava-summary { margin-bottom: 14px; }
+.strava-summary { margin-bottom: 14px; color: var(--text-dim); line-height: 1.6; }
 .strava-group { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; }
 .strava-group small { color: var(--text-dim); display: block; }
 .strava-conflicts-title { margin: 14px 0 0; font-weight: 600; }
 .strava-conflicts-status { margin: 8px 0 0; color: var(--text-dim); }
-.strava-conflicts-status.strava-date-warning { color: var(--warning, #ffb020); }
-.strava-group select { max-width: min(100%, 320px); }
+.strava-conflicts-status.strava-date-warning { color: var(--warning-text); }
 .strava-group select { min-width: 220px; max-width: 100%; padding: 10px 12px; background: var(--field-bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px; }
 .strava-groups { max-height: 300px; overflow-y: auto; margin-top: 12px; }
 .strava-sync { display: flex; align-items: flex-start; gap: 9px; margin-top: 12px; color: var(--text); font-size: 13px; line-height: 1.5; }

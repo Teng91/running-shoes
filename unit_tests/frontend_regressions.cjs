@@ -29,3 +29,4 @@ require('./frontend/onboarding.test.cjs');
 require('./frontend/agent-thinking.test.cjs');
 require('./frontend/core-data.test.cjs');
 require('./frontend/registries.test.cjs');
+require('./frontend/review-cleanup.test.cjs');
