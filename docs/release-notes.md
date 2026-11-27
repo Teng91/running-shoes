@@ -4,6 +4,11 @@
 每版的摘要見 [CHANGELOG.md](../CHANGELOG.md)；目前的功能與操作方式以 [README](../README.md) 為準。
 這裡保留當時的文字，後續版本可能已調整其中的行為。
 
+### Strava 衝突連結的健行配速上限（SPEC-141，v5.3.7）
+
+- `strava_import.manual_matches()` 的衝突帶上 Strava 活動類型（只在伺服器端，預覽回應不變）；`resolve_conflicts()` 依該類型的配速上限決定是否補移動時間。
+- 沒有 schema 或 API 變更，可直接回滾至 v5.3.6 image。Asset 5.3.7／shell v145。
+
 ### 記錄被吞掉的例外與模組私有函式（SPEC-140，v5.3.6）
 
 - `services/reports.py`（logger `running_shoes.reports`）在準備、模型串流與儲存失敗時記錄 traceback 與年月；`agent._execute_tool_safely` 記錄工具名稱與 traceback，不記參數。使用者訊息與 SSE 事件不變。

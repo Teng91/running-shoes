@@ -216,3 +216,18 @@ def test_a_conflict_with_its_own_gear_can_be_mapped_and_two_links_to_one_run_are
                      json.dumps({"p1": typed, "p2": "import"}))
     assert result.status_code == 200, result.text
     assert (result.json()["imported"], result.json()["linked_manual"], result.json()["skipped_unmapped"]) == (1, 1, 0)
+
+
+def test_a_hike_linked_through_a_conflict_keeps_its_slow_moving_time():
+    """SPEC-141: the user's conflict link checks the Strava activity's own pace bound, like an automatic link."""
+    manual = [(1, "2026-11-08", 4.0, None), (2, "2026-11-08", 9.0, None)]
+    hike = {**row("hike", "2026-11-08", 4.02, 21600), "activity_type": "hike"}  # about 90:00 per km
+    _, conflicts = manual_matches([hike, row("other", "2026-11-08", 4.05, 1500)], manual, set())
+    by_id = {conflict["strava_id"]: conflict for conflict in conflicts}
+    assert by_id["hike"]["activity_type"] == "hike" and by_id["other"]["activity_type"] is None
+
+    links, _ = resolve_conflicts(conflicts, {"hike": 1}, manual)
+    assert links[0]["duration_seconds"] == 21600
+    road = [{**conflict, "activity_type": "road"} for conflict in conflicts]
+    links, _ = resolve_conflicts(road, {"hike": 1}, manual)
+    assert links[0]["duration_seconds"] is None, "a road run that slow would be a typo"
