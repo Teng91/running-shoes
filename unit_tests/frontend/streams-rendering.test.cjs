@@ -119,13 +119,14 @@ test('shoe action groups show only relevant controls without overriding shared b
   const context = vm.createContext({ document: { getElementById: id => elements[id] } });
   vm.runInContext(definition + '\nglobalThis.Modal = ShoeModal;', context);
   const modal = Object.create(context.Modal.prototype);
-  Object.assign(modal, { formIds: {}, titleEl: {}, btnDelete: { style: {} }, btnMove: { style: {} }, monthlyRow: { style: {} } });
+  Object.assign(modal, { formIds: {}, titleEl: {}, btnDelete: {}, btnMove: {}, monthlyRow: {} });
   modal._updateUI({ title: '新增', showDelete: false, showMove: false, monthly: 60, monthlyVisible: true });
   assert.equal(elements['shoe-secondary-actions'].hidden, true);
-  assert.equal(modal.btnDelete.style.display, 'none');
+  assert.equal(modal.btnDelete.hidden, true);
+  assert.equal(modal.monthlyRow.hidden, false);
   modal._updateUI({ title: '編輯', showDelete: true, showMove: true, moveText: '移至退役', monthly: 80, monthlyVisible: true });
   assert.equal(elements['shoe-secondary-actions'].hidden, false);
-  assert.equal(modal.btnDelete.style.display, ''); assert.equal(modal.btnMove.style.display, '');
+  assert.equal(modal.btnDelete.hidden, false); assert.equal(modal.btnMove.hidden, false);
   assert.equal(modal.btnMove.textContent, '移至退役'); assert.equal(elements['f-monthly'].value, 80);
 });
 

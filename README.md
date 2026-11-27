@@ -55,8 +55,8 @@ Python 3.11 · FastAPI · SQLAlchemy · SQLite · 原生 JavaScript（不需要�
 | 項目 | 數量 |
 | --- | --- |
 | 正式版本 | 160 個 tag，2026-06 開始，目前 v5.2 |
-| 自動化測試 | Python 827 項、前端 Node 回歸 270 項、40 組版面設定（WebKit／Chromium × 亮暗 × 10 種尺寸）、真實 CRUD E2E 與 PWA 升級／離線測試 |
-| 功能規格 | 136 份 SPEC，每份含 Goals、帳號隔離、migration／rollback 與 AC 追蹤 |
+| 自動化測試 | Python 827 項、前端 Node 回歸 275 項、40 組版面設定（WebKit／Chromium × 亮暗 × 10 種尺寸）、真實 CRUD E2E 與 PWA 升級／離線測試 |
+| 功能規格 | 137 份 SPEC，每份含 Goals、帳號隔離、migration／rollback 與 AC 追蹤 |
 | API | 66 個端點，與 `unit_tests/api_contract.json` 及下方 API 表自動比對 |
 | 資料庫 | SQLite schema 14，每一版都有守衛的回滾腳本 |
 | 部署 | Fly.io 1 台 256MB 機器＋加密 volume，閒置自動休眠 |
@@ -82,7 +82,7 @@ Python 3.11 · FastAPI · SQLAlchemy · SQLite · 原生 JavaScript（不需要�
 | --- | --- | --- |
 | 後端 | FastAPI＋Pydantic v2＋SQLAlchemy 2 | 型別化的請求／回應契約，輸入驗證寫在 schema；同步 session 配合 SQLite 簡單可靠 |
 | 資料庫 | SQLite（WAL、外鍵、busy timeout） | 單機部署、備份就是一份檔案；版本化 migration 與回滾腳本 |
-| 前端 | 原生 JavaScript classic scripts＋native ES modules，`build_frontend.py` 產生 HTML／CSS／Service Worker | 沒有打包工具鏈；建置只做樣板組合、資產版號與 CSP 雜湊，可重現且可檢查 |
+| 前端 | 原生 JavaScript classic scripts＋native ES modules，`build_frontend.py` 產生 HTML／CSS／Service Worker | 沒有打包工具鏈；建置只做樣板組合、資產版號、原生模組預先載入與 CSP 雜湊，可重現且可檢查 |
 | 圖表 | Chart.js（固定版本、包含在離線 shell） | 所有圖表讀同一組主題 token，亮暗模式自動對應 |
 | AI | OpenRouter，原生 function calling、SSE 串流 | 只用當日熱門、免費且支援 tools 的模型；後端驗證模型清單 |
 | 部署 | Docker＋Fly.io（新加坡、256MB、volume） | 最小規格即可運作，閒置休眠降低成本 |
@@ -198,7 +198,7 @@ flowchart LR
 ## 品質：測試與規格
 
 - **Python 827 項**：API、交易與並行、migration 與回滾、備份往返、帳號隔離、Agent 規劃與工具（外部 LLM 與搜尋一律 mock），一律使用暫存或記憶體資料庫，不碰正式 `shoes.db`。
-- **前端 Node 回歸 270 項**：以 `vm` 載入實際前端程式，驗證狀態、競態、草稿、串流與圖表資料。
+- **前端 Node 回歸 275 項**：以 `vm` 載入實際前端程式，驗證狀態、競態、草稿、串流與圖表資料。
 - **瀏覽器**：Playwright 在 WebKit 與 Chromium 跑 40 組版面設定（含幾何對齊與無溢出）、真實 FastAPI＋暫存 SQLite 的 CRUD E2E、Service Worker 升級與離線；失敗時保存截圖與 trace。
 - **修 bug 先寫重現測試**：例如 v4.17.0 的 CI 抓到新圖表檔案重複宣告全域常數，修正時同時加上掃描所有 script 的測試。
 - **文件也被測**：`docs-check` 比對 README 的測試數、工具數、API 表、目錄樹與規格的 AC 追蹤，數字對不上 CI 就失敗。
@@ -395,7 +395,7 @@ running-shoes/
 ├── frontend/
 │   ├── index.html        # 由 templates/ 產生的完整 Dashboard HTML
 │   ├── assets.json       # Script 順序、CSS 來源與 PWA revision 的單一清單
-│   ├── templates/        # Shell、六個彈窗片段與 worker 的可編輯來源
+│   ├── templates/        # Shell、六個彈窗片段、登入頁隱私說明與 worker 的可編輯來源
 │   ├── css/              # 依責任拆分的樣式來源，產生單一 styles.css
 │   ├── runtime/
 │   │   ├── feature-lifecycle.mjs # 功能生命週期
@@ -679,7 +679,7 @@ LLM_MAX_OUTPUT_TOKENS=4096
 - **Email 找回密碼**：在「資料與同步」綁定 email（輸入寄到信箱的 6 位數驗證碼才會綁定），忘記密碼時在登入頁「忘記密碼？」用帳號或 email 收驗證碼並設定新密碼，舊的登入全部失效。驗證碼 10 分鐘內有效、每組最多試 5 次，每個帳號每天最多試 10 次（重寄不重算，SPEC-085），只存 HMAC；不論帳號是否存在都顯示同樣訊息，寄送次數有限制。需要 `SMTP_USERNAME`／`SMTP_PASSWORD`（專用 Gmail 與應用程式密碼）；沒設定時 Email 區塊隱藏，「忘記密碼」會提示找管理員產生臨時密碼（SPEC-079）
 - **資料匯出與備份**：跑鞋可匯出 **XLSX / CSV**，並可下載不含密碼或 token 的完整 JSON 帳號備份（跑鞋、日誌、月跑量、目標、目標賽事與課表週數、月報與 Strava 匯入摘要）
 - **AI 跑鞋推薦助手**：依你的實際資料給換鞋與選鞋建議（需設定 OpenRouter API Key），可從本日熱門、免費且支援工具呼叫的模型中選擇
-- **AI 月度跑步報告**：可自行選擇本日免費模型，一鍵產生指定月份的跑步報告（跑量趨勢、鞋款狀態、退役提醒與下月建議），報告自動保存、可隨時回看，不需重打 LLM；更新時間以帶 offset UTC 傳輸，生成與重新讀取皆顯示裝置本地時間
+- **AI 月度跑步報告**：可自行選擇今日免費模型，一鍵產生指定月份的跑步報告（跑量趨勢、鞋款狀態、退役提醒與下月建議），報告自動保存、可隨時回看，不需重打 LLM；更新時間以帶 offset UTC 傳輸，生成與重新讀取皆顯示裝置本地時間
 - **安全的編輯與串流**：跑步／月跑量／跑鞋視窗保存開啟時的 ID、版本與 session；重新載入後仍由後端檢查衝突。跑鞋儲存、刪除與移動防止重送，晚到回應不關閉新草稿。AI／月報共用串流處理，AI 中斷會保留可見內容、提示重試，不把半截答案放進歷史
 - **按需圖表**：只建立或更新目前分頁的圖表；未變更的分頁可重用，資料或主題更新後在切入時重繪，年度跑步資料只在訓練分析分頁需要時載入
 - **個人跑量目標**：預設自 2026 年起每月 125 km，年度目標自動以月目標 × 12 計算；目標、首頁與 AI 月報統一以逐筆跑步日誌計算。訓練分析分頁的年度目標卡依上方年份一次列出 12 個月是否達標、年度累計與今天應有的進度、年底前每週需求及本月進度；「調整目標」展開後才能修改每月目標與開始計算的年份
@@ -826,7 +826,7 @@ history 筆數與整段對話總字數，並套用每帳號、每 IP 與全站�
 - 本月報告比較上月同期，已結束月份比較完整月份；目標達成率與首頁統一以逐筆跑步日誌為準
 - 產生過程以 SSE 串流顯示；模型只負責把後端算好的數字寫成文字，不得自行計算或杜撰
 - 報告成功產生後存入資料庫（一人一月一版），同月重新產生會覆蓋舊版；之後從「歷史報告」或月份選擇器讀取，不會重打 LLM
-- 月報提供獨立的「本日免費模型」選單，選項與 AI 助手共用同一份後端核准清單，但不會偷偷沿用 AI 助手分頁目前選取的模型
+- 月報提供獨立的「今日免費模型」選單，選項與 AI 助手共用同一份後端核准清單，但不會偷偷沿用 AI 助手分頁目前選取的模型
 - 套用與 AI 助手相同的每帳號／每 IP／全站請求上限，未來月份不可產生
 - 需設定 `OPENROUTER_API_KEY`（見上方），免費模型的可用性可能波動；產生失敗時不會寫入任何資料
 
@@ -955,7 +955,7 @@ Playwright／Chromium／WebKit 齊全時，也會執行版面測試。
 避免每次停止都重跑。Hook 不會呼叫其他模型、外部 API，或傳送提示、diff、原始碼與測試輸出。
 GitHub Actions 仍會在 push／pull request 執行 `verify`，並以三個可獨立重跑的 browser jobs 執行完整版面矩陣、真實 CRUD E2E 與 PWA 升級／離線測試；push 到 main 時再依序快照、部署、檢查並發版（見「日常開發流程、自動部署與發版」）；Dependabot 每月以單一 PR 合併 GitHub Actions 更新；Python 只接收安全性更新 PR，例行升級依下方 `uv pip compile --universal` 步驟手動重編鎖定檔（Dependabot 產生的鎖定檔會遺失 Windows 條件）。
 
-本次驗證基線為 Python **827 passed**、前端回歸測試 **270 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
+本次驗證基線為 Python **827 passed**、前端回歸測試 **275 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
 版面檢查涵蓋 WebKit／Chromium、亮／暗模式與 10 組直橫向尺寸，共 40 組設定，檢查四個功能分頁與月報、三個認證表單、圖表、全部彈窗、行內編輯、停用／錯誤及空資料狀態。
 
 主要表單、工具列與彈窗操作統一為 44px 控制項；桌面表格內的緊湊操作為 36px，手機至少 44px。

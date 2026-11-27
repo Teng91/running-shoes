@@ -102,7 +102,7 @@ module.exports = async function checkSessionIsolation(browser, baseUrl) {
       window.fetch = async () => new Response('{}', { status: 401 });
       await apiGet('/synthetic-test').catch(() => {});
       check(authToken === null, 'current 401 still logs out');
-      check(document.getElementById('app-view').style.display === 'none', 'current 401 hides app');
+      check(document.getElementById('app-view').hidden, 'current 401 hides app');
       return { dashboard: true, streaming: true, authentication: true };
     });
     assert.deepEqual(result, { dashboard: true, streaming: true, authentication: true });

@@ -100,7 +100,7 @@ test('SPEC-059 work in progress postpones the automatic update until it is safe'
     ['dialog open', {}, ctx => ctx.setModal(false), ctx => ctx.setModal(true)],
     ['unsent AI text', {}, ctx => { ctx.elements['agent-input'].value = ''; }, ctx => { ctx.elements['agent-input'].value = '我的鞋'; }],
     ['typed sign-in form', {}, ctx => { ctx.elements['auth-view'].querySelectorAll = () => [{ value: '' }]; },
-      ctx => { ctx.elements['auth-view'].style.display = ''; ctx.elements['auth-view'].querySelectorAll = () => [{ value: 'demo' }]; }],
+      ctx => { ctx.elements['auth-view'].hidden = false; ctx.elements['auth-view'].querySelectorAll = () => [{ value: 'demo' }]; }],
   ];
   for (const [label, globals, finish, start = () => {}] of cases) {
     const ctx = updateContext({ globals });

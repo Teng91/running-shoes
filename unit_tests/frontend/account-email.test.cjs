@@ -23,7 +23,7 @@ test('SPEC-079 the forgot-password form checks for email only when opened and ex
     const context = emailContext(elements, { cancelAuthOperation() {},
       fetch: async () => ({ ok: true, json: async () => ({ mode: 'invite', mail_enabled: enabled }) }) });
     await context.showResetForm();
-    assert.equal(elements['reset-form'].style.display, '');
+    assert.equal(elements['reset-form'].hidden, false);
     assert.equal(/請找管理員/.test(elements['reset-sent'].textContent), !enabled);
   }
   // No request at startup: the login page stays network-free for the PWA shell.
@@ -48,7 +48,7 @@ test('SPEC-079 password reset sends the code request, answers neutrally and need
   });
   elements['login-username'].value = 'Friend';
   await context.showResetForm();
-  assert.equal(elements['reset-form'].style.display, '');
+  assert.equal(elements['reset-form'].hidden, false);
   assert.equal(elements['reset-identifier'].value, 'Friend', 'the typed username carries over');
   await context.sendResetCode();
   assert.equal(JSON.stringify(calls[0]), JSON.stringify(['/api/auth/password-reset/request', { identifier: 'Friend' }]));

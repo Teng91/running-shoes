@@ -6,8 +6,6 @@
 .agent-config select:focus { outline: none; border-color: var(--accent-line); box-shadow: 0 0 0 3px rgba(var(--accent-rgb), .14); }
 .agent-config button { white-space: nowrap; }
 .agent-config button:disabled { opacity: 0.4; cursor: not-allowed; }
-.agent-config input[type="text"] { background: var(--field-bg); border: 1px solid var(--border); color: var(--text); font-size: 13px; padding: 6px 10px; border-radius: 8px; }
-.agent-config input[type="text"]:focus { outline: none; border-color: var(--accent-line); }
 /* Dotted telemetry grid behind the conversation. */
 .agent-messages {
   background-color: var(--card);
@@ -93,7 +91,7 @@
 .report-content.is-streaming::after { content: '▍'; color: var(--accent-light); animation: blink 1s step-end infinite; }
 .report-status { margin-top: 10px; color: var(--text-dim); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
 .report-status:empty { display: none; }
-.report-status.is-error { color: var(--red); }
+.report-status.is-error { color: var(--danger-text); }
 .agent-input-area { display: flex; gap: 8px; align-items: flex-end; flex-shrink: 0; }
 .agent-input-area textarea { flex: 1; background: var(--card); border: 1px solid var(--border-strong); color: var(--text); font-size: 14px; padding: 10px 14px; border-radius: 12px; resize: none; font-family: inherit; transition: border-color .15s, box-shadow .15s; }
 .agent-input-area textarea:focus { outline: none; border-color: var(--accent-line); box-shadow: 0 0 0 3px rgba(var(--accent-rgb), .14); }
@@ -161,7 +159,7 @@
 .agent-tools .tool-item .tool-name { min-width: 0; overflow-wrap: anywhere; }
 .agent-tools .tool-item.done { color: var(--accent-light); }
 .agent-tools .tool-item.done .tool-name { text-decoration: line-through; opacity: 0.7; }
-.agent-tools .tool-item.failed { color: var(--red); }
+.agent-tools .tool-item.failed { color: var(--danger-text); }
 .agent-tools .tool-item .tool-detail { grid-column: 2; opacity: 0.8; }
 .agent-source-status {
   margin-top: 10px;
@@ -171,7 +169,7 @@
   font-size: 11px;
 }
 .agent-source-status.web-used { color: var(--accent-light); }
-.agent-source-status.web-failed { color: var(--red); }
+.agent-source-status.web-failed { color: var(--danger-text); }
 .agent-source-list { display: grid; gap: 4px; margin-top: 6px; }
 .agent-source-link {
   color: var(--accent-light);

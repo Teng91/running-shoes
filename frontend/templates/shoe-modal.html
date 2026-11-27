@@ -1,9 +1,9 @@
 <!-- Add/Edit Modal -->
 <div class="modal-overlay" id="modal">
-  <div class="modal">
+  <form class="modal" data-submit="save-shoe" novalidate>
     <h2 id="modal-title">新增跑鞋</h2>
+    <div class="form-group"><label for="f-nickname">暱稱（選填）</label><input id="f-nickname" maxlength="80" placeholder="例如：晨跑小白"></div>
     <div class="form-row">
-      <div class="form-group"><label for="f-nickname">暱稱（選填）</label><input id="f-nickname" maxlength="80" placeholder="例如：晨跑小白"></div>
       <div class="form-group"><label for="f-brand">品牌</label><input id="f-brand" placeholder="Mizuno"></div>
       <div class="form-group"><label for="f-model">鞋款</label><input id="f-model" placeholder="Wave Sky 7"></div>
     </div>
@@ -34,13 +34,13 @@
     </div>
     <div class="modal-actions">
       <div class="modal-actions-secondary" id="shoe-secondary-actions" hidden>
-        <button class="btn btn-delete" id="btn-delete" style="display:none">刪除</button>
-        <button class="btn btn-edit" id="btn-move" style="display:none">移動</button>
+        <button type="button" class="btn btn-delete" id="btn-delete" data-click="delete-shoe" hidden>刪除</button>
+        <button type="button" class="btn btn-edit" id="btn-move" data-click="move-shoe" hidden>移動</button>
       </div>
       <div class="modal-actions-primary">
-        <button class="btn btn-cancel" data-click="close-shoe-modal">取消</button>
-        <button class="btn btn-primary">儲存</button>
+        <button type="button" class="btn btn-cancel" data-click="close-shoe-modal">取消</button>
+        <button type="submit" class="btn btn-primary">儲存</button>
       </div>
     </div>
-  </div>
+  </form>
 </div>

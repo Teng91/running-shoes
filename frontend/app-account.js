@@ -185,8 +185,8 @@ async function publicPost(path, body) {
 // The login page makes no request at startup (PWA/offline); the mail check runs when the form opens.
 async function showResetForm() {
   cancelAuthOperation();
-  for (const id of ['login-form', 'register-form']) document.getElementById(id).style.display = 'none';
-  document.getElementById('reset-form').style.display = '';
+  for (const id of ['login-form', 'register-form']) document.getElementById(id).hidden = true;
+  document.getElementById('reset-form').hidden = false;
   document.getElementById('reset-error').style.display = 'none';
   const sent = document.getElementById('reset-sent');
   sent.textContent = '';

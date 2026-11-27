@@ -64,7 +64,7 @@
 - `frontend/templates/`: editable shell, modal and service-worker sources.
 - `frontend/css/`: ordered editable CSS sources; preserve cascade order.
 - `frontend/assets.json`: ordered scripts, native modules, style sources and shell revision.
-- `scripts/build_frontend.py`: deterministic frontend generation, including the page CSP with SHA-256 hashes of the shell's inline scripts; use `--write` after source changes and `--check` to verify.
+- `scripts/build_frontend.py`: deterministic frontend generation, including the page CSP with SHA-256 hashes of the shell's inline scripts and a `modulepreload` link per native module at the exact URL its `import()` builds (SPEC-137); use `--write` after source changes and `--check` to verify.
 - `scripts/release_check.py`, `release_browser.cjs`: anonymous, read-only asset/API/PWA deployment checks; never use real account credentials in traces.
 - `frontend/index.html`, `styles.css`, `service-worker.js`: generated static outputs; commit with their sources, do not edit directly.
 - `frontend/runtime/form-operations.mjs`: session/epoch/operation ownership and draft snapshots/reconciliation shared by feature adapters.
@@ -116,7 +116,7 @@
 - `frontend/app-runs.js`: run CRUD, paging, and shoe selection.
 - `frontend/app-strava.js`: Strava preview, mapping, and import UI.
 - `frontend/app-run-insights.js`: run cards, calendar, charts, and shoe analytics UI.
-- `frontend/app-shoes.js`: shoe editing and modal interactions.
+- `frontend/app-shoes.js`: shoe editing and modal interactions; the shoe dialog is a `<form>` (Enter saves) whose buttons and closing go through `registerUiActions`/`registerDialog` (SPEC-137).
 - `unit_tests/frontend/`: feature-oriented Node regressions through `frontend_regressions.cjs`.
 - `unit_tests/browser_waits.cjs`: `waitForAsync` for page conditions that need `await`; never pass async predicates to Playwright `waitForFunction` (it does not await them).
 - `unit_tests/`: backend, frontend, security, migration, and agent regression tests.

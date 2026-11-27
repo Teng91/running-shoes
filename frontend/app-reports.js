@@ -162,7 +162,7 @@ async function generateReport() {
   }
   const reportModel = document.getElementById('report-model').value;
   if (!reportModel) {
-    setReportStatus('目前沒有可用的本日免費模型，請稍後刷新再試。');
+    setReportStatus('目前沒有可用的今日免費模型，請稍後刷新再試。');
     return;
   }
   const report = startReportGeneration(session);

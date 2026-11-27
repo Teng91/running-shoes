@@ -221,5 +221,6 @@ test('selected-month YTD and forecast remain without removed dashboard features'
 test('SPEC-044 month cells use twelve columns on desktop and two rows of six when narrow', () => {
   assert.match(styleSource, /\.goal-months \{[^}]*grid-template-columns: repeat\(12, minmax\(0, 1fr\)\)/);
   assert.match(styleSource, /@media \(max-width: 760px\), \(min-width: 801px\) and \(max-width: 940px\) \{\n  \.goal-months \{ grid-template-columns: repeat\(6, minmax\(0, 1fr\)\); \}/);
-  assert.match(styleSource, /\.goal-settings\[hidden\] \{ display: none; \}/);
+  // SPEC-137: one global rule hides every [hidden] element, including the grid form.
+  assert.match(styleSource, /\n\[hidden\] \{ display: none !important; \}/);
 });

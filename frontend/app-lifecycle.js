@@ -10,8 +10,11 @@ function registerFeatureReset(name, reset) {
 
 async function initializeFeatureLifecycle() {
   const version = document.querySelector('meta[name="app-asset-version"]').content;
-  const { createLifecycle } = await import('./runtime/feature-lifecycle.mjs?v=' + encodeURIComponent(version));
-  const forms = await import('./runtime/form-operations.mjs?v=' + encodeURIComponent(version));
+  // SPEC-137: independent modules load together (the page preloads every module).
+  const [{ createLifecycle }, forms] = await Promise.all([
+    import('./runtime/feature-lifecycle.mjs?v=' + encodeURIComponent(version)),
+    import('./runtime/form-operations.mjs?v=' + encodeURIComponent(version)),
+  ]);
   formOperationFactory = forms.createFormOperations;
   formSnapshotMatches = forms.matchesSnapshot;
   formDraftFactory = forms.createFormDraft;

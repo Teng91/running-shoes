@@ -18,8 +18,7 @@ select:not([multiple]) {
 }
 /* Shared control geometry keeps native date/month and ordinary fields aligned. */
 .form-group input:not([type="checkbox"]):not([type="file"]), .form-group select,
-.year-select, .inline-add input, .inline-add select, .agent-config select,
-.agent-config input[type="text"], .strava-group select {
+.year-select, .agent-config select, .strava-group select {
   height: var(--control-height);
   line-height: var(--control-line-height);
 }
@@ -55,8 +54,7 @@ input::-webkit-datetime-edit { padding: 0; }
   .agent-retry-btn { min-height: var(--control-height); }
   .inline-input { height: var(--control-height); }
   .form-group input, .form-group select, .form-group textarea,
-  .inline-add input, .inline-add select, .year-select,
-  .agent-config select, .agent-config input[type="text"],
+  .year-select, .agent-config select,
   .agent-input-area textarea { font-size: 16px; }
   .strava-group { grid-template-columns: minmax(0, 1fr); }
   .strava-group select { min-width: 0; width: 100%; min-height: 44px; font-size: 16px; }
