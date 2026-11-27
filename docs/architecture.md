@@ -677,10 +677,11 @@ flowchart LR
 ```
 
 - **組合根**：`create_app()` 唯一驗證密鑰並建立預設 engine。匯入任何 backend 模組都不建立目錄、engine，也不結束程序。測試與 app 透過 `app.state.session_factory` 取得 session，清除 dependency override 後也不會落到預設資料庫。
-- **寫入交易**：`write_transaction` commit 前呼叫 `retention`，只清理該帳號超出上限的稽核、回執與墓碑。`run_tombstones` 由 `delete_run` 寫入（schema 8 起連同 Strava 活動 ID），備份匯入計畫與 Strava 預覽／匯入（`run_identity.deleted_strava_ids`）讀取；稽核紀錄只負責歷史與復原。
+- **寫入交易**：`write_transaction` commit 前呼叫 `retention`，只清理該帳號超出上限的稽核、回執與墓碑。`run_tombstones` 由 `delete_run` 寫入（schema 8 起連同 Strava 活動 ID），備份匯入計畫（`run_identity`）與 Strava 預覽／匯入（`read_models/strava_preview.deleted_strava_ids`）讀取；稽核紀錄只負責歷史與復原。
 - **限流**：`rate_limits.consume()` 把同一請求的所有視窗放在一個交易，滿了就整筆回滾；限額來自 `app.state.settings`，不再保留記憶體桶。SPEC-071 再加上 AI 的每帳號與全站 24 小時視窗，限流桶保留 24 小時。
 - **稽核 trigger**：每次啟動依目前欄位重建，避免舊欄位清單使快照不完整或使寫入失敗。
 - **Strava**：`strava_import.parse_activity_dates()` 把 UTC 時間戳轉為 `clock.APP_TIMEZONE` 日期。`date_corrections()` 只修正仍停在舊 UTC 日期的既有活動，`services/strava_imports.py` 在匯入交易中移動日期與月跑量。
+- **v5.3.5**：讀取模型分層與健行／步行配速上限（SPEC-139）。`deleted_strava_ids` 移入 `read_models/strava_preview.py`，讀取模型不再依賴 `services/`；`tools/db_tools.py` 的鞋名對照改由 `read_models/shoes.shoe_names()` 提供；`scripts/check_architecture.py` 以 `forbidden_dependency_chain(…, ("backend.services",))` 與 `tool_query_violations()` 強制這兩條方向。`run_metrics.max_pace_seconds_per_km()` 依活動類型給配速上限（跑步 60:00、健行與步行 120:00），前端在 `app-state.js` 鏡像，`cross_script_names` 不變。
 - **v5.3.3**：移除跑鞋「月跑量」欄位（SPEC-138）。`templates/shoe-modal.html`、`app-shoes.js` 與 `app-workspace.js` 移除 `#f-monthly` 與移動時的 `monthly_km` 寫入；`forecasting.py` 與 `schemas.py` 以 `"no_runs"` 取代 `"planned_monthly_km"`，從未記錄跑步的新鞋不再虛構退役日期；`read_models/shoes.py`、`tool_definitions.py`、`agent.py` 與 `exporting.py` 移除 `assigned_monthly_km`／「月跑量(km)」。資料庫 `shoes.monthly_km` 欄位、寫入契約與 v1–v6 備份不變，依賴方向與 `cross_script_names` 不變。
 - **v5.3.2**：前端 review 修正（SPEC-137）。`build_frontend.py` 產生原生模組的 `modulepreload` 並支援登入頁共用的 `auth-privacy.html` 片段；跑鞋對話框改走 `registerUiActions`／`registerDialog(backdrop: true)`，不再自己綁 `.onclick`；樣式改用主題 token（`--warning-text`、`--strava-text`、`--danger-text`），全域 `[hidden]` 是唯一的隱藏規則。依賴方向不變，`cross_script_names` 維持 153。
 - **v5.3.0**：個人最佳（SPEC-136）。新的 `read_models/personal_bests.py` 只讀有時間的路跑，以平均配速把不短於該距離的跑步換算成 5K、10K、15K、半馬的時間並取前 3 名；`routers/analytics.py` 的 `GET /api/analytics/personal-bests` 只轉交。前端 `app-pace-charts.js` 只排版，按鈕把值放在 `data-*` 屬性交給 `app-race-goal.js` 填入參考成績。依賴方向不變，`cross_script_names` 維持 153。
@@ -728,7 +729,7 @@ flowchart LR
 - **v4.15.0**：跑步時間與配速（SPEC-060）。Schema 9 在 `runs` 加上可為 NULL 的 `duration_seconds`，回滾腳本是 `scripts/rollback_schema_nine.sql`。配速不存，由 `run_metrics.py` 推導，`schemas.RunOut`、`read_models/runs.py`、`shoe_statistics.py` 共用；前端 `app-state.js` 鏡像合理配速上下限。`strava_import.duration_backfills()` 找出缺少時間的既有活動，`services/strava_imports.py` 在匯入交易中補上。備份升為 v4（`backup_contract`），`account_import_changes` 不以空值清除時間，`history.restore_deleted` 從快照帶回時間。依賴方向不變。
 - **v4.14.0**：自動套用新版（SPEC-059）。`app-updates.js` 在新 shell 啟用後，於背景、回到前景未操作或閒置 5 分鐘時重新載入，`appUpdateBusy()` 讀取 AI、月報、請求、彈窗、行內編輯與輸入框狀態來延後；`sessionStorage` 記錄已嘗試的版本避免重整迴圈。`app-agent.js` 以 `saveAgentChat()`／`restoreAgentChat()` 把完成的對話存在分頁的 `sessionStorage`，`app.js` 啟動時還原。模組邊界不變。
 - **v4.13.0**：資料正確性、訓練分析與 AI 統計工具（SPEC-055～058）。
-  - Schema 8 在 `run_tombstones` 加上 `strava_id`；`services/strava_imports.py` 與 `read_models/strava_preview.py` 透過 `run_identity` 略過刪除過的活動。回滾腳本是 `scripts/rollback_schema_eight.sql`。
+  - Schema 8 在 `run_tombstones` 加上 `strava_id`；`services/strava_imports.py` 與 `read_models/strava_preview.py`（v5.3.5 起由 `strava_preview.deleted_strava_ids` 讀取）略過刪除過的活動。回滾腳本是 `scripts/rollback_schema_eight.sql`。
   - 換鞋提醒門檻集中在 `shoe_metrics.py`（`MONITOR_USAGE_PERCENT`、`REPLACE_SOON_USAGE_PERCENT`），`read_models/shoes.py`、`highlights.py` 與 `analytics.py` 共用；前端 `app-state.js` 鏡像同樣的值。`forecasting.retirement_forecast` 不為已退役的鞋產生日期。
   - `read_models/trends.py` 回傳週目標、每週最長一次與星期分布；`tools/db_tools.py` 新增 4 個 adapter，只呼叫 `goals`、`trends`、`highlights`、`spending` 這些既有 read model，依賴方向仍是 tools → read models。
   - `document_contracts.api_reference_errors()` 以 `unit_tests/api_contract.json` 檢查 README 的 API 一覽。

@@ -5,7 +5,6 @@ from collections.abc import Callable
 
 from sqlalchemy.orm import Session
 
-from backend import models
 from backend.clock import local_today
 from backend.read_models import (
     goal_progress,
@@ -83,13 +82,6 @@ WEEKDAY_NAMES = ("週一", "週二", "週三", "週四", "週五", "週六", "�
 SPENDING_RECENT_MONTHS = 12
 
 
-def _shoe_names(db: Session, user_id: int) -> dict[int, str]:
-    rows = db.query(models.Shoe.id, models.Shoe.brand, models.Shoe.model, models.Shoe.is_deleted).filter(
-        models.Shoe.user_id == user_id
-    )
-    return {shoe_id: f"{brand} {model}" + ("（已刪除）" if deleted else "") for shoe_id, brand, model, deleted in rows}
-
-
 def running_goal_progress(db: Session, user_id: int, year: int | None = None) -> str:
     today = local_today()
     overview = goal_progress.year_goal_overview(db, user_id, year or today.year, as_of=today)
@@ -140,7 +132,7 @@ def training_trends(db: Session, user_id: int, year: int | None = None) -> str:
 def year_review(db: Session, user_id: int, year: int | None = None) -> str:
     today = local_today()
     review = highlights.year_review(db, user_id, year or today.year, today)
-    names = _shoe_names(db, user_id)
+    names = shoes.shoe_names(db, user_id)
     for key in ("longest_run", "top_shoe"):
         if isinstance(review.get(key), dict):
             review[key] = {**review[key], "shoe_name": names.get(review[key]["shoe_id"], "未知鞋款")}

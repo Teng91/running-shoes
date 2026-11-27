@@ -1,7 +1,7 @@
 // SPEC-060: run moving time entry, pace display and Strava moving-time backfill.
 const { runContext, test, assert, vm, extract, htmlSource, source } = require('./helpers.cjs');
 
-const paceConstants = source.match(/const RUN_PACE_MIN_SECONDS = \d+;\s*const RUN_PACE_MAX_SECONDS = \d+;/)[0];
+const paceConstants = source.match(/const RUN_PACE_MIN_SECONDS = \d+;\s*const RUN_PACE_MAX_SECONDS = \d+;\s*(?:\/\/[^\n]*\n\s*)?const RUN_SHOE_ONLY_PACE_MAX_SECONDS = \d+;/)[0];
 const esc = value => String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 function nodes(values = {}) {
@@ -235,4 +235,21 @@ test('SPEC-098 hikes and walks stay listed but off the run calendar and month ca
   const rows = elements['run-table'].innerHTML;
   assert.match(rows, /2026\/11\/13<span class="run-activity hike">健行<\/span>/, 'the list keeps hikes for editing');
   assert.match(rows, /2026\/11\/12<span class="run-activity walk">步行<\/span>/);
+});
+
+test('SPEC-139 hikes and walks accept a slower pace; running types keep 60:00 per km', () => {
+  const elements = nodes({ 'run-km': '4', 'run-duration': '6:00:00', 'run-activity': 'road' });
+  const context = paceContext(elements);
+  context.updateRunPacePreview('run');
+  assert.equal(elements['run-pace-preview'].textContent, '配速不合理（每公里 1:00–60:00），請確認時間與距離');
+  assert.match(context.readRunDuration('run', 4).error, /1:00–60:00/);
+  elements['run-activity'].value = 'hike';
+  context.updateRunPacePreview('run');
+  assert.equal(elements['run-pace-preview'].textContent, '配速 90:00 /km');
+  assert.equal(context.readRunDuration('run', 4).seconds, 21600);
+  elements['run-activity'].value = 'walk';
+  elements['run-duration'].value = '9:00:00';
+  context.updateRunPacePreview('run');
+  assert.equal(elements['run-pace-preview'].textContent, '配速不合理（每公里 1:00–120:00），請確認時間與距離');
+  assert.match(paceConstants, /RUN_SHOE_ONLY_PACE_MAX_SECONDS = 7200;/);
 });

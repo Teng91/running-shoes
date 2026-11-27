@@ -16,7 +16,12 @@ from pydantic import (
 )
 
 from backend.clock import local_today
-from backend.run_metrics import MAX_RUN_DURATION_SECONDS, is_plausible_duration, pace_seconds_per_km
+from backend.run_metrics import (
+    MAX_RUN_DURATION_SECONDS,
+    is_plausible_duration,
+    max_pace_seconds_per_km,
+    pace_seconds_per_km,
+)
 
 # All valid shoe purpose/function categories.
 SHOE_CATEGORIES = ["Daily", "Speed", "Tempo", "Race"]
@@ -454,9 +459,12 @@ class RaceGoalOut(BaseModel):
 
 # ── Run Log Schemas ────────────────────────────────────
 
-def _validate_run_pace(duration_seconds: int | None, km: float | None) -> None:
-    if duration_seconds is not None and km is not None and not is_plausible_duration(duration_seconds, km):
-        raise ValueError("duration_seconds must give a pace between 1:00 and 60:00 per km")
+def _validate_run_pace(duration_seconds: int | None, km: float | None, activity_type: str | None) -> None:
+    if duration_seconds is not None and km is not None and not is_plausible_duration(
+        duration_seconds, km, activity_type
+    ):
+        limit = max_pace_seconds_per_km(activity_type) // 60
+        raise ValueError(f"duration_seconds must give a pace between 1:00 and {limit}:00 per km")
 
 
 class RunBase(BaseModel):
@@ -483,7 +491,7 @@ class RunBase(BaseModel):
 
     @model_validator(mode="after")
     def validate_pace(self):
-        _validate_run_pace(self.duration_seconds, self.km)
+        _validate_run_pace(self.duration_seconds, self.km, self.activity_type)
         return self
 
 
@@ -540,7 +548,9 @@ class RunUpdate(BaseModel):
 
     @model_validator(mode="after")
     def validate_pace(self):
-        _validate_run_pace(self.duration_seconds, self.km)
+        # Without a submitted type the stored one is unknown here: allow the loosest bound
+        # and let update_run check the effective type (SPEC-139).
+        _validate_run_pace(self.duration_seconds, self.km, self.activity_type or "hike")
         return self
 
 

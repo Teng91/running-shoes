@@ -22,14 +22,6 @@ def record_tombstone(db: Session, user_id: int, run_id: int, strava_id: str | No
     ))
 
 
-def deleted_strava_ids(db: Session, user_id: int) -> set[str]:
-    """Strava activities this account deleted; a CSV re-import must not recreate them."""
-    rows = db.query(models.RunTombstone.strava_id).filter(
-        models.RunTombstone.user_id == user_id, models.RunTombstone.strava_id.isnot(None),
-    )
-    return {strava_id for (strava_id,) in rows if strava_id}
-
-
 def add_local_tombstones(db: Session, user_id: int, mappings: dict[tuple[str, str], int]) -> None:
     deleted_ids = db.query(models.RunTombstone.run_id).filter_by(user_id=user_id)
     for (identifier,) in deleted_ids:

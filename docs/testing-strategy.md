@@ -301,6 +301,10 @@ SPEC-032：合成資料驗證歷史筆數上限（v4.7.3 起 10,000／10,001）�
 
 [規格與具名案例](specs/116-keep-scheduled-workflows-enabled.md) 以文字解析 `offsite-backup.yml`：續命 job 不依賴備份 job、只有它有 `actions: write`、只用 `GITHUB_TOKEN` 不用 secret、失敗只發警告，且 repo 裡每個有 `schedule` 的 workflow 都在它的重新啟用清單中。
 
+## SPEC-139 讀取模型分層與健行／步行配速上限
+
+[規格與具名案例](specs/139-review-layering-and-hike-pace.md) 以架構測試確認讀取模型不依賴 `backend.services`、工具模組沒有 `.query(...)`（並以暫存檔確認違規會被回報）；Python 測試確認每公里 90:00 的健行可新增與編輯、同樣的路跑與「改成路跑」被拒絕並顯示對應範圍、Strava 慢速健行保留移動時間；前端測試確認配速提示與送出檢查依表單類型採用 60:00 或 120:00，常數由 Python 測試鏡像比對。
+
 ## SPEC-138 移除跑鞋「月跑量」欄位
 
 [規格與具名案例](specs/138-drop-shoe-monthly-km.md) 以 Python 測試確認未退役且無近 90 天紀錄的鞋回傳 `forecast_source: "no_runs"` 與 `None` 日期、批次查詢區分 `no_runs`／`idle_90_days`／`recent_90_days`、`list_my_shoes` 不再包含 `assigned_monthly_km`，以及 CSV／XLSX 匯出不包含「月跑量(km)」。前端 Node 與瀏覽器測試確認跑鞋表單與樣板已移除 `#f-monthly`、送出與切換現役／退役不再傳送 `monthly_km`、單鞋分析顯示「—」與「還沒有跑步紀錄，不預估」。
