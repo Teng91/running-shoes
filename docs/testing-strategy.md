@@ -301,6 +301,10 @@ SPEC-032：合成資料驗證歷史筆數上限（v4.7.3 起 10,000／10,001）�
 
 [規格與具名案例](specs/116-keep-scheduled-workflows-enabled.md) 以文字解析 `offsite-backup.yml`：續命 job 不依賴備份 job、只有它有 `actions: write`、只用 `GITHUB_TOKEN` 不用 secret、失敗只發警告，且 repo 裡每個有 `schedule` 的 workflow 都在它的重新啟用清單中。
 
+## SPEC-138 移除跑鞋「月跑量」欄位
+
+[規格與具名案例](specs/138-drop-shoe-monthly-km.md) 以 Python 測試確認未退役且無近 90 天紀錄的鞋回傳 `forecast_source: "no_runs"` 與 `None` 日期、批次查詢區分 `no_runs`／`idle_90_days`／`recent_90_days`、`list_my_shoes` 不再包含 `assigned_monthly_km`，以及 CSV／XLSX 匯出不包含「月跑量(km)」。前端 Node 與瀏覽器測試確認跑鞋表單與樣板已移除 `#f-monthly`、送出與切換現役／退役不再傳送 `monthly_km`、單鞋分析顯示「—」與「還沒有跑步紀錄，不預估」。
+
 ## SPEC-137 前端 review 修正
 
 [規格與具名案例](specs/137-frontend-review-cleanup.md) 以產生的樣式與樣板確認：CSS 用到的 token 都有定義、定義的都有用到；淺色主題的警示、錯誤、Strava 與新手引導文字以 WCAG 公式計算對比至少 4.5:1；死碼與重複的 `[hidden]` 規則不存在；跑鞋表單是 `<form>` 且只經登記處理按鈕與關閉；樣板沒有 inline style，隱私說明與 logo 各一份來源；每個原生模組以與 `import()` 相同的 URL 預先載入。瀏覽器版面測試改以 `hidden` 切換登入與主畫面。

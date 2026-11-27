@@ -85,12 +85,13 @@ module.exports = async function checkDrafts(browser, baseUrl) {
     await page.waitForFunction(() => !shoeModal.saving);
     assert.equal(await page.locator('#modal').isVisible(), true);
     assert.equal(await page.locator('#btn-move').textContent(), '移至現役');
-    assert.equal(await page.locator('#f-monthly').inputValue(), '0');
+    assert.equal(await page.locator('#f-monthly').count(), 0);
+    assert.equal('monthly_km' in shoeWrites[0], false);
     assert.equal(shoe.is_retired, true);
     await page.locator('#modal .btn-primary').click();
     await page.locator('#modal').waitFor({ state: 'hidden' });
     assert.deepEqual(shoeWrites[1], { nickname: 'new nickname draft', expected_version: 4 });
-    assert.equal(shoe.is_retired, true); assert.equal(shoe.monthly_km, 0);
+    assert.equal(shoe.is_retired, true); assert.equal(shoe.monthly_km, 60);
     assert.deepEqual(errors, []);
     console.log(`PASS ${browser.browserType().name()} SPEC-024: blurred goal drafts, pending goal edits and retirement followed by nickname save`);
   } catch (error) {

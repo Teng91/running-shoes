@@ -13,18 +13,18 @@ from backend.clock import local_today
 
 class ShoeForecast(TypedDict):
     forecast_retirement_date: str | None
-    forecast_source: Literal["recent_90_days", "planned_monthly_km", "idle_90_days", "retired"]
+    forecast_source: Literal["recent_90_days", "no_runs", "idle_90_days", "retired"]
     forecast_monthly_km: float
     actual_monthly_km_90_days: float
     remaining_mileage_km: float
 
 
 def retirement_forecast(shoe: models.Shoe, km_90: float, as_of: date, *, has_runs: bool = False) -> ShoeForecast:
-    """Recent 90-day use, else the planned monthly km for a pair never logged.
+    """Retirement date from the last 90 days of use, the only rate there is.
 
     A pair that has logged runs but none in 90 days (a race or hiking shoe worn now and
-    then) has no usable rate: falling back to the planned monthly km would invent a
-    date, so it gets none (SPEC-069).
+    then) gets no date (SPEC-069); neither does a pair never logged, which used to fall
+    back to a planned monthly km the form no longer asks for (SPEC-138).
     """
     actual_rate = round(km_90 / 90 * 30.4375, 2) if km_90 > 0 else 0.0
     remaining = round(max(0, shoe.expected_mileage - shoe.mileage), 2)
@@ -37,15 +37,15 @@ def retirement_forecast(shoe: models.Shoe, km_90: float, as_of: date, *, has_run
             "actual_monthly_km_90_days": actual_rate,
             "remaining_mileage_km": remaining,
         }
-    if not actual_rate and has_runs:
+    if not actual_rate:
         return {
             "forecast_retirement_date": None,
-            "forecast_source": "idle_90_days",
+            "forecast_source": "idle_90_days" if has_runs else "no_runs",
             "forecast_monthly_km": 0.0,
             "actual_monthly_km_90_days": 0.0,
             "remaining_mileage_km": remaining,
         }
-    rate = actual_rate or round(shoe.monthly_km, 2)
+    rate = actual_rate
     forecast_date = None
     if remaining > 0 and rate > 0:
         try:
@@ -55,7 +55,7 @@ def retirement_forecast(shoe: models.Shoe, km_90: float, as_of: date, *, has_run
             pass
     return {
         "forecast_retirement_date": forecast_date,
-        "forecast_source": "recent_90_days" if actual_rate > 0 else "planned_monthly_km",
+        "forecast_source": "recent_90_days",
         "forecast_monthly_km": rate,
         "actual_monthly_km_90_days": actual_rate,
         "remaining_mileage_km": remaining,

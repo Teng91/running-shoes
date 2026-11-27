@@ -51,8 +51,6 @@ def _shoe_data(shoe: models.Shoe) -> dict:
         "size": shoe.size,
         "purchase_price_twd": round_metric(shoe.price),
         "original_price_twd": round_metric(shoe.orig_price),
-        # This is a user-assigned allocation target, not accumulated mileage.
-        "assigned_monthly_km": round_metric(shoe.monthly_km),
         **_lifecycle(shoe),
     }
 
@@ -86,7 +84,6 @@ def list_my_shoes(db: Session, user_id: int) -> dict:
             "expected_lifespan_km": "此鞋設定的預期總壽命",
             "remaining_mileage_km": "後端計算的剩餘里程",
             "usage_percent": "後端計算的已使用壽命百分比，不是剩餘百分比",
-            "assigned_monthly_km": "使用者分配給此鞋的每月目標里程，不是累積里程",
         },
         shoes=[_shoe_data(shoe) for shoe in shoes],
     )

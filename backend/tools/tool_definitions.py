@@ -24,7 +24,7 @@ TOOL_DEFINITIONS: list[dict] = [
         "type": "function",
         "function": {
             "name": "list_my_shoes",
-            "description": "以 JSON 列出所有跑鞋；後端已分別計算累積里程、剩餘里程、已使用百分比與分配月跑量。",
+            "description": "以 JSON 列出所有跑鞋；後端已分別計算累積里程、剩餘里程與已使用百分比。",
             "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
         },
     },

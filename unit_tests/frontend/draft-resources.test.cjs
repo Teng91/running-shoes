@@ -35,7 +35,7 @@ test('SPEC-024 shoe transitions preserve only new edits and retain the server st
     pending.resolve({ ...original, ...writes[0], version: 4 }); await moving;
     assert.equal(modal.mode, retired ? 'editActive' : 'editRetired');
     assert.equal(modal.context.shoe.version, 4); assert.equal(elements['f-nickname'].value, 'new nickname');
-    assert.equal(Number(elements['f-monthly'].value), writes[0].monthly_km);
+    assert.equal('monthly_km' in writes[0], false, 'moving no longer sends a monthly km');
     await modal.submit();
     assert.deepEqual(JSON.parse(JSON.stringify(writes[1])), {
       nickname: 'new nickname', ...(editMileage ? { mileage: 80, categories: ['Race'] } : {}), expected_version: 4,

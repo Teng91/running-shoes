@@ -10,11 +10,11 @@ from backend.routers.shoes import list_active, list_retired
 
 @pytest.mark.parametrize(("mileage", "expected", "planned", "recent", "source", "has_date"), [
     (300, 900, 60, 300, "recent_90_days", True),
-    (300, 900, 60, 0, "planned_monthly_km", True),
-    (300, 900, 0, 0, "planned_monthly_km", False),
+    (300, 900, 60, 0, "no_runs", False),
+    (300, 900, 0, 0, "no_runs", False),
     (900, 900, 60, 300, "recent_90_days", False),
-    (300, 900, 60, 0.0001, "planned_monthly_km", True),
-    (0, 1e20, 0.01, 0, "planned_monthly_km", False),
+    (300, 900, 60, 0.0001, "no_runs", False),
+    (0, 1e20, 0.01, 0.03, "recent_90_days", False),
 ])
 def test_retirement_forecast_policy(mileage, expected, planned, recent, source, has_date):
     shoe = models.Shoe(mileage=mileage, expected_mileage=expected, monthly_km=planned)
@@ -33,7 +33,8 @@ def test_a_pair_idle_for_90_days_gets_no_forecast_but_a_new_pair_uses_the_plan(d
     assert (idle["forecast_source"], idle["forecast_retirement_date"], idle["forecast_monthly_km"]) == ("idle_90_days", None, 0)
     assert idle["remaining_mileage_km"] == 579.1
     fresh = forecasting.retirement_forecast(shoe, 0, date(2026, 11, 18))
-    assert fresh["forecast_source"] == "planned_monthly_km" and fresh["forecast_retirement_date"] is not None
+    # SPEC-138: a pair never logged gets no date either; the planned monthly km is gone.
+    assert fresh["forecast_source"] == "no_runs" and fresh["forecast_retirement_date"] is None
 
     user, _ = user_with_token
     hiking, new, daily = (models.Shoe(user_id=user.id, brand="NB", model=name, date="2026-01-24", mileage=20.9,
@@ -47,7 +48,7 @@ def test_a_pair_idle_for_90_days_gets_no_forecast_but_a_new_pair_uses_the_plan(d
     as_of = date(2026, 11, 18)
     batch = forecasting.forecasts_for_shoes(db, user.id, [hiking, new, daily], today=as_of)
     assert [batch[shoe.id]["forecast_source"] for shoe in (hiking, new, daily)] == [
-        "idle_90_days", "planned_monthly_km", "recent_90_days"]
+        "idle_90_days", "no_runs", "recent_90_days"]
     analysis = insights.shoe_analytics(db, user.id, hiking.id, today=as_of)["lifecycle"]
     assert (analysis["forecast_source"], analysis["forecast_retirement_date"]) == ("idle_90_days", None)
 

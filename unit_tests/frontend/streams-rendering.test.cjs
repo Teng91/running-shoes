@@ -115,19 +115,18 @@ test('table numeric headers and shared component geometry have explicit presenta
 
 test('shoe action groups show only relevant controls without overriding shared button layout', () => {
   const definition = source.slice(source.indexOf('class ShoeModal {'), source.indexOf('// 初始化一次'));
-  const elements = { 'shoe-secondary-actions': { hidden: false }, 'f-monthly': {} };
+  const elements = { 'shoe-secondary-actions': { hidden: false } };
   const context = vm.createContext({ document: { getElementById: id => elements[id] } });
   vm.runInContext(definition + '\nglobalThis.Modal = ShoeModal;', context);
   const modal = Object.create(context.Modal.prototype);
-  Object.assign(modal, { formIds: {}, titleEl: {}, btnDelete: {}, btnMove: {}, monthlyRow: {} });
-  modal._updateUI({ title: '新增', showDelete: false, showMove: false, monthly: 60, monthlyVisible: true });
+  Object.assign(modal, { formIds: {}, titleEl: {}, btnDelete: {}, btnMove: {} });
+  modal._updateUI({ title: '新增', showDelete: false, showMove: false });
   assert.equal(elements['shoe-secondary-actions'].hidden, true);
   assert.equal(modal.btnDelete.hidden, true);
-  assert.equal(modal.monthlyRow.hidden, false);
-  modal._updateUI({ title: '編輯', showDelete: true, showMove: true, moveText: '移至退役', monthly: 80, monthlyVisible: true });
+  modal._updateUI({ title: '編輯', showDelete: true, showMove: true, moveText: '移至退役' });
   assert.equal(elements['shoe-secondary-actions'].hidden, false);
   assert.equal(modal.btnDelete.hidden, false); assert.equal(modal.btnMove.hidden, false);
-  assert.equal(modal.btnMove.textContent, '移至退役'); assert.equal(elements['f-monthly'].value, 80);
+  assert.equal(modal.btnMove.textContent, '移至退役');
 });
 
 test('shoe purchase columns live only in spending details, with aligned table rows', () => {
@@ -147,7 +146,7 @@ test('shoe purchase columns live only in spending details, with aligned table ro
     'shoeTableRow', 'renderTable', 'renderRetiredTable'].map(extract).join('\n'), context);
   context.renderTable();
   context.renderRetiredTable();
-  // SPEC-050: the planned monthly km is edited in the shoe form, not shown as a column.
+  // SPEC-050 / SPEC-138: shoe tables never show monthly_km, and the form no longer asks for it.
   for (const [id, count] of [['shoe-table', 11], ['retired-table', 11]]) {
     const headers = tableHeaders(id);
     assert.equal(headers.length, count);

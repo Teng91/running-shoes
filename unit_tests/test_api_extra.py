@@ -106,6 +106,7 @@ def test_export_csv_all_contains_calculated_fields(client, db, user_with_token):
     assert rows[0]["每km成本"] == "4.0"
     assert rows[0]["預期每km成本"] == "2.5"
     assert rows[0]["生命進度(%)"] == "62.5"
+    assert "月跑量(km)" not in rows[0]
     assert rows[0]["類別"] == "Daily, Tempo"
     assert rows[0]["狀態"] == "使用中"
     assert rows[1]["折數(%)"] == "0"
@@ -165,6 +166,7 @@ def test_export_xlsx_active_has_styled_sheet(client, db, user_with_token):
     sheet = workbook["跑鞋資料"]
     headers = [cell.value for cell in sheet[1]]
     assert "狀態" in headers
+    assert "月跑量(km)" not in headers
     assert sheet.cell(2, headers.index("鞋款") + 1).value == "Wave Rider"
     assert sheet["A1"].font.bold is True
     assert sheet.column_dimensions["A"].width == 18
@@ -769,7 +771,7 @@ def test_static_asset_and_non404_http_errors(client):
 
     service_worker = client.get("/service-worker.js")
     assert service_worker.status_code == 200
-    assert "running-shoes-shell-v140" in service_worker.text
+    assert "running-shoes-shell-v141" in service_worker.text
 
     agent_script = client.get("/app-agent.js")
     assert agent_script.status_code == 200
