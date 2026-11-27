@@ -10,6 +10,7 @@
 - `backend/run_metrics.py`: canonical run duration bounds and pace (seconds per km, time-weighted averages); pace is derived, never stored (SPEC-060), and the bounds are mirrored in `frontend/app-state.js`. It also owns the activity types (SPEC-096): every type (road, trail, hike, walk) counts toward shoes, `TRAINING_ACTIVITY_TYPES` toward volume/goals/streaks and `PACE_ACTIVITY_TYPES` toward pace and race readiness; read models filter with `run_statistics.TRAINING_RUN`/`PACE_RUN`.
 - `backend/read_models/race_readiness.py`: target race, Riegel prediction, intensity zones relative to goal race pace and long-run readiness (SPEC-065); `routers/race_goal.py` and `services/race_goals.py` own the race goal reads and writes.
 - `backend/read_models/race_plan.py`: the deterministic weekly race training plan (SPEC-119); its length is the goal's `plan_weeks` (SPEC-120, else the distance default) and its baseline is fixed once the plan starts, so past weeks never move. `race_preparation` adds it to race readiness for `GET /api/analytics/race` and the `race_training_plan` AI tool.
+- `backend/read_models/personal_bests.py`: 5K/10K/15K/half personal bests (SPEC-136); runs carry no splits, so every timed road run at least the distance (1% GPS tolerance) counts at its average pace, top 3 per distance; `GET /api/analytics/personal-bests` and the race form's reference result use it.
 - `backend/shoe_metrics.py`: canonical shoe cost, discount and lifecycle arithmetic, plus the single 80%/90% lifespan alert thresholds (mirrored in `frontend/app-state.js`).
 - `backend/read_models/`: user-scoped native statistics shared by HTTP, reports and AI adapters; never import tools or HTTP frameworks.
 - `backend/seeding.py`: optional default data using an injected session factory.
@@ -102,7 +103,7 @@
 - `frontend/app-shoe-charts.js`: shoe lifecycle, cost, retirement, and allocation charts.
 - `frontend/app-monthly-charts.js`: month/year selectors, monthly/annual/year-over-year mileage charts and the year in review.
 - `frontend/app-trend-charts.js`: training trends: heatmap, weekly load and long run, weekday distribution and the cumulative year line (SPEC-090).
-- `frontend/app-pace-charts.js`: shared race state, race readiness cards and pace trend charts (SPEC-065); the plan's layout lives in `runtime/race-plan-view.mjs`, imported while the page loads like every native module, so a later deployment cannot hand an old page a newer module (SPEC-132).
+- `frontend/app-pace-charts.js`: personal best cards (SPEC-136), shared race state, race readiness cards and pace trend charts (SPEC-065); the plan's layout lives in `runtime/race-plan-view.mjs`, imported while the page loads like every native module, so a later deployment cannot hand an old page a newer module (SPEC-132).
 - `frontend/app-race-goal.js`: the race goal form: open, validate, save and delete (SPEC-090).
 - `frontend/app-spending.js`: spending cards, charts, and table.
 - `frontend/app-actions.js`: dispatches delegated `data-click`/`data-change`/… UI actions; each feature registers its own with `registerUiActions` (`app-lifecycle.js`) while it loads, and the table is frozen here (SPEC-113); markup and generated rows never contain inline JavaScript handlers (the page CSP blocks them).

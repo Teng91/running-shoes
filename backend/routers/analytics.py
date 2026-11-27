@@ -9,7 +9,7 @@ from backend import models
 from backend.auth import get_current_user
 from backend.clock import local_today
 from backend.dependencies import get_db
-from backend.read_models import highlights, insights, pace, race_plan, trends
+from backend.read_models import highlights, insights, pace, personal_bests, race_plan, trends
 
 router = APIRouter(tags=["analytics"])
 
@@ -30,6 +30,14 @@ def race_readiness_analytics(
     db: Session = Depends(get_db),
 ):
     return race_plan.race_preparation(db, current_user.id, local_today())
+
+
+@router.get("/api/analytics/personal-bests")
+def personal_best_analytics(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return personal_bests.personal_bests(db, current_user.id, local_today())
 
 
 @router.get("/api/analytics/trends")

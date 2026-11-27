@@ -1,15 +1,17 @@
-// ====== Race preparation and pace trend (SPEC-064, SPEC-065) ======
-// The backend owns every pace, prediction, zone, share and long-run count
-// (`/api/analytics/race`, `/api/analytics/pace`); these renderers only lay them out.
+// ====== Personal bests, race preparation and pace trend (SPEC-064, SPEC-065, SPEC-136) ======
+// The backend owns every best, pace, prediction, zone, share and long-run count
+// (`/api/analytics/personal-bests`, `/api/analytics/race`, `/api/analytics/pace`); these renderers
+// only lay them out.
 // Pace axes are reversed so that faster is higher.
 let racePrepRequestId = 0;
+let personalBestsRequestId = 0;
 let raceGoal = null;
 const PACE_CHART_KEYS = ['paceTrend', 'raceLong', 'raceIntensity'];
 const PACE_DAY_MS = 86400000;
 const RACE_DISTANCES = { '21.0975': '半馬', '10': '10K', '5': '5K', '42.195': '全馬' };
 const RACE_ZONE_COLORS = { easy: ['--chart-2', '#2fd8f0'], steady: ['--chart-line', '#ffd23f'], race: ['--chart-1', '#c8ff3c'], fast: ['--chart-warn', '#ff8a1f'] };
 
-registerFeatureReset('race-prep', () => { raceGoal = null; racePrepRequestId++; });
+registerFeatureReset('race-prep', () => { raceGoal = null; racePrepRequestId++; personalBestsRequestId++; });
 
 function paceClock(seconds) {
   if (!Number.isFinite(seconds) || seconds <= 0) return '—';
@@ -126,6 +128,45 @@ async function renderPaceAnalysis() {
   } catch (error) {
     console.error('載入訓練課表失敗:', error);
   }
+}
+
+// ---------- personal bests (SPEC-136) ----------
+// The backend picks and ranks the bests (`/api/analytics/personal-bests`); a card only lays them
+// out, and its button hands the best to the race goal form as the reference result.
+async function renderPersonalBests() {
+  if (document.querySelector('.tab-panel.active')?.dataset.panel !== 'monthly') return;
+  const requestId = ++personalBestsRequestId;
+  let bests;
+  try {
+    bests = await readAnalytics('personal-bests', '/analytics/personal-bests', value => Array.isArray(value?.distances));
+  } catch (error) {
+    console.error('載入個人最佳失敗:', error);
+    return;
+  }
+  if (!bests || requestId !== personalBestsRequestId) return;
+  document.getElementById('personal-bests').innerHTML = bests.distances.map(personalBestCard).join('');
+}
+
+function personalBestDate(iso) {
+  const [year, month, day] = String(iso).split('-').map(Number);
+  return `${year}/${month}/${day}`;
+}
+
+function personalBestCard(distance) {
+  const [best, ...others] = distance.bests;
+  if (!best) {
+    const km = Number(distance.distance_km);
+    return reviewCard(esc(distance.label), '—', `還沒有 ${esc(km.toFixed(Number.isInteger(km) ? 0 : 1))} km 以上、有時間的路跑`);
+  }
+  const source = best.from_longer_run ? `<br>取自 ${esc(Number(best.run_km).toFixed(1))} km 的跑步` : '';
+  const rest = others.map(entry => `<li><span>${Number(entry.rank)}. ${esc(raceClock(entry.seconds))}</span>`
+    + `<span>${esc(personalBestDate(entry.date))}${entry.from_longer_run ? ` · ${esc(Number(entry.run_km).toFixed(1))} km` : ''}</span></li>`).join('');
+  return `<div class="review-card pb-card"><div class="review-label">${esc(distance.label)}</div>`
+    + `<div class="review-value">${esc(raceClock(best.seconds))}</div>`
+    + `<div class="review-sub">${esc(paceClock(best.pace))} /km · ${esc(personalBestDate(best.date))}<br>${esc(best.shoe)}${source}</div>`
+    + (rest ? `<ol class="pb-others">${rest}</ol>` : '')
+    + `<button type="button" class="btn btn-sm btn-edit pb-use" data-click="use-personal-best" data-km="${esc(String(distance.distance_km))}"`
+    + ` data-seconds="${esc(String(best.seconds))}" data-label="${esc(distance.label)}">設為比賽參考成績</button></div>`;
 }
 
 // ---------- summary cards ----------
@@ -350,4 +391,7 @@ function paceTrendText(analysis) {
 }
 
 // SPEC-105: race readiness follows the monthly charts on the monthly tab.
-registerPanel('monthly', { render: () => { if (typeof Chart !== 'undefined') renderPaceAnalysis(); } });
+registerPanel('monthly', { render: () => {
+  renderPersonalBests();
+  if (typeof Chart !== 'undefined') renderPaceAnalysis();
+} });

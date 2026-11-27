@@ -46,7 +46,7 @@ function registerResourceCaches() {
   });
   resourceStore.registerCache('dashboard', () => {
     dashboardAnalyticsRequest++;
-    resourceStore.invalidate(['dashboard-analytics', 'shoe-timeline', 'home-summary', 'year-review', 'shoe-distance-mix', 'run-totals']);
+    resourceStore.invalidate(['dashboard-analytics', 'shoe-timeline', 'home-summary', 'year-review', 'shoe-distance-mix', 'run-totals', 'personal-bests']);
   });
 }
 

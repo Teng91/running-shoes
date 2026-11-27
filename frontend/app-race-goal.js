@@ -160,6 +160,22 @@ async function deleteRaceGoal() {
   }
 }
 
+// SPEC-136: a personal best card fills the reference result; nothing is saved until the user
+// presses 儲存. The old reference's temperature belongs to that result, so it is cleared.
+function usePersonalBest(button) {
+  const km = Number(button.dataset.km);
+  const seconds = Number(button.dataset.seconds);
+  if (!(km > 0) || !(seconds > 0)) return;
+  const wasOpen = !document.getElementById('race-settings').hidden;
+  if (!wasOpen) toggleRaceSettings(true);
+  document.getElementById('race-ref-distance').value = String(km);
+  document.getElementById('race-ref-time').value = formatRunDuration(seconds);
+  document.getElementById('race-ref-temp').value = '';
+  document.getElementById('race-settings-status').textContent =
+    `已帶入 ${button.dataset.label} 個人最佳 ${formatRunDuration(seconds)} 當參考成績，按「儲存」後更新預估完賽。`;
+  if (wasOpen) document.getElementById('race-ref-time').focus();
+}
+
 // SPEC-105: the form takes the loaded race goal unless the user is editing it.
 onRaceGoalShown(() => prepareRaceForm());
 
@@ -168,6 +184,7 @@ registerUiActions({
   click: {
     'race-settings': element => toggleRaceSettings(element.dataset.open === 'true'),
     'delete-race-goal': () => deleteRaceGoal(),
+    'use-personal-best': element => usePersonalBest(element),
   },
   submit: {
     'save-race-goal': () => saveRaceGoal(),

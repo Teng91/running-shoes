@@ -120,6 +120,7 @@ flowchart TB
     RaceRoutes --> RaceReadiness[read_models/race_readiness.py]
     AnalyticsRoutes --> RacePlan[read_models/race_plan.py]
     RacePlan --> RaceReadiness
+    AnalyticsRoutes --> PersonalBests[read_models/personal_bests.py]
     Factory --> MonthlyRoutes[routers/monthly.py]
     Factory --> AgentRoutes[routers/agent.py]
     Factory --> ReportRoutes[routers/reports.py]
@@ -391,7 +392,7 @@ ARIA 與 `agent-mode` 狀態，不以 inline style 決定 shell 幾何，因此�
 | `backend/rate_limits.py` | auth／AI／備份預覽／Strava 上傳的 SQLite 固定視窗限額，於 app engine 的獨立交易消耗；來源位址沿用 `middleware.client_address` | settings、SQLAlchemy engine、middleware | 請求 session、routers、`backend.main` |
 | `backend/routers/` | HTTP 參數、認證 dependency、response；`workspace.py` 是回執、歷史與帳號還原的 adapter；`errors.py`、`password_notices.py` 是不定義 router 的共用 helper | auth、domain/service、read models、共用 helper | `backend.main`、資料庫 query、其他 route module |
 | `backend/services/` | 配額、版本、里程與 application transaction owner；`accounts.py` 註冊／改密碼、`fingerprints.py` 回執與備份的 payload 指紋、`retention.py` 每帳號保留上限 | models、schemas、read models、persistence | FastAPI、routers、`backend.main` |
-| `backend/read_models/` | user-scoped native statistics：`shoes.py`、`shoe_statistics.py`、`shoe_matching.py`（名稱消歧義）、`runs.py`、`run_statistics.py`、`mileage.py`、`spending.py`、`trends.py`、`pace.py`、`race_readiness.py`、`race_plan.py`（每週備賽課表）、`highlights.py`、`saved_reports.py`、`strava_preview.py`、`insights.py`（首頁洞察與單鞋分析）、`goal_progress.py`（目標進度）、`report_snapshot.py`（月報統計快照與提示詞），共用 `rounding.py` | models、純 domain、SQLAlchemy | HTTP frameworks、routers、tools |
+| `backend/read_models/` | user-scoped native statistics：`shoes.py`、`shoe_statistics.py`、`shoe_matching.py`（名稱消歧義）、`runs.py`、`run_statistics.py`、`mileage.py`、`spending.py`、`trends.py`、`pace.py`、`race_readiness.py`、`race_plan.py`（每週備賽課表）、`personal_bests.py`（個人最佳）、`highlights.py`、`saved_reports.py`、`strava_preview.py`、`insights.py`（首頁洞察與單鞋分析）、`goal_progress.py`（目標進度）、`report_snapshot.py`（月報統計快照與提示詞），共用 `rounding.py` | models、純 domain、SQLAlchemy | HTTP frameworks、routers、tools |
 | `backend/shoe_metrics.py` | 折數、成本、壽命共同算術 | models | HTTP、AI、UI |
 | `backend/run_metrics.py` | 跑步時間合理範圍與配速推導（時間加權平均） | Python stdlib | HTTP、AI、UI、database |
 | `backend/migrations.py` | ordered/idempotent schema upgrade 與版本 | models、database | routers、frontend |
@@ -679,6 +680,7 @@ flowchart LR
 - **限流**：`rate_limits.consume()` 把同一請求的所有視窗放在一個交易，滿了就整筆回滾；限額來自 `app.state.settings`，不再保留記憶體桶。SPEC-071 再加上 AI 的每帳號與全站 24 小時視窗，限流桶保留 24 小時。
 - **稽核 trigger**：每次啟動依目前欄位重建，避免舊欄位清單使快照不完整或使寫入失敗。
 - **Strava**：`strava_import.parse_activity_dates()` 把 UTC 時間戳轉為 `clock.APP_TIMEZONE` 日期。`date_corrections()` 只修正仍停在舊 UTC 日期的既有活動，`services/strava_imports.py` 在匯入交易中移動日期與月跑量。
+- **v5.3.0**：個人最佳（SPEC-136）。新的 `read_models/personal_bests.py` 只讀有時間的路跑，以平均配速把不短於該距離的跑步換算成 5K、10K、15K、半馬的時間並取前 3 名；`routers/analytics.py` 的 `GET /api/analytics/personal-bests` 只轉交。前端 `app-pace-charts.js` 只排版，按鈕把值放在 `data-*` 屬性交給 `app-race-goal.js` 填入參考成績。依賴方向不變，`cross_script_names` 維持 153。
 - **v5.2.7**：對話框、更新忙碌判斷與重繪改由功能登記（SPEC-135）。`app-lifecycle.js` 擁有 `registerDialog`／`closeDialog` 與 `registerBusyCheck`／`featureBusy`，`app-dialogs.js`、`app.js`、`app-updates.js` 不再提功能的函式或狀態；`app-agent.js` 以 `onAuthView` 恢復對話；`app-core.refreshPanels()` 取代看板的 `render()`。依賴方向改為 feature → lifecycle、feature → shell，`cross_script_names` 163 → 153。
 - **v5.2.6**：帳號識別碼的瀏覽器設定與前端解耦（SPEC-134）。`app-onboarding.js`、`app-strava.js`、`app-agent.js` 的 localStorage／sessionStorage 鍵改用 `captureAuthSession().account`；`raceGoalSaving` 由 `app-race-goal.js`、`registrationMode` 由 `app-account.js` 持有（註冊表單只讀 `#reg-invite-group` 的 `data-required`），其他功能經 `app-auth.js` 的 `signOutWithNotice`／`showLoginNotice` 回到登入畫面，`formatLocalTimestamp` 移到 `app-dates.js`，`cross_script_names` 166 → 163。正式映像帶所有 `scripts/*.sql` 回滾腳本，基底映像以 digest 固定。依賴方向不變。
 - **v5.2.2**：程式碼檢查修正（SPEC-130）。帳號名稱折疊規則移到 `settings.account_name_key()`，`services/accounts.py` 與管理員判斷共用；`tools/legacy_calls.py` 新增 `first_call_end()`。依賴方向不變（services → settings）。
