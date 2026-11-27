@@ -199,10 +199,9 @@ def test_list_my_shoes_includes_all(seeded_db):
     models = {shoe["model"] for shoe in out["shoes"]}
     assert {"Wave Sky 7", "Boston 12"} <= models
     sky = next(shoe for shoe in out["shoes"] if shoe["model"] == "Wave Sky 7")
-    assert sky["assigned_monthly_km"] == 60
+    assert "assigned_monthly_km" not in sky  # SPEC-138: no longer asked for or shown
     assert sky["mileage_km"] == 540
     assert sky["remaining_mileage_km"] == 260
-    assert "不是累積里程" in out["field_definitions"]["assigned_monthly_km"]
 
 
 def test_isolation_other_user_sees_nothing(seeded_db):

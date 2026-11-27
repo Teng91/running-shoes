@@ -1,5 +1,5 @@
 // SPEC-055: correctness fixes that the dashboard, run log and login form render.
-const { runContext, test, assert, vm, extract, htmlSource, source } = require('./helpers.cjs');
+const { runContext, test, assert, vm, extract, htmlSource, source, readText } = require('./helpers.cjs');
 
 function nodes() {
   return new Proxy({}, { get: (target, id) => target[id] ||= {
@@ -47,21 +47,44 @@ test('SPEC-055 a retired shoe analysis says retired instead of forecasting a dat
   const data = retired => ({
     shoe: { brand: 'Mizuno', model: 'Sky', is_retired: retired, categories: ['Daily'], purchase_date: '2025-01-01' },
     lifecycle: { total_mileage_km: 500, usage_percent: 62.5, remaining_mileage_km: 300, forecast_monthly_km: 0,
-      forecast_retirement_date: retired ? null : '2027-03-01', forecast_source: retired ? 'retired' : 'planned_monthly_km' },
+      forecast_retirement_date: retired ? null : '2027-03-01', forecast_source: retired ? 'retired' : 'recent_90_days' },
     usage: { count: 0, km_30_days: 0, km_90_days: 0, actual_monthly_km_90_days: 0, last_run_date: null, first_run_date: null },
     monthly_history: [], recent_runs: [],
   });
   context.renderShoeAnalytics(data(true));
   assert.match(elements['shoe-analysis-content'].innerHTML, /預估退役<\/div><div class="insight-card-value">已退役<\/div><div class="insight-card-sub">退役後不再預估/);
   context.renderShoeAnalytics(data(false));
-  assert.match(elements['shoe-analysis-content'].innerHTML, /預估退役<\/div><div class="insight-card-value">2027\/03\/01<\/div><div class="insight-card-sub">依計畫月跑量/);
+  assert.match(elements['shoe-analysis-content'].innerHTML, /預估退役<\/div><div class="insight-card-value">2027\/03\/01<\/div><div class="insight-card-sub">依近 90 天實際使用/);
   // SPEC-069: a pair idle for 90 days shows no date instead of one invented from the plan.
   const idle = data(false);
   idle.lifecycle = { ...idle.lifecycle, forecast_retirement_date: null, forecast_source: 'idle_90_days' };
   context.renderShoeAnalytics(idle);
-  assert.match(elements['shoe-analysis-content'].innerHTML, /預估退役<\/div><div class="insight-card-value">—<\/div><div class="insight-card-sub">近 90 天沒穿，偶爾穿的鞋不預估/);
+  assert.match(elements['shoe-analysis-content'].innerHTML, /預估退役<\/div><div class="insight-card-value">—<\/div><div class="insight-card-sub">近 90 天沒穿，不預估/);
   assert.equal(context.forecastSourceText('idle_90_days'), '近 90 天沒穿，不預估');
   assert.match(extract('shoeTableRow'), /title="\$\{forecastSourceText\(s\.forecast_source\)\}"/);
+});
+
+test('SPEC-138 shoe form drops monthly_km and never-run shoes show no forecast', () => {
+  assert.doesNotMatch(htmlSource, /f-monthly/);
+  assert.doesNotMatch(readText('frontend/templates/shoe-modal.html'), /f-monthly/);
+  const elements = nodes();
+  const context = runContext({ document: { getElementById: id => elements[id], querySelectorAll: () => [] }, esc, chartInstances: {} });
+  const definition = source.slice(source.indexOf('class ShoeModal {'), source.indexOf('// 初始化一次'));
+  vm.runInContext(definition + '\nglobalThis.Modal = ShoeModal;', context);
+  const modal = new context.Modal();
+  modal.mode = 'create';
+  assert.equal('monthly_km' in modal._payload(), false);
+
+  vm.runInContext(['floorShoeKm', 'formatShoeMileage', 'forecastSourceText', 'renderShoeAnalytics'].map(extract).join('\n'), context);
+  assert.equal(context.forecastSourceText('no_runs'), '還沒有跑步紀錄，不預估');
+  context.renderShoeAnalytics({
+    shoe: { brand: 'Mizuno', model: 'Sky', is_retired: false, categories: ['Daily'], purchase_date: '2026-11-01' },
+    lifecycle: { total_mileage_km: 0, usage_percent: 0, remaining_mileage_km: 800, forecast_monthly_km: 0,
+      forecast_retirement_date: null, forecast_source: 'no_runs' },
+    usage: { count: 0, km_30_days: 0, km_90_days: 0, actual_monthly_km_90_days: 0, last_run_date: null, first_run_date: null },
+    monthly_history: [], recent_runs: [],
+  });
+  assert.match(elements['shoe-analysis-content'].innerHTML, /預估退役<\/div><div class="insight-card-value">—<\/div><div class="insight-card-sub">還沒有跑步紀錄，不預估/);
 });
 
 test('SPEC-055 the Strava preview explains activities deleted earlier', () => {

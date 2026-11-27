@@ -33,7 +33,8 @@ function fmtDate(d) { if (!d) return '-'; return `${d.getFullYear()}/${String(d.
 function forecastSourceText(source) {
   if (source === 'recent_90_days') return '依近 90 天實際使用';
   if (source === 'idle_90_days') return '近 90 天沒穿，不預估';
-  return '依計畫月跑量';
+  if (source === 'no_runs') return '還沒有跑步紀錄，不預估';
+  return '';
 }
 // Shoe mileage reads exactly like Strava's gear list: truncated, not rounded, to one
 // decimal (512.352 shows 512.3), SPEC-068. The epsilon keeps 401.7 from flooring to 401.6

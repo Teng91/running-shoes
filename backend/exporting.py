@@ -36,7 +36,6 @@ def generate_shoe_rows(
             "每km成本": cost_per_km,
             "預期每km成本": expected_cost,
             "生命進度(%)": life_pct,
-            "月跑量(km)": shoe.monthly_km,
             "類別": spreadsheet_safe(", ".join(shoe.categories) if shoe.categories else ""),
         }
         if include_retired_status:

@@ -4,6 +4,13 @@
 每版的摘要見 [CHANGELOG.md](../CHANGELOG.md)；目前的功能與操作方式以 [README](../README.md) 為準。
 這裡保留當時的文字，後續版本可能已調整其中的行為。
 
+### 移除跑鞋「月跑量」欄位（SPEC-138，v5.3.3）
+
+- `shoe-modal.html`、`app-shoes.js` 與 `app-workspace.js` 移除 `#f-monthly` 欄位與相關草稿／移動處理；`ShoeModal.move()` 只送 `is_retired` 與 `expected_version`，不再把退役鞋的 `monthly_km` 歸零或於回到現役時補平均。
+- `forecasting.retirement_forecast` 與 `ShoeOut.forecast_source` 以 `"no_runs"` 取代 `"planned_monthly_km"`：從無跑步紀錄的新鞋與近 90 天沒穿的鞋一樣不產生退役日期（`null`／`0.0`），前端 `forecastSourceText` 與單鞋分析顯示「—」與「還沒有跑步紀錄，不預估」。
+- `read_models/shoes.list_my_shoes`、`tools/tool_definitions.py` 與 `agent.py` 移除 `assigned_monthly_km`；`exporting.generate_shoe_rows` 移除「月跑量(km)」欄。
+- 資料庫 `shoes.monthly_km` 欄位、寫入 schema 相容性與 v1–v6 帳號備份格式不變。沒有 schema 變更，可直接回滾至 v5.3.2 image。Asset 5.3.3／shell v141。
+
 ### 前端 review 修正（SPEC-137，v5.3.2）
 
 - 新增 `--warning-text`、`--strava-text` token，錯誤字改用 `--danger-text`；刪除未使用的 `--cyan`、`--green`、`--yellow`、`--radius-sm`、`--boot-card` 與 `.inline-add`、`.metric-source` 等規則；14 條元件層級的 `[hidden]` 規則由全域規則取代；啟動畫面的版面只寫在 inline critical style。

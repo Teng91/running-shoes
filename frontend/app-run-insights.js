@@ -234,9 +234,10 @@ function renderShoeAnalytics(data) {
   document.getElementById('shoe-analysis-sub').textContent = `${shoe.is_retired ? '已退役' : '使用中'} · ${shoe.categories.join(' / ') || '未分類'} · 購入 ${shoe.purchase_date.replace(/-/g, '/')}`;
   // A retired pair has no forecast (SPEC-055); say so instead of "cannot forecast".
   const retired = life.forecast_source === 'retired';
-  const idle = life.forecast_source === 'idle_90_days';
+  // SPEC-138: a pair never logged has no rate either, like one idle for 90 days.
+  const idle = ['idle_90_days', 'no_runs'].includes(life.forecast_source);
   const forecast = retired ? '已退役' : idle ? '—' : life.forecast_retirement_date ? life.forecast_retirement_date.replace(/-/g, '/') : '無法預估';
-  const forecastSub = retired ? '退役後不再預估' : idle ? '近 90 天沒穿，偶爾穿的鞋不預估'
+  const forecastSub = retired ? '退役後不再預估' : idle ? forecastSourceText(life.forecast_source)
     : `${forecastSourceText(life.forecast_source)} · ${Number(life.forecast_monthly_km).toFixed(1)} km／月`;
   const cards = [
     { label: '總里程', value: `${formatShoeMileage(life.total_mileage_km)} km`, sub: usage.average_pace_seconds_per_km ? `平均配速 ${formatPace(usage.average_pace_seconds_per_km)}` : '' },

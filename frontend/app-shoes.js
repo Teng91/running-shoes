@@ -54,12 +54,11 @@ class ShoeModal {
     this.formIds = {
       nickname: 'f-nickname', brand: 'f-brand', model: 'f-model', date: 'f-date', size: 'f-size',
       price: 'f-price', orig: 'f-orig', mileage: 'f-mileage',
-      expected: 'f-expected', monthly: 'f-monthly'
+      expected: 'f-expected'
     };
     this.btnDelete = document.getElementById('btn-delete');
     this.btnMove = document.getElementById('btn-move');
     this.titleEl = document.getElementById('modal-title');
-    this.monthlyRow = document.getElementById('f-monthly').parentElement;
     // SPEC-137: saving, deleting, moving and closing go through registerUiActions and
     // registerDialog below, like every other dialog.
   }
@@ -70,7 +69,7 @@ class ShoeModal {
     this.shoe = null;
     this.context = { mode: this.mode, shoe: null, session: captureAuthSession(), saving: false };
     this._resetForm();
-    this._updateUI({ title: '新增跑鞋', showDelete: false, showMove: false, monthly: 60, monthlyVisible: true });
+    this._updateUI({ title: '新增跑鞋', showDelete: false, showMove: false });
     this._show();
   }
 
@@ -84,8 +83,6 @@ class ShoeModal {
       showDelete: true,
       showMove: true,
       moveText: isRetired ? '移至現役' : '移至退役',
-      monthly: isRetired ? 0 : shoe.monthly_km,
-      monthlyVisible: !isRetired
     });
     this.context.draftBase = this._payload();
     this._show();
@@ -103,7 +100,7 @@ class ShoeModal {
 
   _fillForm(s) {
     Object.entries(this.formIds).forEach(([k, id]) => {
-      const field = k === 'orig' ? 'orig_price' : k === 'expected' ? 'expected_mileage' : k === 'monthly' ? 'monthly_km' : k;
+      const field = k === 'orig' ? 'orig_price' : k === 'expected' ? 'expected_mileage' : k;
       document.getElementById(id).value = s[field] ?? '';
     });
     // Check category checkboxes based on the shoe's categories
@@ -112,14 +109,12 @@ class ShoeModal {
       .forEach(cb => cb.checked = cats.includes(cb.value));
   }
 
-  _updateUI({ title, showDelete, showMove, moveText, monthly, monthlyVisible }) {
+  _updateUI({ title, showDelete, showMove, moveText }) {
     this.titleEl.textContent = title;
     this.btnDelete.hidden = !showDelete;
     this.btnMove.hidden = !showMove;
     document.getElementById('shoe-secondary-actions').hidden = !showDelete && !showMove;
     this.btnMove.textContent = moveText || '';
-    this.monthlyRow.hidden = !monthlyVisible;
-    document.getElementById('f-monthly').value = monthly;
   }
 
   _setBusy(busy) {
@@ -177,7 +172,7 @@ class ShoeModal {
     context.mode = this.mode = retired ? 'editRetired' : 'editActive';
     this._fillForm(saved);
     this._updateUI({ title: retired ? '編輯退役跑鞋' : '編輯跑鞋', showDelete: true, showMove: true,
-      moveText: retired ? '移至現役' : '移至退役', monthly: saved.monthly_km, monthlyVisible: !retired });
+      moveText: retired ? '移至現役' : '移至退役' });
     context.draftBase = this._payload();
     for (const id of dirtyFields) document.getElementById(id).value = draft.fields[id];
     if (dirtyCategories) {
@@ -204,7 +199,6 @@ class ShoeModal {
       orig_price: num('f-orig'),
       mileage: num('f-mileage'),
       expected_mileage: num('f-expected'),
-      monthly_km: num('f-monthly'),
       categories: getSelectedCategories(),
       is_retired: this.mode === 'editRetired'
     };
@@ -236,24 +230,13 @@ class ShoeModal {
     const shoe = context.shoe;
     const targetRetired = context.mode === 'editActive';
     if (!confirm(`確定要移至${targetRetired ? '退役' : '現役'}？`)) return;
-    const payload = { is_retired: targetRetired, expected_version: shoe.version, monthly_km: shoe.monthly_km };
-    if (targetRetired) {
-      payload.monthly_km = 0;
-    } else if (!payload.monthly_km) {
-      // 退役時月跑量被歸零，回到現役時用其他現役鞋的平均月跑量當起始參考。
-      const activeKm = coreData.shoes
-        .filter(s => s.id !== shoe.id && !s.is_retired && s.monthly_km > 0)
-        .map(s => s.monthly_km);
-      payload.monthly_km = activeKm.length
-        ? Math.round(activeKm.reduce((a, b) => a + b, 0) / activeKm.length * 10) / 10
-        : 60;
-    }
+    const payload = { is_retired: targetRetired, expected_version: shoe.version };
     // Movement acknowledges only lifecycle fields; unsaved descriptive fields retain
     // their original baseline, including edits made before clicking Move.
     const baseline = this._formSnapshot();
     for (const [name, id] of Object.entries(this.formIds)) {
-      const key = ({ orig: 'orig_price', expected: 'expected_mileage', monthly: 'monthly_km' })[name] || name;
-      if (key !== 'monthly_km') baseline.fields[id] = String(context.draftBase[key] ?? '');
+      const key = ({ orig: 'orig_price', expected: 'expected_mileage' })[name] || name;
+      baseline.fields[id] = String(context.draftBase[key] ?? '');
     }
     baseline.categories = JSON.stringify(context.draftBase.categories);
     return this._mutate(context, () => apiPut('/shoes/' + shoe.id, payload), '移動失敗', baseline);

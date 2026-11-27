@@ -194,7 +194,7 @@ function resumeWorkspaceEditor(key) {
   for (const [id, value] of Object.entries(draft.values || {})) document.getElementById(id).value = value;
   editor.restored?.(draft);
   if (draft.inline) {
-    const fields = { mileage: 'f-mileage', expected_mileage: 'f-expected', monthly_km: 'f-monthly' };
+    const fields = { mileage: 'f-mileage', expected_mileage: 'f-expected' };
     document.getElementById(fields[draft.inline.field]).value = draft.inline.value;
   }
 }
