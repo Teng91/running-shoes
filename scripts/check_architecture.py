@@ -95,6 +95,16 @@ def forbidden_dependency_chain(start: Path, forbidden: tuple[str, ...]) -> list[
     return None
 
 
+def tool_query_violations(tools: Path) -> list[str]:
+    """Agent tools are thin adapters: a ``.query(...)`` call belongs in a read model."""
+    offenders = []
+    for path in sorted(tools.glob("*.py")):
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "query":
+                offenders.append(f"{path.relative_to(ROOT).as_posix()}:{node.lineno}")
+    return offenders
+
+
 def router_cross_imports(routers: Path) -> list[str]:
     """SPEC-090: a route module never imports another one.
 
@@ -369,12 +379,19 @@ def _check_router_mutations() -> None:
 
 
 def _check_domain_dependencies() -> None:
-    """Services and read models never reach HTTP or tool adapters; routers never import each other."""
+    """Services and read models never reach HTTP or tool adapters; read models never reach services;
+    tools never build queries; routers never import each other."""
     for directory in (SERVICES, ROOT / "backend" / "read_models"):
         for path in sorted(directory.glob("*.py")):
             chain = forbidden_dependency_chain(path, ("fastapi", "starlette", "backend.routers", "backend.main", "backend.tools"))
             if chain:
                 fail("domain/service dependency violation: " + " -> ".join(chain))
+    for path in sorted((ROOT / "backend" / "read_models").glob("*.py")):
+        chain = forbidden_dependency_chain(path, ("backend.services",))
+        if chain:
+            fail("read models must not depend on application services: " + " -> ".join(chain))
+    for offender in tool_query_violations(ROOT / "backend" / "tools"):
+        fail(f"tool adapters read through read models and never build queries: {offender}")
     for offender in router_cross_imports(ROUTERS):
         fail(f"router modules must not import each other: {offender}")
 

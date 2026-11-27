@@ -55,6 +55,14 @@ def _shoe_data(shoe: models.Shoe) -> dict:
     }
 
 
+def shoe_names(db: Session, user_id: int) -> dict[int, str]:
+    """Every shoe of the account by id, deleted ones marked, for labelling runs."""
+    rows = db.query(models.Shoe.id, models.Shoe.brand, models.Shoe.model, models.Shoe.is_deleted).filter(
+        models.Shoe.user_id == user_id
+    )
+    return {shoe_id: f"{brand} {model}" + ("（已刪除）" if deleted else "") for shoe_id, brand, model, deleted in rows}
+
+
 def shoes_by_status(db: Session, user_id: int, *, retired: bool) -> list[models.Shoe]:
     """This account's undeleted shoes on one side of the active/retired split."""
     return (

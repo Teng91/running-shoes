@@ -7,7 +7,6 @@ from sqlalchemy.orm import Session
 
 from backend import models
 from backend.read_models.rounding import round_metric
-from backend.services.run_identity import deleted_strava_ids
 from backend.strava_import import (
     _normalize_gear,
     date_corrections,
@@ -36,6 +35,14 @@ class StoredRuns:
         self, rows: list[dict[str, object]]
     ) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
         return manual_matches(rows, self.manual, set(self.strava) | self.deleted_ids)
+
+
+def deleted_strava_ids(db: Session, user_id: int) -> set[str]:
+    """Strava activities this account deleted; a CSV re-import must not recreate them."""
+    rows = db.query(models.RunTombstone.strava_id).filter(
+        models.RunTombstone.user_id == user_id, models.RunTombstone.strava_id.isnot(None),
+    )
+    return {strava_id for (strava_id,) in rows if strava_id}
 
 
 def stored_runs(db: Session, user_id: int) -> StoredRuns:

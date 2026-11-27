@@ -80,12 +80,6 @@ function formatPace(secondsPerKm) {
   return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')} /km`;
 }
 
-function plausibleRunPace(seconds, km) {
-  if (!Number.isFinite(seconds) || !Number.isFinite(km) || km <= 0) return false;
-  const pace = seconds / km;
-  return pace >= RUN_PACE_MIN_SECONDS && pace <= RUN_PACE_MAX_SECONDS;
-}
-
 // Live hint under the duration field; the saved pace is always the backend's.
 function updateRunPacePreview(prefix) {
   formatDurationInput(document.getElementById(`${prefix}-duration`));
@@ -93,10 +87,11 @@ function updateRunPacePreview(prefix) {
   if (!target) return;
   const seconds = parseRunDuration(document.getElementById(`${prefix}-duration`)?.value);
   const km = parseFloat(document.getElementById(`${prefix}-km`).value);
+  const activityType = document.getElementById(`${prefix}-activity`)?.value;
   if (seconds === null) target.textContent = '填寫後會自動計算配速';
   else if (Number.isNaN(seconds)) target.textContent = '格式例如 32:15、1:05:30 或 45（分鐘）';
   else if (!Number.isFinite(km) || km <= 0) target.textContent = '填寫距離後會顯示配速';
-  else if (!plausibleRunPace(seconds, km)) target.textContent = '配速不合理（每公里 1:00–60:00），請確認時間與距離';
+  else if (!plausibleRunPace(seconds, km, activityType)) target.textContent = `配速不合理（${runPaceRangeText(activityType)}），請確認時間與距離`;
   else target.textContent = `配速 ${formatPace(seconds / km)}`;
 }
 
@@ -105,7 +100,8 @@ function readRunDuration(prefix, km) {
   const seconds = parseRunDuration(document.getElementById(`${prefix}-duration`)?.value);
   if (seconds === null) return { seconds: null };
   if (Number.isNaN(seconds)) return { error: '跑步時間格式例如 32:15、1:05:30 或 45（分鐘）。' };
-  if (!plausibleRunPace(seconds, km)) return { error: '跑步時間換算的配速不合理（每公里 1:00–60:00），請確認時間與距離。' };
+  const activityType = document.getElementById(`${prefix}-activity`)?.value;
+  if (!plausibleRunPace(seconds, km, activityType)) return { error: `跑步時間換算的配速不合理（${runPaceRangeText(activityType)}），請確認時間與距離。` };
   return { seconds };
 }
 
@@ -446,7 +442,10 @@ registerUiActions({
   change: {
     'run-date-warning': element => updateRunDateWarning(element.dataset.form),
     'run-shoe': element => onRunShoeChange(element.dataset.form),
-    'run-activity-hint': element => updateRunActivityHint(element.dataset.form),
+    'run-activity-hint': element => {
+      updateRunActivityHint(element.dataset.form);
+      updateRunPacePreview(element.dataset.form);
+    },
     'load-runs': () => loadRunsForSelectedMonth(),
   },
   input: {

@@ -284,7 +284,7 @@ def test_restore_refuses_to_overwrite_later_changes(workspace):
 
 def test_schema_eight_backfills_deleted_strava_activities_from_audit_history(workspace):
     """SPEC-055: runs deleted before schema 8 keep their Strava activity once upgraded."""
-    from backend.services.run_identity import deleted_strava_ids
+    from backend.read_models.strava_preview import deleted_strava_ids
 
     with workspace.sessions() as db:
         shoe = add_shoe(db)

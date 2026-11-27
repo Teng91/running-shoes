@@ -132,7 +132,13 @@ def parse_activity_dates(value: str) -> tuple[str, str]:
     return day, day
 
 
-def parse_duration_seconds(value: str | None, km: float) -> int | None:
+def _row_activity_type(row: dict) -> str | None:
+    """A parsed row's activity type, or None (running pace) when it carries none."""
+    value = row.get("activity_type")
+    return value if isinstance(value, str) else None
+
+
+def parse_duration_seconds(value: str | None, km: float, activity_type: str | None = None) -> int | None:
     """Whole seconds from a Strava time column, or None when absent or implausible.
 
     A missing or unusable time never rejects the activity: the run is still
@@ -145,7 +151,7 @@ def parse_duration_seconds(value: str | None, km: float) -> int | None:
     if not math.isfinite(seconds):
         return None
     duration = round(seconds)
-    return duration if is_plausible_duration(duration, km) else None
+    return duration if is_plausible_duration(duration, km, activity_type) else None
 
 
 def _normalize_gear(value: str) -> str:
@@ -207,9 +213,9 @@ def _activity_row(row: dict, fields: dict[str, str | None], activity_type: str) 
             raise ValueError("invalid activity")
     except (TypeError, ValueError):
         return None
-    duration = parse_duration_seconds(row.get(fields["moving_time"] or ""), km)
+    duration = parse_duration_seconds(row.get(fields["moving_time"] or ""), km, activity_type)
     if duration is None:
-        duration = parse_duration_seconds(row.get(fields["elapsed_time"] or ""), km)
+        duration = parse_duration_seconds(row.get(fields["elapsed_time"] or ""), km, activity_type)
     return {
         "strava_id": activity_id[:100],
         "duration_seconds": duration,
@@ -285,7 +291,7 @@ def duration_backfills(
             continue
         seen.add(strava_id)
         stored_duration, km = existing[strava_id]
-        if stored_duration is None and is_plausible_duration(duration, km):
+        if stored_duration is None and is_plausible_duration(duration, km, _row_activity_type(row)):
             backfills.append({"strava_id": strava_id, "duration_seconds": duration})
     return backfills
 
@@ -341,7 +347,7 @@ def manual_matches(
                 fill = (
                     duration
                     if partner[3] is None and isinstance(duration, int)
-                    and is_plausible_duration(duration, partner[2])
+                    and is_plausible_duration(duration, partner[2], _row_activity_type(row))
                     else None
                 )
                 links.append({"strava_id": str(row["strava_id"]), "run_id": partner[0],

@@ -212,3 +212,19 @@ def test_frontend_functions_stay_short_or_only_shrink(tmp_path):
     assert "set it to 87" in violations(lengths, {"a.js:long": 90})[0]
     assert "remove it from" in violations({"a.js:long": 70}, {"a.js:long": 87})[0]
     assert "no longer exists" in violations({}, {"a.js:gone": 99})[0]
+
+
+def test_read_models_never_depend_on_application_services():
+    """SPEC-139: dependency runs services -> read models, never back."""
+    for path in sorted((check_architecture.ROOT / "backend" / "read_models").glob("*.py")):
+        assert check_architecture.forbidden_dependency_chain(path, ("backend.services",)) is None, path
+
+
+def test_tool_adapters_never_build_queries(tmp_path, monkeypatch):
+    """SPEC-139: agent tools read through read models; a query in a tool is reported."""
+    assert check_architecture.tool_query_violations(check_architecture.ROOT / "backend" / "tools") == []
+    monkeypatch.setattr(check_architecture, "ROOT", tmp_path)
+    tools = tmp_path / "backend" / "tools"
+    tools.mkdir(parents=True)
+    (tools / "adapter.py").write_text("def names(db):\n    return db.query(1).all()\n", encoding="utf-8")
+    assert check_architecture.tool_query_violations(tools) == ["backend/tools/adapter.py:2"]

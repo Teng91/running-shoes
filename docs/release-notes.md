@@ -4,6 +4,12 @@
 每版的摘要見 [CHANGELOG.md](../CHANGELOG.md)；目前的功能與操作方式以 [README](../README.md) 為準。
 這裡保留當時的文字，後續版本可能已調整其中的行為。
 
+### 讀取模型分層與健行／步行配速上限（SPEC-139，v5.3.5）
+
+- `run_metrics.max_pace_seconds_per_km()`：路跑與越野跑每公里最慢 60:00，健行與步行 120:00；`is_plausible_duration()` 多了選填的 `activity_type`。新增、編輯（`services/runs._check_effective_pace()` 依編輯後的距離、時間與類型檢查）、Strava 解析與補時間，以及前端 `plausibleRunPace()` 都使用同一規則。
+- `deleted_strava_ids` 從 `services/run_identity.py` 移到 `read_models/strava_preview.py`；`db_tools` 的鞋名對照改用 `read_models/shoes.shoe_names()`。`architecture-check` 新增「讀取模型不依賴 services」與「tools 不呼叫 `.query`」。
+- 沒有 schema 或 API 路由變更，可直接回滾至 v5.3.4 image；回滾後已存的慢速健行照常顯示。Asset 5.3.5／shell v143。
+
 ### 課表強度欄統一為實際／建議格式（SPEC-124，v5.3.4）
 
 - `runtime/race-plan-view.mjs` 的 `zoneText()` 改為所有有紀錄或有建議的區間都顯示 `${actual}/${target}`（例如 `輕鬆 1/0`、`比賽配速 0/1`），包括建議次數為 0 的區間與未開始的週；達成加粗與「—」條件不變。

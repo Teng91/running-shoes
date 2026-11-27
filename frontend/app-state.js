@@ -37,6 +37,8 @@ const LIFECYCLE_REPLACE_SOON_PERCENT = 90;
 // A Python test keeps both sides equal; the backend still validates every write.
 const RUN_PACE_MIN_SECONDS = 60;
 const RUN_PACE_MAX_SECONDS = 3600;
+// SPEC-139: hikes and walks climb and stop, so they accept up to 120:00 per km.
+const RUN_SHOE_ONLY_PACE_MAX_SECONDS = 7200;
 
 // Run activity types, mirrored from backend/run_metrics.py (SPEC-096). Every type counts
 // toward shoe mileage; training types count toward volume and goals; only pace types feed
@@ -45,6 +47,21 @@ const RUN_ACTIVITY_TYPES = ['road', 'trail', 'hike', 'walk'];
 const RUN_TRAINING_ACTIVITY_TYPES = ['road', 'trail'];
 const RUN_PACE_ACTIVITY_TYPES = ['road'];
 const RUN_ACTIVITY_LABELS = Object.freeze({ road: '路跑', trail: '越野跑', hike: '健行', walk: '步行' });
+
+// SPEC-139: running types keep the running bound; hikes and walks allow a slower pace.
+function runPaceMaxSeconds(activityType) {
+  return RUN_TRAINING_ACTIVITY_TYPES.includes(activityType || 'road') ? RUN_PACE_MAX_SECONDS : RUN_SHOE_ONLY_PACE_MAX_SECONDS;
+}
+
+function runPaceRangeText(activityType) {
+  return `每公里 ${RUN_PACE_MIN_SECONDS / 60}:00–${runPaceMaxSeconds(activityType) / 60}:00`;
+}
+
+function plausibleRunPace(seconds, km, activityType) {
+  if (!Number.isFinite(seconds) || !Number.isFinite(km) || km <= 0) return false;
+  const pace = seconds / km;
+  return pace >= RUN_PACE_MIN_SECONDS && pace <= runPaceMaxSeconds(activityType);
+}
 
 // The service keeps one calendar: Taiwan time, a fixed UTC+8 without daylight saving,
 // mirrored from backend/clock.py (SPEC-093). "Today" comes from it, not from the device's

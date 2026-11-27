@@ -3,7 +3,7 @@
 from sqlalchemy.orm import Session
 
 from backend import models, schemas
-from backend.run_metrics import DEFAULT_ACTIVITY_TYPE, is_plausible_duration
+from backend.run_metrics import DEFAULT_ACTIVITY_TYPE, is_plausible_duration, pace_range_text
 from backend.services.errors import Conflict, Invalid, NotFound
 from backend.services.identifiers import allocate_id
 from backend.services.mileage import apply_run_mileage_deltas
@@ -63,14 +63,8 @@ def update_run(db: Session, user_id: int, run_id: int, payload: schemas.RunUpdat
             _user_shoe_or_404(db, user_id, update_data["shoe_id"])
         # The schema checks a duration against a submitted distance; these cover the stored
         # side. SPEC-093: a distance edit must also keep a stored moving time plausible.
-        duration = update_data.get("duration_seconds")
-        if duration is not None and "km" not in update_data and not is_plausible_duration(duration, run.km):
-            raise Invalid("跑步時間與距離換算的配速不合理（每公里 1:00–60:00）")
-        stored_duration = getattr(run, "duration_seconds", None)
-        if ("km" in update_data and "duration_seconds" not in update_data and stored_duration is not None
-                and not is_plausible_duration(stored_duration, float(update_data["km"]))):
-            raise Invalid("新距離與已記錄的跑步時間換算的配速不合理（每公里 1:00–60:00），請一併修改或清除跑步時間")
         stored_type = getattr(run, "activity_type", DEFAULT_ACTIVITY_TYPE)
+        _check_effective_pace(run, update_data, stored_type)
         old_values = (run.shoe_id, run.date, run.km, stored_type)
         new_values = (
             int(update_data.get("shoe_id", run.shoe_id)),
@@ -99,6 +93,27 @@ def update_run(db: Session, user_id: int, run_id: int, payload: schemas.RunUpdat
             db, user_id, [(old_values[0], old_values[1], -old_values[2], old_values[3]), new_values], 1
         )
         return run
+
+
+def _check_effective_pace(run: models.Run, update_data: dict, stored_type: str) -> None:
+    """The edited run's moving time, distance and type must still give a plausible pace.
+
+    The schema checks only the submitted fields; this covers the stored side (SPEC-093) and
+    the type's own bound, since hikes and walks allow a slower pace (SPEC-139).
+    """
+    if not {"km", "duration_seconds", "activity_type"} & update_data.keys():
+        return
+    activity_type = str(update_data.get("activity_type", stored_type))
+    km = float(update_data.get("km", run.km))
+    duration = update_data.get("duration_seconds", getattr(run, "duration_seconds", None))
+    if duration is None or is_plausible_duration(duration, km, activity_type):
+        return
+    limit = pace_range_text(activity_type)
+    if "duration_seconds" in update_data:
+        raise Invalid(f"跑步時間與距離換算的配速不合理（{limit}）")
+    if "km" in update_data:
+        raise Invalid(f"新距離與已記錄的跑步時間換算的配速不合理（{limit}），請一併修改或清除跑步時間")
+    raise Invalid(f"已記錄的跑步時間以這個運動類型換算的配速不合理（{limit}），請一併修改或清除跑步時間")
 
 
 def delete_run(db: Session, user_id: int, run_id: int, expected_version: int | None = None):

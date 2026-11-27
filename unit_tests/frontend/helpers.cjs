@@ -63,8 +63,8 @@ function featureContext(globals = {}) {
   };
   vm.runInContext(['applyCoreResource', 'beginInlineEdit', 'finishInlineEdit', 'preserveInlineTable', 'readForm', 'matchesForm', 'shoeLabel', 'invalidateDataResources', 'refreshCoreData', 'registerResourceCaches', 'goalFormValues', 'goalStartYearOptions', 'setGoalField', 'setGoalSettingsOpen', 'updateGoalYearlyHint', 'prepareGoalForm', 'formatRunDuration', 'formatPace'].map(extract).join('\n'), context);
   // SPEC-060 pace helpers are shared by run creation, editing and rendering.
-  vm.runInContext(source.match(/const RUN_PACE_MIN_SECONDS = \d+;\s*const RUN_PACE_MAX_SECONDS = \d+;/)[0] + '\n'
-    + ['parseRunDuration', 'groupDurationDigits', 'formatDurationInput', 'plausibleRunPace', 'updateRunPacePreview', 'readRunDuration'].map(extract).join('\n'), context);
+  vm.runInContext(source.match(/const RUN_PACE_MIN_SECONDS = \d+;\s*const RUN_PACE_MAX_SECONDS = \d+;\s*(?:\/\/[^\n]*\n\s*)?const RUN_SHOE_ONLY_PACE_MAX_SECONDS = \d+;/)[0] + '\n'
+    + ['parseRunDuration', 'groupDurationDigits', 'formatDurationInput', 'runPaceMaxSeconds', 'runPaceRangeText', 'plausibleRunPace', 'updateRunPacePreview', 'readRunDuration'].map(extract).join('\n'), context);
   // SPEC-096 activity types: constants and the form/label helpers shared by run features.
   vm.runInContext(source.match(/const RUN_ACTIVITY_TYPES = [^\n]+\n(?:const RUN_[A-Z_]+ = [^\n]+\n){3}/)[0]
     + ['lastActivityTypeForShoe', 'runActivityLabel', 'updateRunActivityHint'].map(extract).join('\n'), context);

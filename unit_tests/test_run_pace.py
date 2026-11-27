@@ -255,10 +255,15 @@ def test_schema_nine_rollback_keeps_times_and_reupgrades(tmp_path):
 
 
 def test_frontend_pace_bounds_mirror_the_backend():
-    from backend.run_metrics import MAX_PACE_SECONDS_PER_KM, MIN_PACE_SECONDS_PER_KM
+    from backend.run_metrics import (
+        MAX_PACE_SECONDS_PER_KM,
+        MAX_SHOE_ONLY_PACE_SECONDS_PER_KM,
+        MIN_PACE_SECONDS_PER_KM,
+    )
     state = Path("frontend/app-state.js").read_text(encoding="utf-8")
     assert f"const RUN_PACE_MIN_SECONDS = {MIN_PACE_SECONDS_PER_KM};" in state
     assert f"const RUN_PACE_MAX_SECONDS = {MAX_PACE_SECONDS_PER_KM};" in state
+    assert f"const RUN_SHOE_ONLY_PACE_MAX_SECONDS = {MAX_SHOE_ONLY_PACE_SECONDS_PER_KM};" in state
 
 
 def test_stored_moving_time_still_serializes_after_a_distance_edit():
@@ -348,3 +353,43 @@ def test_shoe_views_keep_hikes_and_walks_out_of_running_distances(db):
     assert statistics["count"] == 4, "every activity is a wear of the shoe"
     assert [(row["date"], row["activity_type"]) for row in statistics["recent"]] == [
         ("2026-10-06", "walk"), ("2026-10-05", "hike"), ("2026-10-04", "trail"), ("2026-10-03", "road")]
+
+
+def test_hikes_and_walks_accept_a_slower_pace_than_runs(client, db):
+    """SPEC-139: a steep hike slower than 60:00/km is real; running types keep the 60:00 bound."""
+    from backend.run_metrics import max_pace_seconds_per_km, pace_range_text
+
+    assert max_pace_seconds_per_km("road") == max_pace_seconds_per_km("trail") == 3600
+    assert max_pace_seconds_per_km("hike") == max_pace_seconds_per_km("walk") == 7200
+    assert max_pace_seconds_per_km("unknown") == 3600, "an unknown type is held to running pace"
+    assert pace_range_text("walk") == "每公里 1:00–120:00"
+    assert is_plausible_duration(4 * 5400, 4, "hike") and not is_plausible_duration(4 * 5400, 4, "road")
+    assert not is_plausible_duration(4 * 7201, 4, "walk")
+
+    user, shoe = owner(db)
+    # 4 km in 6 hours: 90:00/km, a steep hike.
+    hike = {"date": "2026-11-15", "km": 4, "shoe_id": shoe.id, "duration_seconds": 21600}
+    assert client.post("/api/runs", headers=headers(user), json={**hike, "activity_type": "road"}).status_code == 422
+    created = client.post("/api/runs", headers=headers(user), json={**hike, "activity_type": "hike"})
+    assert created.status_code == 200 and created.json()["pace_seconds_per_km"] == 5400
+    run_id = created.json()["id"]
+
+    # Without a type in the update, the stored hike type sets the bound.
+    slower = client.put(f"/api/runs/{run_id}", headers=headers(user), json={"duration_seconds": 25200})
+    assert slower.status_code == 200 and slower.json()["pace_seconds_per_km"] == 6300
+    too_slow = client.put(f"/api/runs/{run_id}", headers=headers(user), json={"duration_seconds": 4 * 7300})
+    assert too_slow.status_code == 400 and "120:00" in too_slow.json()["detail"]
+    # Turning the slow hike into a road run would leave an implausible running pace.
+    retyped = client.put(f"/api/runs/{run_id}", headers=headers(user), json={"activity_type": "road"})
+    assert retyped.status_code == 400 and "60:00" in retyped.json()["detail"]
+    stored = db.get(Run, run_id)
+    assert (stored.activity_type, stored.duration_seconds) == ("hike", 25200)
+
+
+def test_strava_hike_moving_time_uses_the_hike_pace_bound():
+    """SPEC-139: an imported slow hike keeps its moving time instead of dropping it."""
+    from backend.strava_import import parse_duration_seconds
+
+    assert parse_duration_seconds("21600", 4, "hike") == 21600
+    assert parse_duration_seconds("21600", 4, "road") is None
+    assert parse_duration_seconds("21600", 4) is None
