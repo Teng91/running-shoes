@@ -4,6 +4,11 @@
 每版的摘要見 [CHANGELOG.md](../CHANGELOG.md)；目前的功能與操作方式以 [README](../README.md) 為準。
 這裡保留當時的文字，後續版本可能已調整其中的行為。
 
+### 個人最佳的跑步距離（SPEC-136，v5.3.1）
+
+- `app-pace-charts.personalBestCard()` 的最佳成績與第 2、3 名都以「日期 · 跑步距離」標示，不再只在 `from_longer_run` 時才寫距離；API 不變（`from_longer_run` 仍回傳）。
+- 沒有 schema 變更，可直接回滾至 v5.3.0 image。Asset 5.3.1／shell v139。
+
 ### 個人最佳（SPEC-136，v5.3.0）
 
 - 新的 `read_models/personal_bests.py` 與唯讀 API `GET /api/analytics/personal-bests`：只讀有時間的路跑，不短於該距離 99% 的跑步以平均配速換算成 5K、10K、15K、半馬的時間，每個距離取最快 3 筆，同秒數時日期早的在前。紀錄沒有分段，所以算不出一場跑步中最快的一段；較長跑步換算出的時間不會比它的平均配速快。
