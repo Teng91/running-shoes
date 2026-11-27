@@ -354,8 +354,11 @@ def manual_matches(
                 links.append({"strava_id": str(row["strava_id"]), "run_id": partner[0],
                               "date": day, "duration_seconds": fill})
                 continue
+            # The activity type stays server-side (the preview copies only its own keys); a chosen
+            # link checks the filled moving time against that type's pace bound (SPEC-141).
             conflicts.append({"strava_id": str(row["strava_id"]), "date": day, "km": km,
-                              "duration_seconds": row.get("duration_seconds"), "gear": str(row.get("gear") or "")})
+                              "duration_seconds": row.get("duration_seconds"), "gear": str(row.get("gear") or ""),
+                              "activity_type": _row_activity_type(row)})
     # SPEC-091: the user may link a conflict to any manual run that day that this import
     # does not link automatically.
     linked_runs = {int(cast(int, link["run_id"])) for link in links}
@@ -420,7 +423,8 @@ def resolve_conflicts(
         duration = conflict.get("duration_seconds")
         fill = (
             duration
-            if manual[3] is None and isinstance(duration, int) and is_plausible_duration(duration, manual[2])
+            if manual[3] is None and isinstance(duration, int)
+            and is_plausible_duration(duration, manual[2], _row_activity_type(conflict))
             and _close_km(float(str(conflict["km"])), manual[2])
             else None
         )
