@@ -154,7 +154,8 @@ def parse_duration_seconds(value: str | None, km: float, activity_type: str | No
     return duration if is_plausible_duration(duration, km, activity_type) else None
 
 
-def _normalize_gear(value: str) -> str:
+def normalize_gear(value: str) -> str:
+    """Gear name key for matching Strava gear to shoes: case-folded letters and digits only."""
     return "".join(character for character in value.casefold() if character.isalnum())
 
 
@@ -200,7 +201,7 @@ def _activity_row(row: dict, fields: dict[str, str | None], activity_type: str) 
     try:
         activity_id = (row.get(fields["id"] or "") or "").strip()
         date_value, utc_date = parse_activity_dates(row.get(fields["date"] or "") or "")
-        schemas._validate_completed_run_date(date_value)
+        schemas.validate_completed_run_date(date_value)
         distance_m = float((row.get(fields["distance"] or "") or "").replace(",", "").strip())
         km = round(distance_m / 1000, 2)
         if (

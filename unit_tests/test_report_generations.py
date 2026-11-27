@@ -173,3 +173,37 @@ def test_schema_four_upgrade_preserves_existing_reports(tmp_path):
         token = begin_generation(db, 1, 2026, 6)
         assert persist_current_report(db, 1, 2026, 6, token, "new", "mock", {"km": 8})
     engine.dispose()
+
+
+def test_unexpected_report_failures_reach_the_server_log_not_the_user(sessions, monkeypatch, caplog):
+    """SPEC-140: each neutral error has a logged cause; the report text is never logged."""
+    def broken(*args):
+        raise RuntimeError("private internals")
+
+    def failing_stream(_):
+        raise RuntimeError("private stream")
+
+    caplog.set_level("ERROR", logger="running_shoes.reports")
+    with sessions() as db:
+        monkeypatch.setattr(reports, "begin_generation", broken)
+        assert list(generate(db, "test"))[-1]["type"] == "error"
+        monkeypatch.setattr(reports, "begin_generation", begin_generation)
+        assert list(generate(db, "test", stream=failing_stream))[-1]["type"] == "error"
+        monkeypatch.setattr(reports, "persist_current_report", broken)
+        events = list(generate(db, "secret report body"))
+    assert events[-1]["type"] == "error" and "private" not in str(events)
+    messages = [record.getMessage() for record in caplog.records]
+    assert messages == ["Report preparation failed for 2026-06", "Report model stream failed for 2026-06",
+                        "Report save failed for 2026-06"]
+    assert all(record.exc_info for record in caplog.records)
+    assert "secret report body" not in caplog.text
+
+
+def test_safe_model_errors_are_not_logged_as_failures(sessions, caplog):
+    def refused(_):
+        raise reports.ReportModelError("safe model error")
+
+    caplog.set_level("ERROR", logger="running_shoes.reports")
+    with sessions() as db:
+        assert list(generate(db, "test", stream=refused))[-1] == {"type": "error", "text": "safe model error"}
+    assert caplog.records == []

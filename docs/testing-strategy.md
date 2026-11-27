@@ -301,6 +301,10 @@ SPEC-032：合成資料驗證歷史筆數上限（v4.7.3 起 10,000／10,001）�
 
 [規格與具名案例](specs/116-keep-scheduled-workflows-enabled.md) 以文字解析 `offsite-backup.yml`：續命 job 不依賴備份 job、只有它有 `actions: write`、只用 `GITHUB_TOKEN` 不用 secret、失敗只發警告，且 repo 裡每個有 `schedule` 的 workflow 都在它的重新啟用清單中。
 
+## SPEC-140 記錄被吞掉的例外與模組私有函式
+
+[規格與具名案例](specs/140-log-swallowed-errors.md) 以 `caplog` 確認月報三個失敗階段各留下一筆含 traceback 的紀錄、月報內文不在紀錄中、`ReportModelError` 不記錄；AI 工具失敗記錄工具名稱與例外類型、不含參數；架構測試以暫存模組確認跨模組匯入或呼叫底線名稱會被回報。
+
 ## SPEC-139 讀取模型分層與健行／步行配速上限
 
 [規格與具名案例](specs/139-review-layering-and-hike-pace.md) 以架構測試確認讀取模型不依賴 `backend.services`、工具模組沒有 `.query(...)`（並以暫存檔確認違規會被回報）；Python 測試確認每公里 90:00 的健行可新增與編輯、同樣的路跑與「改成路跑」被拒絕並顯示對應範圍、Strava 慢速健行保留移動時間；前端測試確認配速提示與送出檢查依表單類型採用 60:00 或 120:00，常數由 Python 測試鏡像比對。

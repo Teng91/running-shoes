@@ -4,6 +4,12 @@
 每版的摘要見 [CHANGELOG.md](../CHANGELOG.md)；目前的功能與操作方式以 [README](../README.md) 為準。
 這裡保留當時的文字，後續版本可能已調整其中的行為。
 
+### 記錄被吞掉的例外與模組私有函式（SPEC-140，v5.3.6）
+
+- `services/reports.py`（logger `running_shoes.reports`）在準備、模型串流與儲存失敗時記錄 traceback 與年月；`agent._execute_tool_safely` 記錄工具名稱與 traceback，不記參數。使用者訊息與 SSE 事件不變。
+- `strava_import.normalize_gear` 與 `schemas.validate_completed_run_date` 改為公開名稱；`architecture-check` 新增 `private_import_violations()`。
+- 沒有 schema 或 API 變更，可直接回滾至 v5.3.5 image。Asset 5.3.6／shell v144。
+
 ### 讀取模型分層與健行／步行配速上限（SPEC-139，v5.3.5）
 
 - `run_metrics.max_pace_seconds_per_km()`：路跑與越野跑每公里最慢 60:00，健行與步行 120:00；`is_plausible_duration()` 多了選填的 `activity_type`。新增、編輯（`services/runs._check_effective_pace()` 依編輯後的距離、時間與類型檢查）、Strava 解析與補時間，以及前端 `plausibleRunPace()` 都使用同一規則。

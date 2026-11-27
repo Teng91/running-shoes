@@ -95,6 +95,35 @@ def forbidden_dependency_chain(start: Path, forbidden: tuple[str, ...]) -> list[
     return None
 
 
+def _is_private(name: str) -> bool:
+    return name.startswith("_") and not name.startswith("__")
+
+
+def private_import_violations(backend: Path) -> list[str]:
+    """SPEC-140: an underscore name is its module's own; another module imports a public one."""
+    offenders = []
+    for path in sorted(backend.rglob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        where = path.relative_to(ROOT).as_posix()
+        project_modules: set[str] = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and (node.level or (node.module or "").startswith("backend")):
+                for alias in node.names:
+                    if _is_private(alias.name):
+                        offenders.append(f"{where}:{node.lineno} imports {alias.name}")
+                    else:
+                        project_modules.add(alias.asname or alias.name)
+            elif isinstance(node, ast.Import):
+                project_modules.update(alias.asname or alias.name for alias in node.names
+                                       if alias.name.startswith("backend"))
+        for node in ast.walk(tree):
+            if (isinstance(node, ast.Attribute) and _is_private(node.attr)
+                    and isinstance(node.value, ast.Name) and node.value.id in project_modules
+                    and module_path(f"backend.{node.value.id}") is not None):
+                offenders.append(f"{where}:{node.lineno} uses {node.value.id}.{node.attr}")
+    return offenders
+
+
 def tool_query_violations(tools: Path) -> list[str]:
     """Agent tools are thin adapters: a ``.query(...)`` call belongs in a read model."""
     offenders = []
@@ -390,6 +419,8 @@ def _check_domain_dependencies() -> None:
         chain = forbidden_dependency_chain(path, ("backend.services",))
         if chain:
             fail("read models must not depend on application services: " + " -> ".join(chain))
+    for offender in private_import_violations(ROOT / "backend"):
+        fail(f"private helpers stay in their module (SPEC-140): {offender}")
     for offender in tool_query_violations(ROOT / "backend" / "tools"):
         fail(f"tool adapters read through read models and never build queries: {offender}")
     for offender in router_cross_imports(ROUTERS):

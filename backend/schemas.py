@@ -85,7 +85,7 @@ def _validate_iso_date(value: str) -> str:
     return value
 
 
-def _validate_completed_run_date(value: str) -> str:
+def validate_completed_run_date(value: str) -> str:
     value = _validate_iso_date(value)
     today = local_today()
     if calendar_date.fromisoformat(value) > today:
@@ -499,7 +499,7 @@ class RunCreate(RunBase):
     @field_validator("date")
     @classmethod
     def validate_completed_date(cls, value: str) -> str:
-        return _validate_completed_run_date(value)
+        return validate_completed_run_date(value)
 
 
 class RunUpdate(BaseModel):
@@ -516,7 +516,7 @@ class RunUpdate(BaseModel):
     def validate_date(cls, value: str | None) -> str:
         if value is None:
             raise ValueError("date must not be null")
-        return _validate_completed_run_date(value)
+        return validate_completed_run_date(value)
 
     @field_validator("km")
     @classmethod
