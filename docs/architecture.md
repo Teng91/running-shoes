@@ -216,7 +216,8 @@ flowchart LR
     Lifecycle --> Native
     HTML --> State[app-state.js<br/>共享 state]
     State --> Session[app-session.js<br/>session 身分]
-    Session --> API[app-api.js<br/>HTTP adapters]
+    Session --> Format[app-format.js<br/>runFormat / shoeFormat / raceFormat / goalFormat]
+    Format --> API[app-api.js<br/>HTTP adapters]
     API --> AuthUI[app-auth.js<br/>session lifecycle]
     AuthUI --> Streams[app-streams.js<br/>JSON SSE lifecycle]
     Streams --> Resources[app-resources.js<br/>cache adapters]
@@ -681,6 +682,7 @@ flowchart LR
 - **限流**：`rate_limits.consume()` 把同一請求的所有視窗放在一個交易，滿了就整筆回滾；限額來自 `app.state.settings`，不再保留記憶體桶。SPEC-071 再加上 AI 的每帳號與全站 24 小時視窗，限流桶保留 24 小時。
 - **稽核 trigger**：每次啟動依目前欄位重建，避免舊欄位清單使快照不完整或使寫入失敗。
 - **Strava**：`strava_import.parse_activity_dates()` 把 UTC 時間戳轉為 `clock.APP_TIMEZONE` 日期。`date_corrections()` 只修正仍停在舊 UTC 日期的既有活動，`services/strava_imports.py` 在匯入交易中移動日期與月跑量。
+- **v5.4.0**：review 強化與前端解耦（SPEC-142～145）。`middleware.UploadLimitMiddleware` 在解析前限制每個 `/api/` 請求內容（`Settings.max_api_body_bytes`，上傳路徑各自的上限不變），讀完內容後把後續 `receive()` 交回原連線，SSE 仍收得到真正的中斷；`forecasting.rate_window_days()` 以第一筆跑步起算新鞋的月均（14～90 天）；`llm.current_config()` 沒有注入時不讀環境；`app_factory` 不提供 `templates/`、`css/` 與 `assets.json`，並在 lifespan 每小時清除過期的還原預覽；`services/account_import_changes.ImportTargets`（Protocol）取代型別檢查時的循環匯入。`credentials.create_access_token()` 記錄 `auth_time`，`auth.get_current_session()` 提供驗證過的 claims，`POST /api/auth/refresh`（`accounts.renew_session()`）換發新 token，但不超過登入後 30 天；前端 `app-auth.js` 在 token 過半時續期，`startAuthSession(…, { renewal: true })` 只接受同一個帳號的 token，`isCurrentAuthSession` 以帳號延續 session。`verify.yml` 的瀏覽器重跑保留第一次的診斷並寫入 run summary；新增 `rollback` job：release-check 失敗且這次 commit 的 schema 與部署前相同時，以 `flyctl deploy --image <上一版> --rollback` 回到上一版。前端新增 `app-format.js`，跑步、跑鞋、比賽與目標的共用格式化以凍結的 namespace 提供，功能不再從 `app-runs.js`／`app-dashboard.js` 取用；目標進度與訓練趨勢各自登記月度分頁 hook（`app-goals.js` 移到 `app-monthly-charts.js` 之後載入），換年度只重畫分頁；比賽目標由 `app-race-goal.js` 擁有，`onRaceGoalShown(goal)` 交付讀到的值，存檔後 `refreshPanels('race')`；Strava 匯入歷史與帳號還原以 `refreshPanels('strava-history')`／`refreshPanels('account-history')` 通知；`onWorkspaceModalOpen(opened, { closed })` 讓異動歷史與還原自行登記；年度堆疊圖的請求計數移回 `app-monthly-charts.js`，`run-controller` 不再持有 `annualRequest`。依賴方向改為 feature → app-format／shell／workspace，`cross_script_names` 由 153 降為 132。
 - **v5.3.7**：Strava 衝突連結的健行配速上限（SPEC-141）。`strava_import.manual_matches()` 的衝突在伺服器端帶上活動類型，`resolve_conflicts()` 依它檢查補上的移動時間；預覽回應與依賴方向不變。
 - **v5.3.6**：記錄被吞掉的例外（SPEC-140）。`services/reports.py` 與 `agent._execute_tool_safely` 以 `logger.exception` 留下原因（不含月報內容與工具參數）；`strava_import.normalize_gear`、`schemas.validate_completed_run_date` 改為公開，`check_architecture.private_import_violations()` 禁止跨模組使用底線名稱。依賴方向不變。
 - **v5.3.5**：讀取模型分層與健行／步行配速上限（SPEC-139）。`deleted_strava_ids` 移入 `read_models/strava_preview.py`，讀取模型不再依賴 `services/`；`tools/db_tools.py` 的鞋名對照改由 `read_models/shoes.shoe_names()` 提供；`scripts/check_architecture.py` 以 `forbidden_dependency_chain(…, ("backend.services",))` 與 `tool_query_violations()` 強制這兩條方向。`run_metrics.max_pace_seconds_per_km()` 依活動類型給配速上限（跑步 60:00、健行與步行 120:00），前端在 `app-state.js` 鏡像，`cross_script_names` 不變。

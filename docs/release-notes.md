@@ -4,6 +4,16 @@
 每版的摘要見 [CHANGELOG.md](../CHANGELOG.md)；目前的功能與操作方式以 [README](../README.md) 為準。
 這裡保留當時的文字，後續版本可能已調整其中的行為。
 
+### Review 強化、登入續期、CI 回滾與前端解耦（SPEC-142～145，v5.4.0）
+
+- `UploadLimitMiddleware` 對每個 `/api/` 寫入請求套用 `Settings.max_api_body_bytes`（1 MiB），上傳路徑的 11 MB／64 MiB 不變；超過回 413 `too_large`。讀完內容後的 `receive()` 交回原連線，SSE 照常偵測中斷。
+- `forecasting.rate_window_days()`：第一筆跑步在近 90 天內的鞋，月均以開穿天數（14～90 天）計算；`actual_monthly_km_90_days` 欄位名稱不變，值對新鞋變大。
+- `POST /api/auth/refresh`：token 帶 `auth_time`，續期沿用它，效期不超過登入後 30 天。舊版忽略 `auth_time`，已續期的 token 照常有效到期滿。
+- `llm.current_config()` 未注入時不讀環境；SPA fallback 不提供 `templates/`、`css/`、`assets.json`；lifespan 每小時清除過期的還原預覽。
+- `verify.yml`：瀏覽器重跑保留 `<job>-first-attempt` artifact；新增只在 release-check 失敗時執行的 `rollback` job（schema 未變才自動部署上一版映像）。
+- 前端新增 `app-format.js`（release-check 資產 59 → 60）；`app-goals.js` 改在 `app-monthly-charts.js` 之後載入。
+- 沒有 schema 變更，可直接回滾至 v5.3.7 image。Asset 5.4.0／shell v146。
+
 ### Strava 衝突連結的健行配速上限（SPEC-141，v5.3.7）
 
 - `strava_import.manual_matches()` 的衝突帶上 Strava 活動類型（只在伺服器端，預覽回應不變）；`resolve_conflicts()` 依該類型的配速上限決定是否補移動時間。

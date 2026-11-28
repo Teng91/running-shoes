@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+## [5.4.0] - 2026-11-28
+
+### Security
+- 每個 API 請求在解析前限制 1 MB（Strava 與備份上傳維持各自的上限），超過直接回 413，不登入的大型請求不再能耗盡伺服器記憶體（SPEC-142）。
+- 前端建置用的原始檔（`templates/`、`css/`、`assets.json`）不再對外提供；過期的還原預覽每小時清除（SPEC-142）。
+
+### Added
+- 登入自動續期：App 開著或回到前景時，token 過了一半就換新，常用的人不會每週被登出；登入滿 30 天後仍要重新輸入密碼（`POST /api/auth/refresh`，SPEC-143）。
+- 部署後的 release-check 失敗且這次沒有改 schema 時，CI 自動回到上一版映像；瀏覽器測試重跑時保留第一次的診斷並寫入 run summary（SPEC-144）。
+
+### Fixed
+- 剛開穿的鞋以開穿以來的天數（至少 14 天）計算月均，退役日期不再晚一年以上（SPEC-142）。
+
+### Changed
+- 前端共用格式化移到 `app-format.js`，功能之間不再直接呼叫彼此，`cross_script_names` 由 153 降為 132（SPEC-145）；LLM 轉接層不再讀環境變數；README 概覽的版本、規格、端點與測試數改由 `docs-check` 檢查。Asset 5.4.0／shell v146，schema 14 不變。
+
 ## [5.3.7] - 2026-11-28
 
 ### Fixed

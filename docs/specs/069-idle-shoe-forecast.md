@@ -45,5 +45,5 @@
 
 | Acceptance criterion | Named test / command |
 | --- | --- |
-| AC-1 | `unit_tests/test_forecasting.py::test_a_pair_idle_for_90_days_gets_no_forecast_but_a_new_pair_uses_the_plan` |
+| AC-1 | `unit_tests/test_forecasting.py::test_idle_and_never_worn_pairs_get_no_forecast` |
 | AC-2 | `unit_tests/frontend/corrections.test.cjs::SPEC-055 a retired shoe analysis says retired instead of forecasting a date` |

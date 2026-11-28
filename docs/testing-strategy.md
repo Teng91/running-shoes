@@ -301,6 +301,22 @@ SPEC-032：合成資料驗證歷史筆數上限（v4.7.3 起 10,000／10,001）�
 
 [規格與具名案例](specs/116-keep-scheduled-workflows-enabled.md) 以文字解析 `offsite-backup.yml`：續命 job 不依賴備份 job、只有它有 `actions: write`、只用 `GITHUB_TOKEN` 不用 secret、失敗只發警告，且 repo 裡每個有 `schedule` 的 workflow 都在它的重新啟用清單中。
 
+## SPEC-145 前端共用格式化模組與功能間解耦
+
+[規格與具名案例](specs/145-frontend-feature-decoupling.md) 載入 `app-format.js` 確認四個 namespace 凍結且輸出不變，並以原始碼確認列出的功能不再呼叫彼此；設定視窗依序執行登記的 open／close hook；月度分頁的目標進度與訓練趨勢由各自的 hook 畫出，換年度只重畫分頁並回到最新 16 週。測試的 `featureContext` 以 `installFormatNamespaces()` 提供 namespace，既有 stub 仍生效。`architecture-check` 把 `cross_script_names` 固定在 132。
+
+## SPEC-144 CI 重跑保留診斷、部署後檢查失敗自動回滾
+
+[規格與具名案例](specs/144-ci-retry-diagnostics-and-rollback.md) 以文字解析 `verify.yml`：每個瀏覽器步驟與 release-check 第一次失敗時留下警告與 summary、保存第一次的診斷再重跑；`rollback` job 只在部署成功、release-check 失敗時執行，先確認上一版映像與 schema 已知、schema 未變才 `flyctl deploy --image … --rollback`；只有 deploy 與 rollback 取得 `FLY_API_TOKEN`。
+
+## SPEC-143 登入自動續期（最長 30 天）
+
+[規格與具名案例](specs/143-session-renewal.md) 以 TestClient 確認登入 token 帶 `auth_time`、續期保留帳號與登入時間並延後到期、不超過登入後 30 天、舊 token 以到期前 7 天為登入時間，過期、缺少或已撤銷的 token 無法續期；前端以真實 `app-session.js` 確認續期不中斷進行中的工作、未過半不送請求、離線失敗每小時最多重試、其他分頁的同帳號 token 被採用而不同帳號被拒。
+
+## SPEC-142 請求大小上限、新鞋退役預估與其他 review 強化
+
+[規格與具名案例](specs/142-review-hardening.md) 以 TestClient 與 ASGI 假連線確認超過上限的 JSON（含 chunked）在解析前回 413、上傳路徑維持原上限、讀完內容後路由仍收到真正的中斷、最大的合法 AI 請求小於上限；以暫存資料庫確認新鞋月均依開穿天數（14～90 天）計算且清單與分析一致；LLM 未注入時不讀環境；建置輸入不對外提供；過期還原預覽在 app 運作中被清除；backend 沒有互相匯入的模組；README 概覽數字由 `docs-check` 檢查。
+
 ## SPEC-141 Strava 衝突連結的健行配速上限
 
 [規格與具名案例](specs/141-strava-conflict-hike-pace.md) 以純函式測試確認衝突帶上 Strava 活動類型，使用者連結一筆每公里約 90:00 的健行時會補上移動時間，同樣配速的路跑則不補。

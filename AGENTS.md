@@ -3,10 +3,10 @@
 ## Project map
 
 - `backend/main.py`: minimal ASGI entry point; it must only import `backend.app_factory`.
-- `backend/app_factory.py`: FastAPI composition, injectable lifecycle dependencies, routers, and SPA fallback.
+- `backend/app_factory.py`: FastAPI composition, injectable lifecycle dependencies, routers, and SPA fallback (never serving the `templates/`, `css/` or `assets.json` build inputs); the lifespan sweeps expired restore previews hourly (SPEC-142).
 - `backend/settings.py`: immutable typed runtime configuration.
 - `backend/clock.py`: the single application timezone, `local_now()` and `local_today()`; never hard-code UTC offsets or use the server zone elsewhere (the frontend mirrors it as `APP_UTC_OFFSET_MINUTES` in `app-state.js` and never takes calendar days from the device zone, SPEC-093).
-- `backend/forecasting.py`: shared retirement policy and batched user-scoped forecasts; retirement dates come only from recent 90-day runs (`no_runs`/`idle_90_days`/`retired` give no date, SPEC-138).
+- `backend/forecasting.py`: shared retirement policy and batched user-scoped forecasts; retirement dates come only from recent 90-day runs (`no_runs`/`idle_90_days`/`retired` give no date, SPEC-138); a pair first worn inside the window is averaged over its days since that first run, 14 to 90 (`rate_window_days`, SPEC-142).
 - `backend/run_metrics.py`: canonical run duration bounds and pace (seconds per km, time-weighted averages); pace is derived, never stored (SPEC-060), and the bounds are mirrored in `frontend/app-state.js`; hikes and walks allow up to 120:00/km (`max_pace_seconds_per_km`, SPEC-139). It also owns the activity types (SPEC-096): every type (road, trail, hike, walk) counts toward shoes, `TRAINING_ACTIVITY_TYPES` toward volume/goals/streaks and `PACE_ACTIVITY_TYPES` toward pace and race readiness; read models filter with `run_statistics.TRAINING_RUN`/`PACE_RUN`.
 - `backend/read_models/race_readiness.py`: target race, Riegel prediction, intensity zones relative to goal race pace and long-run readiness (SPEC-065); `routers/race_goal.py` and `services/race_goals.py` own the race goal reads and writes.
 - `backend/read_models/race_plan.py`: the deterministic weekly race training plan (SPEC-119); its length is the goal's `plan_weeks` (SPEC-120, else the distance default) and its baseline is fixed once the plan starts, so past weeks never move. `race_preparation` adds it to race readiness for `GET /api/analytics/race` and the `race_training_plan` AI tool.
@@ -14,9 +14,9 @@
 - `backend/shoe_metrics.py`: canonical shoe cost, discount and lifecycle arithmetic, plus the single 80%/90% lifespan alert thresholds (mirrored in `frontend/app-state.js`).
 - `backend/read_models/`: user-scoped native statistics shared by HTTP, reports and AI adapters; never import tools, services or HTTP frameworks, and agent tools never build their own queries (`architecture-check`, SPEC-139).
 - `backend/seeding.py`: optional default data using an injected session factory.
-- `backend/middleware.py`: request-level transport guards: security headers on every response (SPEC-054), the in-memory per-address `/api/` request budget (SPEC-073, no SQLite writes) and Strava/backup upload size limits.
+- `backend/middleware.py`: request-level transport guards: security headers on every response (SPEC-054), the in-memory per-address `/api/` request budget (SPEC-073, no SQLite writes) and request body limits: Strava/backup uploads keep their own, every other `/api/` write is capped at `max_api_body_bytes` before parsing (SPEC-142).
 - `backend/observability.py`: request IDs and metadata-only structured HTTP logs; never log bodies, tokens or passwords.
-- `backend/auth.py`: HTTP bearer adapter; always decodes with the app's injected key (tests sign through `unit_tests/token_helpers.token_for`) and rejects a token whose `aid` is missing or not the account's `backup_id` (SPEC-087, SPEC-093).
+- `backend/auth.py`: HTTP bearer adapter; always decodes with the app's injected key (tests sign through `unit_tests/token_helpers.token_for`) and rejects a token whose `aid` is missing or not the account's `backup_id` (SPEC-087, SPEC-093); `get_current_session` also returns the verified claims, which `POST /api/auth/refresh` renews (SPEC-143).
 - `backend/models.py`, `schemas.py`: ORM tables and Pydantic request/response contracts with input validation.
 - `backend/read_models/insights.py`, `goal_progress.py`, `report_snapshot.py`: read-only home insights, goal progress and monthly-report snapshots (moved from `backend/` in SPEC-090); their writes live in `backend/services/`.
 - `backend/exporting.py`, `strava_import.py`: pure CSV/XLSX export rows and Strava CSV parsing (hikes and walks are imported only with `include_walks_hikes`, SPEC-097); `backend/services/exports.py`, `strava_imports.py` own the use cases.
@@ -33,7 +33,7 @@
 - `backend/read_models/saved_reports.py`: user-scoped saved monthly report summaries and bodies.
 - `backend/read_models/rounding.py`: shared aggregate rounding (`round_metric`); do not redefine local `_round` helpers.
 - `scripts/document_contracts.py`: Markdown links, feature-spec structure, AC completion, traceability path validation, and the README tree / SDD module inventory (SPEC-053).
-- `backend/credentials.py`: HTTP-independent bcrypt/JWT primitives; runtime secrets are injected.
+- `backend/credentials.py`: HTTP-independent bcrypt/JWT primitives; runtime secrets are injected; tokens carry `auth_time` and never live past `SESSION_MAX_AGE_DAYS` (30) after it, renewals included (SPEC-143).
 - `backend/services/accounts.py`, `goals.py`: account and goal writes, domain errors, and transactions; usernames ignore ASCII case only, like SQLite's `lower()` (`accounts.username_key`/`find_user`, SPEC-093) and `delete_account` removes every table holding `user_id` (SPEC-075).
 - `backend/mailer.py`, `backend/services/email_codes.py`: Gmail SMTP adapter injected as `app.state.mailer` (None without `SMTP_USERNAME`/`SMTP_PASSWORD`; tests inject a fake) and the email-binding / password-reset codes (HMAC only, 10 minutes, 5 attempts, neutral answers) (SPEC-079).
 - `backend/services/invites.py`, `backend/routers/admin.py`: invite-only registration (only code hashes are stored) and the admin's invite and temporary-password routes; admins come from `ADMIN_USERNAMES` (SPEC-075).
@@ -47,7 +47,7 @@
 - `backend/services/operations.py`: operation identities, expected versions, transactional receipts.
 - `backend/services/account_restore.py`: user-bound preview, source mappings and atomic non-destructive merges.
 - `backend/services/account_import_plan.py`: user-scoped source matching and shared import previews/plans.
-- `backend/services/account_import_changes.py`: query-free field patches and projected mileage shared by preview and execution.
+- `backend/services/account_import_changes.py`: query-free field patches and projected mileage shared by preview and execution; it reads the plan through the `ImportTargets` Protocol and never imports `account_import_plan` (no import cycle, SPEC-142).
 - `backend/services/account_import.py`: plan execution inside the caller-owned transaction; no independent commits.
 - `backend/services/history.py`: user-scoped audit and conflict-aware deletion recovery.
 - `backend/services/run_identity.py`: user-scoped deletion tombstones (`run_tombstones`, never inferred from audit rows; schema 8 keeps the Strava activity so a CSV re-import never recreates a deleted run) and recovered source aliases; caller-owned transactions.
@@ -57,7 +57,7 @@
 - `docs/architecture.md`: current SDD, module boundaries, diagrams, and evolution sequence.
 - `docs/release-notes.md`: per-version behavior, compatibility and rollback notes (newest first); README describes only current behavior.
 - `.github/workflows/offsite-backup.yml`: daily pull, restore drill and AES-256 encryption of the production database into a 30-day artifact; the repository is public, so only the encrypted archive is uploaded and the job fails without `BACKUP_PASSPHRASE` (SPEC-078).
-- `.github/workflows/verify.yml`: CI for every push/PR; on `main` it also snapshots the production database, deploys with `FLY_API_TOKEN` (deploy job only), runs `release-check`, and tags/releases a new `package.json` version from `CHANGELOG.md` (SPEC-048).
+- `.github/workflows/verify.yml`: CI for every push/PR; on `main` it also snapshots the production database, deploys with `FLY_API_TOKEN` (deploy job only), runs `release-check`, and tags/releases a new `package.json` version from `CHANGELOG.md` (SPEC-048); a browser retry keeps the first attempt's diagnostics, and a failed `release-check` triggers the `rollback` job, which redeploys the previous image only when the schema did not change (SPEC-144).
 - `docs/testing-strategy.md`: test design, traceability matrix, and definition of done.
 - `backend/agent.py`: LLM and tool-loop runner; planning, dispatch, and SSE serialization live in `backend/agent_*.py` modules.
 - `backend/tools/`: trusted database and web-search tools used by the agent; database tools are thin adapters over existing read models (goals, trends, highlights, spending, shoes, mileage) and never recompute values.
@@ -83,19 +83,20 @@
 - `frontend/app-boot.js`: startup loading, stylesheet readiness, timeout, and retry state.
 - `frontend/app-state.js`: shared browser state (`coreData` is the core data store's read-only view; never declare core data globals again), presentation constants and the guarded localStorage helpers (`readStoredValue` and friends); classic scripts never touch `localStorage` outside a try (SPEC-087).
 - `frontend/app-api.js`: authenticated JSON and upload transport helpers.
-- `frontend/app-session.js`: the signed-in identity (`authToken`, `currentUser`, `authGeneration`, `captureAuthSession`/`isCurrentAuthSession`/`requireAuthSession`), written only by its `startAuthSession`/`endAuthSession` (`architecture-check` rejects other writes, SPEC-109); the name is the server spelling from the token's `sub`, and `captureAuthSession().account` is the token's never-reused `aid` (SPEC-129); loads right after `app-state.js`. A 401 is the window event `auth-session-expired`, dispatched by `app-api.js` and handled by `app-auth.js` (SPEC-108).
-- `frontend/app-auth.js`: sign-in forms and account transitions; features register what happens around sign-in with `onAuthView` (SPEC-108) and leave the app only through `signOutWithNotice`/`showLoginNotice` (SPEC-134). Browser settings of an account are keyed by `captureAuthSession().account`, never by the name (SPEC-134).
+- `frontend/app-session.js`: the signed-in identity (`authToken`, `currentUser`, `authGeneration`, `captureAuthSession`/`isCurrentAuthSession`/`requireAuthSession`), written only by its `startAuthSession`/`endAuthSession` (`architecture-check` rejects other writes, SPEC-109); the name is the server spelling from the token's `sub`, and `captureAuthSession().account` is the token's never-reused `aid` (SPEC-129); loads right after `app-state.js`. A 401 is the window event `auth-session-expired`, dispatched by `app-api.js` and handled by `app-auth.js` (SPEC-108); a renewal (`startAuthSession(token, name, { renewal: true })`) accepts only the same account's token and keeps the generation (SPEC-143).
+- `frontend/app-format.js`: shared presentation helpers as the frozen `runFormat`, `shoeFormat`, `raceFormat` and `goalFormat` namespaces; other scripts call them only through the namespace, never another feature's script (SPEC-145).
+- `frontend/app-auth.js`: sign-in forms and account transitions; features register what happens around sign-in with `onAuthView` (SPEC-108) and leave the app only through `signOutWithNotice`/`showLoginNotice` (SPEC-134). Browser settings of an account are keyed by `captureAuthSession().account`, never by the name (SPEC-134); `renewSessionIfDue` renews a token past half its life when the app is shown or visible again, and `adoptRenewedToken` takes another tab's renewal (SPEC-143).
 - `frontend/app-streams.js`: shared authenticated SSE decoding, cancellation, and terminal state.
 - `frontend/app-inline-editors.js`: live table DOM ownership and immutable row snapshots across refreshes.
 - `frontend/runtime/workspace-controller.mjs`: injected account drafts, leases and durable run queue.
 - `frontend/app-local-store.js`: atomic IndexedDB adapter; reopens closed connections and retries a WebKit `UnknownError` once on a fresh connection (SPEC-120); credentials never belong in records.
-- `frontend/app-workspace.js`: account cache, draft and queue DOM bridge; the IndexedDB partition is `origin|aid:<backup id>`, and partitions saved under any A–Z spelling of the name are adopted once (SPEC-129); other features register their drafts (`registerWorkspaceForm`, `registerWorkspaceEditor`, `onWorkspaceModalOpen`) instead of the workspace reaching into their forms (SPEC-107).
+- `frontend/app-workspace.js`: account cache, draft and queue DOM bridge; the IndexedDB partition is `origin|aid:<backup id>`, and partitions saved under any A–Z spelling of the name are adopted once (SPEC-129); other features register their drafts (`registerWorkspaceForm`, `registerWorkspaceEditor`, `onWorkspaceModalOpen(opened, { closed })`) instead of the workspace reaching into their forms or modals (SPEC-107, SPEC-145).
 - `frontend/app-account.js`: sign-up invite field, admin invite/password panel and account deletion (SPEC-075).
 - `frontend/app-account-restore.js`: restore preview/window/session ownership.
 - `frontend/runtime/account-restore-controller.mjs`: injected restore operation, session and preview cleanup ownership; no DOM or browser transport.
 - `frontend/app-history.js`: audit paging and recover-deletion presentation.
 - `frontend/app-core.js`: dashboard shell, theme, tabs, and aggregate data loading. Features register what they draw and load (`registerPanel`, `registerResourceReader`, `registerDataHooks`); the shell never calls a feature function by name (SPEC-101), and features redraw after a data change only through `refreshPanels(resource)` (SPEC-135).
-- `frontend/app-dashboard.js`: dashboard cards, alerts, and shoe tables.
+- `frontend/app-dashboard.js`: dashboard cards, alerts, and shoe tables; shoe formatting lives in `app-format.js`.
 - `frontend/app-onboarding.js`: the new-account getting-started card, derived only from loaded shoes, monthly mileage and the goal (SPEC-084).
 - `frontend/app-exports.js`: authenticated shoe exports and account backup downloads.
 - `frontend/app-goals.js`: running-goal settings and progress presentation.
@@ -103,8 +104,8 @@
 - `frontend/app-shoe-charts.js`: shoe lifecycle, cost, retirement, and allocation charts.
 - `frontend/app-monthly-charts.js`: month/year selectors, monthly/annual/year-over-year mileage charts and the year in review.
 - `frontend/app-trend-charts.js`: training trends: heatmap, weekly load and long run, weekday distribution and the cumulative year line (SPEC-090).
-- `frontend/app-pace-charts.js`: personal best cards (SPEC-136), shared race state, race readiness cards and pace trend charts (SPEC-065); the plan's layout lives in `runtime/race-plan-view.mjs`, imported while the page loads like every native module, so a later deployment cannot hand an old page a newer module (SPEC-132).
-- `frontend/app-race-goal.js`: the race goal form: open, validate, save and delete (SPEC-090).
+- `frontend/app-pace-charts.js`: personal best cards (SPEC-136), race readiness cards (the goal it loads goes to the form through `onRaceGoalShown(goal)`, SPEC-145) and pace trend charts (SPEC-065); the plan's layout lives in `runtime/race-plan-view.mjs`, imported while the page loads like every native module, so a later deployment cannot hand an old page a newer module (SPEC-132).
+- `frontend/app-race-goal.js`: the race goal form: open, validate, save and delete (SPEC-090); it owns `raceGoal` and redraws the race views with `refreshPanels('race')` (SPEC-145).
 - `frontend/app-spending.js`: spending cards, charts, and table.
 - `frontend/app-actions.js`: dispatches delegated `data-click`/`data-change`/… UI actions; each feature registers its own with `registerUiActions` (`app-lifecycle.js`) while it loads, and the table is frozen here (SPEC-113); markup and generated rows never contain inline JavaScript handlers (the page CSP blocks them).
 - `frontend/offline.html`: script-free offline fallback with its own strict CSP.
@@ -113,7 +114,7 @@
 - `frontend/app-models.js`: shared provider/model menus.
 - `frontend/app-markdown.js`: safe rendering of untrusted Markdown.
 - `frontend/app-reports.js`: monthly report loading, generation, and streaming UI.
-- `frontend/app-runs.js`: run CRUD, paging, and shoe selection.
+- `frontend/app-runs.js`: run CRUD, paging, and shoe selection; run formatting lives in `app-format.js`.
 - `frontend/app-strava.js`: Strava preview, mapping, and import UI.
 - `frontend/app-run-insights.js`: run cards, calendar, charts, and shoe analytics UI.
 - `frontend/app-shoes.js`: shoe editing and modal interactions; the shoe dialog is a `<form>` (Enter saves) whose buttons and closing go through `registerUiActions`/`registerDialog` (SPEC-137).
