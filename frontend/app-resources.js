@@ -44,7 +44,6 @@ function registerResourceCache(name, onInvalidate) {
 function registerResourceCaches() {
   for (const [name, onInvalidate] of resourceCacheHooks) resourceStore.registerCache(name, onInvalidate);
   resourceStore.registerCache('annual', () => {
-    runController.state.annualRequest++;
     resourceStore.invalidate(['annual-summary', 'training-trends', 'shoe-timeline', 'pace-analysis', 'race-readiness', 'run-totals']);
   });
   resourceStore.registerCache('dashboard', () => {

@@ -18,17 +18,20 @@ function populateYearSelect() {
   sel.innerHTML = years.map(y => `<option value="${y}" ${y === selectedYear ? 'selected' : ''}>${y}</option>`).join('');
 }
 
+// SPEC-145: goal progress, training trends and race readiness are monthly panel hooks of their
+// own scripts, so a new year redraws the panel instead of calling each feature by name.
 function onYearChange() {
   const sel = document.getElementById('year-select');
   selectedYear = parseInt(sel.value, 10) || null;
-  weeklyWindowEnd = null;
-  renderGoalProgress();
-  renderMonthlyYearChart();
-  renderShoeStackedChart();
-  renderYearOverYearChart();
-  renderYearReview();
-  renderTrends();
+  renderedPanels.delete('monthly');
+  renderActivePanel();
 }
+
+// SPEC-145: this chart's own request counter. A newer draw, a full redraw or a sign-out makes an
+// older yearly read stale; invalidating the annual cache is caught by resourceStore.current().
+let shoeStackedRequestId = 0;
+registerFeatureReset('shoe-stacked-chart', () => { shoeStackedRequestId++; });
+registerDataHooks({ invalidated: () => { shoeStackedRequestId++; } });
 
 // ====== Monthly Mileage Charts ======
 function renderMonthlyCharts() {
@@ -36,13 +39,11 @@ function renderMonthlyCharts() {
     if (chartInstances[key]) { chartInstances[key].destroy(); delete chartInstances[key]; }
   });
   populateYearSelect();
-  renderGoalProgress();
   renderMonthlyYearChart();
   renderShoeStackedChart();
   renderYearlyTotalChart();
   renderYearOverYearChart();
   renderYearReview();
-  renderTrends();
 }
 
 async function renderShoeStackedChart() {
@@ -50,7 +51,7 @@ async function renderShoeStackedChart() {
   if (chartInstances.shoeStacked) { chartInstances.shoeStacked.destroy(); delete chartInstances.shoeStacked; }
   const year = parseInt(document.getElementById('year-select')?.value, 10);
   if (!year) return;
-  const requestId = ++runController.state.annualRequest;
+  const requestId = ++shoeStackedRequestId;
   let yearRuns;
   try {
     const result = await resourceStore.read('annual-summary', {
@@ -61,12 +62,12 @@ async function renderShoeStackedChart() {
         return value;
       },
     });
-    if (!resourceStore.current(result) || requestId !== runController.state.annualRequest) return;
+    if (!resourceStore.current(result) || requestId !== shoeStackedRequestId) return;
     if (result.status === 'rejected') throw result.error;
     yearRuns = result.value;
   } catch (error) {
     console.error('載入年度跑步紀錄失敗:', error);
-    if (requestId === runController.state.annualRequest) renderedPanels.delete('monthly');
+    if (requestId === shoeStackedRequestId) renderedPanels.delete('monthly');
     return;
   }
 
@@ -93,7 +94,7 @@ async function renderShoeStackedChart() {
   const datasets = displayShoes.map(s => ({
     label: s.brand + ' ' + s.model + (s.is_retired ? ' (退役)' : ''),
     data: shoeMonthlyMap.get(s.id).map(v => parseFloat(v.toFixed(2))),
-    backgroundColor: shoeColor(s.id),
+    backgroundColor: shoeFormat.shoeColor(s.id),
     borderRadius: 2,
   }));
   if (deletedKm.some(km => km > 0)) {
@@ -355,10 +356,10 @@ async function renderYearReview() {
     reviewCard('總跑量', km(review.total_km), [change, goal].filter(Boolean).join('<br>')),
     reviewCard('跑步', `${review.run_count} 次`, `${review.run_days} 天有跑（${review.active_day_percent}% 的日子）`),
     reviewCard('平均每次', km(review.average_km), `最長連續 ${review.longest_streak_days} 天`),
-    reviewCard('最長一次', km(longest.km), `${md(longest.date)} · ${esc(shoeName(longest.shoe_id))}`),
+    reviewCard('最長一次', km(longest.km), `${md(longest.date)} · ${esc(shoeFormat.shoeName(longest.shoe_id))}`),
     reviewCard('最多的一週', km(review.biggest_week.km), `${md(review.biggest_week.week_start)} 那週`),
     reviewCard('最多的月份', `${review.biggest_month.month} 月`, km(review.biggest_month.km)),
-    reviewCard('最常穿', esc(shoeName(review.top_shoe.shoe_id)), `${km(review.top_shoe.km)} · ${review.top_shoe.runs} 次`),
+    reviewCard('最常穿', esc(shoeFormat.shoeName(review.top_shoe.shoe_id)), `${km(review.top_shoe.km)} · ${review.top_shoe.runs} 次`),
     reviewCard('買鞋', `${review.shoes_bought} 雙`, review.shoes_bought
       ? `NT$ ${Math.round(review.shoe_spend).toLocaleString()}${review.cost_per_km != null ? ` · 每 km NT$ ${review.cost_per_km.toFixed(1)}` : ''}` : '這一年沒有買鞋'),
   ].join('');

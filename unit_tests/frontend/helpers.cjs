@@ -39,6 +39,8 @@ function featureContext(globals = {}) {
     registerPanel() {}, registerResourceReader() {}, registerDataHooks() {}, workspaceDataArrived() {},
     // SPEC-108: whole scripts register their sign-in and session-expiry hooks on load.
     onAuthView() {},
+    // SPEC-145: history and account restore register their settings-modal hooks on load.
+    onWorkspaceModalOpen() {},
     // SPEC-113: whole scripts register their UI actions on load.
     registerUiActions() {},
     // SPEC-135: whole scripts register their dialogs and update busy checks on load.
@@ -73,6 +75,7 @@ function featureContext(globals = {}) {
   // SPEC-106: features register their cache hooks when they load; install them like initializeDataResources().
   vm.runInContext(`const resourceCacheHooks = [];\n${extract('registerResourceCache')}\n${featureRegistrations(/^registerResourceCache\(/gm)}`, context);
   context.registerResourceCaches();
+  installFormatNamespaces(context);
   // SPEC-112: what a test passes in wins over the shared helpers installed above (for example a
   // prepareGoalForm or updateRunActivityHint spy), so a test never has to re-assign it afterwards.
   for (const [name, value] of Object.entries(rest)) {
@@ -90,7 +93,7 @@ function runContext(globals) {
     newKey: () => 'synthetic-operation-' + (++nextKey),
   });
   const names = { runs: 'rows', runSummary: 'summary', runPageOffset: 'offset', runPageHasMore: 'hasMore',
-    runDayFilter: 'day', yearlyRunsCache: 'annualCache', runListRequestId: 'listRequest', stackedRunsRequestId: 'annualRequest' };
+    runDayFilter: 'day', yearlyRunsCache: 'annualCache', runListRequestId: 'listRequest' };
   for (const [legacy, owned] of Object.entries(names)) {
     if (legacy in globals) context.runController.state[owned] = globals[legacy];
   }
@@ -104,6 +107,20 @@ const scriptPaths = JSON.parse(fs.readFileSync('frontend/assets.json', 'utf8')).
 const scriptSource = scriptPaths.map(readText).join('\n');
 const styleSource = readText('frontend/styles.css');
 const source = `${htmlSource}\n${styleSource}\n${scriptSource}`;
+
+// SPEC-145: features read shared formatting through runFormat, shoeFormat, raceFormat and goalFormat (app-format.js).
+// A test context gets both; each helper resolves to the context's own function of that name
+// (a stub or an extracted copy) when it has one, else to the real app-format.js code.
+const formatSource = readText('frontend/app-format.js');
+function installFormatNamespaces(context) {
+  const real = vm.runInContext(`(() => {\n${formatSource}\nreturn { runFormat, shoeFormat, raceFormat, goalFormat };\n})()`, context);
+  for (const [name, namespace] of Object.entries(real)) {
+    context[name] = new Proxy({ ...namespace }, {
+      get: (target, key) => (typeof context[key] === 'function' ? context[key] : target[key]),
+    });
+  }
+  return context;
+}
 
 
 function authOperationContext() {
@@ -219,4 +236,4 @@ function transportContext() {
   return context;
 }
 
-module.exports = { runContext, test, assert, fs, path, readText, vm: { ...vm, createContext: featureContext }, htmlSource, scriptPaths, scriptSource, styleSource, source, authOperationContext, streamContext, editContext, tableHeaders, extract, panelWiring, featureRegistrations, reportGenerationSource, transportContext };
+module.exports = { installFormatNamespaces, runContext, test, assert, fs, path, readText, vm: { ...vm, createContext: featureContext }, htmlSource, scriptPaths, scriptSource, styleSource, source, authOperationContext, streamContext, editContext, tableHeaders, extract, panelWiring, featureRegistrations, reportGenerationSource, transportContext };

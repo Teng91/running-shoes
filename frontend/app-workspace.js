@@ -9,6 +9,7 @@ const workspaceForms = {
 const workspaceFormAdapters = {};
 const workspaceEditors = new Map();
 const workspaceModalViews = [];
+const workspaceModalClosers = [];
 
 // adapter: { isDraft(values) whether the values are worth keeping, restore(id, value), reset() }.
 function registerWorkspaceForm(name, ids, adapter) {
@@ -22,8 +23,11 @@ function registerWorkspaceEditor(kind, adapter) {
   workspaceEditors.set(kind, adapter);
 }
 
-function onWorkspaceModalOpen(view) {
-  workspaceModalViews.push(view);
+// SPEC-145: opened() runs when the settings modal opens, closed() when it closes; history and
+// account restore register here, so the workspace names neither of them.
+function onWorkspaceModalOpen(opened, { closed = null } = {}) {
+  if (opened) workspaceModalViews.push(opened);
+  if (closed) workspaceModalClosers.push(closed);
 }
 
 // SPEC-108: the run feature registers how the workspace reads the shown month, restores that
@@ -347,12 +351,12 @@ async function renderWorkspaceQueue() {
 function openWorkspaceModal() {
   document.getElementById('workspace-owner').textContent = '目前網站：' + window.location.origin + '；目前帳號：' + currentUser + '。匯入只寫入這個網站的此帳號。';
   document.getElementById('workspace-modal').classList.add('active');
-  void renderWorkspaceQueue(); void loadWorkspaceHistory();
+  void renderWorkspaceQueue();
   workspaceModalViews.forEach(view => view());
 }
 function closeWorkspaceModal() {
   document.getElementById('workspace-modal').classList.remove('active');
-  resetAccountRestore();
+  workspaceModalClosers.forEach(closed => closed());
 }
 
 async function clearLocalWorkspace() {

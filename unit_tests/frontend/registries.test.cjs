@@ -83,7 +83,7 @@ test('SPEC-135 a data change redraws through the shell, which tells the data hoo
     Chart() {}, localDateISO: () => '2026-10-19', selectedRunMonth: () => '2026-10',
     ...Object.fromEntries(spies.map(name => [name, (...args) => calls.push(args.length ? `${name}(${args})` : name)])),
   });
-  vm.runInContext(`let panelRevision = 0, currentTheme = 'light';
+  vm.runInContext(`let panelRevision = 0, shoeStackedRequestId = 0, currentTheme = 'light';
     const renderedPanels = new Map();\n${panelWiring()}
     ${['invalidatePanels', 'renderActivePanel', 'refreshPanels'].map(extract).join('\n')}`, context);
   const shoesPanel = ['renderCards', 'renderAlerts', 'renderCategorySummary', 'renderTable', 'renderRetiredTable',
@@ -104,4 +104,44 @@ test('SPEC-135 a data change redraws through the shell, which tells the data hoo
     assert.match(code, /refreshPanels\(/, file);
     assert.doesNotMatch(code, /(?<![\w.])(?:render|invalidatePanels)\(/, file);
   }
+});
+
+test('SPEC-145 shared formatting lives in app-format.js and features no longer call each other', () => {
+  const context = vm.createContext({ RUN_ACTIVITY_LABELS: { road: '路跑', hike: '健行' } });
+  vm.runInContext(readText('frontend/app-format.js'), context);
+  const names = vm.runInContext('[runFormat, shoeFormat, raceFormat, goalFormat].map(Object.isFrozen)', context);
+  assert.deepEqual([...names], [true, true, true, true]);
+  assert.equal(vm.runInContext('runFormat.formatPace(331)', context), '5:31 /km');
+  assert.equal(vm.runInContext("runFormat.parseRunDuration('1:05:30')", context), 3930);
+  assert.equal(vm.runInContext('shoeFormat.formatShoeMileage(401.7)', context), '401.7');
+  assert.equal(vm.runInContext('raceFormat.raceDistanceName(21.0975)', context), '半馬');
+  assert.equal(vm.runInContext("goalFormat.dashboardGoalSummary({ active: true, month_state: 'future' })", context), '尚未開始');
+  for (const [file, names] of Object.entries({
+    'app-workspace.js': /loadWorkspaceHistory|resetAccountRestore/,
+    'app-account-restore.js': /loadWorkspaceHistory|\braceGoal\b/,
+    'app-resources.js': /runController/,
+    'app-monthly-charts.js': /runController|renderTrends|renderGoalProgress|weeklyWindowEnd/,
+    'app-race-goal.js': /renderPaceAnalysis/,
+    'app-strava.js': /renderStravaStatus/,
+    'app-goals.js': /(?<![.\w])dashboardGoalSummary/,
+    'app-pace-charts.js': /\braceGoal\s*=/,
+  })) assert.doesNotMatch(withoutComments('frontend/' + file), names, file);
+});
+
+test('SPEC-145 the settings modal runs the open and close hooks features register', () => {
+  const calls = [];
+  const modal = { classList: { add: () => calls.push('shown'), remove: () => calls.push('hidden') } };
+  const context = vm.createContext({ window: { location: { origin: 'https://example.test' } }, currentUser: 'runner',
+    document: { getElementById: id => (id === 'workspace-modal' ? modal : { textContent: '' }) },
+    renderWorkspaceQueue: async () => calls.push('queue') });
+  vm.runInContext(`const workspaceModalViews = [], workspaceModalClosers = [];
+    ${['onWorkspaceModalOpen', 'openWorkspaceModal', 'closeWorkspaceModal'].map(extract).join('\n')}`, context);
+  context.onWorkspaceModalOpen(() => calls.push('history'));
+  context.onWorkspaceModalOpen(null, { closed: () => calls.push('restore reset') });
+  context.openWorkspaceModal();
+  context.closeWorkspaceModal();
+  assert.deepEqual(calls, ['shown', 'queue', 'history', 'hidden', 'restore reset']);
+  // History and restore register themselves; the account restore asks for new history through the shell.
+  assert.match(withoutComments('frontend/app-history.js'), /onWorkspaceModalOpen\(\(\) => \{ void loadWorkspaceHistory\(\); \}\)/);
+  assert.match(withoutComments('frontend/app-account-restore.js'), /refreshPanels\('account-history'\)/);
 });

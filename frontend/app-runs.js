@@ -29,19 +29,6 @@ registerFeatureReset('run-editor', () => {
   delete select.dataset.requiresSelection;
 });
 
-// SPEC-060: a run's moving time is typed as "32:15", "1:05:30" or whole minutes ("45").
-// Returns seconds, null for an empty field, or NaN for text that is not a duration.
-function parseRunDuration(text) {
-  const value = String(text ?? '').trim();
-  if (!value) return null;
-  if (/^\d{1,4}$/.test(value)) return Number(value) > 0 ? Number(value) * 60 : NaN;
-  const match = value.match(/^(?:(\d{1,3}):)?(\d{1,4}):(\d{2})$/);
-  if (!match) return NaN;
-  const [, hours, minutes, seconds] = match;
-  if (Number(seconds) > 59 || (hours !== undefined && Number(minutes) > 59)) return NaN;
-  const total = Number(hours || 0) * 3600 + Number(minutes) * 60 + Number(seconds);
-  return total > 0 ? total : NaN;
-}
 
 // Phone number pads have no colon key: typed digits are grouped from the right,
 // so 5200 reads 52:00 and 15959 reads 1:59:59. One or two digits stay whole minutes.
@@ -64,40 +51,26 @@ function formatDurationInput(element) {
   element.setSelectionRange?.(grouped.length, grouped.length);
 }
 
-function formatRunDuration(seconds) {
-  if (!Number.isFinite(seconds) || seconds <= 0) return '';
-  const total = Math.round(seconds);
-  const hours = Math.floor(total / 3600);
-  const minutes = Math.floor((total % 3600) / 60);
-  const rest = String(total % 60).padStart(2, '0');
-  return hours ? `${hours}:${String(minutes).padStart(2, '0')}:${rest}` : `${minutes}:${rest}`;
-}
 
-// Pace comes from the backend (pace_seconds_per_km); this only formats it.
-function formatPace(secondsPerKm) {
-  if (!Number.isFinite(secondsPerKm) || secondsPerKm <= 0) return '—';
-  const total = Math.round(secondsPerKm);
-  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')} /km`;
-}
 
 // Live hint under the duration field; the saved pace is always the backend's.
 function updateRunPacePreview(prefix) {
   formatDurationInput(document.getElementById(`${prefix}-duration`));
   const target = document.getElementById(`${prefix}-pace-preview`);
   if (!target) return;
-  const seconds = parseRunDuration(document.getElementById(`${prefix}-duration`)?.value);
+  const seconds = runFormat.parseRunDuration(document.getElementById(`${prefix}-duration`)?.value);
   const km = parseFloat(document.getElementById(`${prefix}-km`).value);
   const activityType = document.getElementById(`${prefix}-activity`)?.value;
   if (seconds === null) target.textContent = '填寫後會自動計算配速';
   else if (Number.isNaN(seconds)) target.textContent = '格式例如 32:15、1:05:30 或 45（分鐘）';
   else if (!Number.isFinite(km) || km <= 0) target.textContent = '填寫距離後會顯示配速';
   else if (!plausibleRunPace(seconds, km, activityType)) target.textContent = `配速不合理（${runPaceRangeText(activityType)}），請確認時間與距離`;
-  else target.textContent = `配速 ${formatPace(seconds / km)}`;
+  else target.textContent = `配速 ${runFormat.formatPace(seconds / km)}`;
 }
 
 // Validates the duration field for a submit: { seconds } or { error }.
 function readRunDuration(prefix, km) {
-  const seconds = parseRunDuration(document.getElementById(`${prefix}-duration`)?.value);
+  const seconds = runFormat.parseRunDuration(document.getElementById(`${prefix}-duration`)?.value);
   if (seconds === null) return { seconds: null };
   if (Number.isNaN(seconds)) return { error: '跑步時間格式例如 32:15、1:05:30 或 45（分鐘）。' };
   const activityType = document.getElementById(`${prefix}-activity`)?.value;
@@ -131,9 +104,6 @@ function lastActivityTypeForShoe(shoeId, rows) {
   return latest ? latest.activity_type : 'road';
 }
 
-function runActivityLabel(type) {
-  return RUN_ACTIVITY_LABELS[type] || RUN_ACTIVITY_LABELS.road;
-}
 
 function updateRunActivityHint(prefix) {
   const target = document.getElementById(`${prefix}-activity-hint`);
@@ -208,8 +178,6 @@ function runsResourceReader() {
 
 registerResourceReader('runs', runsResourceReader());
 registerPanel('runs', { key: () => selectedRunMonth(), render: () => populateRunShoeSelects() });
-// A full redraw also drops an in-flight read of the annual run totals.
-registerDataHooks({ invalidated: () => { runController.state.annualRequest += 1; } });
 
 const RUN_PAGE_SIZE = 200;
 
@@ -319,7 +287,7 @@ function openRunModal(runId) {
   runController.openEditor(run);
   document.getElementById('edit-run-date').value = run.date;
   document.getElementById('edit-run-km').value = run.km;
-  document.getElementById('edit-run-duration').value = formatRunDuration(run.duration_seconds);
+  document.getElementById('edit-run-duration').value = runFormat.formatRunDuration(run.duration_seconds);
   document.getElementById('edit-run-activity').value = run.activity_type || 'road';
   updateRunActivityHint('edit-run');
   updateRunPacePreview('edit-run');
@@ -417,7 +385,7 @@ registerWorkspaceEditor('run', {
     runController.openEditor(draft.base);
     document.getElementById('edit-run-date').value = draft.base.date;
     document.getElementById('edit-run-km').value = draft.base.km;
-    document.getElementById('edit-run-duration').value = formatRunDuration(draft.base.duration_seconds);
+    document.getElementById('edit-run-duration').value = runFormat.formatRunDuration(draft.base.duration_seconds);
     document.getElementById('edit-run-activity').value = draft.base.activity_type || 'road';
     populateRunShoeSelects(draft.base.shoe_id);
     document.getElementById('run-modal').classList.add('active');

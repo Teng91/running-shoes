@@ -188,7 +188,7 @@ test('SPEC-019 annual charts use one summary request rather than downloading ind
   const context = runContext({ document: { getElementById: id => nodes[id], querySelector: () => ({ dataset: { panel: 'monthly' } }) },
     apiGet: async url => { calls.push(url); return { shoes: [{ shoe_id: 99, monthly_km: [5, ...Array(11).fill(0)] }] }; },
     chartInstances: {}, shoes: [], retiredShoes: [], yearlyRunsCache: new Map(), renderedPanels: new Map(),
-    stackedRunsRequestId: 0, getThemeColor: () => '#000', brandColor: () => '#000', shoeColor: () => '#000',
+    shoeStackedRequestId: 0, getThemeColor: () => '#000', brandColor: () => '#000', shoeColor: () => '#000',
     Chart: function(_, config) { this.config = config; this.destroy = () => {}; },
   });
   vm.runInContext(extract('renderShoeStackedChart'), context);

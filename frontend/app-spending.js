@@ -215,7 +215,7 @@ function renderSpendingTable() {
       <td class="numeric">${fmtMoney(s.price)}</td>
       <td class="numeric">${fmtMoney(s.orig_price)}</td>
       <td class="numeric">${discount}</td>
-      <td>${esc(shoeCategories(s).join(', ') || '未分類')}</td>
+      <td>${esc(shoeFormat.shoeCategories(s).join(', ') || '未分類')}</td>
       <td>${status}</td>
     </tr>`;
   }).join('');

@@ -1,5 +1,6 @@
 // Race goal form: open, fill, validate, save and delete the target race (SPEC-065).
-// Shared race state and the readiness charts stay in app-pace-charts.js (SPEC-090).
+// The readiness charts stay in app-pace-charts.js (SPEC-090); this form owns the goal they
+// load and hand over through onRaceGoalShown (SPEC-145).
 // SPEC-119: default plan length by distance, mirroring backend/read_models/race_plan.PROFILES.
 const RACE_PLAN_DEFAULT_WEEKS = [[5.5, 8], [10.5, 10], [21.5, 12], [Infinity, 16]];
 const RACE_PLAN_MIN_WEEKS = 4;
@@ -7,7 +8,8 @@ const RACE_PLAN_MAX_WEEKS = 24;
 
 // SPEC-134: a save or delete in flight; owned here, where it is written.
 let raceGoalSaving = false;
-registerFeatureReset('race-goal-form', () => { raceGoalSaving = false; });
+let raceGoal = null;
+registerFeatureReset('race-goal-form', () => { raceGoalSaving = false; raceGoal = null; });
 
 // Weeks from this week to race week, both included, in the app's calendar (SPEC-093).
 function racePlanWeeksUntil(raceDate) {
@@ -42,9 +44,9 @@ function raceFormValues(goal) {
     'race-name': goal?.race_name || '',
     'race-date': goal?.race_date || '',
     'race-distance': goal ? String(goal.distance_km) : '21.0975',
-    'race-target': goal ? formatRunDuration(goal.target_seconds) : '',
+    'race-target': goal ? runFormat.formatRunDuration(goal.target_seconds) : '',
     'race-ref-distance': goal?.reference_distance_km != null ? String(goal.reference_distance_km) : '',
-    'race-ref-time': goal?.reference_seconds != null ? formatRunDuration(goal.reference_seconds) : '',
+    'race-ref-time': goal?.reference_seconds != null ? runFormat.formatRunDuration(goal.reference_seconds) : '',
     'race-ref-temp': goal?.reference_temperature_c != null ? String(goal.reference_temperature_c) : '',
     'race-plan-weeks': goal?.plan_weeks != null ? String(goal.plan_weeks) : '',
   };
@@ -56,14 +58,14 @@ function prepareRaceForm() {
   const distance = document.getElementById('race-distance');
   const values = raceFormValues(raceGoal);
   if (![...distance.options].some(option => option.value === values['race-distance'])) {
-    distance.insertAdjacentHTML('beforeend', `<option value="${esc(values['race-distance'])}">${esc(raceDistanceName(values['race-distance']))}</option>`);
+    distance.insertAdjacentHTML('beforeend', `<option value="${esc(values['race-distance'])}">${esc(raceFormat.raceDistanceName(values['race-distance']))}</option>`);
   }
   for (const [id, value] of Object.entries(values)) document.getElementById(id).value = value;
   updateRacePlanHint();
   document.getElementById('delete-race-btn').hidden = !raceGoal;
   document.getElementById('race-edit-toggle').textContent = raceGoal ? '調整比賽' : '設定比賽';
   document.getElementById('race-goal-summary').textContent = raceGoal
-    ? `${raceGoal.race_name ? raceGoal.race_name + ' · ' : ''}${raceShortDate(raceGoal.race_date)} ${raceDistanceName(raceGoal.distance_km)} 目標 ${raceClock(raceGoal.target_seconds)}`
+    ? `${raceGoal.race_name ? raceGoal.race_name + ' · ' : ''}${raceFormat.raceShortDate(raceGoal.race_date)} ${raceFormat.raceDistanceName(raceGoal.distance_km)} 目標 ${raceFormat.raceClock(raceGoal.target_seconds)}`
     : '';
 }
 
@@ -89,8 +91,8 @@ function toggleRaceSettings(open) {
 
 function readRaceForm() {
   const value = id => document.getElementById(id).value.trim();
-  const target = parseRunDuration(value('race-target'));
-  const referenceTime = parseRunDuration(value('race-ref-time'));
+  const target = runFormat.parseRunDuration(value('race-target'));
+  const referenceTime = runFormat.parseRunDuration(value('race-ref-time'));
   const referenceDistance = value('race-ref-distance') === '' ? null : Number(value('race-ref-distance'));
   const temperature = value('race-ref-temp') === '' ? null : Number(value('race-ref-temp'));
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value('race-date'))) return { error: '請選擇比賽日期。' };
@@ -128,7 +130,7 @@ async function saveRaceGoal() {
     status.textContent = '比賽目標已儲存。';
     setRaceSettingsOpen(false);
     prepareRaceForm();
-    renderPaceAnalysis();
+    refreshPanels('race');
   } catch (failure) {
     if (failure.name === 'AbortError' || !isCurrentAuthSession(session)) return;
     status.textContent = failure.message || '比賽目標儲存失敗。';
@@ -151,7 +153,7 @@ async function deleteRaceGoal() {
     status.textContent = '比賽目標已刪除。';
     setRaceSettingsOpen(false);
     prepareRaceForm();
-    renderPaceAnalysis();
+    refreshPanels('race');
   } catch (failure) {
     if (failure.name === 'AbortError' || !isCurrentAuthSession(session)) return;
     status.textContent = failure.message || '比賽目標刪除失敗。';
@@ -169,15 +171,15 @@ function usePersonalBest(button) {
   const wasOpen = !document.getElementById('race-settings').hidden;
   if (!wasOpen) toggleRaceSettings(true);
   document.getElementById('race-ref-distance').value = String(km);
-  document.getElementById('race-ref-time').value = formatRunDuration(seconds);
+  document.getElementById('race-ref-time').value = runFormat.formatRunDuration(seconds);
   document.getElementById('race-ref-temp').value = '';
   document.getElementById('race-settings-status').textContent =
-    `已帶入 ${button.dataset.label} 個人最佳 ${formatRunDuration(seconds)} 當參考成績，按「儲存」後更新預估完賽。`;
+    `已帶入 ${button.dataset.label} 個人最佳 ${runFormat.formatRunDuration(seconds)} 當參考成績，按「儲存」後更新預估完賽。`;
   if (wasOpen) document.getElementById('race-ref-time').focus();
 }
 
 // SPEC-105: the form takes the loaded race goal unless the user is editing it.
-onRaceGoalShown(() => prepareRaceForm());
+onRaceGoalShown(goal => { raceGoal = goal; prepareRaceForm(); });
 
 // SPEC-113: this feature's delegated UI actions; markup names them with data-click and the like.
 registerUiActions({

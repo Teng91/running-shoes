@@ -69,7 +69,7 @@ test('SPEC-026 derived reads coalesce and reject invalidated responses', async (
   const context = runContext({ document: { getElementById: id => elements[id], querySelector: () => ({ dataset: { panel: 'monthly' } }) },
     authToken: 'synthetic', localDateISO: () => '2026-10-23', selectedYear: 2026,
     runningGoal: { version: 1 }, goalProgressCache: new Map(), selectedRunMonth: () => '2026-10', chartInstances: {}, shoes: [], retiredShoes: [],
-    renderedPanels: new Map(), getThemeColor: () => '#000', brandColor: () => '#000', shoeColor: () => '#000',
+    renderedPanels: new Map(), shoeStackedRequestId: 0, getThemeColor: () => '#000', brandColor: () => '#000', shoeColor: () => '#000',
     Chart: function(_, config) { this.config = config; this.destroy = () => {}; },
     apiGet: url => { calls.push(url); return pending.promise; },
     renderGoalOverview: value => rendered.push(value), renderDashboardInsights: value => rendered.push(value), esc: String,

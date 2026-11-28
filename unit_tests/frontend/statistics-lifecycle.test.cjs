@@ -77,7 +77,7 @@ test('SPEC-017 deleted shoes remain in annual stacked mileage totals', async () 
     chartInstances: {}, shoes: [{ id: 2, brand: 'A', model: 'Visible' }], retiredShoes: [],
     apiGet: async () => ({ shoes: [{ shoe_id: 1, monthly_km: [10, 1.5] }, { shoe_id: 2, monthly_km: [20, 0] },
       { shoe_id: 15, monthly_km: [0, 6.67] }] }),
-    brandColor: () => '#000', shoeColor: () => '#000', getThemeColor: () => '#000', stackedRunsRequestId: 0,
+    brandColor: () => '#000', shoeColor: () => '#000', getThemeColor: () => '#000', shoeStackedRequestId: 0,
     Chart: function(_, config) { this.config = config; },
   });
   vm.runInContext(extract('renderShoeStackedChart'), context);
