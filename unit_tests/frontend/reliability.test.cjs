@@ -21,13 +21,92 @@ test('SPEC-019 storage invalidation never deletes the replacement tab credential
   const context = vm.createContext({ window: { addEventListener: (name, listener) => listeners[name] = listener },
     localStorage: storage, authToken: 'A', currentUser: 'alice',
     clearAuth: options => cleared.push(options), showLoginView() {}, showAuthError: text => notices.push(text),
+    startAuthSession: () => false,
   });
-  vm.runInContext(['readStoredValue', 'isLocalStorageEvent', 'signOutWithNotice', 'initializeAuthSync'].map(extract).join('\n'), context);
+  vm.runInContext(['readStoredValue', 'isLocalStorageEvent', 'signOutWithNotice', 'adoptRenewedToken', 'initializeAuthSync']
+    .map(extract).join('\n'), context);
   context.initializeAuthSync();
   listeners.storage({ storageArea: storage, key: 'theme' }); assert.equal(cleared.length, 0);
   for (const key of ['token', 'username', null]) listeners.storage({ storageArea: storage, key });
   assert.equal(cleared.length, 3); assert.ok(cleared.every(options => options.persist === false));
   assert.equal(notices.length, 3);
+});
+
+function syntheticJwt(claims) {
+  const part = value => Buffer.from(JSON.stringify(value)).toString('base64url');
+  return `${part({ alg: 'HS256' })}.${part(claims)}.signature`;
+}
+
+// The real app-session.js with app-auth.js's renewal functions and an in-memory localStorage.
+function sessionContext(token, extra = {}) {
+  const stored = new Map([['token', token], ['username', 'alice']]);
+  const listeners = {}, notices = [];
+  const storage = { getItem: key => stored.get(key) ?? null, setItem: (key, value) => stored.set(key, value),
+    removeItem: key => stored.delete(key) };
+  const context = nodeVm.createContext({
+    localStorage: storage, atob, TextDecoder, Uint8Array, DOMException,
+    window: { addEventListener: (name, listener) => { listeners[name] = listener; } },
+    document: { visibilityState: 'visible' }, clearAuth() {}, showLoginView() {},
+    showAuthError: text => notices.push(text), ...extra,
+  });
+  nodeVm.runInContext(['readStoredValue', 'writeStoredValue', 'removeStoredValue', 'isLocalStorageEvent']
+    .map(extract).join('\n'), context);
+  nodeVm.runInContext(readText('frontend/app-session.js'), context, { filename: 'app-session.js' });
+  nodeVm.runInContext(['signOutWithNotice', 'adoptRenewedToken', 'initializeAuthSync', 'renewSessionIfDue']
+    .map(extract).join('\n') + `
+    const SESSION_RENEW_REMAINING_MS = 3.5 * 24 * 60 * 60 * 1000;
+    const SESSION_RENEW_INTERVAL_MS = 60 * 60 * 1000;
+    let lastSessionRenewal = -Infinity;`, context);
+  return { context, stored, storage, listeners, notices };
+}
+
+test('SPEC-143 a renewed token of the same account continues the session in this and other tabs', async () => {
+  const day = 24 * 60 * 60 * 1000, now = Date.UTC(2026, 10, 28);
+  const first = syntheticJwt({ sub: 'alice', aid: 'acct-1', exp: (now + 2 * day) / 1000 });
+  const renewed = syntheticJwt({ sub: 'alice', aid: 'acct-1', exp: (now + 7 * day) / 1000 });
+  const requests = [];
+  const { context, stored, storage, listeners, notices } = sessionContext(first, {
+    apiPost: async (url, body) => { requests.push([url, body]); return { access_token: renewed }; },
+  });
+  const before = context.captureAuthSession();
+  assert.equal(before.expiresAt, now + 2 * day);
+  assert.equal(await context.renewSessionIfDue(now), true);
+  assert.equal(JSON.stringify(requests), '[["/auth/refresh",{}]]');
+  assert.equal(stored.get('token'), renewed);
+  assert.equal(context.isCurrentAuthSession(before), true, 'work captured before the renewal still owns the screen');
+  assert.equal(await context.renewSessionIfDue(now + 1000), false, 'a fresh token is not renewed again');
+  assert.equal(requests.length, 1);
+
+  // Another tab renewed the same account: adopt its token without signing out.
+  context.initializeAuthSync();
+  const later = syntheticJwt({ sub: 'alice', aid: 'acct-1', exp: (now + 8 * day) / 1000 });
+  listeners.storage({ storageArea: storage, key: 'token', newValue: later });
+  assert.equal(nodeVm.runInContext('authToken', context), later);
+  assert.equal(notices.length, 0);
+  // Another account under the same name (deleted and registered again) is never adopted.
+  listeners.storage({ storageArea: storage, key: 'token',
+    newValue: syntheticJwt({ sub: 'alice', aid: 'acct-2', exp: (now + 9 * day) / 1000 }) });
+  assert.equal(notices.length, 1);
+});
+
+test('SPEC-143 renewal waits until half the token has passed and retries at most hourly', async () => {
+  const day = 24 * 60 * 60 * 1000, now = Date.UTC(2026, 10, 28);
+  let calls = 0;
+  const fresh = syntheticJwt({ sub: 'alice', aid: 'acct-1', exp: (now + 6 * day) / 1000 });
+  const { context } = sessionContext(fresh, { apiPost: async () => { calls++; throw new TypeError('offline'); } });
+  assert.equal(await context.renewSessionIfDue(now), false);
+  assert.equal(calls, 0, 'six days left: no request');
+  assert.equal(await context.renewSessionIfDue(now + 3 * day), false);
+  assert.equal(calls, 1, 'past half: one attempt, which failed offline');
+  assert.equal(await context.renewSessionIfDue(now + 3 * day + 1000), false);
+  assert.equal(calls, 1, 'no second attempt within the hour');
+  assert.equal(await context.renewSessionIfDue(now + 3 * day + 60 * 60 * 1000), false);
+  assert.equal(calls, 2);
+  const other = sessionContext(syntheticJwt({ sub: 'bob', aid: 'acct-9', exp: (now + day) / 1000 }), {
+    apiPost: async () => ({ access_token: syntheticJwt({ sub: 'bob', aid: 'acct-10', exp: (now + 7 * day) / 1000 }) }),
+  });
+  assert.equal(await other.context.renewSessionIfDue(now), false, 'a token of another account is refused');
+  assert.equal(other.stored.get('token').length > 0, true);
 });
 
 test('SPEC-087 a browser that blocks site storage still starts and keeps the login in memory', () => {

@@ -1340,6 +1340,7 @@ venv/bin/python -m backend.run
 | 帳號 | `GET /api/auth/registration` | 註冊方式（invite／open／closed）與是否開啟 email 功能，不需登入 |
 | 帳號 | `POST /api/auth/register` | 註冊帳號；邀請制時需要 `invite_code`（受註冊總數與頻率限制） |
 | 帳號 | `POST /api/auth/login` | 登入並取得 7 天有效的 Bearer token |
+| 帳號 | `POST /api/auth/refresh` | 以仍有效的 token 換一個新的 7 天 token；登入滿 30 天後不再延長，需重新輸入密碼 |
 | 帳號 | `GET /api/auth/me` | 取得目前登入的帳號 |
 | 帳號 | `POST /api/auth/change-password` | 以舊密碼更換密碼；舊 token 立即失效 |
 | 帳號 | `POST /api/auth/logout-all` | 登出所有裝置（包括這一台），密碼不變 |

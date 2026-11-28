@@ -4,7 +4,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from backend import models, schemas
-from backend.auth import get_current_user
+from backend.auth import get_current_session, get_current_user
 from backend.dependencies import get_db
 from backend.mailer import Mailer, MailError, deliver_later
 from backend.rate_limits import (
@@ -59,6 +59,13 @@ def login(request: Request, payload: schemas.UserLogin, db: Session = Depends(ge
 def read_current_user(request: Request, current_user: models.User = Depends(get_current_user)):
     return {"id": current_user.id, "username": current_user.username,
             "is_admin": request.app.state.settings.is_admin(current_user.username), "email": current_user.email}
+
+
+@router.post("/refresh", response_model=schemas.Token)
+def refresh(request: Request, session: tuple[models.User, dict] = Depends(get_current_session)):
+    """SPEC-143: swap a valid token for a new 7-day one, never past 30 days after sign-in."""
+    user, claims = session
+    return accounts.renew_session(user, claims, secret_key=request.app.state.settings.secret_key)
 
 
 @router.post("/logout-all")

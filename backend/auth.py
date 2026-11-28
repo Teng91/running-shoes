@@ -24,11 +24,12 @@ def decode_access_token(token: str, *, secret_key: str) -> dict:
         ) from None
 
 
-def get_current_user(
+def get_current_session(
     request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_db),
-) -> User:
+) -> tuple[User, dict]:
+    """The signed-in account and its verified token claims (SPEC-143 renews from them)."""
     payload = decode_access_token(
         credentials.credentials, secret_key=request.app.state.settings.secret_key
     )
@@ -46,4 +47,8 @@ def get_current_user(
     # the older ones expired after ACCESS_TOKEN_EXPIRE_MINUTES (7 days), so it is required.
     if payload.get("aid") != user.backup_id:
         raise HTTPException(status_code=401, detail="Session expired; please log in again")
-    return user
+    return user, payload
+
+
+def get_current_user(session: tuple[User, dict] = Depends(get_current_session)) -> User:
+    return session[0]
