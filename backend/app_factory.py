@@ -161,6 +161,7 @@ def create_app(
         UploadLimitMiddleware,
         max_bytes=selected_settings.max_strava_request_bytes,
         max_backup_bytes=MAX_BACKUP_BYTES,
+        max_api_bytes=selected_settings.max_api_body_bytes,
     )
     # The SPA and API share one origin, so no CORS middleware is installed:
     # browsers refuse cross-origin API reads (SPEC-054).
