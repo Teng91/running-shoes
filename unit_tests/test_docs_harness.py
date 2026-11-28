@@ -183,3 +183,22 @@ def test_api_reference_requires_every_contract_route_exactly(tmp_path):
 def test_current_readme_documents_every_api_route():
     from scripts.document_contracts import api_reference_errors
     assert api_reference_errors(check_docs.ROOT) == []
+
+
+
+@pytest.mark.parametrize(("pattern", "replacement", "message"), [
+    (r"\| 功能規格 \| \d+ 份 SPEC", "| 功能規格 | 1 份 SPEC", "overview spec says 1"),
+    (r"\| API \| \d+ 個端點", "| API | 1 個端點", "overview API endpoint says 1"),
+    (r"\| 自動化測試 \| Python \d+ 項", "| 自動化測試 | Python 1 項", "overview Python test says 1"),
+    (r"目前 v\d+\.\d+", "目前 v0.1", "overview version says v0.1"),
+])
+def test_docs_harness_rejects_a_stale_overview(monkeypatch, capsys, pattern, replacement, message):
+    """SPEC-142: the overview table's version, spec, endpoint and test counts follow the repository."""
+    import re
+
+    python, frontend = check_docs.documented_counts()
+    check_docs.require_overview(python, frontend)
+    monkeypatch.setattr(check_docs, "README", re.sub(pattern, replacement, check_docs.README, count=1))
+    with pytest.raises(SystemExit):
+        check_docs.require_overview(python, frontend)
+    assert message in capsys.readouterr().err

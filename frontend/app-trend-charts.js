@@ -5,8 +5,10 @@
 // these renderers only lay out the returned values.
 let trendsRequestId = 0;
 
-// SPEC-072: end of the 16-week window shown by the weekly charts; null is the latest.
+// SPEC-072: end of the 16-week window shown by the weekly charts; null is the latest. A new
+// year shows that year's latest weeks again (SPEC-145: this script tracks the year itself).
 let weeklyWindowEnd = null;
+let weeklyWindowYear = null;
 let weeklyWindow = null;
 
 function addDaysISO(iso, days) {
@@ -43,6 +45,10 @@ async function renderTrends() {
   if (document.querySelector('.tab-panel.active')?.dataset.panel !== 'monthly') return;
   const year = parseInt(document.getElementById('year-select')?.value, 10);
   if (!year) return;
+  if (year !== weeklyWindowYear) {
+    weeklyWindowYear = year;
+    weeklyWindowEnd = null;
+  }
   const requestId = ++trendsRequestId;
   const windowEnd = weeklyWindowEnd;
   let trends;
@@ -297,7 +303,7 @@ function renderWeekdayChart(trends) {
   };
   if (hasPace) {
     scales.pace = { position: 'right', reverse: true, grid: { display: false },
-      ticks: { color: textColor, callback: value => formatPace(value).replace(' /km', '') } };
+      ticks: { color: textColor, callback: value => runFormat.formatPace(value).replace(' /km', '') } };
   }
   chartInstances.weekday = new Chart(document.getElementById('chart-weekday'), {
     data: { labels: WEEKDAY_LABELS, datasets },
@@ -309,7 +315,7 @@ function renderWeekdayChart(trends) {
         tooltip: { callbacks: {
           label: ctx => {
             const row = rows[ctx.dataIndex];
-            if (ctx.dataset?.yAxisID === 'pace') return row.pace ? `平均配速 ${formatPace(row.pace)}` : '沒有時間紀錄';
+            if (ctx.dataset?.yAxisID === 'pace') return row.pace ? `平均配速 ${runFormat.formatPace(row.pace)}` : '沒有時間紀錄';
             const runs = weekdayRuns(row);
             const average = runs ? ` · 平均每次 ${(row.km / runs).toFixed(1)} km` : '';
             return `${row.km.toFixed(1)} km · ${row.run_days} 天 ${runs} 次${average}`;
@@ -337,7 +343,7 @@ function weekdayText(rows) {
   const fastest = timed.length ? timed.reduce((best, row) => (row.pace < best.pace ? row : best), timed[0]) : null;
   const slowest = timed.length > 1 ? timed.reduce((worst, row) => (row.pace > worst.pace ? row : worst), timed[0]) : null;
   const pace = fastest && slowest && fastest !== slowest
-    ? `；平均配速最快是${WEEKDAY_LABELS[fastest.weekday]}（${formatPace(fastest.pace)}），最慢是${WEEKDAY_LABELS[slowest.weekday]}（${formatPace(slowest.pace)}）` : '';
+    ? `；平均配速最快是${WEEKDAY_LABELS[fastest.weekday]}（${runFormat.formatPace(fastest.pace)}），最慢是${WEEKDAY_LABELS[slowest.weekday]}（${runFormat.formatPace(slowest.pace)}）` : '';
   return `跑最多的是${WEEKDAY_LABELS[most.weekday]}：${most.km.toFixed(1)} km、${runs} 次，平均每次跑 ${(most.km / runs).toFixed(1)} km${pace}`
     + (rest.length ? `；${rest.join('、')}這一年沒跑過。` : '。');
 }
@@ -410,3 +416,6 @@ registerUiActions({
     'weekly-page': element => changeWeeklyWindow(Number(element.dataset.step)),
   },
 });
+
+// SPEC-145: the trends follow the monthly charts (which fill the year selector) on the monthly tab.
+registerPanel('monthly', { render: () => { if (typeof Chart !== 'undefined') renderTrends(); } });

@@ -55,8 +55,8 @@ async function previewAccountRestore() {
 }
 
 // SPEC-126: the one-row goals a preview mentions, such as '及跑量目標與目標賽事'.
-function restoreGoalText(runningGoal, raceGoal) {
-  const names = [runningGoal && '跑量目標', raceGoal && '目標賽事'].filter(Boolean);
+function restoreGoalText(runningGoal, targetRace) {
+  const names = [runningGoal && '跑量目標', targetRace && '目標賽事'].filter(Boolean);
   return names.length ? `及${names.join('與')}` : '';
 }
 
@@ -105,7 +105,7 @@ async function refreshAccountRestoreView() {
     button.hidden = true;
     document.getElementById('restore-preview').textContent = operation.preview.summary?.mode === 'update'
       ? '資料匯入完成，同來源資料已更新，額外資料已保留。' : '合併還原完成，現有內容已保留。';
-    void loadWorkspaceHistory();
+    refreshPanels('account-history');
   } catch (error) {
     if (!accountRestore.ownsRefresh(operation) || error.name === 'AbortError') return;
     document.getElementById('restore-preview').textContent = '匯入已完成，但畫面更新失敗。請按「重新載入資料」，不需要再次匯入。';
@@ -117,6 +117,8 @@ async function refreshAccountRestoreView() {
   }
 }
 registerFeatureReset('account-restore', resetAccountRestore);
+// SPEC-145: closing the settings modal discards an unapplied preview.
+onWorkspaceModalOpen(null, { closed: () => resetAccountRestore() });
 
 // SPEC-113: this feature's delegated UI actions; markup names them with data-click and the like.
 registerUiActions({

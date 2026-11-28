@@ -48,16 +48,16 @@ Python 3.11 · FastAPI · SQLAlchemy · SQLite · 原生 JavaScript（不需要�
 - **數字只算一次、到處一致**：里程、成本、壽命門檻、配速、目標進度都在後端算好；首頁、圖表、月報和 AI 讀的是同一個 read model，AI 只負責把數字寫成文字。
 - **不會弄丟或算錯資料**：每筆異動有版本檢查、冪等鍵與同交易的稽核紀錄；里程增減和跑步紀錄在同一個交易完成；刪除可以從異動歷史復原。
 - **手機優先、離線可用**：PWA 安裝到主畫面；離線時新增的跑步先存在 IndexedDB 佇列，恢復連線後自動送出且不重複。
-- **長期可維護**：每個功能先寫規格（91 份 spec）、每個驗收條件都對應到具名測試；`main` 受保護，只能透過 CI 全綠的 PR 合併。
+- **長期可維護**：每個功能先寫規格（數量見下方「規模」）、每個驗收條件都對應到具名測試；`main` 受保護，只能透過 CI 全綠的 PR 合併。
 
 ### 規模
 
 | 項目 | 數量 |
 | --- | --- |
-| 正式版本 | 160 個 tag，2026-06 開始，目前 v5.2 |
-| 自動化測試 | Python 836 項、前端 Node 回歸 277 項、40 組版面設定（WebKit／Chromium × 亮暗 × 10 種尺寸）、真實 CRUD E2E 與 PWA 升級／離線測試 |
-| 功能規格 | 138 份 SPEC，每份含 Goals、帳號隔離、migration／rollback 與 AC 追蹤 |
-| API | 66 個端點，與 `unit_tests/api_contract.json` 及下方 API 表自動比對 |
+| 正式版本 | 2026-06 開始，目前 v5.4；每個版本都有 tag 與 GitHub Release |
+| 自動化測試 | Python 864 項、前端 Node 回歸 281 項、40 組版面設定（WebKit／Chromium × 亮暗 × 10 種尺寸）、真實 CRUD E2E 與 PWA 升級／離線測試 |
+| 功能規格 | 144 份 SPEC，每份含 Goals、帳號隔離、migration／rollback 與 AC 追蹤 |
+| API | 68 個端點，與 `unit_tests/api_contract.json` 及下方 API 表自動比對 |
 | 資料庫 | SQLite schema 14，每一版都有守衛的回滾腳本 |
 | 部署 | Fly.io 1 台 256MB 機器＋加密 volume，閒置自動休眠 |
 
@@ -158,7 +158,7 @@ flowchart LR
 
 1. PR 的 5 個測試 job 全部通過才能合併到 `main`。
 2. 合併後喚醒正式機器，在 volume 上先做資料庫快照，再部署新映像。
-3. `release-check` 匿名、唯讀地確認 schema、API contract、59 個資產的雜湊與 MIME、未登入一律被拒、手機啟動與離線 shell。
+3. `release-check` 匿名、唯讀地確認 schema、API contract、60 個資產的雜湊與 MIME、未登入一律被拒、手機啟動與離線 shell；失敗時若這次部署沒有改 schema，CI 自動重新部署上一版映像，有 migration 時改用文件化的回滾腳本（SPEC-144）。
 4. `package.json` 版號是新的就自動打 tag、用 CHANGELOG 發 GitHub Release；開著的 App 在安全時機自動換成新版。
 
 ---
@@ -172,7 +172,7 @@ flowchart LR
 | 暴力登入、濫用 AI | 每帳號／每 IP／全站的限流，以 SQLite 共享計數讓多 worker 共用上限；同一 IP 對同一帳號 15 分鐘內失敗 10 次、或該帳號從各處失敗 100 次就暫時鎖定；AI 另有每帳號／全站每日額度；註冊總數、每人資料量都有上限 |
 | 陌生人註冊、帳號被接管 | 預設邀請制註冊，伺服器只存邀請碼雜湊，沒有有效邀請碼時試不出哪些名稱已被使用；邀請碼不能註冊管理員名稱，管理員帳號也不能刪除（權限跟著名稱走）；帳號名稱不分大小寫；改密碼、email 重設或管理員臨時密碼都讓所有舊 token 失效，綁定 email 的帳號會收到通知信；token 綁定帳號本身，帳號刪除後同名重新註冊，舊 token 也進不去；可以一鍵登出所有裝置 |
 | 忘記密碼流程被濫用 | 驗證碼 6 位數、10 分鐘、每組最多試 5 次（比對前就計入），每個帳號每天最多試 10 次，只存 HMAC；不論帳號是否存在都回同樣結果；每 IP／帳號／全站都有寄送上限；寄信的 STARTTLS 驗證 Gmail 憑證 |
-| 大量請求灌爆服務 | 每個來源位址每分鐘 600 次 API 上限（記憶體計數，不寫資料庫），Fly 另設同時請求上限 |
+| 大量請求灌爆服務 | 每個來源位址每分鐘 600 次 API 上限（記憶體計數，不寫資料庫），Fly 另設同時請求上限；每個 `/api/` 請求在解析前限制 1 MB（Strava 與備份上傳各有自己的上限），超過直接回 413（SPEC-142） |
 | 資料遺失 | 每次部署前在 volume 快照；每天把正式資料庫加密（AES-256）後存到 GitHub artifact，保留 30 天 |
 | 偷換模型、燒付費額度 | 後端只接受當日免費 tools 模型清單內的模型 ID，前端傳任意 ID 也不會使用伺服器金鑰 |
 | 提示注入 | 搜尋結果以不可信的 tool 結果傳入、限制長度並過濾網址；私人資料只來自資料庫工具 |
@@ -197,8 +197,8 @@ flowchart LR
 
 ## 品質：測試與規格
 
-- **Python 836 項**：API、交易與並行、migration 與回滾、備份往返、帳號隔離、Agent 規劃與工具（外部 LLM 與搜尋一律 mock），一律使用暫存或記憶體資料庫，不碰正式 `shoes.db`。
-- **前端 Node 回歸 277 項**：以 `vm` 載入實際前端程式，驗證狀態、競態、草稿、串流與圖表資料。
+- **Python 864 項**：API、交易與並行、migration 與回滾、備份往返、帳號隔離、Agent 規劃與工具（外部 LLM 與搜尋一律 mock），一律使用暫存或記憶體資料庫，不碰正式 `shoes.db`。
+- **前端 Node 回歸 281 項**：以 `vm` 載入實際前端程式，驗證狀態、競態、草稿、串流與圖表資料。
 - **瀏覽器**：Playwright 在 WebKit 與 Chromium 跑 40 組版面設定（含幾何對齊與無溢出）、真實 FastAPI＋暫存 SQLite 的 CRUD E2E、Service Worker 升級與離線；失敗時保存截圖與 trace。
 - **修 bug 先寫重現測試**：例如 v4.17.0 的 CI 抓到新圖表檔案重複宣告全域常數，修正時同時加上掃描所有 script 的測試。
 - **文件也被測**：`docs-check` 比對 README 的測試數、工具數、API 表、目錄樹與規格的 AC 追蹤，數字對不上 CI 就失敗。
@@ -214,10 +214,12 @@ push 任何分支 ─▶ verify（Ruff、mypy、架構邊界、secret 掃描、�
                ├▶ frontend-pwa    ─┤
                └▶ diagnostics-roundtrip
 merge 到 main ─▶ 喚醒機器 → volume 上快照資料庫 → 部署 → release-check → 打 tag、發 Release
+               （release-check 失敗且 schema 沒變 ─▶ 自動回到上一版映像）
 每週一        ─▶ 在 main 排程跑一次，抓新公布的 CVE
 ```
 
-- 只有部署 job 拿得到 `FLY_API_TOKEN`；測試 job 沒有任何 secret，fork 的 PR 也拿不到。
+- 只有部署與回滾 job 拿得到 `FLY_API_TOKEN`；測試 job 沒有任何 secret，fork 的 PR 也拿不到。
+- 瀏覽器 job 失敗會重跑一次；重跑後通過時仍留下警告、run summary 的一行說明與第一次的診斷 artifact，不穩定的測試不會被藏起來（SPEC-144）。
 - 資料庫：每次部署前在 volume 上快照；另有異地備份、checksum 驗證與隔離還原演練工具（見下方維運手冊）。
 - 每次 schema 升級都有守衛的回滾腳本，回到舊映像時舊程式仍能讀資料。
 
@@ -242,6 +244,8 @@ merge 到 main ─▶ 喚醒機器 → volume 上快照資料庫 → 部署 → 
 | 2026-11-24～25 | v4.29.2–4.29.14 | 解耦與只准變少的架構基準：殼層不再以名稱呼叫功能、沒有互相引用的 script、前端函式不超過 80 行；排程 workflow 續命；免費 AI 模型備援 |
 | 2026-11-25 | v5.0 | 比賽訓練課表：自選週數、依自己跑量逐週累積、恢復週與減量、長跑不足時說明怎麼調、落後時往下調、每週各強度建議次數；AI 教練讀同一份課表 |
 | 2026-11-25～26 | v5.1–5.2 | 帳號備份含目標賽事（v6）；目標賽事的異動歷史與誤刪復原；課表排版拆成獨立模組；本機離線資料與瀏覽器設定改依帳號識別碼存放；正式映像內含回滾腳本；AI 教練、網路搜尋、管理員名稱、邀請碼與 Strava 預覽的程式碼檢查修正 |
+| 2026-11-27～28 | v5.3 | 個人最佳成績（5K／10K／15K／半馬）；移除跑鞋「月跑量」欄位，退役只依實際使用預估；健行與步行配速上限每公里 120:00；讀取模型分層檢查；月報與 AI 工具的例外寫入伺服器紀錄；Strava 衝突連結的健行補上移動時間 |
+| 2026-11-28 | v5.4 | 所有 API 請求先限制大小再解析；新鞋退役預估改依開穿天數；登入自動續期（最長 30 天）；CI 重跑保留第一次的診斷、部署後檢查失敗自動回滾；前端共用格式化模組與功能間解耦 |
 
 ---
 
@@ -416,7 +420,8 @@ running-shoes/
 │   ├── app.js            # Dashboard 初始化
 │   ├── app-boot.js       # 啟動 loading、逾時與 stylesheet readiness
 │   ├── app-state.js      # 共用記憶體 state 與 presentation constants
-│   ├── app-session.js    # 登入 session 身分（token、使用者、世代）與過期通知
+│   ├── app-session.js    # 登入 session 身分（token、使用者、世代）、續期與過期通知
+│   ├── app-format.js     # 共用格式化：runFormat／shoeFormat／raceFormat／goalFormat（SPEC-145）
 │   ├── app-api.js        # HTTP／upload helpers
 │   ├── app-auth.js       # 登入、註冊、登出與帳號切換
 │   ├── app-streams.js    # 共用 SSE 解碼、取消與完成狀態
@@ -427,7 +432,7 @@ running-shoes/
 │   ├── app-account-restore.js # 還原預覽與視窗操作身分
 │   ├── app-history.js    # 異動分頁與誤刪復原 UI
 │   ├── app-core.js       # Shell、主題、分頁與聚合資料載入
-│   ├── app-dashboard.js  # 首頁卡片、提醒與跑鞋表格
+│   ├── app-dashboard.js  # 首頁卡片、提醒與跑鞋表格（格式化在 app-format.js）
 │   ├── app-onboarding.js # 新帳號的三步驟引導卡
 │   ├── app-exports.js    # 跑鞋匯出與帳號備份下載
 │   ├── app-goals.js      # 年度目標總覽、每月達標與目標設定
@@ -654,7 +659,7 @@ LLM_MAX_OUTPUT_TOKENS=4096
 - **跑鞋全生命週期追蹤**：記錄品牌、鞋款、用途類別 (Daily / Speed / Tempo / Race，可多選)、購買日期、尺寸、價格、里程、預期壽命
 - **購鞋資訊集中管理**：現役／退役跑鞋清單聚焦使用狀態；尺寸、買價、原價、折數統一在「跑鞋 → 支出明細」查看。新增／編輯跑鞋仍保留原有尺寸與價格欄位，不刪除既有資料
 - **鞋櫃類別覆蓋分析**：判斷某雙鞋退役後其所有用途是否仍有其他現役鞋覆蓋，避免不必要地補鞋 (支援多用途鞋款)
-- **智慧試算**：自動計算每 km／每次穿著成本、折數、生命進度，並依近 90 天實際使用預估退役日期；還沒穿過的新鞋與穿過但近 90 天沒穿的鞋（比賽鞋、健行鞋）都不預估、顯示「—」（跑過後改依近 90 天實際里程預估），已退役的鞋也不再預估，退役表格的「預估退役」欄顯示「已退役」，與現役表格欄位對齊（SPEC-069、SPEC-117、SPEC-138）
+- **智慧試算**：自動計算每 km／每次穿著成本、折數、生命進度，並依近 90 天實際使用預估退役日期（開穿不到 90 天的鞋以開穿以來的天數計算月均，至少 14 天，SPEC-142）；還沒穿過的新鞋與穿過但近 90 天沒穿的鞋（比賽鞋、健行鞋）都不預估、顯示「—」（跑過後改依近 90 天實際里程預估），已退役的鞋也不再預估，退役表格的「預估退役」欄顯示「已退役」，與現役表格欄位對齊（SPEC-069、SPEC-117、SPEC-138）
 - **一致的換鞋提醒**：所有頁面、提醒與 AI 工具共用同一套門檻：達預期壽命 80% 開始注意、90% 可以準備換鞋（標紅）
 - **一致的退役預估**：跑鞋清單、時間軸及單鞋分析共用後端預估；只依近 90 天實際月均計算，尚未有近 90 天紀錄（從未穿過或近 90 天沒穿）時不預估。清單日期提示及分析卡片會標示依據；無法預估或已達壽命時不虛構日期
 - **圖表視覺化**：生命進度條、每 km 成本比較、退役時間軸、近 90 天月均里程佔比（各現役鞋近 90 天實際月均，圓餅圖直接標示公里數與百分比，中間為合計，Chart.js）
@@ -939,7 +944,7 @@ CI 失敗／取消時嘗試上傳已有產物；引擎完全卡死時可能只�
 CI 的 `frontend-pwa` job 上傳獨立 `browser-diagnostics-roundtrip` artifact，另一個 job 下載並驗證 PNG、trace ZIP 與合成錯誤標記，缺檔／損毀會讓 pipeline 失敗。
 
 `frontend-e2e` 會對真實 FastAPI 與暫存 SQLite 執行同一個 `release-check`：檢查 readiness／schema、
-完整 API contract、manifest 對應的 59 個 shell／worker 資產雜湊與 MIME、四個統計 API 的匿名拒絕存取，
+完整 API contract、manifest 對應的 60 個 shell／worker 資產雜湊與 MIME、四個統計 API 的匿名拒絕存取，
 再驗證 Chromium／WebKit 匿名手機啟動與 native runtime cache，以及 Chromium 離線重開。
 WebKit 離線 shell 由 `frontend-pwa` 的 fixture transport 中斷驗證；API probe 在 HTTP headers 後截斷 response body，完整讀取 JSON 並檢查 server 請求計數，避免 headers 前 TCP 中斷讓裸 fetch 一直 pending。這些不取代引擎之外的實機驗證。
 這個 task 不登入、不送出資料、不發布或回滾；正式 origin 必須是 HTTPS，HTTP 只允許 loopback。
@@ -955,7 +960,7 @@ Playwright／Chromium／WebKit 齊全時，也會執行版面測試。
 避免每次停止都重跑。Hook 不會呼叫其他模型、外部 API，或傳送提示、diff、原始碼與測試輸出。
 GitHub Actions 仍會在 push／pull request 執行 `verify`，並以三個可獨立重跑的 browser jobs 執行完整版面矩陣、真實 CRUD E2E 與 PWA 升級／離線測試；push 到 main 時再依序快照、部署、檢查並發版（見「日常開發流程、自動部署與發版」）；Dependabot 每月以單一 PR 合併 GitHub Actions 更新；Python 只接收安全性更新 PR，例行升級依下方 `uv pip compile --universal` 步驟手動重編鎖定檔（Dependabot 產生的鎖定檔會遺失 Windows 條件）。
 
-本次驗證基線為 Python **836 passed**、前端回歸測試 **277 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
+本次驗證基線為 Python **864 passed**、前端回歸測試 **281 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
 版面檢查涵蓋 WebKit／Chromium、亮／暗模式與 10 組直橫向尺寸，共 40 組設定，檢查四個功能分頁與月報、三個認證表單、圖表、全部彈窗、行內編輯、停用／錯誤及空資料狀態。
 
 主要表單、工具列與彈窗操作統一為 44px 控制項；桌面表格內的緊湊操作為 36px，手機至少 44px。
@@ -1328,7 +1333,7 @@ venv/bin/python -m backend.run
 
 註冊方式由 `REGISTRATION_MODE` 決定：預設 `invite` 需要管理員產生的邀請碼，`open` 任何人都能註冊，`closed` 不開放註冊（其他值一律視為 `closed`）。每個使用者的跑鞋資料完全隔離，互看不到；管理員只能管理邀請碼和產生臨時密碼，看不到別人的跑步資料。
 
-登入後的 token 存在這台裝置的瀏覽器，7 天後過期；瀏覽器封鎖網站資料時仍可使用，但登入只保存在這個頁面，重新整理後要再登入。「登出」只清除這台裝置；手機遺失或懷疑別人登入過時，在「資料與同步」按「登出所有裝置」，所有裝置（包括這一台）都要重新登入，密碼不變；懷疑密碼外流時請更改密碼，效果相同。
+登入後的 token 存在這台裝置的瀏覽器，7 天後過期；App 開著或回到前景時，token 過了一半就自動換新，常用的人不會每週被登出，但登入滿 30 天後仍要重新輸入密碼（SPEC-143）；瀏覽器封鎖網站資料時仍可使用，但登入只保存在這個頁面，重新整理後要再登入。「登出」只清除這台裝置；手機遺失或懷疑別人登入過時，在「資料與同步」按「登出所有裝置」，所有裝置（包括這一台）都要重新登入，密碼不變；懷疑密碼外流時請更改密碼，效果相同。
 
 ## API 一覽
 
@@ -1340,6 +1345,7 @@ venv/bin/python -m backend.run
 | 帳號 | `GET /api/auth/registration` | 註冊方式（invite／open／closed）與是否開啟 email 功能，不需登入 |
 | 帳號 | `POST /api/auth/register` | 註冊帳號；邀請制時需要 `invite_code`（受註冊總數與頻率限制） |
 | 帳號 | `POST /api/auth/login` | 登入並取得 7 天有效的 Bearer token |
+| 帳號 | `POST /api/auth/refresh` | 以仍有效的 token 換一個新的 7 天 token；登入滿 30 天後不再延長，需重新輸入密碼 |
 | 帳號 | `GET /api/auth/me` | 取得目前登入的帳號 |
 | 帳號 | `POST /api/auth/change-password` | 以舊密碼更換密碼；舊 token 立即失效 |
 | 帳號 | `POST /api/auth/logout-all` | 登出所有裝置（包括這一台），密碼不變 |

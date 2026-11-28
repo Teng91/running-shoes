@@ -112,14 +112,17 @@ test('SPEC-040 the shared year selector redraws every year view and the comparis
   const calls = [];
   const ctx = context(nodes, { panel: 'monthly',
     monthlyMileages: [{ year: 2025, month: 1, km: 50 }, { year: 2026, month: 1, km: 80 }, { year: 2026, month: 2, km: 90 }],
-    ...Object.fromEntries(['renderGoalProgress', 'renderMonthlyYearChart', 'renderShoeStackedChart', 'renderYearReview', 'renderTrends']
-      .map(name => [name, () => calls.push(name)])),
+    renderedPanels: new Map([['monthly', 'drawn'], ['runs', 'drawn']]), renderActivePanel: () => calls.push('renderActivePanel'),
   });
-  vm.runInContext(`let selectedYear = null;\nlet weeklyWindowEnd = '2026-03-01';\nconst YEAR_LINE_COLORS = ['#a', '#b'];\n${['onYearChange', 'yearOverYearSeries', 'renderYearOverYearChart'].map(extract).join('\n')}`, ctx);
+  vm.runInContext(`let selectedYear = null;\nconst YEAR_LINE_COLORS = ['#a', '#b'];\n${['onYearChange', 'yearOverYearSeries', 'renderYearOverYearChart'].map(extract).join('\n')}`, ctx);
   ctx.onYearChange();
-  assert.deepEqual(calls, ['renderGoalProgress', 'renderMonthlyYearChart', 'renderShoeStackedChart', 'renderYearReview', 'renderTrends']);
+  // SPEC-145: every year view (goal progress, trends, race readiness, these charts) is a monthly
+  // panel hook, so a new year redraws the monthly panel instead of naming each feature.
+  assert.deepEqual(calls, ['renderActivePanel']);
+  assert.deepEqual([...ctx.renderedPanels.keys()], ['runs']);
   assert.equal(vm.runInContext('selectedYear', ctx), 2026);
-  assert.equal(vm.runInContext('weeklyWindowEnd', ctx), null, 'a new year starts at its latest 16 weeks');
+  assert.doesNotMatch(extract('onYearChange'), /renderGoalProgress|renderTrends|weeklyWindowEnd/);
+  ctx.renderYearOverYearChart();
   const { datasets } = ctx.chartInstances.yearOverYear.config.data;
   assert.deepEqual(Array.from(datasets, row => [row.label, row.borderWidth]), [['2025', 1.5], ['2026', 3]]);
   assert.deepEqual(Array.from(datasets[1].data.slice(0, 6)), [80, 90, 0, 0, 0, null], 'started months without runs are 0');

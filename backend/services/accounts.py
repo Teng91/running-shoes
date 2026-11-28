@@ -6,7 +6,12 @@ from sqlalchemy import delete, func
 from sqlalchemy.orm import Session
 
 from backend import models
-from backend.credentials import create_access_token, get_password_hash, verify_password
+from backend.credentials import (
+    create_access_token,
+    get_password_hash,
+    session_started_at,
+    verify_password,
+)
 from backend.database import Base
 from backend.services import invites
 from backend.services.errors import CapacityExceeded, Conflict, Invalid, NotFound, Unauthorized
@@ -92,6 +97,20 @@ def login(db: Session, username: str, password: str, *, secret_key: str):
         raise Unauthorized("Incorrect username or password")
     token = create_access_token(
         {"sub": user.username, "token_version": user.token_version, "aid": user.backup_id},
+        secret_key=secret_key,
+    )
+    return {"access_token": token, "token_type": "bearer"}
+
+
+def renew_session(user: models.User, claims: dict, *, secret_key: str) -> dict:
+    """A fresh 7-day token for a still-valid session, capped 30 days after sign-in (SPEC-143).
+
+    The caller has verified ``claims`` against ``user``; the sign-in time is carried over, so
+    renewing never extends a session past ``SESSION_MAX_AGE_DAYS``.
+    """
+    token = create_access_token(
+        {"sub": user.username, "token_version": user.token_version, "aid": user.backup_id,
+         "auth_time": session_started_at(claims)},
         secret_key=secret_key,
     )
     return {"access_token": token, "token_type": "bearer"}

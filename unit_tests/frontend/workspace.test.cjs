@@ -189,7 +189,7 @@ test('SPEC-027 restore windows reject repreview during apply and stale completio
   const context = vm.createContext({ document: { getElementById: id => elements[id] },
     captureAuthSession: () => ({}), isCurrentAuthSession: () => true,
     registerFeatureReset() {}, apiPost: () => gate.promise,
-    loadData: async () => { loads++; }, loadWorkspaceHistory() {},
+    loadData: async () => { loads++; }, loadWorkspaceHistory() {}, refreshPanels() {},
   });
   vm.runInContext(fs.readFileSync('frontend/app-account-restore.js', 'utf8'), context);
   await bindRestoreController(context);
@@ -362,7 +362,7 @@ test('SPEC-029 import modes own their previews and confirmation', async () => {
     captureAuthSession: () => ({}), isCurrentAuthSession: () => true, registerFeatureReset() {},
     authHeaders: () => ({}), newOperationKey: () => 'synthetic-import-operation',
     jsonRequest: (url) => { requested = url; return new Promise(resolve => { resolvePreview = resolve; }); },
-    apiPost: async () => { posts++; }, loadData: async () => {}, loadWorkspaceHistory() {},
+    apiPost: async () => { posts++; }, loadData: async () => {}, loadWorkspaceHistory() {}, refreshPanels() {},
     confirm: message => { assert.match(message, /localhost:8000.*local-user/); return accepted; },
   });
   vm.runInContext(fs.readFileSync('frontend/app-account-restore.js', 'utf8'), context);
@@ -514,7 +514,7 @@ test('SPEC-032 committed import refresh retries only reads and isolates replaced
     captureAuthSession: () => session, isCurrentAuthSession: value => value === session,
     jsonRequest: async () => ({ token: 'synthetic-preview', summary: { mode: 'merge' } }),
     apiPost: async (_, body, options) => { posts++; keys.push(options.idempotencyKey); if (failWrite) throw Error('lost response'); },
-    loadData: async () => { reads++; }, loadWorkspaceHistory() {},
+    loadData: async () => { reads++; }, loadWorkspaceHistory() {}, refreshPanels() {},
   });
   context.resourceStore = { ...context.resourceStore, getError: resource => failRead && resource === 'shoes' ? Error('read failed') : undefined };
   vm.runInContext(fs.readFileSync('frontend/app-account-restore.js', 'utf8'), context);
@@ -550,7 +550,7 @@ test('SPEC-032 late refresh cannot change a replacement preview or account', asy
       captureAuthSession: () => session, isCurrentAuthSession: value => value === session,
       jsonRequest: async () => ({ token: 'first', summary: { mode: 'merge' } }), apiPost: async () => {},
       loadData: () => new Promise((resolve, reject) => { settle = () => fails ? reject(Error('old read failed')) : resolve(); }),
-      loadWorkspaceHistory() { throw Error('stale refresh cannot reload history'); },
+      refreshPanels(resource) { if (resource === 'account-history') throw Error('stale refresh cannot reload history'); },
     });
     vm.runInContext(fs.readFileSync('frontend/app-account-restore.js', 'utf8'), context);
     const controller = await bindRestoreController(context);

@@ -39,7 +39,7 @@ function renderRunLog() {
   // SPEC-060: time-weighted average over runs that have a moving time, from the backend.
   const averagePace = summary?.average_pace_seconds_per_km;
   // SPEC-096: totals count road and trail runs; the average pace counts road runs only.
-  const paceText = averagePace ? ` · 路跑平均配速 ${formatPace(averagePace)}` : '';
+  const paceText = averagePace ? ` · 路跑平均配速 ${runFormat.formatPace(averagePace)}` : '';
   document.getElementById('run-stats').innerHTML = [
     { label: `${monthLabel}總里程`, value: `${total.toFixed(2)} km`, sub: `${summary ? summary.run_count : runsOnly.length} 次跑步${paceText}` },
     { label: '跑步天數', value: `${days} 天`, sub: days ? `平均每天 ${(total / days).toFixed(2)} km` : '還沒有紀錄' },
@@ -57,13 +57,13 @@ function renderRunLog() {
   }
   document.getElementById('run-table').innerHTML = filtered.length ? filtered.map(run => {
     const shoe = runShoe(run.shoe_id);
-    const color = shoe ? shoeColor(shoe.id) : '#64748b';
-    const shoeName = shoe ? `${esc(shoe.brand)} ${esc(shoe.model)}` : '鞋款已刪除';
+    const color = shoe ? shoeFormat.shoeColor(shoe.id) : '#64748b';
+    const shoeText = shoe ? `${esc(shoe.brand)} ${esc(shoe.model)}` : '鞋款已刪除';
     const source = run.strava_id ? '<span class="run-source strava">Strava</span>' : '<span class="run-source">手動</span>';
-    const time = run.duration_seconds ? formatRunDuration(run.duration_seconds) : '—';
+    const time = run.duration_seconds ? runFormat.formatRunDuration(run.duration_seconds) : '—';
     const activity = run.activity_type && run.activity_type !== 'road'
-      ? `<span class="run-activity ${esc(run.activity_type)}">${esc(runActivityLabel(run.activity_type))}</span>` : '';
-    return `<tr><td>${esc(run.date.replace(/-/g, '/'))}${activity}</td><td class="numeric"><strong>${run.km.toFixed(2)} km</strong></td><td class="numeric">${time}</td><td class="numeric">${formatPace(run.pace_seconds_per_km)}</td><td><span class="run-shoe-label"><span class="brand-dot" style="background:${color}"></span>${shoeName}</span></td><td>${source}</td><td><button class="btn btn-sm btn-edit" data-click="open-run" data-run-id="${run.id}">編輯</button></td></tr>`;
+      ? `<span class="run-activity ${esc(run.activity_type)}">${esc(runFormat.runActivityLabel(run.activity_type))}</span>` : '';
+    return `<tr><td>${esc(run.date.replace(/-/g, '/'))}${activity}</td><td class="numeric"><strong>${run.km.toFixed(2)} km</strong></td><td class="numeric">${time}</td><td class="numeric">${runFormat.formatPace(run.pace_seconds_per_km)}</td><td><span class="run-shoe-label"><span class="brand-dot" style="background:${color}"></span>${shoeText}</span></td><td>${source}</td><td><button class="btn btn-sm btn-edit" data-click="open-run" data-run-id="${run.id}">編輯</button></td></tr>`;
   }).join('') : '<tr><td colspan="7" class="empty-state">這個月還沒有跑步紀錄。點月曆日期或從右上角記下第一跑吧！</td></tr>';
   renderRunCalendar(summary ? summary.calendar : runsOnly, month);
   renderRunShoeChart(shoeStats);
@@ -100,7 +100,7 @@ function renderDashboardInsights(data) {
   const delta = Number(comparison.delta_km ?? data.month_delta_km ?? 0);
   const recent = data.recent_7_days || {};
   const forecast = data.forecast || {};
-  const goalSummary = dashboardGoalSummary(goal);
+  const goalSummary = goalFormat.dashboardGoalSummary(goal);
   const forecastSummary = forecast.state === 'current'
     ? ` · 月底預測 ${Number(forecast.projected_month_km || 0).toFixed(2)} km` : '';
   const cards = [
@@ -110,27 +110,6 @@ function renderDashboardInsights(data) {
   ];
   const alerts = (data.alerts || []).map(alert => `<div class="insight-alert ${esc(alert.severity || '')}">${esc(alert.message)}</div>`).join('');
   target.innerHTML = `<div class="insight-grid">${cards.map(card => `<div class="insight-card"><div class="insight-card-label">${card.label}</div><div class="insight-card-value">${card.value}</div><div class="insight-card-sub">${card.sub}</div></div>`).join('')}</div>${alerts ? `<div class="insight-alerts">${alerts}</div>` : ''}`;
-}
-
-function dashboardGoalSummary(goal) {
-  if (!goal.active) return `從 ${goal.start_year || '—'} 年開始`;
-  if (goal.month_state === 'future') return '尚未開始';
-  if (goal.month_state === 'past') {
-    const remainingKm = Number(goal.month_remaining_km || 0);
-    if (remainingKm > 0) return `月底結算，未達目標 ${remainingKm.toFixed(2)} km`;
-    const overKm = Math.max(0, Number(goal.month_km || 0) - Number(goal.monthly_km || 0));
-    return `已達成目標，超過 ${overKm.toFixed(2)} km`;
-  }
-  if (goal.month_state === 'before_goal') return `從 ${goal.start_year || '—'} 年開始`;
-  const paceDelta = Number(goal.pace_delta_km || 0);
-  const parts = [
-    `${paceDelta >= 0 ? '超前' : '落後'} ${Math.abs(paceDelta).toFixed(2)} km`,
-    `剩 ${Number(goal.remaining_days || 0)} 天`,
-  ];
-  if (goal.required_daily_km !== null && goal.required_daily_km !== undefined) {
-    parts.push(`每天需 ${Number(goal.required_daily_km).toFixed(2)} km`);
-  }
-  return parts.join(' · ');
 }
 
 function renderStravaStatus() {
@@ -184,7 +163,7 @@ function renderRunCalendar(filtered, month) {
 function renderRunShoeChart(shoeStats) {
   const entries = [...shoeStats.entries()].sort((a, b) => b[1].km - a[1].km);
   const shoeList = entries.map(([id]) => runShoe(id));
-  const colors = shoeList.map(shoe => shoe ? shoeColor(shoe.id) : '#64748b');
+  const colors = shoeList.map(shoe => shoe ? shoeFormat.shoeColor(shoe.id) : '#64748b');
   const total = entries.reduce((sum, [, stats]) => sum + stats.km, 0);
   const legend = document.getElementById('run-shoe-legend');
   legend.innerHTML = entries.length ? entries.map(([, stats], index) => {
@@ -237,17 +216,17 @@ function renderShoeAnalytics(data) {
   // SPEC-138: a pair never logged has no rate either, like one idle for 90 days.
   const idle = ['idle_90_days', 'no_runs'].includes(life.forecast_source);
   const forecast = retired ? '已退役' : idle ? '—' : life.forecast_retirement_date ? life.forecast_retirement_date.replace(/-/g, '/') : '無法預估';
-  const forecastSub = retired ? '退役後不再預估' : idle ? forecastSourceText(life.forecast_source)
-    : `${forecastSourceText(life.forecast_source)} · ${Number(life.forecast_monthly_km).toFixed(1)} km／月`;
+  const forecastSub = retired ? '退役後不再預估' : idle ? shoeFormat.forecastSourceText(life.forecast_source)
+    : `${shoeFormat.forecastSourceText(life.forecast_source)} · ${Number(life.forecast_monthly_km).toFixed(1)} km／月`;
   const cards = [
-    { label: '總里程', value: `${formatShoeMileage(life.total_mileage_km)} km`, sub: usage.average_pace_seconds_per_km ? `平均配速 ${formatPace(usage.average_pace_seconds_per_km)}` : '' },
+    { label: '總里程', value: `${shoeFormat.formatShoeMileage(life.total_mileage_km)} km`, sub: usage.average_pace_seconds_per_km ? `平均配速 ${runFormat.formatPace(usage.average_pace_seconds_per_km)}` : '' },
     { label: '穿著次數', value: `${usage.count} 次`, sub: usage.count ? '已納入逐筆日誌' : '尚無日誌紀錄' },
     { label: '近 30／90 天', value: `${Number(usage.km_30_days).toFixed(1)} / ${Number(usage.km_90_days).toFixed(1)} km`, sub: `實際月均 ${Number(usage.actual_monthly_km_90_days).toFixed(1)} km` },
     { label: '最後使用', value: usage.last_run_date ? usage.last_run_date.replace(/-/g, '/') : '—', sub: usage.first_run_date ? `首次紀錄 ${usage.first_run_date.replace(/-/g, '/')}` : '尚無日誌紀錄' },
     { label: '壽命進度', value: life.usage_percent === null ? '—' : `${Number(life.usage_percent).toFixed(1)}%`, sub: `剩餘 ${Number(life.remaining_mileage_km).toFixed(2)} km` },
     { label: '預估退役', value: forecast, sub: forecastSub },
   ];
-  const recentRows = data.recent_runs.length ? data.recent_runs.map(run => `<tr><td>${run.date.replace(/-/g, '/')}${run.activity_type && run.activity_type !== 'road' ? `<span class="run-activity ${esc(run.activity_type)}">${esc(runActivityLabel(run.activity_type))}</span>` : ''}</td><td class="numeric">${Number(run.km).toFixed(2)} km</td><td class="numeric">${formatPace(run.pace_seconds_per_km)}</td></tr>`).join('') : '<tr><td colspan="3" class="empty-state">尚無逐筆跑步紀錄。</td></tr>';
+  const recentRows = data.recent_runs.length ? data.recent_runs.map(run => `<tr><td>${run.date.replace(/-/g, '/')}${run.activity_type && run.activity_type !== 'road' ? `<span class="run-activity ${esc(run.activity_type)}">${esc(runFormat.runActivityLabel(run.activity_type))}</span>` : ''}</td><td class="numeric">${Number(run.km).toFixed(2)} km</td><td class="numeric">${runFormat.formatPace(run.pace_seconds_per_km)}</td></tr>`).join('') : '<tr><td colspan="3" class="empty-state">尚無逐筆跑步紀錄。</td></tr>';
   document.getElementById('shoe-analysis-content').innerHTML = `<div class="shoe-analysis-grid">${cards.map(card => `<div class="insight-card"><div class="insight-card-label">${card.label}</div><div class="insight-card-value">${card.value}</div>${card.sub ? `<div class="insight-card-sub">${card.sub}</div>` : ''}</div>`).join('')}</div><div class="shoe-analysis-section"><h3>近 12 個月使用趨勢</h3><div class="shoe-analysis-chart"><canvas id="chart-shoe-analytics"></canvas></div></div><div class="shoe-analysis-section"><h3>最近使用</h3><div class="table-wrap" tabindex="0" role="region" aria-label="跑鞋最近使用紀錄"><table><thead><tr><th>日期</th><th class="numeric">距離</th><th class="numeric">配速</th></tr></thead><tbody>${recentRows}</tbody></table></div></div>`;
   if (typeof Chart === 'undefined') return;
   if (chartInstances.shoeAnalytics) chartInstances.shoeAnalytics.destroy();
@@ -270,7 +249,7 @@ function renderShoeSuggestion(suggestion) {
   if (!pick) { target.hidden = true; target.replaceChildren(); return; }
   const reason = pick.days_since_last_run == null ? '還沒穿過' : pick.days_since_last_run === 0 ? '今天穿過' : `已經 ${pick.days_since_last_run} 天沒穿`;
   const wear = pick.near_end ? `，已用 ${pick.usage_percent.toFixed(0)}%，快到退役里程` : '';
-  target.innerHTML = `<span>今天穿哪雙？建議 <strong>${esc(shoeName(pick.shoe_id))}</strong>（${reason}${wear}）</span>`
+  target.innerHTML = `<span>今天穿哪雙？建議 <strong>${esc(shoeFormat.shoeName(pick.shoe_id))}</strong>（${reason}${wear}）</span>`
     + `<button type="button" class="btn btn-sm btn-edit" id="use-suggested-shoe">選這雙</button>`;
   document.getElementById('use-suggested-shoe').onclick = () => {
     const select = document.getElementById('run-shoe');
@@ -321,3 +300,6 @@ registerUiActions({
     'close-shoe-analytics': () => closeShoeAnalytics(),
   },
 });
+
+// SPEC-145: new Strava import history (app-strava.js) reaches the run log through refreshPanels.
+registerDataHooks({ refreshed: resource => { if (resource === 'strava-history') renderStravaStatus(); } });

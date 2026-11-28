@@ -69,3 +69,8 @@ registerUiActions({
     'load-history': element => loadWorkspaceHistory(element.dataset.more === 'true'),
   },
 });
+
+// SPEC-145: the history loads whenever the settings modal opens, and again after an account
+// restore (app-account-restore.js) reports new history through refreshPanels.
+onWorkspaceModalOpen(() => { void loadWorkspaceHistory(); });
+registerDataHooks({ refreshed: resource => { if (resource === 'account-history') void loadWorkspaceHistory(); } });

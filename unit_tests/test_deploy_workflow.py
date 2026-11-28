@@ -31,7 +31,7 @@ def needs(block: str) -> set[str]:
 
 def test_deploy_runs_only_for_main_after_every_test_job():
     workflow_jobs = jobs()
-    assert set(workflow_jobs) == TEST_JOBS | {"deploy", "release-check", "release"}
+    assert set(workflow_jobs) == TEST_JOBS | {"deploy", "release-check", "rollback", "release"}
     for trigger in ("push:", "pull_request:", "schedule:", "workflow_dispatch:"):
         assert re.search(rf"^  {trigger}$", WORKFLOW, re.M)
     deploy = workflow_jobs["deploy"]
@@ -40,6 +40,7 @@ def test_deploy_runs_only_for_main_after_every_test_job():
     assert needs(deploy) == TEST_JOBS
     assert needs(workflow_jobs["release-check"]) == {"deploy"}
     assert needs(workflow_jobs["release"]) == {"release-check"}
+    assert needs(workflow_jobs["rollback"]) == {"deploy", "release-check"}
 
 
 def test_ci_tests_every_push_pull_request_and_weekly_schedule_including_docs():
@@ -53,16 +54,18 @@ def test_ci_tests_every_push_pull_request_and_weekly_schedule_including_docs():
     assert "github.event_name == 'schedule'" not in jobs()["deploy"]
 
 
-def test_only_the_deploy_job_receives_the_fly_token():
+def test_only_the_deploy_and_rollback_jobs_receive_the_fly_token():
     workflow_jobs = jobs()
     for name, block in workflow_jobs.items():
-        if name != "deploy":
+        if name not in {"deploy", "rollback"}:
             assert "secrets." not in block, name
-    deploy = workflow_jobs["deploy"]
-    assert deploy.count("FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}") == 3
-    for forbidden in ("npm ", "pip install", "scripts/task.py", "browser-setup", "setup-python", "setup-node"):
-        assert forbidden not in deploy, forbidden
-    assert "persist-credentials: false" in deploy
+    deploy, rollback = workflow_jobs["deploy"], workflow_jobs["rollback"]
+    assert deploy.count("FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}") == 4
+    assert rollback.count("secrets.") == rollback.count("FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}") == 1
+    for block in (deploy, rollback):
+        for forbidden in ("npm ", "pip install", "scripts/task.py", "browser-setup", "setup-python", "setup-node"):
+            assert forbidden not in block, forbidden
+        assert "persist-credentials: false" in block
     assert "persist-credentials: false" in workflow_jobs["release-check"]
     assert re.search(r"^permissions:\n  contents: read$", WORKFLOW, re.M)
     assert WORKFLOW.count("contents: write") == 1 and "contents: write" in workflow_jobs["release"]
@@ -115,14 +118,52 @@ def test_production_runs_are_serialized_without_cancelling():
 
 
 def test_browser_jobs_retry_once_with_a_visible_warning():
+    """SPEC-144: a passing retry still leaves a warning, a summary line and the first attempt."""
     workflow_jobs = jobs()
     for job, command in (("frontend-layout", "frontend-layout"), ("frontend-e2e", "frontend-e2e"),
                          ("frontend-pwa", "frontend-pwa"),
                          ("release-check", "release-check --base-url https://running-shoes.fly.dev")):
         task = command.split()[0]
-        assert (f'python scripts/task.py {command} || {{ echo "::warning::{task} failed once; retrying"; '
-                f"python scripts/task.py {command}; }}") in workflow_jobs[job], job
+        block = workflow_jobs[job]
+        script = "\n".join((
+            f"python scripts/task.py {command} && exit 0",
+            f'          echo "::warning::{task} failed once; retrying"',
+            '          echo "retried=true" >> "$GITHUB_OUTPUT"',
+            f'          echo "{task} failed its first attempt and was retried." >> "$GITHUB_STEP_SUMMARY"',
+        ))
+        assert script in block, job
+        assert block.rstrip().count(f"python scripts/task.py {command}") == 2, job
+        if job != "release-check":
+            move = "mv .artifacts/browser .artifacts/browser-first-attempt"
+            assert block.index(move) < block.rindex(f"python scripts/task.py {command}"), job
+            upload = block.split("Save the first attempt of a retried run", 1)[1]
+            assert "if: always() && steps.attempt.outputs.retried == 'true'" in upload
+            assert f"name: {task}-first-attempt" in upload and "path: .artifacts/browser-first-attempt/" in upload
     assert "||" not in workflow_jobs["verify"], "unit, lint and docs checks are deterministic and never retried"
+
+
+def test_a_failed_release_check_rolls_back_only_when_the_schema_did_not_move():
+    """SPEC-144: the previous image comes back automatically; a migration needs the manual script."""
+    workflow_jobs = jobs()
+    deploy, rollback = workflow_jobs["deploy"], workflow_jobs["rollback"]
+    record = deploy.index("Record the running release for a rollback")
+    assert deploy.index("Wake the production machine") < record < deploy.index("flyctl deploy --remote-only")
+    assert "flyctl machine list -a \"$FLY_APP\" --json | jq -r '[.[].config.image] | unique" in deploy
+    assert "jq -r '.schema_version // \"\"'" in deploy
+    assert "previous_image: ${{ steps.previous.outputs.image }}" in deploy
+    assert ("    if: always() && needs.deploy.result == 'success' && needs.release-check.result == 'failure'"
+            in rollback)
+    script = rollback.split("run: |", 1)[1]
+    schema_check = script.index('if [ "$schema" != "$PREVIOUS_SCHEMA" ]; then')
+    assert script.index('if [ -z "$PREVIOUS_IMAGE" ] || [ -z "$PREVIOUS_SCHEMA" ]; then') < schema_check
+    assert schema_check < script.index('flyctl deploy --image "$PREVIOUS_IMAGE" --rollback --ha=false')
+    assert script.count("exit 1") == 2
+    # The schema this commit would migrate to is read from the source it deployed.
+    command = "grep -oE '^CURRENT_SCHEMA_VERSION = [0-9]+$' backend/migrations.py | grep -oE '[0-9]+$'"
+    assert command in script
+    from backend import migrations
+    source = (ROOT / "backend" / "migrations.py").read_text(encoding="utf-8")
+    assert re.findall(r"^CURRENT_SCHEMA_VERSION = ([0-9]+)$", source, re.M) == [str(migrations.CURRENT_SCHEMA_VERSION)]
 
 
 def test_main_ruleset_requires_a_green_pull_request_without_bypass():

@@ -75,12 +75,45 @@ function clearAuth({ persist = true } = {}) {
   resetAuthInputs();
 }
 
+// SPEC-143: another tab renewing the same account's token hands this tab the new one.
+function adoptRenewedToken(token) {
+  return typeof token === 'string' && token !== authToken && startAuthSession(token, currentUser, { renewal: true });
+}
+
 function initializeAuthSync() {
   const invalidate = () => signOutWithNotice('其他分頁已變更登入狀態，請重新登入。', { persist: false });
   window.addEventListener('storage', event => {
-    if (isLocalStorageEvent(event) && [null, 'token', 'username'].includes(event.key)) invalidate();
+    if (!isLocalStorageEvent(event) || ![null, 'token', 'username'].includes(event.key)) return;
+    if (event.key === 'token' && adoptRenewedToken(event.newValue)) return;
+    if (event.key !== 'username' || event.newValue !== currentUser) invalidate();
   });
-  if (readStoredValue('token') !== authToken || readStoredValue('username') !== currentUser) invalidate();
+  window.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') void renewSessionIfDue();
+  });
+  const stored = readStoredValue('token');
+  if ((stored !== authToken && !adoptRenewedToken(stored)) || readStoredValue('username') !== currentUser) invalidate();
+}
+
+// SPEC-143: a token past half of its 7 days is renewed when the app is shown or comes back
+// into view, at most once an hour; the server never extends a session past 30 days after
+// the password was entered, so the token then simply expires.
+const SESSION_RENEW_REMAINING_MS = 3.5 * 24 * 60 * 60 * 1000;
+const SESSION_RENEW_INTERVAL_MS = 60 * 60 * 1000;
+let lastSessionRenewal = -Infinity;
+
+async function renewSessionIfDue(now = Date.now()) {
+  const session = captureAuthSession();
+  if (!session.token || session.expiresAt === null || session.expiresAt - now > SESSION_RENEW_REMAINING_MS) return false;
+  if (now - lastSessionRenewal < SESSION_RENEW_INTERVAL_MS) return false;
+  lastSessionRenewal = now;
+  try {
+    const body = await apiPost('/auth/refresh', {});
+    return isCurrentAuthSession(session) && typeof body?.access_token === 'string'
+      && startAuthSession(body.access_token, currentUser, { renewal: true });
+  } catch {
+    // Offline or already expired: a 401 signs out through app-api.js; anything else retries later.
+    return false;
+  }
 }
 
 function showLoginView() {
@@ -96,6 +129,7 @@ function showAppView({ keepBoot = false } = {}) {
   document.getElementById('user-label').textContent = currentUser || '';
   refreshPanels();
   runAuthViewHooks('appShown');
+  void renewSessionIfDue();
   if (!keepBoot) hideAppBoot();
 }
 

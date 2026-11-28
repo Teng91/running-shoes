@@ -74,6 +74,8 @@ class Settings:
     llm_max_output_tokens: int
     openrouter_default_model: str | None
     max_strava_csv_bytes: int = 10 * 1024 * 1024
+    # SPEC-142: every other /api/ request body (JSON, sign-in forms, chat turns).
+    max_api_body_bytes: int = 1024 * 1024
     max_strava_csv_rows: int = 50_000
     max_strava_import_history_per_user: int = 50
     # Each file or mode change in the restore panel previews again; allow normal use.

@@ -5,26 +5,16 @@
 // Pace axes are reversed so that faster is higher.
 let racePrepRequestId = 0;
 let personalBestsRequestId = 0;
-let raceGoal = null;
 const PACE_CHART_KEYS = ['paceTrend', 'raceLong', 'raceIntensity'];
 const PACE_DAY_MS = 86400000;
-const RACE_DISTANCES = { '21.0975': '半馬', '10': '10K', '5': '5K', '42.195': '全馬' };
 const RACE_ZONE_COLORS = { easy: ['--chart-2', '#2fd8f0'], steady: ['--chart-line', '#ffd23f'], race: ['--chart-1', '#c8ff3c'], fast: ['--chart-warn', '#ff8a1f'] };
 
-registerFeatureReset('race-prep', () => { raceGoal = null; racePrepRequestId++; personalBestsRequestId++; });
+registerFeatureReset('race-prep', () => { racePrepRequestId++; personalBestsRequestId++; });
 
 function paceClock(seconds) {
   if (!Number.isFinite(seconds) || seconds <= 0) return '—';
   const total = Math.round(seconds);
   return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
-}
-
-function raceClock(seconds) {
-  if (!Number.isFinite(seconds)) return '—';
-  const total = Math.round(Math.abs(seconds));
-  const hours = Math.floor(total / 3600);
-  const rest = `${String(Math.floor(total % 3600 / 60)).padStart(hours ? 2 : 1, '0')}:${String(total % 60).padStart(2, '0')}`;
-  return hours ? `${hours}:${rest}` : rest;
 }
 
 function paceDayNumber(iso) {
@@ -35,15 +25,6 @@ function paceDayNumber(iso) {
 function paceDayLabel(dayNumber) {
   const value = new Date(dayNumber * PACE_DAY_MS);
   return `${value.getUTCFullYear()}/${value.getUTCMonth() + 1}`;
-}
-
-function raceShortDate(iso) {
-  const [, month, day] = String(iso).split('-');
-  return `${Number(month)}/${Number(day)}`;
-}
-
-function raceDistanceName(km) {
-  return RACE_DISTANCES[String(km)] || `${Number(km).toFixed(1)} km`;
 }
 
 function zoneColor(key) {
@@ -81,7 +62,8 @@ async function readAnalytics(name, path, check) {
   return result.value;
 }
 
-// SPEC-105: views of the race goal (the form in app-race-goal.js) refresh when it loads.
+// SPEC-105: views of the race goal (the form in app-race-goal.js) refresh when it loads; each
+// view(goal) receives the loaded goal, which the form owns (SPEC-145).
 const raceGoalViews = [];
 
 function onRaceGoalShown(view) {
@@ -104,8 +86,7 @@ async function renderPaceAnalysis() {
   if (!race || !pace || requestId !== racePrepRequestId) return;
   if (document.querySelector('.tab-panel.active')?.dataset.panel !== 'monthly') return;
   destroyPaceCharts();
-  raceGoal = race.goal;
-  raceGoalViews.forEach(view => view());
+  raceGoalViews.forEach(view => view(race.goal));
   const colors = {
     text: getThemeColor('--text-dim', '#8b8d9a'), grid: getThemeColor('--chart-grid', '#f1f5f9'),
     primary: getThemeColor('--chart-1', '#c8ff3c'), soft: getThemeColor('--chart-1-soft', 'rgba(200, 255, 60, .38)'),
@@ -160,10 +141,10 @@ function personalBestCard(distance) {
     const km = Number(distance.distance_km);
     return reviewCard(esc(distance.label), '—', `還沒有 ${esc(km.toFixed(Number.isInteger(km) ? 0 : 1))} km 以上、有時間的路跑`);
   }
-  const rest = others.map(entry => `<li><span>${Number(entry.rank)}. ${esc(raceClock(entry.seconds))}</span>`
+  const rest = others.map(entry => `<li><span>${Number(entry.rank)}. ${esc(raceFormat.raceClock(entry.seconds))}</span>`
     + `<span>${esc(personalBestRun(entry))}</span></li>`).join('');
   return `<div class="review-card pb-card"><div class="review-label">${esc(distance.label)}</div>`
-    + `<div class="review-value">${esc(raceClock(best.seconds))}</div>`
+    + `<div class="review-value">${esc(raceFormat.raceClock(best.seconds))}</div>`
     + `<div class="review-sub">${esc(paceClock(best.pace))} /km · ${esc(personalBestRun(best))}<br>${esc(best.shoe)}</div>`
     + (rest ? `<ol class="pb-others">${rest}</ol>` : '')
     + `<button type="button" class="btn btn-sm btn-edit pb-use" data-click="use-personal-best" data-km="${esc(String(distance.distance_km))}"`
@@ -181,16 +162,16 @@ function renderRaceCards(race) {
   const days = race.days_left;
   const countdown = days > 0 ? `${days} 天` : days === 0 ? '今天' : '已結束';
   const cards = [
-    reviewCard('倒數', esc(countdown), `${esc(raceShortDate(goal.race_date))} · ${esc(raceDistanceName(goal.distance_km))}`),
-    reviewCard('目標配速', `${esc(paceClock(race.goal_pace))} <small>/km</small>`, `目標 ${esc(raceClock(goal.target_seconds))}`),
+    reviewCard('倒數', esc(countdown), `${esc(raceFormat.raceShortDate(goal.race_date))} · ${esc(raceFormat.raceDistanceName(goal.distance_km))}`),
+    reviewCard('目標配速', `${esc(paceClock(race.goal_pace))} <small>/km</small>`, `目標 ${esc(raceFormat.raceClock(goal.target_seconds))}`),
   ];
   const prediction = race.prediction;
   if (prediction) {
     const margin = prediction.margin_seconds;
-    const gap = margin >= 0 ? `<span class="review-sub good">比目標快 ${esc(raceClock(margin))}</span>` : `<span class="review-sub warn">比目標慢 ${esc(raceClock(margin))}</span>`;
+    const gap = margin >= 0 ? `<span class="review-sub good">比目標快 ${esc(raceFormat.raceClock(margin))}</span>` : `<span class="review-sub warn">比目標慢 ${esc(raceFormat.raceClock(margin))}</span>`;
     const weather = prediction.hot_reference ? `（${prediction.reference_temperature_c}°C，涼爽時通常更快）` : '';
-    cards.push(reviewCard('預估完賽', esc(raceClock(prediction.predicted_seconds)),
-      `${gap}<br>依 ${esc(Number(prediction.reference_distance_km).toFixed(1))} km ${esc(raceClock(prediction.reference_seconds))}${esc(weather)}`));
+    cards.push(reviewCard('預估完賽', esc(raceFormat.raceClock(prediction.predicted_seconds)),
+      `${gap}<br>依 ${esc(Number(prediction.reference_distance_km).toFixed(1))} km ${esc(raceFormat.raceClock(prediction.reference_seconds))}${esc(weather)}`));
   } else {
     cards.push(reviewCard('預估完賽', '—', '填參考成績後，依 Riegel 公式推算'));
   }
@@ -226,7 +207,7 @@ async function renderRacePlan(race, requestId) {
   if (!racePlanModule && !await racePlanModuleLoading) racePlanModuleLoading = loadRacePlanModule();
   if (!racePlanModule && !await racePlanModuleLoading) throw new Error('課表模組載入失敗');
   if (requestId !== racePrepRequestId) return;
-  const view = racePlanModule.racePlanView(race, { esc, paceClock, zoneColor, zoneRangeText, raceShortDate, raceDistanceName });
+  const view = racePlanModule.racePlanView(race, { esc, paceClock, zoneColor, zoneRangeText, raceShortDate: raceFormat.raceShortDate, raceDistanceName: raceFormat.raceDistanceName });
   section.hidden = false;
   table.innerHTML = view.rows;
   document.getElementById('race-plan-note').textContent = view.note;
@@ -239,7 +220,7 @@ function renderRaceLongRunChart(race, colors) {
   const distance = Number(race.goal.distance_km);
   chartInstances.raceLong = new Chart(document.getElementById('chart-race-long'), {
     data: {
-      labels: weeks.map(week => raceShortDate(week.week_start)),
+      labels: weeks.map(week => raceFormat.raceShortDate(week.week_start)),
       datasets: [
         { type: 'bar', label: '每週最長一次', data: weeks.map(week => (week.partial && !week.longest_km ? null : week.longest_km)),
           backgroundColor: weeks.map(week => (week.longest_km >= long.threshold_km ? colors.primary : colors.soft)), borderRadius: 4, order: 2 },
@@ -272,16 +253,16 @@ function renderRaceLongRunChart(race, colors) {
 
 function raceLongRunText(race) {
   const long = race.long_runs;
-  const name = raceDistanceName(race.goal.distance_km);
+  const name = raceFormat.raceDistanceName(race.goal.distance_km);
   const longest = long.longest_recent;
   const parts = [`近 ${long.weeks} 週達到 ${Number(long.threshold_km).toFixed(1)} km（${name}的 75%）的長距離有 ${long.count} 次，一般建議至少 ${long.target_count} 次`];
-  if (longest) parts.push(`最長是 ${raceShortDate(longest.date)} 的 ${Number(longest.km).toFixed(1)} km（${long.longest_recent_percent}%）`);
+  if (longest) parts.push(`最長是 ${raceFormat.raceShortDate(longest.date)} 的 ${Number(longest.km).toFixed(1)} km（${long.longest_recent_percent}%）`);
   parts.push(`平均每週 ${Number(long.average_weekly_km).toFixed(1)} km`);
   let advice;
   if (race.days_left < 0) advice = '比賽已經結束。';
   else if (race.as_of > long.last_long_run_by) advice = '已進入賽前兩週，不要再補長距離，以減量和休息為主。';
-  else if (!long.enough) advice = `長距離偏少：建議在 ${raceShortDate(long.last_long_run_by)} 前再跑一次 ${Number(long.threshold_km).toFixed(0)} km 以上的輕鬆長距離，之後開始減量。`;
-  else advice = `長距離次數足夠；最後一次長距離在 ${raceShortDate(long.last_long_run_by)} 前完成，之後減量。`;
+  else if (!long.enough) advice = `長距離偏少：建議在 ${raceFormat.raceShortDate(long.last_long_run_by)} 前再跑一次 ${Number(long.threshold_km).toFixed(0)} km 以上的輕鬆長距離，之後開始減量。`;
+  else advice = `長距離次數足夠；最後一次長距離在 ${raceFormat.raceShortDate(long.last_long_run_by)} 前完成，之後減量。`;
   return `${parts.join('；')}。${advice}`;
 }
 
@@ -361,9 +342,9 @@ function renderPaceTrendChart(analysis, colors) {
           label: ctx => {
             if (ctx.datasetIndex === 0) {
               const run = runs[ctx.dataIndex];
-              return `${Number(run.km).toFixed(2)} km · ${formatPace(run.pace)}${run.zone ? ` · ${zoneLabels[run.zone]}` : ''}`;
+              return `${Number(run.km).toFixed(2)} km · ${runFormat.formatPace(run.pace)}${run.zone ? ` · ${zoneLabels[run.zone]}` : ''}`;
             }
-            return ctx.datasetIndex === 1 ? `近 30 天平均 ${formatPace(ctx.raw.y)}` : ctx.dataset.label;
+            return ctx.datasetIndex === 1 ? `近 30 天平均 ${runFormat.formatPace(ctx.raw.y)}` : ctx.dataset.label;
           },
         } },
       },

@@ -148,7 +148,7 @@ def test_browser_jobs_are_independent_and_keep_timeout_diagnostics():
         body = re.search(r'^  ' + gate + r':\n(.*?)(?=^  [a-z]|\Z)', source, re.M | re.S)[1]
         assert 'needs:' not in body
         assert 'uses: ./.github/actions/browser-setup' in body
-        assert f'run: python scripts/task.py {gate}' in body
+        assert f'python scripts/task.py {gate} && exit 0' in body
         assert 'if: always() && (failure() || cancelled())' in body
         assert f'name: {gate}-failure-diagnostics' in body
     commands = []

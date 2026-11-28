@@ -57,7 +57,7 @@
 
 | Acceptance criterion | Named test / command |
 | --- | --- |
-| AC-1 | `unit_tests/test_forecasting.py::test_retirement_forecast_policy`、`unit_tests/test_forecasting.py::test_a_pair_idle_for_90_days_gets_no_forecast_but_a_new_pair_uses_the_plan` |
+| AC-1 | `unit_tests/test_forecasting.py::test_retirement_forecast_policy`、`unit_tests/test_forecasting.py::test_idle_and_never_worn_pairs_get_no_forecast` |
 | AC-2 | `unit_tests/frontend/corrections.test.cjs::SPEC-138 shoe form drops monthly_km and never-run shoes show no forecast`、`unit_tests/frontend/draft-resources.test.cjs::SPEC-024 shoe transitions preserve only new edits and retain the server state` |
 | AC-3 | `unit_tests/frontend/corrections.test.cjs::SPEC-138 shoe form drops monthly_km and never-run shoes show no forecast` |
 | AC-4 | `unit_tests/test_tools.py::test_list_my_shoes_includes_all`、`unit_tests/test_api_extra.py::test_export_csv_all_contains_calculated_fields`、`unit_tests/test_api_extra.py::test_export_xlsx_active_has_styled_sheet` |

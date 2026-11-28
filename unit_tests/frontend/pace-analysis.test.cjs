@@ -26,6 +26,8 @@ function racePrepContext({ race, pace, bests = null, puts = [], deletes = [] }) 
     Chart, esc, console: { error() {} }, chartInstances: {}, registerFeatureReset() {},
     getThemeColor: (token, fallback) => fallback, confirm: () => true,
     invalidateDataResources: () => {}, localDateISO: () => '2026-11-17',
+    // SPEC-145: the race form asks the shell to redraw the race views after a save or delete.
+    panelRefreshes: [], refreshPanels: resource => context.panelRefreshes.push(resource),
     apiGet: async path => {
       reads.push(path);
       return { '/analytics/race': race, '/analytics/personal-bests': bests }[path] || pace;
@@ -272,6 +274,7 @@ test('SPEC-065 the race form validates its fields and saves the parsed goal', as
     expected_version: 0, race_name: '示範半馬', race_date: '2026-12-13', distance_km: 21.0975, target_seconds: 7199,
     reference_distance_km: 10, reference_seconds: 3120, reference_temperature_c: 28, plan_weeks: 4 } });
   assert.equal(nodes['race-settings-status'].textContent, '比賽目標已儲存。');
+  assert.deepEqual([...context.panelRefreshes], ['race']);
   // SPEC-119: a blank plan length starts this week (four weeks before 12/13); a typed one is kept.
   context.updateRacePlanHint();
   assert.equal(nodes['race-plan-weeks'].placeholder, '4');

@@ -6,7 +6,7 @@ const { createFormOperations } = await import(new URL(
 export function createRunController({ transport, session, newKey }) {
   const state = {
     rows: [], summary: null, offset: 0, hasMore: false, day: null,
-    listRequest: 0, annualRequest: 0, lastCreateResult: null, retryOptions: {},
+    listRequest: 0, lastCreateResult: null, retryOptions: {},
   };
   const operations = createFormOperations(session);
   let pending = null, latest = null, retry = null, editor = null;
@@ -62,7 +62,6 @@ export function createRunController({ transport, session, newKey }) {
       Object.assign(state, { rows: [], summary: null, offset: 0, hasMore: false, day: null, retryOptions: {} });
       state.lastCreateResult = null;
       state.listRequest++;
-      state.annualRequest++;
     },
   });
 }

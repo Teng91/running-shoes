@@ -243,3 +243,19 @@ def test_private_helpers_stay_in_their_module(tmp_path, monkeypatch):
         encoding="utf-8")
     assert check_architecture.private_import_violations(backend) == [
         "backend/caller.py:4 uses parser._key", "backend/importer.py:1 imports _key"]
+
+
+def test_backend_modules_have_no_import_cycle_even_for_type_checking():
+    """SPEC-142: the import field patches read the plan through a Protocol, not the plan module."""
+    import ast
+
+    backend = check_architecture.ROOT / "backend"
+    edges: dict[str, set[str]] = {}
+    for path in backend.rglob("*.py"):
+        module = ".".join(path.relative_to(check_architecture.ROOT).with_suffix("").parts)
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if isinstance(node, ast.ImportFrom) and node.module and node.module.startswith("backend"):
+                edges.setdefault(module, set()).add(node.module)
+    cycles = sorted(f"{a} <-> {b}" for a, targets in edges.items() for b in targets
+                    if a < b and a in edges.get(b, set()))
+    assert cycles == []

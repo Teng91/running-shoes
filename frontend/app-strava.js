@@ -30,7 +30,7 @@ async function loadStravaHistory() {
     console.warn('Strava 匯入歷史格式不正確:', error);
     return;
   }
-  renderStravaStatus();
+  refreshPanels('strava-history');
   if (document.getElementById('strava-modal').classList.contains('active')) renderStravaImportHistory();
 }
 
@@ -209,7 +209,7 @@ function stravaManualMatchText(preview) {
 // SPEC-091: each same-day conflict offers skip (default), a link to one of that day's
 // manual runs, or importing it as a new run. The backend re-checks every choice.
 function stravaConflictLabel(item) {
-  const time = item.duration_seconds ? ` · ${formatRunDuration(item.duration_seconds)}` : '';
+  const time = item.duration_seconds ? ` · ${runFormat.formatRunDuration(item.duration_seconds)}` : '';
   return `${Number(item.km).toFixed(2)} km${time}`;
 }
 

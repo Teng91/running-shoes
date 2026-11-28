@@ -65,7 +65,7 @@ v4.7.3 發布時，維護者的 Windows 電腦缺少 Fly CLI 與 `gh`，venv 指
 | Acceptance criterion | Named test / command |
 | --- | --- |
 | AC-1 | `unit_tests/test_deploy_workflow.py::test_deploy_runs_only_for_main_after_every_test_job` |
-| AC-2 | `unit_tests/test_deploy_workflow.py::test_only_the_deploy_job_receives_the_fly_token` |
+| AC-2 | `unit_tests/test_deploy_workflow.py::test_only_the_deploy_and_rollback_jobs_receive_the_fly_token` |
 | AC-3 | `unit_tests/test_deploy_workflow.py::test_deploy_takes_a_verified_database_snapshot_before_deploying` |
 | AC-4 | `unit_tests/test_deploy_workflow.py::test_release_tags_only_new_versions_after_the_release_check` |
 | AC-5 | `unit_tests/test_deploy_workflow.py::test_production_runs_are_serialized_without_cancelling` |

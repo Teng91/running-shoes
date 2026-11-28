@@ -3,13 +3,14 @@ const { runContext, test, assert, fs, path, vm, htmlSource, scriptPaths, scriptS
 test('panel rendering is lazy, reused, and invalidated by data or theme changes', () => {
   const counts = {};
   const hooks = ['renderCards', 'renderAlerts', 'renderCategorySummary', 'renderTable', 'renderRetiredTable',
-    'renderCharts', 'populateRunShoeSelects', 'renderRunLog', 'renderHomeSummary', 'renderOnboarding', 'renderMonthlyCharts', 'renderPaceAnalysis', 'renderPersonalBests', 'renderSpendingCharts'];
+    'renderCharts', 'populateRunShoeSelects', 'renderRunLog', 'renderHomeSummary', 'renderOnboarding', 'renderMonthlyCharts', 'renderPaceAnalysis', 'renderPersonalBests', 'renderSpendingCharts',
+    'renderGoalProgress', 'renderTrends', 'prepareGoalForm'];
   let active = 'runs';
   const context = runContext({ document: { querySelector: () => ({ dataset: { panel: active } }) },
     Chart() {}, localDateISO: () => '2026-10-19', selectedRunMonth: () => '2026-10',
     ...Object.fromEntries(hooks.map(name => [name, () => { counts[name] = (counts[name] || 0) + 1; }])),
   });
-  vm.runInContext(`let panelRevision = 0, stackedRunsRequestId = 0, currentTheme = 'light';
+  vm.runInContext(`let panelRevision = 0, shoeStackedRequestId = 0, currentTheme = 'light';
     const renderedPanels = new Map();\n${panelWiring()}\n${extract('invalidatePanels')}\n${extract('renderActivePanel')}`, context);
   context.renderActivePanel(); context.renderActivePanel();
   assert.equal(counts.renderRunLog, 1);
@@ -17,6 +18,9 @@ test('panel rendering is lazy, reused, and invalidated by data or theme changes'
   assert.equal(counts.renderMonthlyCharts, undefined);
   active = 'monthly'; context.renderActivePanel();
   assert.equal(counts.renderMonthlyCharts, 1);
+  // SPEC-145: goal progress and the trends are monthly panel hooks of their own scripts.
+  assert.equal(counts.renderGoalProgress, 1);
+  assert.equal(counts.renderTrends, 1);
   // SPEC-105: race readiness registers itself on the monthly tab, after the monthly charts.
   assert.equal(counts.renderPaceAnalysis, 1);
   // SPEC-136: personal bests need no Chart.js, so they draw with the race readiness.
@@ -40,7 +44,7 @@ test('SPEC-101 features register their panels and data in script order; the shel
     Chart() {}, localDateISO: () => '2026-10-19', selectedRunMonth: () => '2026-10',
     ...Object.fromEntries(hooks.map(name => [name, (...args) => order.push(args.length ? `${name}(${args})` : name)])),
   });
-  vm.runInContext(`let panelRevision = 0, currentTheme = 'light';
+  vm.runInContext(`let panelRevision = 0, shoeStackedRequestId = 0, currentTheme = 'light';
     const renderedPanels = new Map();\n${panelWiring()}\n${extract('invalidatePanels')}\n${extract('renderActivePanel')}`, context);
   context.renderActivePanel();
   assert.deepEqual(order.splice(0), ['renderCards', 'renderAlerts', 'renderCategorySummary', 'renderTable',
@@ -58,9 +62,9 @@ test('SPEC-101 features register their panels and data in script order; the shel
   // SPEC-135: the shell's redraw reaches the getting-started card through its refreshed hook.
   vm.runInContext('dataHooks', context).forEach(hook => { hook.arrived?.('goal'); hook.history?.(); hook.refreshed?.('goal'); });
   assert.deepEqual(order.splice(0), ['prepareGoalForm', 'loadStravaHistory', 'noteOnboardingData(goal)']);
-  // A full redraw drops an in-flight annual run read.
-  const before = context.runController.state.annualRequest;
-  context.invalidatePanels(); assert.equal(context.runController.state.annualRequest, before + 1);
+  // A full redraw drops an in-flight annual run read (SPEC-145: the chart's own counter).
+  const before = vm.runInContext('shoeStackedRequestId', context);
+  context.invalidatePanels(); assert.equal(vm.runInContext('shoeStackedRequestId', context), before + 1);
   // The shell calls no feature function by name: only registered hooks.
   const shell = readText('frontend/app-core.js').replace(/\/\/.*$/gm, '');
   for (const name of hooks) assert.doesNotMatch(shell, new RegExp(`(?<![.\\w])${name}\\(`), name);

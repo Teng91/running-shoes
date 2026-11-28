@@ -46,7 +46,8 @@ class LLMConfig:
     max_output_tokens: int = 4096
 
     def __repr__(self) -> str:
-        return f"LLMConfig(api_key={'set' if self.api_key else None}, default_model={self.default_model!r}, "                f"max_output_tokens={self.max_output_tokens})"
+        return (f"LLMConfig(api_key={'set' if self.api_key else None}, default_model={self.default_model!r}, "
+                f"max_output_tokens={self.max_output_tokens})")
 
     @classmethod
     def from_settings(cls, config: Settings) -> "LLMConfig":
@@ -54,19 +55,19 @@ class LLMConfig:
                    max_output_tokens=config.llm_max_output_tokens)
 
 
-# One process serves one application, so create_app configures this adapter once. Scripts
-# and tests that call it directly without an app read the environment at call time.
+# One process serves one application, so create_app configures this adapter once. Without
+# that call it has no key and fails closed; it never reads the environment (SPEC-142).
 _config: LLMConfig | None = None
 
 
 def configure(config: LLMConfig | None) -> None:
-    """Install the application's LLM configuration; ``None`` returns to the environment."""
+    """Install the application's LLM configuration; ``None`` leaves the adapter unconfigured."""
     global _config
     _config = config
 
 
 def current_config() -> LLMConfig:
-    return _config if _config is not None else LLMConfig.from_settings(Settings.from_env())
+    return _config if _config is not None else LLMConfig()
 
 
 # 各家 endpoint 與缺 key 時顯示的設定名稱

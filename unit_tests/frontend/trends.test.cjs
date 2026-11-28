@@ -27,7 +27,7 @@ const trendRenderers = ['addDaysISO', 'changeWeeklyWindow', 'renderWeekPagers', 
   'partialWeekText', 'renderTrends', 'heatLevel', 'renderRunHeatmap', 'renderWeeklyChart', 'weeklyGoalText',
   'renderCumulativeChart', 'renderLongRunChart', 'longRunText', 'renderWeekdayChart', 'weekdayRuns', 'weekdayText'];
 // The weekly window state (SPEC-072) rides along with the shared declarations.
-const weekdayLabels = `${source.match(/const WEEKDAY_LABELS = [^\n]+/)[0]}\nlet weeklyWindowEnd = null;\nlet weeklyWindow = null;`;
+const weekdayLabels = `${source.match(/const WEEKDAY_LABELS = [^\n]+/)[0]}\nlet weeklyWindowEnd = null;\nlet weeklyWindowYear = null;\nlet weeklyWindow = null;`;
 
 const sample = {
   year: 2026, end_date: '2026-01-06', thresholds: { spike_percent: 30, spike_min_base_km: 5 },
@@ -335,4 +335,10 @@ test('SPEC-072 a past year pages back 16 weeks at a time and never calls its las
   assert.deepEqual(urls, ['/analytics/trends?year=2024', '/analytics/trends?year=2024&weeks_end=2024-09-10']);
   assert.deepEqual(buttons.map(button => button.disabled), [false, false]);
   assert.match(nodes['long-run-note'].textContent, /^5\/13～9\/1 這 16 週最長 20\.0 km/);
+
+  // SPEC-145: another year starts at its latest 16 weeks; the trends track the year themselves.
+  nodes['year-select'].value = '2025';
+  await context.renderTrends();
+  assert.equal(urls.at(-1), '/analytics/trends?year=2025');
+  assert.equal(vm.runInContext('weeklyWindowEnd', context), null);
 });

@@ -151,7 +151,7 @@ function renderGoalOverview(goal) {
   const monthsSummary = goal.months_closed > 0
     ? `已結束的 ${goal.months_closed} 個月中 ${goal.months_met} 個月達標` : '';
   const current = goal.year_state === 'current'
-    ? `<p class="goal-month-detail"><strong>${goal.focus_month} 月</strong> ${formatGoalKm(goal.month_km, 2)} / ${Number(goal.monthly_km).toLocaleString()} km（${Number(goal.month_achievement_percent || 0).toFixed(1)}%）· ${dashboardGoalSummary(goal)}</p>` : '';
+    ? `<p class="goal-month-detail"><strong>${goal.focus_month} 月</strong> ${formatGoalKm(goal.month_km, 2)} / ${Number(goal.monthly_km).toLocaleString()} km（${Number(goal.month_achievement_percent || 0).toFixed(1)}%）· ${goalFormat.dashboardGoalSummary(goal)}</p>` : '';
   target.innerHTML = `<div class="goal-card">
     <div class="goal-hero">
       <div class="goal-hero-main">
@@ -221,7 +221,9 @@ async function saveRunningGoal() {
 }
 
 // SPEC-101: the goal form takes its baseline before the monthly tab becomes interactive.
-registerPanel('monthly', { enter: () => prepareGoalForm() });
+// SPEC-145: goal progress is drawn by this monthly panel hook; it loads after the monthly
+// charts, which fill the year selector it reads.
+registerPanel('monthly', { enter: () => prepareGoalForm(), render: () => renderGoalProgress() });
 
 // SPEC-106: invalidating the goal drops goal progress and the trends that draw its pace line.
 registerResourceCache('goal', () => {

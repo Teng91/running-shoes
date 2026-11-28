@@ -80,6 +80,36 @@ def require_readme_number(pattern: str, actual: int, label: str) -> None:
         fail(f"{label} says {documented}, but the repository has {actual}")
 
 
+def spec_count() -> int:
+    """Feature specs: docs/specs/NNN-*.md (the template and index are not specs)."""
+    return sum(1 for path in (ROOT / "docs" / "specs").glob("[0-9][0-9][0-9]-*.md"))
+
+
+def api_endpoint_count() -> int:
+    return len(json.loads((ROOT / "unit_tests" / "api_contract.json").read_text(encoding="utf-8")))
+
+
+def current_minor_version() -> str:
+    version = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))["version"]
+    major, minor = version.split(".")[:2]
+    return f"{major}.{minor}"
+
+
+def require_overview(python: int, frontend: int) -> None:
+    """SPEC-142: the README overview table repeats facts the repository already knows."""
+    require_readme_number(r"\| 功能規格 \| (\d+) 份 SPEC", spec_count(), "overview spec")
+    require_readme_number(r"\| API \| (\d+) 個端點", api_endpoint_count(), "overview API endpoint")
+    require_readme_number(r"\| 自動化測試 \| Python (\d+) 項", python, "overview Python test")
+    require_readme_number(r"\| 自動化測試 \| Python \d+ 項、前端 Node 回歸 (\d+) 項", frontend, "overview frontend test")
+    require_readme_number(r"- \*\*Python (\d+) 項\*\*", python, "quality Python test")
+    require_readme_number(r"- \*\*前端 Node 回歸 (\d+) 項\*\*", frontend, "quality frontend test")
+    match = re.search(r"\| 正式版本 \| [^|\n]*目前 v(\d+\.\d+)", README)
+    if not match:
+        fail("the documented current version is missing")
+    if match.group(1) != current_minor_version():
+        fail(f"overview version says v{match.group(1)}, but package.json is v{current_minor_version()}")
+
+
 def release_asset_count(manifest: dict | None = None) -> int:
     from scripts.build_frontend import shell_asset_paths
 
@@ -276,6 +306,7 @@ def main() -> None:
             f"but frontend feature suites define {actual_frontend}"
         )
 
+    require_overview(actual_python, actual_frontend)
     require_readme_number(r"目前提供 (\d+) 個 Agent 工具", agent_tool_count(), "Agent tool")
     require_readme_number(r"共 (\d+) 組設定", layout_matrix_count(), "layout matrix")
     require_readme_number(
@@ -285,7 +316,7 @@ def main() -> None:
         "README consistency passed: "
         f"{actual_python} Python tests, {actual_frontend} frontend tests, "
         f"{agent_tool_count()} Agent tools, {layout_matrix_count()} layout configurations, "
-        f"{release_asset_count()} release assets."
+        f"{release_asset_count()} release assets, {spec_count()} specs, {api_endpoint_count()} API endpoints."
     )
 
 

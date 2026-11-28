@@ -21,12 +21,18 @@ function authTokenClaims(token) {
 }
 
 function captureAuthSession() {
-  const account = authTokenClaims(authToken).aid;
-  return { generation: authGeneration, token: authToken, account: typeof account === 'string' ? account : null };
+  const claims = authTokenClaims(authToken);
+  return {
+    generation: authGeneration, token: authToken,
+    account: typeof claims.aid === 'string' ? claims.aid : null,
+    expiresAt: Number.isFinite(claims.exp) ? claims.exp * 1000 : null,
+  };
 }
 
+// SPEC-143: a renewed token of the same account continues the session it replaced.
 function isCurrentAuthSession(session) {
-  return session.generation === authGeneration && session.token === authToken;
+  if (session.generation !== authGeneration) return false;
+  return session.token === authToken || (session.account !== null && session.account === captureAuthSession().account);
 }
 
 function requireAuthSession(session) {
@@ -34,13 +40,22 @@ function requireAuthSession(session) {
 }
 
 // SPEC-109: the only writers of the identity; architecture-check rejects assignments elsewhere.
-// Signing in stores the new token and user name for this and future page loads.
-function startAuthSession(token, username) {
-  const name = authTokenClaims(token).sub;
+// Signing in stores the new token and user name for this and future page loads. A renewal
+// (SPEC-143) swaps in a new token only when it names the same account, and keeps the
+// generation, so work captured before it still owns the screen; it returns whether it did.
+function startAuthSession(token, username, { renewal = false } = {}) {
+  const claims = authTokenClaims(token);
+  if (renewal) {
+    const current = authTokenClaims(authToken);
+    if (!authToken || typeof claims.aid !== 'string' || claims.aid !== current.aid || claims.sub !== current.sub) {
+      return false;
+    }
+  }
   authToken = token;
-  currentUser = typeof name === 'string' && name ? name : username;
+  currentUser = typeof claims.sub === 'string' && claims.sub ? claims.sub : username;
   writeStoredValue('token', token);
   writeStoredValue('username', currentUser);
+  return true;
 }
 
 // Signing out advances the generation first, so work captured before it is stale while

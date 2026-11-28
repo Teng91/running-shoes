@@ -55,9 +55,26 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/browser-setup
       # Browser jobs retry once: CI WebKit occasionally reports an internal error. A real
-      # regression fails both attempts; a passing retry still leaves a visible warning.
+      # regression fails both attempts; a passing retry leaves a warning, a line in the run
+      # summary and the first attempt's diagnostics as an artifact (SPEC-144).
       - name: Run layout matrix
-        run: python scripts/task.py frontend-layout || { echo "::warning::frontend-layout failed once; retrying"; python scripts/task.py frontend-layout; }
+        id: attempt
+        run: |
+          python scripts/task.py frontend-layout && exit 0
+          echo "::warning::frontend-layout failed once; retrying"
+          echo "retried=true" >> "$GITHUB_OUTPUT"
+          echo "frontend-layout failed its first attempt and was retried." >> "$GITHUB_STEP_SUMMARY"
+          if [ -d .artifacts/browser ]; then mv .artifacts/browser .artifacts/browser-first-attempt; fi
+          python scripts/task.py frontend-layout
+      - name: Save the first attempt of a retried run
+        if: always() && steps.attempt.outputs.retried == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: frontend-layout-first-attempt
+          path: .artifacts/browser-first-attempt/
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Save browser failure diagnostics
         if: always() && (failure() || cancelled())
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -78,7 +95,23 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/browser-setup
       - name: Run browser CRUD flow
-        run: python scripts/task.py frontend-e2e || { echo "::warning::frontend-e2e failed once; retrying"; python scripts/task.py frontend-e2e; }
+        id: attempt
+        run: |
+          python scripts/task.py frontend-e2e && exit 0
+          echo "::warning::frontend-e2e failed once; retrying"
+          echo "retried=true" >> "$GITHUB_OUTPUT"
+          echo "frontend-e2e failed its first attempt and was retried." >> "$GITHUB_STEP_SUMMARY"
+          if [ -d .artifacts/browser ]; then mv .artifacts/browser .artifacts/browser-first-attempt; fi
+          python scripts/task.py frontend-e2e
+      - name: Save the first attempt of a retried run
+        if: always() && steps.attempt.outputs.retried == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: frontend-e2e-first-attempt
+          path: .artifacts/browser-first-attempt/
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Save browser failure diagnostics
         if: always() && (failure() || cancelled())
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -99,7 +132,23 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/browser-setup
       - name: Run PWA upgrade and offline flow
-        run: python scripts/task.py frontend-pwa || { echo "::warning::frontend-pwa failed once; retrying"; python scripts/task.py frontend-pwa; }
+        id: attempt
+        run: |
+          python scripts/task.py frontend-pwa && exit 0
+          echo "::warning::frontend-pwa failed once; retrying"
+          echo "retried=true" >> "$GITHUB_OUTPUT"
+          echo "frontend-pwa failed its first attempt and was retried." >> "$GITHUB_STEP_SUMMARY"
+          if [ -d .artifacts/browser ]; then mv .artifacts/browser .artifacts/browser-first-attempt; fi
+          python scripts/task.py frontend-pwa
+      - name: Save the first attempt of a retried run
+        if: always() && steps.attempt.outputs.retried == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: frontend-pwa-first-attempt
+          path: .artifacts/browser-first-attempt/
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Exercise synthetic failure capture
         run: python scripts/task.py diagnostics-generate
       - name: Upload synthetic diagnostics for roundtrip verification
@@ -137,8 +186,8 @@ jobs:
       - name: Verify downloaded trace, screenshot and error contents
         run: python scripts/task.py diagnostics-verify
 
-  # The only job that receives FLY_API_TOKEN. It installs and runs no project
-  # packages: it only drives flyctl against the app named in fly.toml.
+  # With rollback, the only jobs that receive FLY_API_TOKEN. They install and run no
+  # project packages: they only drive flyctl against the app named in fly.toml.
   deploy:
     if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     needs: [verify, frontend-layout, frontend-e2e, frontend-pwa, diagnostics-roundtrip]
@@ -146,6 +195,9 @@ jobs:
     timeout-minutes: 20
     env:
       FLY_APP: running-shoes
+    outputs:
+      previous_image: ${{ steps.previous.outputs.image }}
+      previous_schema: ${{ steps.previous.outputs.schema }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -167,6 +219,17 @@ jobs:
             sleep 5
           done
           echo "::warning::/health/ready did not answer; the snapshot step will still try SSH"
+      - name: Record the running release for a rollback
+        # SPEC-144: the image every machine runs now and the schema it serves; empty when unknown.
+        id: previous
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          image=$(flyctl machine list -a "$FLY_APP" --json | jq -r '[.[].config.image] | unique | if length == 1 then .[0] else "" end' || true)
+          schema=$(curl -fsS -m 10 "https://$FLY_APP.fly.dev/health/ready" | jq -r '.schema_version // ""' || true)
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+          echo "schema=$schema" >> "$GITHUB_OUTPUT"
+          echo "Running before this deploy: ${image:-unknown image}, schema ${schema:-unknown}"
       - name: Snapshot the production database on its volume
         # A verified on-volume copy before every deploy; a failed snapshot stops the deploy.
         env:
@@ -194,7 +257,47 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/browser-setup
       - name: Check the deployed release
-        run: python scripts/task.py release-check --base-url https://running-shoes.fly.dev || { echo "::warning::release-check failed once; retrying"; python scripts/task.py release-check --base-url https://running-shoes.fly.dev; }
+        id: attempt
+        run: |
+          python scripts/task.py release-check --base-url https://running-shoes.fly.dev && exit 0
+          echo "::warning::release-check failed once; retrying"
+          echo "retried=true" >> "$GITHUB_OUTPUT"
+          echo "release-check failed its first attempt and was retried." >> "$GITHUB_STEP_SUMMARY"
+          python scripts/task.py release-check --base-url https://running-shoes.fly.dev
+
+  # SPEC-144: when the live site fails its release check, put the previous image back, but
+  # only if this commit keeps the schema it found: an older image refuses a newer schema, so
+  # a migration needs the documented rollback script instead. The run stays failed.
+  rollback:
+    needs: [deploy, release-check]
+    if: always() && needs.deploy.result == 'success' && needs.release-check.result == 'failure'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      FLY_APP: running-shoes
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1 # 1.6
+      - name: Redeploy the previous image
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          PREVIOUS_IMAGE: ${{ needs.deploy.outputs.previous_image }}
+          PREVIOUS_SCHEMA: ${{ needs.deploy.outputs.previous_schema }}
+        run: |
+          schema=$(grep -oE '^CURRENT_SCHEMA_VERSION = [0-9]+$' backend/migrations.py | grep -oE '[0-9]+$')
+          if [ -z "$PREVIOUS_IMAGE" ] || [ -z "$PREVIOUS_SCHEMA" ]; then
+            echo "::error::release-check failed and the previous release is unknown; roll back by hand (docs/release-notes.md)"
+            exit 1
+          fi
+          if [ "$schema" != "$PREVIOUS_SCHEMA" ]; then
+            echo "::error::release-check failed after a schema $PREVIOUS_SCHEMA -> $schema migration; use the documented rollback script"
+            exit 1
+          fi
+          flyctl deploy --image "$PREVIOUS_IMAGE" --rollback --ha=false
+          echo "::error::release-check failed; production was rolled back to $PREVIOUS_IMAGE"
+          echo "release-check failed; production was rolled back to \`$PREVIOUS_IMAGE\`." >> "$GITHUB_STEP_SUMMARY"
 
   # The only job that can write to the repository: it tags a new version once the
   # live site passed its release check. A push without a version bump only deploys.

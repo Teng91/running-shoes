@@ -123,33 +123,46 @@ class ApiRateLimitMiddleware:
 
 
 class UploadLimitMiddleware:
-    """Reject oversized Strava CSV and backup-restore bodies before form parsing/spooling."""
+    """Reject oversized request bodies before form or JSON parsing (SPEC-142).
+
+    Strava CSV and backup-restore uploads keep their own limits; every other /api/ body
+    (JSON commands, chat turns, sign-in forms) is capped at ``max_api_bytes`` so an
+    unauthenticated request cannot make the process parse megabytes of JSON.
+    """
 
     _paths: ClassVar[frozenset[str]] = frozenset({
         "/api/runs/import/strava",
         "/api/runs/import/strava/preview",
         "/api/account-restore/preview",
     })
+    _body_methods: ClassVar[frozenset[str]] = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 
-    def __init__(self, app: ASGIApp, max_bytes: int, max_backup_bytes: int):
+    def __init__(self, app: ASGIApp, max_bytes: int, max_backup_bytes: int,
+                 max_api_bytes: int = 1024 * 1024):
         self.app = app
         self.max_bytes = max_bytes
         self.max_backup_bytes = max_backup_bytes
+        self.max_api_bytes = max_api_bytes
+
+    def _limit(self, scope: Scope) -> tuple[int, str] | None:
+        """The byte limit and rejection text for this request, or None when it is not limited."""
+        path = scope.get("path") or ""
+        if scope["type"] != "http" or scope.get("method") not in self._body_methods:
+            return None
+        if path == "/api/account-restore/preview" and scope.get("method") == "POST":
+            return self.max_backup_bytes, f"備份不可超過 {megabytes_label(self.max_backup_bytes)}"
+        if path in self._paths and scope.get("method") == "POST":
+            return self.max_bytes, f"Strava 上傳請求不可超過 {megabytes_label(self.max_bytes)}"
+        if path.startswith("/api/"):
+            return self.max_api_bytes, f"請求內容不可超過 {megabytes_label(self.max_api_bytes)}"
+        return None
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if (
-            scope["type"] != "http"
-            or scope.get("method") != "POST"
-            or scope.get("path") not in self._paths
-        ):
+        limit = self._limit(scope)
+        if limit is None:
             await self.app(scope, receive, send)
             return
-        is_backup = scope.get("path") == "/api/account-restore/preview"
-        max_bytes = self.max_backup_bytes if is_backup else self.max_bytes
-        detail = (
-            f"備份不可超過 {megabytes_label(max_bytes)}" if is_backup
-            else f"Strava 上傳請求不可超過 {megabytes_label(max_bytes)}"
-        )
+        max_bytes, detail = limit
         declared_size = _declared_size(dict(scope.get("headers", [])))
         if declared_size is not None and declared_size > max_bytes:
             await _too_large(detail)(scope, receive, send)
@@ -168,7 +181,9 @@ class UploadLimitMiddleware:
         async def replay_receive() -> Message:
             if pending:
                 return {"type": "http.request", "body": pending.pop(), "more_body": False}
-            return {"type": "http.disconnect"}
+            # After the body, wait for the real disconnect: streamed (SSE) responses
+            # listen for it and must not be cancelled by a synthetic one.
+            return await receive()
 
         await self.app(scope, replay_receive, send)
 

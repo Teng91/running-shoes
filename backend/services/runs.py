@@ -38,7 +38,7 @@ def create_run(
     with write_transaction(db, user_id, reason="run.create"):
         _user_shoe_or_404(db, user_id, payload.shoe_id)
         run_count = db.query(models.Run).filter(models.Run.user_id == user_id).count()
-        if isinstance(run_count, int) and run_count >= max_runs:
+        if run_count >= max_runs:
             raise Conflict("跑步紀錄已達上限")
         run = models.Run(**payload.model_dump(), user_id=user_id, id=allocate_id(db, "runs"))
         db.add(run)

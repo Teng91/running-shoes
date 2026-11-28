@@ -104,7 +104,7 @@ class ShoeModal {
       document.getElementById(id).value = s[field] ?? '';
     });
     // Check category checkboxes based on the shoe's categories
-    const cats = shoeCategories(s);
+    const cats = shoeFormat.shoeCategories(s);
     document.querySelectorAll('#f-category-group input[type="checkbox"]')
       .forEach(cb => cb.checked = cats.includes(cb.value));
   }

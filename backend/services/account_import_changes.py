@@ -2,13 +2,11 @@
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import Any, Protocol
 
+from backend import models
 from backend.backup_contract import AccountBackup
 from backend.run_metrics import counts_toward_training
-
-if TYPE_CHECKING:
-    from backend.services.account_import_plan import ImportPlan
 
 # A run after the import: (shoe key, date, km, activity type). A shoe key is ('existing', target ID)
 # or ('source', archive ID): new source shoe IDs occupy a separate namespace until execution allocates IDs.
@@ -27,6 +25,23 @@ class ImportChanges:
     new_shoe_mileages: dict[int, float] = field(default_factory=dict)
 
 
+class ImportTargets(Protocol):
+    """The account rows an import plan matched; ``account_import_plan.ImportPlan`` provides them.
+
+    Declared here so this module needs nothing from the plan module, which imports it.
+    """
+
+    shoes: dict[int, models.Shoe]
+    runs: dict[int, models.Run]
+    months: dict[tuple[int, int], models.MonthlyMileage]
+    reports: dict[tuple[int, int], models.MonthlyReport]
+    goal: models.RunningGoal | None
+    race_goal: models.RaceGoal | None
+    run_targets: dict[int, int | None]
+
+    def existing(self, entity: str, key: str | int) -> int | None: ...
+
+
 def changed_fields(row: Any, values: dict[str, Any]) -> dict[str, Any]:
     def comparable(name, value):
         if name in {"mileage", "baseline_mileage", "km", "adjustment_km", "monthly_km", "yearly_km", "expected_mileage"} and isinstance(value, (int, float)):
@@ -35,7 +50,7 @@ def changed_fields(row: Any, values: dict[str, Any]) -> dict[str, Any]:
     return {name: value for name, value in values.items() if comparable(name, getattr(row, name)) != comparable(name, value)}
 
 
-def build_changes(plan: 'ImportPlan', backup: AccountBackup) -> ImportChanges:
+def build_changes(plan: ImportTargets, backup: AccountBackup) -> ImportChanges:
     """Every field an update would write, with shoe and month totals projected from the final runs."""
     changes = ImportChanges()
     final_runs = _run_changes(plan, backup, changes)
@@ -57,7 +72,7 @@ def build_changes(plan: 'ImportPlan', backup: AccountBackup) -> ImportChanges:
     return changes
 
 
-def _run_changes(plan: 'ImportPlan', backup: AccountBackup, changes: ImportChanges) -> dict[tuple[str, int], FinalRun]:
+def _run_changes(plan: ImportTargets, backup: AccountBackup, changes: ImportChanges) -> dict[tuple[str, int], FinalRun]:
     """Record run patches; returns every run the account will have, keyed like the shoe keys."""
     final_runs = {('existing', row.id): (('existing', row.shoe_id), row.date, row.km, row.activity_type)
                   for row in plan.runs.values()}
@@ -105,7 +120,7 @@ def _projected_totals(final_runs: dict[tuple[str, int], FinalRun]) -> tuple[dict
     return by_shoe, by_month
 
 
-def _shoe_changes(plan: 'ImportPlan', backup: AccountBackup, by_shoe: dict[ShoeKey, float], changes: ImportChanges) -> None:
+def _shoe_changes(plan: ImportTargets, backup: AccountBackup, by_shoe: dict[ShoeKey, float], changes: ImportChanges) -> None:
     baselines = {row.id: row.baseline_mileage for row in plan.shoes.values()}
     for shoe_item in backup.shoes:
         target = plan.existing('shoe', shoe_item.id)
@@ -122,7 +137,7 @@ def _shoe_changes(plan: 'ImportPlan', backup: AccountBackup, by_shoe: dict[ShoeK
             changes.shoes.setdefault(identifier, {})['mileage'] = total
 
 
-def _month_changes(plan: 'ImportPlan', backup: AccountBackup, by_month: dict[tuple[int, int], float],
+def _month_changes(plan: ImportTargets, backup: AccountBackup, by_month: dict[tuple[int, int], float],
                    changes: ImportChanges) -> None:
     incoming_months = {(item.year, item.month): item for item in backup.monthly_mileages}
     for period in plan.months.keys() | incoming_months.keys() | by_month.keys():

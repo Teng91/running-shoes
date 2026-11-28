@@ -47,7 +47,7 @@ test('SPEC-025 Strava history invalidation rejects older reads', async () => {
   const elements = nodes(), old = deferred(); let calls = 0;
   const context = vm.createContext({ document: { getElementById: id => elements[id] },
     apiGet: () => ++calls === 1 ? old.promise : Promise.resolve([{ end_date: '2026-10-20' }]),
-    renderStravaStatus() {}, renderStravaImportHistory() {}, console: { warn: assert.fail } });
+    refreshPanels() {}, renderStravaImportHistory() {}, console: { warn: assert.fail } });
   vm.runInContext(extract('loadStravaHistory'), context);
   const stale = context.loadStravaHistory(); await flush();
   context.resourceStore.invalidate(['strava-history']);

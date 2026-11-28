@@ -18,8 +18,8 @@ from backend import llm
 def restore_model_cache(monkeypatch):
     """Keep global model-cache state isolated between tests.
 
-    These tests set OPENROUTER_API_KEY in the environment, which the adapter reads only
-    while no application has configured it (SPEC-093), so clear any earlier app's config.
+    The adapter never reads the environment (SPEC-093, SPEC-142); each test installs the
+    configuration it needs, so clear any earlier app's config first.
     """
     monkeypatch.setattr(llm, "_config", None)
     cached_models = dict(llm._MODELS_CACHE)
@@ -65,7 +65,7 @@ def test_provider_from_str_accepts_openrouter_and_rejects_unknown():
 
 
 def test_fetch_free_models_filters_out_paid_models(monkeypatch):
-    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setattr(llm, "_config", llm.LLMConfig(api_key="test-key"))
     response = MagicMock()
     response.json.return_value = {
         "data": [
@@ -109,7 +109,7 @@ def test_fetch_free_models_filters_out_paid_models(monkeypatch):
 
 
 def test_fetch_free_models_sorts_by_today_usage(monkeypatch):
-    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setattr(llm, "_config", llm.LLMConfig(api_key="test-key"))
     models_response = MagicMock()
     models_response.json.return_value = {
         "data": [
@@ -148,7 +148,7 @@ def test_fetch_free_models_sorts_by_today_usage(monkeypatch):
 
 
 def test_fetch_free_models_rejects_catalog_only_fallback_when_ranking_fails(monkeypatch):
-    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setattr(llm, "_config", llm.LLMConfig(api_key="test-key"))
     models_response = MagicMock()
     models_response.json.return_value = {
         "data": [
@@ -171,7 +171,7 @@ def test_fetch_free_models_rejects_catalog_only_fallback_when_ranking_fails(monk
 
 
 def test_fetch_free_models_only_keeps_free_tool_models_in_overall_top_50(monkeypatch):
-    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setattr(llm, "_config", llm.LLMConfig(api_key="test-key"))
     models_response = MagicMock()
     models_response.json.return_value = {
         "data": [
@@ -227,7 +227,7 @@ def test_fetch_free_models_only_keeps_free_tool_models_in_overall_top_50(monkeyp
 
 def _ranking_fetch(monkeypatch, catalog_ids, ranking):
     """Patch the catalog and ranking responses; ``ranking`` is [(slug, tokens)]."""
-    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setattr(llm, "_config", llm.LLMConfig(api_key="test-key"))
     models_response = MagicMock()
     models_response.json.return_value = {"data": [
         {"id": model_id, "name": model_id, "pricing": {"prompt": "0", "completion": "0"},
@@ -270,14 +270,14 @@ def test_spec118_no_free_model_in_the_whole_ranking_still_returns_nothing(monkey
 
 
 def test_fetch_free_models_requires_api_key(monkeypatch):
-    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    monkeypatch.setattr(llm, "_config", None)
 
     with pytest.raises(llm.LLMError, match="未設定 OPENROUTER_API_KEY"):
         llm._fetch_free_models()
 
 
 def test_fetch_free_models_wraps_http_errors(monkeypatch):
-    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setattr(llm, "_config", llm.LLMConfig(api_key="test-key"))
     monkeypatch.setattr(
         llm.httpx,
         "get",
@@ -289,7 +289,7 @@ def test_fetch_free_models_wraps_http_errors(monkeypatch):
 
 
 def test_fetch_free_models_returns_empty_when_api_has_no_compatible_models(monkeypatch):
-    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setattr(llm, "_config", llm.LLMConfig(api_key="test-key"))
     response = MagicMock()
     response.json.return_value = {"data": []}
     monkeypatch.setattr(llm.httpx, "get", MagicMock(return_value=response))
@@ -299,7 +299,7 @@ def test_fetch_free_models_returns_empty_when_api_has_no_compatible_models(monke
 
 @pytest.mark.parametrize("payload", [{"data": {}}, {"data": [None, "bad"]}, []])
 def test_fetch_free_models_rejects_or_skips_malformed_catalog(monkeypatch, payload):
-    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setattr(llm, "_config", llm.LLMConfig(api_key="test-key"))
     response = MagicMock()
     response.json.return_value = payload
     monkeypatch.setattr(llm.httpx, "get", MagicMock(return_value=response))
@@ -448,7 +448,7 @@ def test_resolve_allowed_model_rejects_empty_allowlist(monkeypatch):
 
 
 def test_list_providers_reports_configuration(monkeypatch):
-    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setattr(llm, "_config", llm.LLMConfig(api_key="test-key"))
     get_models = MagicMock(return_value=[{"id": "vendor/today:free", "display": "Today"}])
     monkeypatch.setattr(llm, "_get_models", get_models)
 
@@ -460,11 +460,11 @@ def test_list_providers_reports_configuration(monkeypatch):
 
 
 def test_build_client_requires_key_and_uses_openrouter_endpoint(monkeypatch):
-    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    monkeypatch.setattr(llm, "_config", None)
     with pytest.raises(llm.LLMError, match="未設定 OPENROUTER_API_KEY"):
         llm._build_client(llm.LLMProvider.openrouter)
 
-    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setattr(llm, "_config", llm.LLMConfig(api_key="test-key"))
     client = object()
     constructor = MagicMock(return_value=client)
     monkeypatch.setattr("openai.OpenAI", constructor)
@@ -563,7 +563,7 @@ def _real_sdk_stream(monkeypatch, deltas, **stream_kwargs):
     server = ThreadingHTTPServer(("127.0.0.1", 0), StreamingHandler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
-    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setattr(llm, "_config", llm.LLMConfig(api_key="test-key"))
     monkeypatch.setitem(
         llm._PROVIDER_CONFIG[llm.LLMProvider.openrouter],
         "base_url",
@@ -867,7 +867,7 @@ def test_spec_093_create_app_injects_the_key_and_limits_without_import_time_read
     from backend.app_factory import create_app
     from backend.settings import settings
 
-    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    monkeypatch.setattr(llm, "_config", None)
     config = replace(settings, seed_data=False, frontend_dir=tmp_path, openrouter_api_key="injected-key",
                      openrouter_default_model="vendor/model:free", llm_max_output_tokens=777)
     from sqlalchemy import create_engine
@@ -879,3 +879,13 @@ def test_spec_093_create_app_injects_the_key_and_limits_without_import_time_read
     import inspect
     source = inspect.getsource(llm)
     assert "os.environ" not in source and "load_dotenv" not in source
+
+
+def test_an_unconfigured_adapter_never_reads_the_environment(monkeypatch):
+    """SPEC-142: only create_app configures the adapter; the environment is not a fallback."""
+    monkeypatch.setattr(llm, "_config", None)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "from-environment")
+    monkeypatch.setenv("OR_MODEL", "vendor/from-environment:free")
+    assert llm.current_config() == llm.LLMConfig()
+    with pytest.raises(llm.LLMError, match="未設定 OPENROUTER_API_KEY"):
+        llm._build_client(llm.LLMProvider.openrouter)

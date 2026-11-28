@@ -57,8 +57,8 @@ function renderCharts() {
     gridColor: getThemeColor('--chart-grid', '#2a2d3e'),
     mainTextColor: getThemeColor('--text', '#e4e4e7'),
     labels: coreData.shoes.map(s => s.brand + ' ' + s.model),
-    colors: coreData.shoes.map(s => shoeColor(s.id)),
-    calcs: coreData.shoes.map(s => calc(s)),
+    colors: coreData.shoes.map(s => shoeFormat.shoeColor(s.id)),
+    calcs: coreData.shoes.map(s => shoeFormat.calc(s)),
   };
   renderProgressChart(view);
   renderCostChart(view);
@@ -74,7 +74,7 @@ function renderProgressChart({ labels, calcs, textColor, gridColor }) {
       datasets: [{
         label: '已跑里程',
         data: coreData.shoes.map(s => s.mileage),
-        backgroundColor: calcs.map(c => progressColor(c.lifeProgress)),
+        backgroundColor: calcs.map(c => shoeFormat.progressColor(c.lifeProgress)),
         borderRadius: 4,
       }, {
         label: '剩餘里程',
@@ -96,7 +96,7 @@ function renderProgressChart({ labels, calcs, textColor, gridColor }) {
               const shoe = coreData.shoes[ctx.dataIndex];
               const c = calcs[ctx.dataIndex];
               if (ctx.datasetIndex === 0) {
-                return `已跑 ${formatShoeMileage(shoe.mileage)} km (${(c.lifeProgress * 100).toFixed(1)}%)`;
+                return `已跑 ${shoeFormat.formatShoeMileage(shoe.mileage)} km (${(c.lifeProgress * 100).toFixed(1)}%)`;
               }
               return `剩餘 ${c.remainingMileage} km`;
             }
@@ -162,7 +162,7 @@ function renderRetireChart({ labels, colors, calcs, textColor, gridColor }) {
       maintainAspectRatio: false,
       plugins: {
         legend: { display: false },
-        tooltip: { callbacks: { label: ctx => retireData[ctx.dataIndex].label + ': ' + fmtDate(new Date(ctx.raw.x)) } }
+        tooltip: { callbacks: { label: ctx => retireData[ctx.dataIndex].label + ': ' + shoeFormat.fmtDate(new Date(ctx.raw.x)) } }
       },
       scales: {
         x: {
@@ -249,10 +249,10 @@ const DAY_MS = 86400000;
 // The shoe total matches the shoes table; the part outside the run log is the
 // walking and warm-ups recorded on the same shoe (Strava "步行"), SPEC-067.
 function timelineMileageLines(row) {
-  const runs = `跑步 ${formatShoeMileage(row.km)} km · ${row.run_count} 次`;
-  const total = `鞋子里程 ${formatShoeMileage(row.shoe_km)} km`;
-  if (!(floorShoeKm(row.other_km) > 0)) return [total, runs];
-  return [total, `${runs}｜步行與暖身 ${formatShoeMileage(row.other_km)} km`];
+  const runs = `跑步 ${shoeFormat.formatShoeMileage(row.km)} km · ${row.run_count} 次`;
+  const total = `鞋子里程 ${shoeFormat.formatShoeMileage(row.shoe_km)} km`;
+  if (!(shoeFormat.floorShoeKm(row.other_km) > 0)) return [total, runs];
+  return [total, `${runs}｜步行與暖身 ${shoeFormat.formatShoeMileage(row.other_km)} km`];
 }
 
 async function renderShoeTimeline() {
@@ -314,7 +314,7 @@ function shoeTimelineView(timeline) {
   const toTime = iso => { const [y, m, d] = iso.split('-').map(Number); return new Date(y, m - 1, d).getTime(); };
   return {
     rows, names, today: toTime(timeline.as_of),
-    colors: rows.map(row => (row.idle ? getThemeColor('--chart-warn', '#ff8a1f') : shoeColor(row.shoe_id))),
+    colors: rows.map(row => (row.idle ? getThemeColor('--chart-warn', '#ff8a1f') : shoeFormat.shoeColor(row.shoe_id))),
     // A single-day bar still needs visible width, so each bar ends after its last day.
     data: rows.map(row => [toTime(row.first_run_date), toTime(row.last_run_date) + DAY_MS]),
     textColor: getThemeColor('--text-dim', '#8b8d9a'),
@@ -427,7 +427,7 @@ async function renderDistanceMix() {
     note.textContent = '現役鞋還沒有跑步紀錄。';
     return;
   }
-  const names = rows.map(row => shoeName(row.shoe_id));
+  const names = rows.map(row => shoeFormat.shoeName(row.shoe_id));
   const textColor = getThemeColor('--text-dim', '#8b8d9a');
   const gridColor = getThemeColor('--chart-grid', '#2a2d3e');
   box.style.height = `${Math.max(140, rows.length * 34 + 72)}px`;
@@ -463,7 +463,7 @@ async function renderDistanceMix() {
   const longRuns = rows.map(row => ({ row, long: row.counts.slice(-2).reduce((a, b) => a + b, 0) }))
     .filter(item => item.long > 0).sort((a, b) => b.long - a.long);
   note.textContent = longRuns.length
-    ? `15 km 以上的長跑最常穿 ${shoeName(longRuns[0].row.shoe_id)}（${longRuns[0].long} 次）。`
+    ? `15 km 以上的長跑最常穿 ${shoeFormat.shoeName(longRuns[0].row.shoe_id)}（${longRuns[0].long} 次）。`
     : '現役鞋還沒有 15 km 以上的長跑紀錄。';
 }
 

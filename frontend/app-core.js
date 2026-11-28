@@ -11,7 +11,8 @@ function invalidatePanels(resource = null) {
   // The shoes panel also draws run-derived charts (rotation timeline, distance mix). Accepting
   // runs or the goal drops their cached reads, so those arrivals must redraw it as well.
   const dependencies = { shoes: ['shoes', 'runs', 'monthly'],
-    monthly: ['monthly'], runs: ['shoes', 'runs', 'monthly'], goal: ['shoes', 'runs', 'monthly'] };
+    monthly: ['monthly'], runs: ['shoes', 'runs', 'monthly'], goal: ['shoes', 'runs', 'monthly'],
+    race: ['monthly'] };
   for (const name of dependencies[resource] || []) renderedPanels.delete(name);
 }
 
