@@ -1,6 +1,6 @@
 # SPEC-134: pinned to one image digest so every build gets the same base; Dependabot's
 # monthly docker update moves the pin (the tag keeps it readable).
-FROM python:3.11-slim@sha256:61e01f72680f86a5279ad510818ab7b2ee9f049822589d4e34e33e044360356c
+FROM python:3.13-slim@sha256:7249d5587b78209a006dc4a3b5340678f84ea729239193aa559962cd8c1fce50
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir --require-hashes -r requirements.txt

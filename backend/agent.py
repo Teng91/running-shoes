@@ -233,7 +233,7 @@ def run_agent_stream(
     model: str | None = None,
     db: Session | None = None,
     user_id: int | None = None,
-) -> Generator[str, None, None]:
+) -> Generator[str]:
     try:
         prov, model_id = _resolve_model(provider, model)
     except llm.LLMError as exc:

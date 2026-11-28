@@ -255,6 +255,26 @@ def test_image_ships_every_rollback_script_and_pins_its_base_by_digest():
     assert not any(pattern.strip() in {"scripts/", "scripts/*.sql", "*.sql"}
                    for pattern in (ROOT / ".dockerignore").read_text(encoding="utf-8").splitlines())
     base = re.search(r"^FROM (\S+)$", dockerfile, re.M)
-    assert base is not None and re.fullmatch(r"python:3\.11-slim@sha256:[0-9a-f]{64}", base.group(1))
+    assert base is not None and re.fullmatch(r"python:3\.13-slim@sha256:[0-9a-f]{64}", base.group(1))
     dependabot = (ROOT / ".github" / "dependabot.yml").read_text(encoding="utf-8")
     assert re.search(r"- package-ecosystem: docker\n\s+directory: \"/\"", dependabot)
+
+
+def test_ci_lint_and_lock_files_target_the_image_python_version():
+    """SPEC-146: CI, ruff, mypy and the lock-file compile all use the production image's Python."""
+    dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
+    base = re.search(r"^FROM python:(\d+)\.(\d+)-slim@", dockerfile, re.M)
+    assert base is not None
+    version = f"{base.group(1)}.{base.group(2)}"
+    pinned = [(path.relative_to(ROOT).as_posix(), found)
+              for path in sorted((ROOT / ".github").rglob("*.yml"))
+              for found in re.findall(r'python-version: "([^"]+)"', path.read_text(encoding="utf-8"))]
+    assert {".github/workflows/verify.yml", ".github/workflows/offsite-backup.yml",
+            ".github/actions/browser-setup/action.yml"} <= {path for path, _ in pinned}
+    assert all(found == version for _, found in pinned), pinned
+    pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    assert re.search(rf'^target-version = "py{base.group(1)}{base.group(2)}"$', pyproject, re.M)
+    assert re.search(rf'^python_version = "{re.escape(version)}"$', pyproject, re.M)
+    compiles = re.findall(r"uv pip compile .*?--python-version (\S+) .*requirements(?:-dev)?\.in",
+                          (ROOT / "README.md").read_text(encoding="utf-8"))
+    assert len(compiles) == 2 and set(compiles) == {version}
