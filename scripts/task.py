@@ -1,7 +1,7 @@
 """Cross-platform repository task runner.
 
 This module is the single source of truth for local development, coding-agent
-verification, and CI. Invoke it with any Python 3.11+ launcher, for example
+verification, and CI. Invoke it with any Python 3.13+ launcher, for example
 ``python3 scripts/task.py <task>`` on Unix or ``py -3 scripts/task.py <task>``
 on Windows.
 """

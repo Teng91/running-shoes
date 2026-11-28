@@ -301,6 +301,10 @@ SPEC-032：合成資料驗證歷史筆數上限（v4.7.3 起 10,000／10,001）�
 
 [規格與具名案例](specs/116-keep-scheduled-workflows-enabled.md) 以文字解析 `offsite-backup.yml`：續命 job 不依賴備份 job、只有它有 `actions: write`、只用 `GITHUB_TOKEN` 不用 secret、失敗只發警告，且 repo 裡每個有 `schedule` 的 workflow 都在它的重新啟用清單中。
 
+## SPEC-146 執行環境升級到 Python 3.13
+
+[規格與具名案例](specs/146-python-313.md) 以文字解析確認 Dockerfile 的基底是以 digest 固定的 `python:3.13-slim`，`.github` 下每個 `setup-python`、Ruff `target-version`、mypy `python_version` 與 README 的兩行 `uv pip compile --python-version` 都與它同版本；鎖定檔測試確認重新編譯後 `uvloop`／`colorama` 的平台條件仍在。CI 在 3.13 上以 `--require-hashes` 安裝並跑完整個 harness，`docker build` 在 3.13 映像安裝正式依賴。
+
 ## SPEC-145 前端共用格式化模組與功能間解耦
 
 [規格與具名案例](specs/145-frontend-feature-decoupling.md) 載入 `app-format.js` 確認四個 namespace 凍結且輸出不變，並以原始碼確認列出的功能不再呼叫彼此；設定視窗依序執行登記的 open／close hook；月度分頁的目標進度與訓練趨勢由各自的 hook 畫出，換年度只重畫分頁並回到最新 16 週。測試的 `featureContext` 以 `installFormatNamespaces()` 提供 namespace，既有 stub 仍生效。`architecture-check` 把 `cross_script_names` 固定在 132。

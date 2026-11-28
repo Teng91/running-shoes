@@ -4,6 +4,15 @@
 每版的摘要見 [CHANGELOG.md](../CHANGELOG.md)；目前的功能與操作方式以 [README](../README.md) 為準。
 這裡保留當時的文字，後續版本可能已調整其中的行為。
 
+### 執行環境升級到 Python 3.13（SPEC-146，v5.4.1）
+
+- `Dockerfile` 的基底改為 `python:3.13-slim@sha256:7249d558…`（3.13.18、Debian trixie 的多架構 index）；`verify.yml`、`offsite-backup.yml` 與 `.github/actions/browser-setup` 的 `setup-python` 改為 3.13。部署與回滾 job 不安裝 Python，沒有變動。
+- Ruff `target-version = "py313"`、mypy `python_version = "3.13"`；Ruff 新目標的兩個 UP043 只把 `agent.run_agent_stream` 與 `services/reports.generate_report` 的 `Generator[X, None, None]` 改成 `Generator[X]`。
+- 鎖定檔以 `--python-version 3.13` 重新編譯：版本與雜湊不變，`httpx2-jsfetch` 少了 `python_full_version >= '3.12'` 條件；`uvloop`／`colorama` 的平台條件保留。`test_ci_lint_and_lock_files_target_the_image_python_version` 以 Dockerfile 的版本比對 `.github` 下的 `setup-python`、`pyproject.toml` 與 README 的編譯指令。
+- 3.13 的 `ssl.create_default_context()` 預設多了 `VERIFY_X509_STRICT` 與 `VERIFY_X509_PARTIAL_CHAIN`，SPEC-085 的 STARTTLS 檢查更嚴格；Gmail 的 STARTTLS 已確認相容，上線後寄一次 email 驗證碼確認。
+- 本機虛擬環境建議以 3.13 重建（`python3.13 -m venv venv` 或 Windows 的 `py -3.13 -m venv venv`），再以 `--require-hashes` 安裝 `requirements-dev.txt`。
+- 沒有 schema、API 或帳號備份格式變更，可直接回滾至 v5.4.0 image（Python 3.11）；映像內的 bytecode 跟著映像走，volume 只有 SQLite 資料。Asset 5.4.1／shell v147。
+
 ### Review 強化、登入續期、CI 回滾與前端解耦（SPEC-142～145，v5.4.0）
 
 - `UploadLimitMiddleware` 對每個 `/api/` 寫入請求套用 `Settings.max_api_body_bytes`（1 MiB），上傳路徑的 11 MB／64 MiB 不變；超過回 413 `too_large`。讀完內容後的 `receive()` 交回原連線，SSE 照常偵測中斷。

@@ -1,6 +1,6 @@
 const CACHE_PREFIX = 'running-shoes-shell-';
-const CACHE_NAME = 'running-shoes-shell-v146';
-const APP_ASSET_VERSION = '5.4.0';
+const CACHE_NAME = 'running-shoes-shell-v147';
+const APP_ASSET_VERSION = '5.4.1';
 const versioned = path => `${path}?v=${APP_ASSET_VERSION}`;
 const APP_SHELL = [
   '/',

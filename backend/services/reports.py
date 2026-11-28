@@ -18,7 +18,7 @@ class ReportModelError(Exception):
 def generate_report(
     db: Session, user_id: int, year: int, month: int, model: str, *,
     build_stats: Callable[[], dict], stream_text: Callable[[dict], Iterable[str]],
-) -> Generator[dict, None, None]:
+) -> Generator[dict]:
     try:
         token = begin_generation(db, user_id, year, month)
         stats = build_stats()

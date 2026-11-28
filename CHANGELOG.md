@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [5.4.1] - 2026-11-28
+
+### Changed
+- **執行環境升級到 Python 3.13**（SPEC-146）：Python 3.11 將於 2027-10 結束支援。正式映像改用以 digest 固定的 `python:3.13-slim`，CI、異地備份與瀏覽器 job 的 Python、Ruff（`py313`）與 mypy 目標都改為 3.13。鎖定檔以 `uv pip compile --universal --python-version 3.13` 重新編譯，套件版本與雜湊不變；新的測試確認 Dockerfile、workflow、`pyproject.toml` 與 README 的編譯指令是同一個版本。本機虛擬環境建議以 3.13 重建。Asset 5.4.1／shell v147，schema 14 不變。
+
 ## [5.4.0] - 2026-11-28
 
 ### Security

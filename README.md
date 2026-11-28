@@ -2,7 +2,7 @@
 
 **給跑者用的跑鞋與訓練紀錄 App**：記錄每一次跑步的距離、時間和穿哪雙鞋，自動算出每雙鞋的里程、成本與退役時間，並把長期資料整理成訓練趨勢、配速分析與 AI 教練的對話和月報。可以加到手機主畫面當 App 用，離線時也能先記錄、恢復連線後自動同步。
 
-Python 3.11 · FastAPI · SQLAlchemy · SQLite · 原生 JavaScript（不需要打包）· Chart.js · PWA · OpenRouter（function calling）· Docker · Fly.io · GitHub Actions · Playwright
+Python 3.13 · FastAPI · SQLAlchemy · SQLite · 原生 JavaScript（不需要打包）· Chart.js · PWA · OpenRouter（function calling）· Docker · Fly.io · GitHub Actions · Playwright
 
 - 線上網址：https://running-shoes.fly.dev （邀請制註冊：向管理員索取邀請碼；每個帳號的資料完全隔離）
 - 版本紀錄：[`CHANGELOG.md`](CHANGELOG.md)、相容性與回滾細節 [`docs/release-notes.md`](docs/release-notes.md)
@@ -55,8 +55,8 @@ Python 3.11 · FastAPI · SQLAlchemy · SQLite · 原生 JavaScript（不需要�
 | 項目 | 數量 |
 | --- | --- |
 | 正式版本 | 2026-06 開始，目前 v5.4；每個版本都有 tag 與 GitHub Release |
-| 自動化測試 | Python 864 項、前端 Node 回歸 281 項、40 組版面設定（WebKit／Chromium × 亮暗 × 10 種尺寸）、真實 CRUD E2E 與 PWA 升級／離線測試 |
-| 功能規格 | 144 份 SPEC，每份含 Goals、帳號隔離、migration／rollback 與 AC 追蹤 |
+| 自動化測試 | Python 865 項、前端 Node 回歸 281 項、40 組版面設定（WebKit／Chromium × 亮暗 × 10 種尺寸）、真實 CRUD E2E 與 PWA 升級／離線測試 |
+| 功能規格 | 145 份 SPEC，每份含 Goals、帳號隔離、migration／rollback 與 AC 追蹤 |
 | API | 68 個端點，與 `unit_tests/api_contract.json` 及下方 API 表自動比對 |
 | 資料庫 | SQLite schema 14，每一版都有守衛的回滾腳本 |
 | 部署 | Fly.io 1 台 256MB 機器＋加密 volume，閒置自動休眠 |
@@ -197,7 +197,7 @@ flowchart LR
 
 ## 品質：測試與規格
 
-- **Python 864 項**：API、交易與並行、migration 與回滾、備份往返、帳號隔離、Agent 規劃與工具（外部 LLM 與搜尋一律 mock），一律使用暫存或記憶體資料庫，不碰正式 `shoes.db`。
+- **Python 865 項**：API、交易與並行、migration 與回滾、備份往返、帳號隔離、Agent 規劃與工具（外部 LLM 與搜尋一律 mock），一律使用暫存或記憶體資料庫，不碰正式 `shoes.db`。
 - **前端 Node 回歸 281 項**：以 `vm` 載入實際前端程式，驗證狀態、競態、草稿、串流與圖表資料。
 - **瀏覽器**：Playwright 在 WebKit 與 Chromium 跑 40 組版面設定（含幾何對齊與無溢出）、真實 FastAPI＋暫存 SQLite 的 CRUD E2E、Service Worker 升級與離線；失敗時保存截圖與 trace。
 - **修 bug 先寫重現測試**：例如 v4.17.0 的 CI 抓到新圖表檔案重複宣告全域常數，修正時同時加上掃描所有 script 的測試。
@@ -245,7 +245,7 @@ merge 到 main ─▶ 喚醒機器 → volume 上快照資料庫 → 部署 → 
 | 2026-11-25 | v5.0 | 比賽訓練課表：自選週數、依自己跑量逐週累積、恢復週與減量、長跑不足時說明怎麼調、落後時往下調、每週各強度建議次數；AI 教練讀同一份課表 |
 | 2026-11-25～26 | v5.1–5.2 | 帳號備份含目標賽事（v6）；目標賽事的異動歷史與誤刪復原；課表排版拆成獨立模組；本機離線資料與瀏覽器設定改依帳號識別碼存放；正式映像內含回滾腳本；AI 教練、網路搜尋、管理員名稱、邀請碼與 Strava 預覽的程式碼檢查修正 |
 | 2026-11-27～28 | v5.3 | 個人最佳成績（5K／10K／15K／半馬）；移除跑鞋「月跑量」欄位，退役只依實際使用預估；健行與步行配速上限每公里 120:00；讀取模型分層檢查；月報與 AI 工具的例外寫入伺服器紀錄；Strava 衝突連結的健行補上移動時間 |
-| 2026-11-28 | v5.4 | 所有 API 請求先限制大小再解析；新鞋退役預估改依開穿天數；登入自動續期（最長 30 天）；CI 重跑保留第一次的診斷、部署後檢查失敗自動回滾；前端共用格式化模組與功能間解耦 |
+| 2026-11-28 | v5.4 | 所有 API 請求先限制大小再解析；新鞋退役預估改依開穿天數；登入自動續期（最長 30 天）；CI 重跑保留第一次的診斷、部署後檢查失敗自動回滾；前端共用格式化模組與功能間解耦；執行環境升級到 Python 3.13 |
 
 ---
 
@@ -523,6 +523,9 @@ running-shoes/
 
 ## 快速開始（本機開發）
 
+需要 Python 3.13，與正式映像和 CI 相同；鎖定檔、Ruff 與 mypy 都以 3.13 為準。較新的 Python 通常也能執行，
+但以 3.13 建立虛擬環境最接近正式環境（Windows 可用 `py -3.13 -m venv venv`）。
+
 ```bash
 # 1. Clone
 git clone https://github.com/<你的 GitHub 帳號>/running-shoes.git
@@ -557,8 +560,8 @@ Terminal、忘記 activate，或 IDE 使用另一個 shell 而誤用系統 Pytho
 `requirements.txt`。更新 `.in` 後，使用 `uv pip compile` 以跨平台（universal）模式重新編譯兩份鎖定檔，不要直接手改鎖定內容：
 
 ```bash
-uv pip compile --universal --generate-hashes --python-version 3.11 --no-header requirements.in -o requirements.txt
-uv pip compile --universal --generate-hashes --python-version 3.11 --no-header requirements-dev.in -o requirements-dev.txt
+uv pip compile --universal --generate-hashes --python-version 3.13 --no-header requirements.in -o requirements.txt
+uv pip compile --universal --generate-hashes --python-version 3.13 --no-header requirements-dev.in -o requirements-dev.txt
 ```
 
 跨平台模式會保留平台條件，例如 `uvloop` 只在非 Windows 安裝、`colorama` 只在 Windows 安裝；只在單一平台編譯會遺失這些條件，使其他作業系統的 `setup` 失敗。
@@ -960,7 +963,7 @@ Playwright／Chromium／WebKit 齊全時，也會執行版面測試。
 避免每次停止都重跑。Hook 不會呼叫其他模型、外部 API，或傳送提示、diff、原始碼與測試輸出。
 GitHub Actions 仍會在 push／pull request 執行 `verify`，並以三個可獨立重跑的 browser jobs 執行完整版面矩陣、真實 CRUD E2E 與 PWA 升級／離線測試；push 到 main 時再依序快照、部署、檢查並發版（見「日常開發流程、自動部署與發版」）；Dependabot 每月以單一 PR 合併 GitHub Actions 更新；Python 只接收安全性更新 PR，例行升級依下方 `uv pip compile --universal` 步驟手動重編鎖定檔（Dependabot 產生的鎖定檔會遺失 Windows 條件）。
 
-本次驗證基線為 Python **864 passed**、前端回歸測試 **281 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
+本次驗證基線為 Python **865 passed**、前端回歸測試 **281 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
 版面檢查涵蓋 WebKit／Chromium、亮／暗模式與 10 組直橫向尺寸，共 40 組設定，檢查四個功能分頁與月報、三個認證表單、圖表、全部彈窗、行內編輯、停用／錯誤及空資料狀態。
 
 主要表單、工具列與彈窗操作統一為 44px 控制項；桌面表格內的緊湊操作為 36px，手機至少 44px。
@@ -1176,7 +1179,7 @@ git push main ──→ GitHub Actions：測試 → 資料庫快照 → flyctl d
                                          │                     │
                                          └──────────┬──────────┘
                                                     │
-                                            Python 3.11 容器
+                                            Python 3.13 容器
                                             uvicorn 啟動
                                                     │
                                         ┌───────────┴───────────┐

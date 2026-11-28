@@ -1,5 +1,5 @@
 [tool.ruff]
-target-version = "py311"
+target-version = "py313"
 line-length = 100
 
 [tool.ruff.lint]
@@ -19,7 +19,7 @@ ignore = [
 max-complexity = 10
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.13"
 explicit_package_bases = true
 check_untyped_defs = true
 no_implicit_optional = true
