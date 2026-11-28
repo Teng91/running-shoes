@@ -5,7 +5,7 @@ from functools import cache
 from sqlalchemy import delete, func
 from sqlalchemy.orm import Session
 
-from backend import models
+from backend import clock, models
 from backend.credentials import (
     create_access_token,
     get_password_hash,
@@ -154,6 +154,22 @@ def logout_everywhere(db: Session, user: models.User) -> dict:
             {models.User.token_version: models.User.token_version + 1}, synchronize_session=False,
         )
     return {"ok": True}
+
+
+def set_timezone(db: Session, user: models.User, name: str) -> dict:
+    """SPEC-147: the IANA zone that decides the account's today, months and run-date limit.
+
+    Stored dates are calendar days and stay as they are; only what counts as today moves.
+    """
+    if not clock.is_timezone_name(name):
+        raise Invalid("Unknown time zone")
+    user_id = user.id
+    with write_transaction(db, user_id, reason="account.timezone"):
+        db.query(models.User).filter(models.User.id == user_id).update(
+            {models.User.timezone: name}, synchronize_session=False,
+        )
+    zone = clock.zone(name)
+    return {"timezone": zone.key, "today": clock.local_today(zone).isoformat()}
 
 
 def account_rate_limit_keys(user_id: int) -> tuple[str, ...]:

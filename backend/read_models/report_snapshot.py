@@ -12,10 +12,10 @@ from datetime import date
 from sqlalchemy.orm import Session
 
 from backend import models
-from backend.clock import local_today
 from backend.read_models import goal_progress
 from backend.read_models import mileage as mileage_stats
 from backend.read_models import shoes as shoe_stats
+from backend.read_models.account_clock import account_today
 from backend.read_models.rounding import round_metric
 from backend.read_models.run_statistics import (
     TRAINING_RUN,
@@ -118,7 +118,7 @@ def build_report_stats(
     today: date | None = None,
 ) -> dict:
     """組出餵給 LLM 與存入 stats_json 的精簡統計快照。"""
-    as_of = today or local_today()
+    as_of = today or account_today(db, user_id)
     period = run_period(year, month, as_of)
     distances = period_distances(db, user_id, period)
     month_stats = _month_run_stats(db, user_id, year, month, through_date=period.month_end)

@@ -12,6 +12,7 @@ from backend.services.errors import (
     Invalid,
     NotFound,
     Unauthorized,
+    Unprocessable,
 )
 
 
@@ -31,5 +32,5 @@ def service_errors() -> Iterator[None]:
         # SPEC-092: a full registration is a 403 like "Admin only", but clients tell them apart.
         raise CodedHTTPException(403, str(error), "capacity") from error
     except DomainError as error:
-        status = {NotFound: 404, Invalid: 400, Conflict: 409, Unauthorized: 401}[type(error)]
+        status = {NotFound: 404, Invalid: 400, Conflict: 409, Unauthorized: 401, Unprocessable: 422}[type(error)]
         raise HTTPException(status_code=status, detail=str(error)) from error

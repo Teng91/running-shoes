@@ -1,10 +1,14 @@
 """User-scoped runs application mutations and transaction ownership."""
 
+from datetime import date
+
 from sqlalchemy.orm import Session
 
 from backend import models, schemas
+from backend.clock import local_today
+from backend.read_models.account_clock import account_zone
 from backend.run_metrics import DEFAULT_ACTIVITY_TYPE, is_plausible_duration, pace_range_text
-from backend.services.errors import Conflict, Invalid, NotFound
+from backend.services.errors import Conflict, Invalid, NotFound, Unprocessable
 from backend.services.identifiers import allocate_id
 from backend.services.mileage import apply_run_mileage_deltas
 from backend.services.run_identity import record_tombstone
@@ -26,6 +30,14 @@ def _user_shoe_or_404(db: Session, user_id: int, shoe_id: int):
     return shoe
 
 
+def reject_future_run_date(db: Session, user_id: int, value: str) -> None:
+    """SPEC-147: a run is dated on or before today on the account's own calendar."""
+    zone = account_zone(db, user_id)
+    today = local_today(zone)
+    if date.fromisoformat(value) > today:
+        raise Unprocessable(f"跑步日期不能晚於今天（{zone.key}：{today.isoformat()}）")
+
+
 def create_run(
     db: Session,
     user_id: int,
@@ -37,6 +49,7 @@ def create_run(
     # inside the same transaction; this use case only owns the business rules.
     with write_transaction(db, user_id, reason="run.create"):
         _user_shoe_or_404(db, user_id, payload.shoe_id)
+        reject_future_run_date(db, user_id, payload.date)
         run_count = db.query(models.Run).filter(models.Run.user_id == user_id).count()
         if run_count >= max_runs:
             raise Conflict("跑步紀錄已達上限")
@@ -61,6 +74,8 @@ def update_run(db: Session, user_id: int, run_id: int, payload: schemas.RunUpdat
         expected_version = update_data.pop("expected_version", getattr(run, "version", 0))
         if "shoe_id" in update_data:
             _user_shoe_or_404(db, user_id, update_data["shoe_id"])
+        if "date" in update_data:
+            reject_future_run_date(db, user_id, update_data["date"])
         # The schema checks a duration against a submitted distance; these cover the stored
         # side. SPEC-093: a distance edit must also keep a stored moving time plausible.
         stored_type = getattr(run, "activity_type", DEFAULT_ACTIVITY_TYPE)

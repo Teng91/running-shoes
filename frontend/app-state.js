@@ -63,11 +63,51 @@ function plausibleRunPace(seconds, km, activityType) {
   return pace >= RUN_PACE_MIN_SECONDS && pace <= runPaceMaxSeconds(activityType);
 }
 
-// The service keeps one calendar: Taiwan time, a fixed UTC+8 without daylight saving,
-// mirrored from backend/clock.py (SPEC-093). "Today" comes from it, not from the device's
-// zone, or a phone in Tokyo just after midnight offers a run date the backend rejects as
-// the future. A Python test keeps both sides equal.
-const APP_UTC_OFFSET_MINUTES = 480;
+// SPEC-147: "today" is the signed-in account's calendar, in its IANA zone. It never comes
+// from the device's zone (SPEC-093), or a phone abroad just after midnight offers a run date
+// the backend rejects as the future. Accounts start in Asia/Taipei, mirrored from
+// backend/clock.py (a Python test keeps both equal); app-account.js announces the account's
+// zone with the window event 'account-timezone' (detail.timeZone, null for the default).
+const DEFAULT_ACCOUNT_TIMEZONE = 'Asia/Taipei';
+let calendarTimeZone = DEFAULT_ACCOUNT_TIMEZONE;
+const calendarFormatters = new Map();
+
+function calendarFormatter(timeZone) {
+  let formatter = calendarFormatters.get(timeZone);
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone, hourCycle: 'h23', year: 'numeric', month: 'numeric', day: 'numeric',
+      hour: 'numeric', minute: 'numeric', second: 'numeric',
+    });
+    calendarFormatters.set(timeZone, formatter);
+  }
+  return formatter;
+}
+
+// The zone's offset from UTC in minutes at that instant, from the zone's own rules, so a
+// zone with daylight saving gets the offset of that date, not of today.
+function timeZoneOffsetMinutes(timeZone, instant = new Date()) {
+  const parts = {};
+  for (const { type, value } of calendarFormatter(timeZone).formatToParts(instant)) parts[type] = value;
+  const wall = Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day),
+    Number(parts.hour) % 24, Number(parts.minute), Number(parts.second));
+  return Math.round((wall - Math.floor(instant.getTime() / 1000) * 1000) / 60000);
+}
+
+// An unknown name (an older browser's zone list) keeps the default calendar.
+function useCalendarTimeZone(timeZone) {
+  try {
+    calendarFormatter(timeZone);
+    calendarTimeZone = timeZone;
+  } catch {
+    calendarTimeZone = DEFAULT_ACCOUNT_TIMEZONE;
+  }
+}
+
+window.addEventListener('account-timezone', event => {
+  const timeZone = event.detail?.timeZone;
+  useCalendarTimeZone(typeof timeZone === 'string' && timeZone ? timeZone : DEFAULT_ACCOUNT_TIMEZONE);
+});
 
 // A colour token of the shown theme, for charts and wear bars (SPEC-105: shared, so it lives here).
 function getThemeColor(varName, fallback) {
@@ -75,11 +115,11 @@ function getThemeColor(varName, fallback) {
 }
 
 function appCalendarDate(instant = new Date()) {
-  const shifted = new Date(instant.getTime() + APP_UTC_OFFSET_MINUTES * 60000);
+  const shifted = new Date(instant.getTime() + timeZoneOffsetMinutes(calendarTimeZone, instant) * 60000);
   return { year: shifted.getUTCFullYear(), month: shifted.getUTCMonth() + 1, day: shifted.getUTCDate() };
 }
 
-// The service's calendar date as YYYY-MM-DD (Taiwan time, SPEC-093), whatever zone the device is in.
+// The account's calendar date as YYYY-MM-DD (SPEC-093, SPEC-147), whatever zone the device is in.
 function localDateISO(instant = new Date()) {
   const { year, month, day } = appCalendarDate(instant);
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;

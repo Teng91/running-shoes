@@ -70,8 +70,8 @@ function featureContext(globals = {}) {
   // SPEC-096 activity types: constants and the form/label helpers shared by run features.
   vm.runInContext(source.match(/const RUN_ACTIVITY_TYPES = [^\n]+\n(?:const RUN_[A-Z_]+ = [^\n]+\n){3}/)[0]
     + ['lastActivityTypeForShoe', 'runActivityLabel', 'updateRunActivityHint'].map(extract).join('\n'), context);
-  // SPEC-093: calendar days come from the service's fixed zone, shared by every feature.
-  vm.runInContext(source.match(/const APP_UTC_OFFSET_MINUTES = \d+;/)[0] + '\n' + extract('appCalendarDate'), context);
+  // SPEC-093, SPEC-147: calendar days come from the account's zone, shared by every feature.
+  installAccountCalendar(context);
   // SPEC-106: features register their cache hooks when they load; install them like initializeDataResources().
   vm.runInContext(`const resourceCacheHooks = [];\n${extract('registerResourceCache')}\n${featureRegistrations(/^registerResourceCache\(/gm)}`, context);
   context.registerResourceCaches();
@@ -177,6 +177,13 @@ function tableHeaders(tbodyId) {
   const beforeBody = htmlSource.slice(0, htmlSource.indexOf(`<tbody id="${tbodyId}"`));
   const header = beforeBody.slice(beforeBody.lastIndexOf('<thead>'));
   return [...header.matchAll(/<th\b[^>]*>(.*?)<\/th>/g)].map(match => match[1]);
+}
+
+// SPEC-147: the account calendar of app-state.js (default zone, per-instant offsets, zone switch).
+function installAccountCalendar(context) {
+  const state = source.match(/const DEFAULT_ACCOUNT_TIMEZONE = '[^']+';\nlet calendarTimeZone = DEFAULT_ACCOUNT_TIMEZONE;\nconst calendarFormatters = new Map\(\);/)[0];
+  vm.runInContext(state + '\n' + ['calendarFormatter', 'timeZoneOffsetMinutes', 'useCalendarTimeZone', 'appCalendarDate']
+    .map(extract).join('\n'), context);
 }
 
 function extract(name) {

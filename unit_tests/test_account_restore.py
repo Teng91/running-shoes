@@ -486,7 +486,7 @@ def test_schema_six_preserves_existing_preview_and_is_idempotent(workspace):
         connection.execute(text("UPDATE schema_metadata SET value='5' WHERE key='schema_version'"))
     run_startup_migrations(workspace.engine, workspace.sessions)
     run_startup_migrations(workspace.engine, workspace.sessions)
-    assert schema_version(workspace.engine) == 14
+    assert schema_version(workspace.engine) == 15
     assert inspect(workspace.engine).get_pk_constraint('restore_previews')['constrained_columns'] == ['user_id', 'token']
     with workspace.sessions() as db:
         after = exports.build_account_export(db, db.get(models.User, 1))[0]
@@ -529,6 +529,7 @@ def test_preview_schema_rollback_preserves_business_rows(workspace):
         before = db.query(models.AuditEvent).count()
     connection = workspace.engine.raw_connection()
     try:
+        connection.executescript(Path('scripts/rollback_schema_fifteen.sql').read_text(encoding="utf-8"))
         connection.executescript(Path('scripts/rollback_schema_fourteen.sql').read_text(encoding="utf-8"))
         connection.executescript(Path('scripts/rollback_schema_thirteen.sql').read_text(encoding="utf-8"))
         connection.executescript(Path('scripts/rollback_schema_twelve.sql').read_text(encoding="utf-8"))
@@ -547,7 +548,7 @@ def test_preview_schema_rollback_preserves_business_rows(workspace):
         assert db.query(models.AuditEvent).count() == before
         assert db.query(models.RestorePreview).count() == 0
     run_startup_migrations(workspace.engine, workspace.sessions)
-    assert schema_version(workspace.engine) == 14
+    assert schema_version(workspace.engine) == 15
 
 
 def test_export_contract_limits_and_explicit_history_omission(workspace):

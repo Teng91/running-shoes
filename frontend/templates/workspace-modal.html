@@ -45,6 +45,15 @@
       <p class="workspace-help">只清除此瀏覽器中目前帳號的草稿、快取及待同步跑步，不會刪除雲端資料。尚未同步的跑步會遺失。</p>
       <button class="btn btn-delete" data-click="clear-local-workspace">清除此帳號的本機資料</button>
     </details>
+    <details class="workspace-section" id="timezone-section">
+      <summary>時區（決定「今天」是哪一天）</summary>
+      <p id="timezone-current" class="workspace-help" role="status" aria-live="polite"></p>
+      <p class="workspace-help">「今天」、跑步日期上限、本週／本月、連續跑步天數、目標進度、退役預估與月報月份都依這個時區計算；已記錄的跑步日期不會改變。出國比賽或住在國外時改成當地時區，回來後再改回去；所有裝置都會跟著這個帳號的設定。</p>
+      <div class="form-group"><label for="timezone-select">時區</label><select id="timezone-select"></select></div>
+      <button class="btn btn-edit" id="timezone-device" data-click="use-device-timezone" hidden>改用這台裝置的時區</button>
+      <button class="btn btn-primary" data-click="save-timezone">儲存時區</button>
+      <p id="timezone-status" class="workspace-help" role="status" aria-live="polite"></p>
+    </details>
     <details class="workspace-section" id="email-section" hidden>
       <summary>Email（忘記密碼時使用）</summary>
       <p id="email-current" class="workspace-help" role="status" aria-live="polite"></p>

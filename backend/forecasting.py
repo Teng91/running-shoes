@@ -8,7 +8,7 @@ from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 
 from backend import models
-from backend.clock import local_today
+from backend.read_models.account_clock import account_today
 
 
 class ShoeForecast(TypedDict):
@@ -106,7 +106,7 @@ def forecasts_for_shoes(
     rows = [shoe for shoe in shoes if shoe.user_id == user_id and not shoe.is_deleted]
     if not rows:
         return {}
-    as_of = today or local_today()
+    as_of = today or account_today(db, user_id)
     start = (as_of - timedelta(days=89)).isoformat()
     recent = func.sum(case((models.Run.date >= start, models.Run.km), else_=0))
     totals = {shoe_id: (km, count, first) for shoe_id, km, count, first in db.query(

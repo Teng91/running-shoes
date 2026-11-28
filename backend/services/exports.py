@@ -4,7 +4,7 @@ import csv
 import io
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, tzinfo
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -18,7 +18,7 @@ from backend.backup_contract import (
     ArchiveBudget,
     validate_export,
 )
-from backend.clock import APP_TIMEZONE
+from backend.clock import DEFAULT_ZONE, zone_for
 from backend.exporting import export_filename, generate_shoe_rows
 from backend.read_models.goal_progress import yearly_goal_km
 from backend.services.errors import Invalid
@@ -41,7 +41,7 @@ class ExportFile:
 
 
 RowGenerator = Callable[..., Iterable[dict[str, Any]]]
-FilenameFactory = Callable[[str, str], str]
+FilenameFactory = Callable[[str, str, tzinfo], str]
 
 
 def build_account_export(
@@ -100,8 +100,8 @@ def _account_export_snapshot(db: Session, user: models.User, *, now: datetime | 
     }
     validate_export(payload)
     suffix = "" if include_history else "_without_history"
-    # Fly machines run in UTC; name the file with the application calendar time.
-    filename = f"running_shoes_account_{exported_at.astimezone(APP_TIMEZONE):%Y%m%d_%H%M%S}{suffix}.json"
+    # Fly machines run in UTC; name the file with the account's calendar time (SPEC-147).
+    filename = f"running_shoes_account_{exported_at.astimezone(zone_for(user)):%Y%m%d_%H%M%S}{suffix}.json"
     return payload, filename
 
 
@@ -113,6 +113,7 @@ def build_shoe_export(
     *,
     row_generator: RowGenerator = generate_shoe_rows,
     filename_factory: FilenameFactory = export_filename,
+    zone: tzinfo = DEFAULT_ZONE,
 ) -> ExportFile | None:
     """Build a user-scoped CSV or XLSX export without HTTP response types."""
     query = db.query(models.Shoe).filter(
@@ -129,9 +130,9 @@ def build_shoe_export(
 
     rows = list(row_generator(shoes, include_retired_status=mode != "retired"))
     if format == "csv":
-        return _build_csv(rows, filename_factory("csv", mode))
+        return _build_csv(rows, filename_factory("csv", mode, zone))
     if format == "xlsx":
-        return _build_xlsx(rows, filename_factory("xlsx", mode))
+        return _build_xlsx(rows, filename_factory("xlsx", mode, zone))
     return None
 
 

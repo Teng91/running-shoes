@@ -54,11 +54,11 @@ Python 3.13 · FastAPI · SQLAlchemy · SQLite · 原生 JavaScript（不需要�
 
 | 項目 | 數量 |
 | --- | --- |
-| 正式版本 | 2026-06 開始，目前 v5.4；每個版本都有 tag 與 GitHub Release |
-| 自動化測試 | Python 865 項、前端 Node 回歸 281 項、40 組版面設定（WebKit／Chromium × 亮暗 × 10 種尺寸）、真實 CRUD E2E 與 PWA 升級／離線測試 |
-| 功能規格 | 145 份 SPEC，每份含 Goals、帳號隔離、migration／rollback 與 AC 追蹤 |
-| API | 68 個端點，與 `unit_tests/api_contract.json` 及下方 API 表自動比對 |
-| 資料庫 | SQLite schema 14，每一版都有守衛的回滾腳本 |
+| 正式版本 | 2026-06 開始，目前 v5.5；每個版本都有 tag 與 GitHub Release |
+| 自動化測試 | Python 882 項、前端 Node 回歸 286 項、40 組版面設定（WebKit／Chromium × 亮暗 × 10 種尺寸）、真實 CRUD E2E 與 PWA 升級／離線測試 |
+| 功能規格 | 146 份 SPEC，每份含 Goals、帳號隔離、migration／rollback 與 AC 追蹤 |
+| API | 69 個端點，與 `unit_tests/api_contract.json` 及下方 API 表自動比對 |
+| 資料庫 | SQLite schema 15，每一版都有守衛的回滾腳本 |
 | 部署 | Fly.io 1 台 256MB 機器＋加密 volume，閒置自動休眠 |
 
 ---
@@ -102,7 +102,7 @@ flowchart LR
   subgraph Fly["Fly.io · 1 台機器"]
     R["routers<br/>只做 HTTP 轉換"] --> S["services<br/>交易、版本、冪等"]
     R --> RM["read_models<br/>里程・目標・趨勢・配速"]
-    S --> DB[("SQLite /data<br/>schema 14＋稽核 trigger")]
+    S --> DB[("SQLite /data<br/>schema 15＋稽核 trigger")]
     RM --> DB
     A["agent<br/>規劃・工具・SSE"] --> RM
   end
@@ -131,7 +131,7 @@ flowchart LR
 
 ### 2. Strava 匯入：去重、時區與手動紀錄配對
 
-1. 預覽只解析、不寫入：讀繁中／英文欄位，把 UTC 時間（含「晚上」「凌晨」等時段）換成台灣日期，讀移動時間。
+1. 預覽只解析、不寫入：讀繁中／英文欄位，把 UTC 時間（含「晚上」「凌晨」等時段）換成帳號時區的日期，讀移動時間。
 2. 以 Strava 活動 ID 去重；刪過的活動有墓碑，不會被再次匯入。
 3. 同一天只有一筆距離接近的手動紀錄時，視為同一次跑步，只連結並補上時間，不重複計算里程；無法確定時逐筆列出，由使用者選擇略過、連結或匯入。
 4. 匯入在一個交易內完成新增、補時間、日期修正與里程同步。
@@ -197,8 +197,8 @@ flowchart LR
 
 ## 品質：測試與規格
 
-- **Python 865 項**：API、交易與並行、migration 與回滾、備份往返、帳號隔離、Agent 規劃與工具（外部 LLM 與搜尋一律 mock），一律使用暫存或記憶體資料庫，不碰正式 `shoes.db`。
-- **前端 Node 回歸 281 項**：以 `vm` 載入實際前端程式，驗證狀態、競態、草稿、串流與圖表資料。
+- **Python 882 項**：API、交易與並行、migration 與回滾、備份往返、帳號隔離、Agent 規劃與工具（外部 LLM 與搜尋一律 mock），一律使用暫存或記憶體資料庫，不碰正式 `shoes.db`。
+- **前端 Node 回歸 286 項**：以 `vm` 載入實際前端程式，驗證狀態、競態、草稿、串流與圖表資料。
 - **瀏覽器**：Playwright 在 WebKit 與 Chromium 跑 40 組版面設定（含幾何對齊與無溢出）、真實 FastAPI＋暫存 SQLite 的 CRUD E2E、Service Worker 升級與離線；失敗時保存截圖與 trace。
 - **修 bug 先寫重現測試**：例如 v4.17.0 的 CI 抓到新圖表檔案重複宣告全域常數，修正時同時加上掃描所有 script 的測試。
 - **文件也被測**：`docs-check` 比對 README 的測試數、工具數、API 表、目錄樹與規格的 AC 追蹤，數字對不上 CI 就失敗。
@@ -299,7 +299,7 @@ running-shoes/
 │   ├── main.py           # 最小 ASGI 入口
 │   ├── app_factory.py    # 可注入的 FastAPI 組裝、lifecycle 與 SPA fallback
 │   ├── settings.py       # Immutable typed runtime configuration
-│   ├── clock.py          # 唯一的應用時區、local_now()／local_today()
+│   ├── clock.py          # 帳號時區規則（預設 Asia/Taipei）、local_now()／local_today()／user_today()
 │   ├── dependencies.py   # Request-scoped app settings 與 DB session（get_db）
 │   ├── seeding.py        # 使用注入 session factory 的可選預設資料
 │   ├── mailer.py         # Gmail SMTP 寄送驗證碼（未設定時關閉，log 不含收件人與驗證碼）
@@ -368,6 +368,7 @@ running-shoes/
 │   ├── shoe_metrics.py   # 共用折數、成本與壽命算術
 │   ├── run_metrics.py    # 跑步時間合理範圍與配速推導
 │   ├── read_models/      # API／月報／AI 共用的 user-scoped native statistics 與清單查詢
+│   │   ├── account_clock.py # 帳號的時區與「今天」（只有 user id 的讀取模型與 AI 工具使用）
 │   │   ├── shoes.py      # 鞋櫃、生命週期與名稱身分查詢
 │   │   ├── shoe_statistics.py # SQL 聚合與每雙鞋 12 筆 recent window
 │   │   ├── shoe_matching.py # 名稱消歧義；有歧義時絕不自動選一筆
@@ -413,13 +414,13 @@ running-shoes/
 │   │   └── race-plan-view.mjs # 訓練課表的表格列與說明文字（不碰 DOM，格式函式由呼叫端注入）
 │   ├── app-lifecycle.js  # 過渡橋接，以及面板、對話框與更新忙碌判斷的登記處
 │   ├── app-inline-editors.js # 表格輸入 DOM、列快照與 session 清理
-│   ├── app-dates.js      # 日曆日期與跨日限制／恢復
+│   ├── app-dates.js      # 日曆日期與跨日限制／恢復（帳號時區改變時一併更新）
 │   ├── app-dialogs.js    # 共用焦點、Tab、Escape 與彈窗語義
 │   ├── app-updates.js    # 版本資訊、新部署偵測與確認後才重載的更新提示
 │   ├── app-actions.js    # data-* 介面動作的事件委派（不寫 inline handler）
 │   ├── app.js            # Dashboard 初始化
 │   ├── app-boot.js       # 啟動 loading、逾時與 stylesheet readiness
-│   ├── app-state.js      # 共用記憶體 state 與 presentation constants
+│   ├── app-state.js      # 共用記憶體 state、presentation constants 與帳號時區的日曆
 │   ├── app-session.js    # 登入 session 身分（token、使用者、世代）、續期與過期通知
 │   ├── app-format.js     # 共用格式化：runFormat／shoeFormat／raceFormat／goalFormat（SPEC-145）
 │   ├── app-api.js        # HTTP／upload helpers
@@ -428,7 +429,7 @@ running-shoes/
 │   ├── app-resources.js  # 原生資源模組、session 與功能快取的過渡橋接
 │   ├── app-local-store.js # IndexedDB 原子交易 adapter
 │   ├── app-workspace.js  # 草稿、資源快照及同步 DOM adapter
-│   ├── app-account.js    # 邀請碼註冊、管理員邀請碼／臨時密碼與刪除帳號
+│   ├── app-account.js    # 邀請碼註冊、管理員邀請碼／臨時密碼、帳號時區與刪除帳號
 │   ├── app-account-restore.js # 還原預覽與視窗操作身分
 │   ├── app-history.js    # 異動分頁與誤刪復原 UI
 │   ├── app-core.js       # Shell、主題、分頁與聚合資料載入
@@ -485,6 +486,7 @@ running-shoes/
 │   ├── diagnostics_drill.cjs # 產生合成瀏覽器失敗，演練診斷落檔
 │   ├── verify_diagnostics.py # 只用標準函式庫驗證下載的合成診斷
 │   ├── render_icons.cjs  # 本機由 icons/app-icon.svg 產生 PNG 圖示（不在 CI 執行）
+│   ├── rollback_schema_fifteen.sql # Schema 15 → 14 的文件化回滾（保留帳號時區欄位）
 │   ├── rollback_schema_fourteen.sql # Schema 14 → 13 的文件化回滾（保留比賽目標與課表週數欄位）
 │   ├── rollback_schema_thirteen.sql # Schema 13 → 12 的文件化回滾（健行里程加回月跑量）
 │   ├── rollback_schema_twelve.sql # Schema 12 → 11 的文件化回滾
@@ -670,7 +672,8 @@ LLM_MAX_OUTPUT_TOKENS=4096
 - **運動科技風介面**：碳黑底配細格線，螢光黃綠（volt）代表距離與主要操作，青色代表金額與「目前」，數字使用 DIN 風格字體（iOS／macOS 的 DIN Alternate、Windows 的 Bahnschrift，沒有時回退系統字體），分頁與品牌使用線條 SVG 圖示
 - **淺色／深色／跟隨系統**：側欄（手機在「帳號」選單）與登入頁都可以三選一，預設跟隨裝置設定，裝置切換時即時更新；偏好只存在這台裝置（SPEC-082），全域 UI 元素與所有 Chart.js 圖表（網格線、刻度文字、數據標籤、跑鞋磨耗色階）都讀同一組 CSS 主題 token 自動對應色調，偏好透過 `localStorage` 自動記憶
 - **安全的里程統計**：跑鞋與月跑量都明確區分「逐筆跑步日誌」與「歷史／手動調整」（月跑量的手動調整自 v4.1.2 起不再提供網頁編輯，資料保留），手動總數不能低於日誌合計；所有新輸入的里程與金額統一保存至小數點後兩位
-- **跑步日誌**：預設首頁，可記錄日期、公里數與鞋款並同步里程；完成日期不得晚於今天。「今天」一律以台灣時間計算，人在國外時預設日期也照台灣日曆（SPEC-093）
+- **跑步日誌**：預設首頁，可記錄日期、公里數與鞋款並同步里程；完成日期不得晚於今天。「今天」依帳號的時區計算，不看裝置所在的時區（SPEC-093）
+- **帳號時區**：每個帳號有自己的時區（IANA 名稱，新帳號與既有帳號都是 `Asia/Taipei`）。「今天」、跑步日期上限、本週／本月、連續天數、目標進度、退役預估、月報可選的月份、Strava 日期與匯出檔名都依這個時區計算；出國比賽或住在國外時，在「資料與同步」的「時區」改成當地時區（裝置在別的時區時會提供「改用這台裝置的時區」），所有裝置都跟著帳號的設定。已記錄的跑步日期是日曆日，改時區不會移動它們；時區不包含在帳號備份 JSON 中，匯入備份不會改變接收帳號的時區（SPEC-147）
 - **今天穿哪雙**：跑步表單下方依休息天數建議現役鞋（快到退役里程的鞋排最後），可一鍵選入
 - **比賽準備**：訓練分析分頁可設定一個目標賽事（日期、距離、目標時間，選填參考成績與當天氣溫）。目標時間與參考成績時間同樣可以只打數字（`15959` → `1:59:59`）；目標存在帳號裡，換裝置也在，直到修改或刪除。依參考成績以 Riegel 公式預估完賽時間（參考成績在 25°C 以上會標示偏保守）；以目標配速為基準把每次跑步分成輕鬆（慢 45 秒以上）、穩定、比賽配速（快 10 秒到慢 15 秒）與更快，顯示近 8 週的時間占比；以比賽距離 75% 為長距離門檻，檢查近 8 週次數（建議至少 2 次）、最長一次與近 12 週每週最長一次，並提示最後一次長距離的期限（賽前 14 天）。配速趨勢依強度上色並畫出目標配速，配速軸越上面越快（SPEC-065）
 - **個人最佳**：訓練分析分頁在比賽準備上方列出 5K、10K、15K、半馬的最佳時間、配速、日期與鞋款，以及第 2、3 名；不分年份，只算有時間的路跑，時間是移動時間。紀錄只有總距離與總時間，所以比較長的跑步以那次的平均配速換算成該距離（例如一場半馬也能是 5K 最佳），實際分段可能更快；每一筆都標出那次跑步的日期與實際距離；GPS 量短 1% 以內仍算。按「設為比賽參考成績」會打開比賽設定並帶入距離與時間，按「儲存」才更新預估完賽（SPEC-136）
@@ -683,7 +686,7 @@ LLM_MAX_OUTPUT_TOKENS=4096
 - **Strava 歷史匯入**：從 Strava 匯出的 `activities.csv` 預覽並批次匯入跑步活動與移動時間，依活動 ID 去重，支援匯入前逐鞋款配對；重新匯入可替既有紀錄補上跑步時間；CSV 與資料庫工作在 worker thread 順序執行，HTTP 仍等待交易完成，不是背景佇列
 - **帳號與註冊**：註冊預設需要邀請碼（`REGISTRATION_MODE=invite`，也可設為 open 或 closed）。管理員（`ADMIN_USERNAMES`）在側邊欄的「邀請碼管理」（只有管理員看得到）產生邀請碼：可自訂好記的邀請碼（4～20 個英文字母或數字，不分大小寫；留空自動產生 8 碼），並設備註、使用次數（最多 20）與有效天數（最多 90），邀請碼只在產生時顯示一次，伺服器只存雜湊；也可以替忘記密碼的人產生一次性的臨時密碼，對方的登入會全部失效。帳號名稱不分英文字母大小寫。任何人都可以在「資料與同步」更改密碼（知道目前密碼時；忘記密碼請用登入頁的「忘記密碼？」），或輸入密碼後永久刪除自己的帳號與所有資料（管理員帳號不能刪除，要先從 `ADMIN_USERNAMES` 移除；尚未註冊的管理員名稱只有全新部署的第一個帳號能註冊，SPEC-085、SPEC-093）；手機遺失或懷疑別人登入過時，可以在「資料與同步」按「登出所有裝置」（SPEC-088）；登入與註冊頁有隱私說明（SPEC-075）
 - **新帳號引導**：新帳號的跑步頁最上方有「開始使用：三個步驟」：新增第一雙鞋、記錄跑步或匯入 Strava、設定月目標，每步都有直接開啟表單的按鈕，完成會打勾；三步都完成或按「略過引導」（只記在這台裝置）後不再顯示（SPEC-084）
-- **密碼變更通知**：綁定 email 的帳號在更改密碼、用 email 驗證碼重設或管理員產生臨時密碼後，會收到通知信（帳號、台灣時間、方式；不是本人操作時用「忘記密碼？」重設）（SPEC-083）
+- **密碼變更通知**：綁定 email 的帳號在更改密碼、用 email 驗證碼重設或管理員產生臨時密碼後，會收到通知信（帳號、以帳號時區顯示的時間、方式；不是本人操作時用「忘記密碼？」重設）（SPEC-083）
 - **Email 找回密碼**：在「資料與同步」綁定 email（輸入寄到信箱的 6 位數驗證碼才會綁定），忘記密碼時在登入頁「忘記密碼？」用帳號或 email 收驗證碼並設定新密碼，舊的登入全部失效。驗證碼 10 分鐘內有效、每組最多試 5 次，每個帳號每天最多試 10 次（重寄不重算，SPEC-085），只存 HMAC；不論帳號是否存在都顯示同樣訊息，寄送次數有限制。需要 `SMTP_USERNAME`／`SMTP_PASSWORD`（專用 Gmail 與應用程式密碼）；沒設定時 Email 區塊隱藏，「忘記密碼」會提示找管理員產生臨時密碼（SPEC-079）
 - **資料匯出與備份**：跑鞋可匯出 **XLSX / CSV**，並可下載不含密碼或 token 的完整 JSON 帳號備份（跑鞋、日誌、月跑量、目標、目標賽事與課表週數、月報與 Strava 匯入摘要）
 - **AI 跑鞋推薦助手**：依你的實際資料給換鞋與選鞋建議（需設定 OpenRouter API Key），可從本日熱門、免費且支援工具呼叫的模型中選擇
@@ -751,7 +754,7 @@ LLM_MAX_OUTPUT_TOKENS=4096
 
 匯入前可逐組選擇現有鞋款；名稱只有一個相符候選時會自動配對，也可以把多個 Strava 裝備配到同一雙 Dashboard 跑鞋。如果同品牌型號有多雙，系統不會猜測，請依購買日期手動選擇。沒有鞋款或無法辨識的裝備可以選擇略過。
 
-Strava 匯出的活動時間是 UTC，系統會換算成台灣日期：清晨 6:30 的跑步（UTC 前一天 22:30）記在當天，不會跑到前一天或上個月。繁中匯出的「凌晨、清晨、上午、中午、下午、晚上」等時段都會換算（SPEC-063）。v4.7.0 以前匯入的紀錄只取了 UTC 日期；用涵蓋那段時間的匯出檔重新預覽時，會顯示「另有 N 筆既有紀錄的日期會依台灣時間修正」，匯入時一併修正並把里程移到正確月份。只修正仍停在舊 UTC 日期的紀錄，自己改過日期的不會被覆蓋。
+Strava 匯出的活動時間是 UTC，系統會換算成帳號時區的日期（預設台灣）：清晨 6:30 的跑步（UTC 前一天 22:30）記在當天，不會跑到前一天或上個月。繁中匯出的「凌晨、清晨、上午、中午、下午、晚上」等時段都會換算（SPEC-063）。v4.7.0 以前匯入的紀錄只取了 UTC 日期；用涵蓋那段時間的匯出檔重新預覽時，會顯示「另有 N 筆既有紀錄的日期會依台灣時間修正」，匯入時一併修正並把里程移到正確月份。只修正仍停在舊 UTC 日期的紀錄，自己改過日期的不會被覆蓋；帳號時區不是 `Asia/Taipei` 時不做這項修正，因為無法分辨舊 UTC 日期與當地日期（SPEC-147）。
 
 匯入時會讀取「移動時間」（`Moving Time`，沒有時用「經過時間」）作為跑步時間，配速與 Strava 顯示的一致。時間缺漏或換算配速不合理（每公里快於 1:00，或跑步慢於 60:00、健行與步行慢於 120:00）時，活動照常匯入，只是沒有配速。先前匯入、還沒有時間的紀錄，用同一份 CSV 重新預覽會顯示「另有 N 筆既有紀錄會補上跑步時間」，匯入時只補上缺少的時間，已有的時間（包括手動填的）不會被覆蓋；只需要補時間、沒有新活動時也可以按匯入（SPEC-060）。
 
@@ -963,7 +966,7 @@ Playwright／Chromium／WebKit 齊全時，也會執行版面測試。
 避免每次停止都重跑。Hook 不會呼叫其他模型、外部 API，或傳送提示、diff、原始碼與測試輸出。
 GitHub Actions 仍會在 push／pull request 執行 `verify`，並以三個可獨立重跑的 browser jobs 執行完整版面矩陣、真實 CRUD E2E 與 PWA 升級／離線測試；push 到 main 時再依序快照、部署、檢查並發版（見「日常開發流程、自動部署與發版」）；Dependabot 每月以單一 PR 合併 GitHub Actions 更新；Python 只接收安全性更新 PR，例行升級依下方 `uv pip compile --universal` 步驟手動重編鎖定檔（Dependabot 產生的鎖定檔會遺失 Windows 條件）。
 
-本次驗證基線為 Python **865 passed**、前端回歸測試 **281 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
+本次驗證基線為 Python **882 passed**、前端回歸測試 **286 passed**；測試數量會隨功能與修正持續增加，實際結果以 `python3 scripts/task.py verify` 與 CI 當次輸出為準。
 版面檢查涵蓋 WebKit／Chromium、亮／暗模式與 10 組直橫向尺寸，共 40 組設定，檢查四個功能分頁與月報、三個認證表單、圖表、全部彈窗、行內編輯、停用／錯誤及空資料狀態。
 
 主要表單、工具列與彈窗操作統一為 44px 控制項；桌面表格內的緊湊操作為 36px，手機至少 44px。
@@ -1349,7 +1352,8 @@ venv/bin/python -m backend.run
 | 帳號 | `POST /api/auth/register` | 註冊帳號；邀請制時需要 `invite_code`（受註冊總數與頻率限制） |
 | 帳號 | `POST /api/auth/login` | 登入並取得 7 天有效的 Bearer token |
 | 帳號 | `POST /api/auth/refresh` | 以仍有效的 token 換一個新的 7 天 token；登入滿 30 天後不再延長，需重新輸入密碼 |
-| 帳號 | `GET /api/auth/me` | 取得目前登入的帳號 |
+| 帳號 | `GET /api/auth/me` | 取得目前登入的帳號（含 `timezone`） |
+| 帳號 | `PUT /api/auth/timezone` | 設定帳號時區（IANA 名稱，例如 `Asia/Tokyo`），回傳新時區與該時區的今天 |
 | 帳號 | `POST /api/auth/change-password` | 以舊密碼更換密碼；舊 token 立即失效 |
 | 帳號 | `POST /api/auth/logout-all` | 登出所有裝置（包括這一台），密碼不變 |
 | 帳號 | `POST /api/auth/delete-account` | 輸入密碼後永久刪除帳號與所有資料（管理員帳號不能刪除） |

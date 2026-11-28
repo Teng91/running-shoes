@@ -2,7 +2,7 @@
 
 import json
 
-from backend import agent
+from backend import agent, clock
 from backend.models import MonthlyMileage, Run, Shoe, User
 from backend.tools import db_tools
 
@@ -379,7 +379,7 @@ def test_native_statistics_tools_reuse_read_models_and_stay_user_scoped(db, user
                 Run(user_id=user.id, shoe_id=mine.id, date="2025-10-05", km=10),
                 Run(user_id=other.id, shoe_id=theirs.id, date="2026-10-06", km=99)])
     db.commit()
-    monkeypatch.setattr(db_tools, "local_today", lambda: date(2026, 10, 14))
+    monkeypatch.setattr(db_tools, "account_today", lambda db, user_id: date(2026, 10, 14))
 
     goal = _result(db_tools.running_goal_progress(db, user.id))
     assert (goal["tool"], goal["year"], goal["ytd_km"], goal["yearly_km"]) == ("running_goal_progress", 2026, 21.1, 1200)
@@ -409,7 +409,7 @@ def test_native_statistics_tools_validate_the_year_argument(seeded_db):
     db, uid = seeded_db
     for year in ("2026", True, 1800, 2200, None):
         out = _result(agent_tools.execute_tool("year_review", {"year": year}, db, uid))
-        assert out["tool"] == "year_review" and out["year"] == db_tools.local_today().year
+        assert out["tool"] == "year_review" and out["year"] == clock.local_today().year
     assert _result(agent_tools.execute_tool("training_trends", {"year": 2025}, db, uid))["year"] == 2025
     assert {tool["function"]["name"] for tool in db_tools.TOOL_DEFINITIONS} >= {
         "running_goal_progress", "training_trends", "year_review", "spending_summary"}

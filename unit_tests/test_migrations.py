@@ -282,7 +282,7 @@ def test_startup_drops_only_empty_legacy_tables():
         assert connection.execute(text("SELECT value FROM app_settings")).scalar_one() == "row"
         assert connection.execute(text(
             "SELECT value FROM schema_metadata WHERE key = 'schema_version'"
-        )).scalar_one() == "14"
+        )).scalar_one() == "15"
 
 
 def test_startup_adds_the_shoe_owner_index_to_older_databases():
@@ -353,7 +353,7 @@ def test_schema_thirteen_defaults_runs_to_road(tmp_path):
         shoe_before = connection.execute(text("SELECT mileage FROM shoes")).scalar()
     run_startup_migrations(engine, sessions)
     run_startup_migrations(engine, sessions)  # idempotent
-    assert schema_version(engine) == 14
+    assert schema_version(engine) == 15
     with engine.connect() as connection:
         assert connection.execute(text("SELECT DISTINCT activity_type FROM runs")).scalars().all() == ["road"]
         assert connection.execute(text("SELECT mileage FROM shoes")).scalar() == shoe_before == 16.5
@@ -382,6 +382,7 @@ def test_rollback_schema_thirteen_restores_hike_mileage(tmp_path):
     script = Path("scripts/rollback_schema_thirteen.sql").read_text(encoding="utf-8")
     connection = engine.raw_connection()
     try:
+        connection.executescript(Path("scripts/rollback_schema_fifteen.sql").read_text(encoding="utf-8"))
         connection.executescript(Path("scripts/rollback_schema_fourteen.sql").read_text(encoding="utf-8"))
         connection.executescript(script)
         with pytest.raises(Exception, match="CHECK constraint failed"):
@@ -398,7 +399,7 @@ def test_rollback_schema_thirteen_restores_hike_mileage(tmp_path):
         )).scalar() == 1
 
     run_startup_migrations(engine, sessions)
-    assert schema_version(engine) == 14
+    assert schema_version(engine) == 15
     assert (_month_km(engine, user_id, 10), _month_km(engine, user_id, 11)) == (10, 0)
     assert _month_km(engine, other_id, 10) == 3
     with engine.connect() as connection:
@@ -421,6 +422,7 @@ def test_rollback_schema_thirteen_restores_walk_mileage(tmp_path):
     assert _month_km(engine, user_id, 10) == 10
     connection = engine.raw_connection()
     try:
+        connection.executescript(Path("scripts/rollback_schema_fifteen.sql").read_text(encoding="utf-8"))
         connection.executescript(Path("scripts/rollback_schema_fourteen.sql").read_text(encoding="utf-8"))
         connection.executescript(Path("scripts/rollback_schema_thirteen.sql").read_text(encoding="utf-8"))
     finally:
@@ -440,7 +442,7 @@ def test_schema_fourteen_adds_plan_weeks_and_rolls_back_keeping_goals(tmp_path):
 
     engine, sessions = _file_engine(tmp_path, "rollback14.sqlite")
     run_startup_migrations(engine, sessions)
-    assert schema_version(engine) == 14
+    assert schema_version(engine) == 15
     user_id, _ = _account(sessions, "rollback14-owner")
     with engine.begin() as connection:
         connection.execute(text(
@@ -450,6 +452,7 @@ def test_schema_fourteen_adds_plan_weeks_and_rolls_back_keeping_goals(tmp_path):
     script = Path("scripts/rollback_schema_fourteen.sql").read_text(encoding="utf-8")
     connection = engine.raw_connection()
     try:
+        connection.executescript(Path("scripts/rollback_schema_fifteen.sql").read_text(encoding="utf-8"))
         connection.executescript(script)
         with pytest.raises(Exception, match="CHECK constraint failed"):
             connection.executescript(script)
@@ -458,7 +461,56 @@ def test_schema_fourteen_adds_plan_weeks_and_rolls_back_keeping_goals(tmp_path):
         connection.close()
     assert schema_version(engine) == 13
     run_startup_migrations(engine, sessions)
-    assert schema_version(engine) == 14
+    assert schema_version(engine) == 15
     with engine.connect() as connection:
         assert connection.execute(text("SELECT plan_weeks FROM race_goals WHERE user_id = :u"), {"u": user_id}).scalar() == 10
+    engine.dispose()
+
+
+def _account_zone(engine, user_id):
+    with engine.connect() as connection:
+        return connection.execute(text("SELECT timezone FROM users WHERE id = :u"), {"u": user_id}).scalar()
+
+
+def test_schema_fifteen_starts_accounts_in_taipei_and_rolls_back_keeping_their_zones(tmp_path):
+    """SPEC-147 AC-1: a schema-14 account starts in Asia/Taipei; the rollback keeps every saved zone."""
+    from pathlib import Path
+
+    from backend.migrations import schema_version
+
+    engine, sessions = _file_engine(tmp_path, "rollback15.sqlite")
+    run_startup_migrations(engine, sessions)
+    user_id, _ = _account(sessions, "rollback15-owner")
+    other_id, _ = _account(sessions, "rollback15-other")
+    # The same database as schema-14 code left it: no zone column.
+    with engine.begin() as connection:
+        connection.exec_driver_sql("ALTER TABLE users DROP COLUMN timezone")
+        connection.exec_driver_sql("UPDATE schema_metadata SET value = '14' WHERE key = 'schema_version'")
+    run_startup_migrations(engine, sessions)
+    assert schema_version(engine) == 15
+    assert (_account_zone(engine, user_id), _account_zone(engine, other_id)) == ("Asia/Taipei", "Asia/Taipei")
+
+    with engine.begin() as connection:
+        connection.execute(text("UPDATE users SET timezone = 'Asia/Tokyo' WHERE id = :u"), {"u": user_id})
+    script = Path("scripts/rollback_schema_fifteen.sql").read_text(encoding="utf-8")
+    connection = engine.raw_connection()
+    try:
+        connection.executescript(script)
+        with pytest.raises(Exception, match="CHECK constraint failed"):
+            connection.executescript(script)
+        connection.rollback()
+    finally:
+        connection.close()
+    assert schema_version(engine) == 14
+    # Schema-14 code creates accounts without naming the column; they get the default zone.
+    with engine.begin() as connection:
+        connection.execute(text(
+            "INSERT INTO users (username, hashed_password, created_at, token_version, backup_id, data_revision) "
+            "VALUES ('schema14-new', 'synthetic', '2026-11-28 00:00:00', 0, 'b14', 0)"
+        ))
+        new_id = connection.execute(text("SELECT id FROM users WHERE username = 'schema14-new'")).scalar()
+    run_startup_migrations(engine, sessions)
+    assert schema_version(engine) == 15
+    assert _account_zone(engine, user_id) == "Asia/Tokyo", "the upgrade reuses the saved zone"
+    assert (_account_zone(engine, other_id), _account_zone(engine, new_id)) == ("Asia/Taipei", "Asia/Taipei")
     engine.dispose()

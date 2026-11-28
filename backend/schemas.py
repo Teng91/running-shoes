@@ -15,7 +15,7 @@ from pydantic import (
     model_validator,
 )
 
-from backend.clock import local_today
+from backend.clock import DEFAULT_TIMEZONE, MAX_TIMEZONE_LENGTH, is_timezone_name, latest_today
 from backend.run_metrics import (
     MAX_RUN_DURATION_SECONDS,
     is_plausible_duration,
@@ -42,6 +42,7 @@ MAX_AGENT_CONTEXT_CHARS = 60_000
 Username = Annotated[str, Field(min_length=1, max_length=50)]
 ShoeName = Annotated[str, Field(min_length=1, max_length=100)]
 ShoeSize = Annotated[str, Field(max_length=50)]
+FUTURE_RUN_DATE = "run date must not be in the future"
 
 
 def serialize_utc_timestamp(value: datetime) -> str:
@@ -85,11 +86,15 @@ def _validate_iso_date(value: str) -> str:
     return value
 
 
-def validate_completed_run_date(value: str) -> str:
+def validate_completed_run_date(value: str, today: calendar_date | None = None) -> str:
+    """A run date on or before `today`, the account's calendar day (SPEC-147).
+
+    A request schema does not know the account, so without `today` it rejects only a date
+    after every zone's today; the run service then checks the account's own today.
+    """
     value = _validate_iso_date(value)
-    today = local_today()
-    if calendar_date.fromisoformat(value) > today:
-        raise ValueError("run date must not be in the future")
+    if calendar_date.fromisoformat(value) > (today or latest_today()):
+        raise ValueError(FUTURE_RUN_DATE)
     return value
 
 
@@ -121,6 +126,26 @@ class UserOut(BaseModel):
     username: str
     is_admin: bool = False
     email: str | None = None
+    # SPEC-147: the IANA zone of the account's calendar.
+    timezone: str = DEFAULT_TIMEZONE
+
+
+def _validate_timezone(value: str) -> str:
+    if not is_timezone_name(value):
+        raise ValueError("timezone must be an IANA time zone name such as Asia/Taipei")
+    return value
+
+
+class TimezoneUpdate(BaseModel):
+    """SPEC-147: the zone that decides the account's "today", months and run-date limit."""
+    model_config = ConfigDict(extra="forbid")
+    timezone: Annotated[str, Field(min_length=1, max_length=MAX_TIMEZONE_LENGTH), AfterValidator(_validate_timezone)]
+
+
+class TimezoneOut(BaseModel):
+    timezone: str
+    # The account's calendar day in that zone, so a client can tell it the change took.
+    today: str
 
 
 class RegistrationOut(BaseModel):

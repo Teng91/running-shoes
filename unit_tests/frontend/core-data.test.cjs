@@ -10,7 +10,7 @@ require('node:test').before(async () => {
 // The real app-lifecycle.js, app-state.js and app-resources.js, with the native store installed.
 function bridgeContext() {
   const context = nodeVm.createContext({ document: { getElementById: () => null, querySelectorAll: () => [] },
-    localStorage: { getItem: () => null, setItem() {}, removeItem() {} }, console });
+    localStorage: { getItem: () => null, setItem() {}, removeItem() {} }, console, window: new EventTarget() });
   for (const file of ['app-lifecycle.js', 'app-state.js', 'app-resources.js']) {
     nodeVm.runInContext(readText('frontend/' + file), context, { filename: file });
   }

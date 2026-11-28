@@ -11,7 +11,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend import agent, llm, models, rate_limits, schemas
-from backend.clock import APP_TIMEZONE
+from backend.clock import DEFAULT_TIMEZONE
 from backend.credentials import get_password_hash
 from backend.dependencies import get_db
 from backend.main import app
@@ -46,11 +46,11 @@ def _login(client, username):
 
 
 def test_frontend_calendar_mirrors_the_backend_time_zone():
-    """AC-1: the browser computes "today" in the same fixed zone as backend/clock.py."""
-    offset = APP_TIMEZONE.utcoffset(None)
-    assert offset is not None
+    """AC-1 (SPEC-147): until the account's zone arrives, the browser counts "today" in the same
+    default zone as backend/clock.py, and never with a fixed offset."""
     state = (ROOT / "frontend" / "app-state.js").read_text(encoding="utf-8")
-    assert f"const APP_UTC_OFFSET_MINUTES = {int(offset.total_seconds() // 60)};" in state
+    assert f"const DEFAULT_ACCOUNT_TIMEZONE = '{DEFAULT_TIMEZONE}';" in state
+    assert "APP_UTC_OFFSET_MINUTES" not in state
     sources = "\n".join(path.read_text(encoding="utf-8") for path in (ROOT / "frontend").glob("app-*.js"))
     # Calendar days never come from the device's zone; timestamps for display may.
     assert not re.search(r"new Date\(\)\.get(FullYear|Month|Date)\(", sources)

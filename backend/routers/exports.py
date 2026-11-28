@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from backend import models
 from backend.auth import get_current_user
+from backend.clock import zone_for
 from backend.dependencies import get_db
 from backend.routers.errors import service_errors
 from backend.services import exports as export_service
@@ -36,7 +37,7 @@ def export_shoes(
 ):
     try:
         export_file = export_service.build_shoe_export(
-            format, mode, current_user.id, db
+            format, mode, current_user.id, db, zone=zone_for(current_user)
         )
     except export_service.NoExportRowsError as exc:
         raise HTTPException(status_code=404, detail="沒有可匯出的跑鞋資料") from exc

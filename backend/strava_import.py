@@ -7,9 +7,10 @@ import re
 from collections.abc import Sequence
 from datetime import UTC, date, datetime
 from typing import cast
+from zoneinfo import ZoneInfo
 
 from backend import schemas
-from backend.clock import APP_TIMEZONE
+from backend.clock import DEFAULT_TIMEZONE, DEFAULT_ZONE, local_today
 from backend.run_metrics import counts_toward_training, is_plausible_duration
 
 
@@ -116,18 +117,19 @@ def _calendar_date(text_value: str) -> date:
     raise ValueError("invalid date")
 
 
-def parse_activity_dates(value: str) -> tuple[str, str]:
-    """Return (application calendar date, UTC calendar date) for one activity.
+def parse_activity_dates(value: str, zone: ZoneInfo = DEFAULT_ZONE) -> tuple[str, str]:
+    """Return (account calendar date, UTC calendar date) for one activity.
 
     Strava's bulk export writes Activity Date in UTC: a 06:00 run in Taipei is
-    22:00 UTC on the previous day. The run belongs to the local calendar day.
-    The UTC date is what versions before SPEC-047 stored, and identifies runs
-    that a re-import may correct. A value without a time is used as-is.
+    22:00 UTC on the previous day. The run belongs to the calendar day of the
+    account's zone (SPEC-147). The UTC date is what versions before SPEC-047
+    stored, and identifies runs that a re-import may correct. A value without a
+    time is used as-is.
     """
     text_value = value.strip()
     stamp = _utc_timestamp(text_value)
     if stamp is not None:
-        return stamp.astimezone(APP_TIMEZONE).date().isoformat(), stamp.date().isoformat()
+        return stamp.astimezone(zone).date().isoformat(), stamp.date().isoformat()
     day = _calendar_date(text_value).isoformat()
     return day, day
 
@@ -163,7 +165,9 @@ def parse_csv(
     raw: bytes,
     *,
     max_rows: int,
+    zone: ZoneInfo = DEFAULT_ZONE,
 ) -> tuple[list[dict[str, object]], int, list[str]]:
+    """Rows dated on the calendar of `zone`, the account's zone (SPEC-147)."""
     try:
         csv_text = raw.decode("utf-8-sig")
     except UnicodeDecodeError as exc:
@@ -177,6 +181,7 @@ def parse_csv(
     rows: list[dict[str, object]] = []
     invalid = 0
     warnings: list[str] = []
+    today = local_today(zone)
     try:
         for row_number, row in enumerate(reader, start=1):
             if row_number > max_rows:
@@ -184,7 +189,7 @@ def parse_csv(
             activity_type = STRAVA_ACTIVITY_TYPES.get((row.get(fields["type"] or "") or "").strip())
             if activity_type is None:
                 continue
-            parsed = _activity_row(row, fields, activity_type)
+            parsed = _activity_row(row, fields, activity_type, zone, today)
             if parsed is None:
                 invalid += 1
             else:
@@ -196,12 +201,14 @@ def parse_csv(
     return rows, invalid, warnings
 
 
-def _activity_row(row: dict, fields: dict[str, str | None], activity_type: str) -> dict[str, object] | None:
+def _activity_row(
+    row: dict, fields: dict[str, str | None], activity_type: str, zone: ZoneInfo, today: date
+) -> dict[str, object] | None:
     """One supported activity as a run row, or None when its ID, date or distance is unusable."""
     try:
         activity_id = (row.get(fields["id"] or "") or "").strip()
-        date_value, utc_date = parse_activity_dates(row.get(fields["date"] or "") or "")
-        schemas.validate_completed_run_date(date_value)
+        date_value, utc_date = parse_activity_dates(row.get(fields["date"] or "") or "", zone)
+        schemas.validate_completed_run_date(date_value, today)
         distance_m = float((row.get(fields["distance"] or "") or "").replace(",", "").strip())
         km = round(distance_m / 1000, 2)
         if (
@@ -221,7 +228,10 @@ def _activity_row(row: dict, fields: dict[str, str | None], activity_type: str) 
         "strava_id": activity_id[:100],
         "duration_seconds": duration,
         "date": date_value,
-        "utc_date": utc_date,
+        # Runs stored on the UTC date come from imports before SPEC-047, made when every account
+        # used Taiwan time. Only an account still in that zone can tell them apart from runs
+        # dated in its own zone, so only there does a re-import correct them (SPEC-147).
+        "utc_date": utc_date if zone.key == DEFAULT_TIMEZONE else date_value,
         "km": km,
         "gear": (row.get(fields["gear"] or "") or "").strip(),
         "activity_type": activity_type,

@@ -5,12 +5,12 @@ from datetime import date
 from sqlalchemy.orm import Session
 
 from backend import models
-from backend.clock import local_today
+from backend.read_models.account_clock import account_today
 from backend.read_models.rounding import round_metric
 
 
 def spending_summary(db: Session, user_id: int, *, today: date | None = None) -> dict:
-    as_of = today or local_today()
+    as_of = today or account_today(db, user_id)
     shoes = (
         db.query(models.Shoe)
         .filter(

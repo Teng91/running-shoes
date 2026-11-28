@@ -204,6 +204,8 @@ def test_lifespan_repairs_partial_owner_migration_when_users_table_exists():
             assert conn.execute(text("SELECT user_id FROM shoes")).scalar_one() == 1
             assert conn.execute(text("SELECT version FROM shoes")).scalar_one() == 0
             assert conn.execute(text("SELECT token_version FROM users")).scalar_one() == 0
+            # SPEC-147: the owner lookup reads users through the ORM, which needs the zone column.
+            assert conn.execute(text("SELECT timezone FROM users")).scalar_one() == "Asia/Taipei"
     finally:
         asyncio.run(context.__aexit__(None, None, None))
 

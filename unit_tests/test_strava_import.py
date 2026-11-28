@@ -34,7 +34,7 @@ def test_strava_worker_keeps_event_loop_responsive(monkeypatch, action):
     worker_threads = []
     session = object()
 
-    def parse(raw, max_rows):
+    def parse(raw, max_rows, zone):
         worker_threads.append(threading.get_ident())
         assert threading.get_ident() != loop_thread
         assert raw == b"mock csv"
