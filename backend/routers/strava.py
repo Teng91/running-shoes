@@ -5,6 +5,7 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from threading import Lock
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from sqlalchemy.orm import Session
@@ -12,6 +13,7 @@ from starlette.concurrency import run_in_threadpool
 
 from backend import models, schemas, strava_import
 from backend.auth import get_current_user
+from backend.clock import DEFAULT_ZONE, zone_for
 from backend.dependencies import get_db, get_settings
 from backend.rate_limits import enforce_strava_upload_limits
 from backend.read_models.runs import recent_strava_imports
@@ -38,9 +40,11 @@ def strava_upload_slot(request: Request) -> Iterator[None]:
         slot.release()
 
 
-def _parse_strava_csv(raw: bytes, max_rows: int) -> tuple[list[dict[str, object]], int, list[str]]:
+def _parse_strava_csv(
+    raw: bytes, max_rows: int, zone: ZoneInfo = DEFAULT_ZONE
+) -> tuple[list[dict[str, object]], int, list[str]]:
     try:
-        return strava_import.parse_csv(raw, max_rows=max_rows)
+        return strava_import.parse_csv(raw, max_rows=max_rows, zone=zone)
     except strava_import.InvalidCSVError as exc:
         raise HTTPException(status_code=413 if exc.row_limit else 400, detail=str(exc)) from exc
 
@@ -71,10 +75,10 @@ def _parsed_mapping(raw_mapping: str) -> dict[str, Any]:
     return parsed
 
 
-def _preview_upload(db: Session, user_id: int, raw: bytes, start_date: str, end_date: str, config: Settings,
-                    include_walks_hikes: bool = False):
+def _preview_upload(db: Session, user_id: int, zone: ZoneInfo, raw: bytes, start_date: str, end_date: str,
+                    config: Settings, include_walks_hikes: bool = False):
     """One sequential worker owns CSV parsing and all request-session DB work."""
-    rows, invalid, warnings = _parse_strava_csv(raw, config.max_strava_csv_rows)
+    rows, invalid, warnings = _parse_strava_csv(raw, config.max_strava_csv_rows, zone)
     rows, filtered_out = _filter_strava_rows(rows, start_date, end_date)
     rows, walk_hike_count, walk_hike_km = strava_import.split_shoe_only(rows, include_walks_hikes)
     result = strava_imports.preview(db, user_id, rows, invalid, warnings)
@@ -99,11 +103,11 @@ def _conflict_choices(raw_choices: str) -> dict[str, object]:
     return parsed
 
 
-def _import_upload(db: Session, user_id: int, raw: bytes, mapping: str, start_date: str, end_date: str,
-                   config: Settings, conflicts: str = "{}", include_walks_hikes: bool = False):
+def _import_upload(db: Session, user_id: int, zone: ZoneInfo, raw: bytes, mapping: str, start_date: str,
+                   end_date: str, config: Settings, conflicts: str = "{}", include_walks_hikes: bool = False):
     parsed_mapping = _parsed_mapping(mapping)
     choices = _conflict_choices(conflicts)
-    rows, invalid, _ = _parse_strava_csv(raw, config.max_strava_csv_rows)
+    rows, invalid, _ = _parse_strava_csv(raw, config.max_strava_csv_rows, zone)
     rows, filtered_out = _filter_strava_rows(rows, start_date, end_date)
     rows, walk_hike_count, _ = strava_import.split_shoe_only(rows, include_walks_hikes)
     try:
@@ -158,7 +162,8 @@ async def preview_strava_import(
         await run_in_threadpool(enforce_strava_upload_limits, request, user_id)
         raw = await _read_strava_upload(file, config.max_strava_csv_bytes)
         return await run_in_threadpool(
-            _preview_upload, db, user_id, raw, start_date, end_date, config, include_walks_hikes
+            _preview_upload, db, user_id, zone_for(current_user), raw, start_date, end_date, config,
+            include_walks_hikes,
         )
 
 
@@ -180,7 +185,8 @@ async def import_strava_runs(
         await run_in_threadpool(enforce_strava_upload_limits, request, user_id)
         raw = await _read_strava_upload(file, config.max_strava_csv_bytes)
         return await run_in_threadpool(
-            _import_upload, db, user_id, raw, mapping, start_date, end_date, config, conflicts, include_walks_hikes
+            _import_upload, db, user_id, zone_for(current_user), raw, mapping, start_date, end_date, config,
+            conflicts, include_walks_hikes,
         )
 
 

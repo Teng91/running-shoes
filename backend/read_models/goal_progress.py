@@ -6,7 +6,7 @@ from datetime import date
 from sqlalchemy.orm import Session
 
 from backend import models
-from backend.clock import local_today
+from backend.read_models.account_clock import account_today
 from backend.read_models.rounding import round_metric
 from backend.read_models.run_statistics import (
     monthly_run_distances,
@@ -52,7 +52,7 @@ def goal_progress(
     """Return goal progress through the requested report month."""
     goal = goal_values(db, user_id)
     active = year >= goal["start_year"]
-    today = as_of or local_today()
+    today = as_of or account_today(db, user_id)
     selected = (year, month)
     current = (today.year, today.month)
     totals = distances if distances is not None else period_distances(
@@ -116,7 +116,7 @@ def year_goal_overview(
     db: Session, user_id: int, year: int, *, as_of: date | None = None
 ) -> dict:
     """Annual goal progress with every month's logged distance against the monthly target."""
-    today = as_of or local_today()
+    today = as_of or account_today(db, user_id)
     if year < today.year:
         year_state, focus_month, elapsed = "past", 12, days_in_year(year)
     elif year > today.year:

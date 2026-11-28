@@ -106,7 +106,7 @@ def test_batch_forecast_is_scoped_bounded_and_matches_analysis(db, user_with_tok
     ])
     db.commit()
     as_of = date(2026, 10, 19)
-    monkeypatch.setattr(forecasting, "local_today", lambda: as_of)
+    monkeypatch.setattr(forecasting, "account_today", lambda db, user_id: as_of)
     queries = []
 
     def count_query(*args):

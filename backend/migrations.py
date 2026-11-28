@@ -10,10 +10,11 @@ from sqlalchemy.orm import Session
 
 from backend import models
 from backend.audit_schema import install_audit_triggers
+from backend.clock import DEFAULT_TIMEZONE, MAX_TIMEZONE_LENGTH
 from backend.credentials import get_password_hash
 from backend.database import Base
 
-CURRENT_SCHEMA_VERSION = 14
+CURRENT_SCHEMA_VERSION = 15
 
 
 def _migrate_preview_tokens(engine: Engine) -> None:
@@ -180,6 +181,17 @@ def _migrate_schema_fourteen(engine: Engine) -> None:
             connection.exec_driver_sql("ALTER TABLE race_goals ADD COLUMN plan_weeks INTEGER")
 
 
+# SPEC-147: every existing account keeps the one calendar the service used before.
+_ADD_USER_TIMEZONE = f"ALTER TABLE users ADD COLUMN timezone VARCHAR({MAX_TIMEZONE_LENGTH}) NOT NULL DEFAULT '{DEFAULT_TIMEZONE}'"
+
+
+def _migrate_schema_fifteen(engine: Engine) -> None:
+    """Per-account calendar zone (SPEC-147); existing accounts start in Asia/Taipei."""
+    with engine.begin() as connection:
+        if "timezone" not in _columns(connection, "users"):
+            connection.exec_driver_sql(_ADD_USER_TIMEZONE)
+
+
 def _ensure_lookup_indexes(engine: Engine) -> None:
     """Indexes that only speed up reads (SPEC-089).
 
@@ -279,6 +291,7 @@ def run_startup_migrations(
     _migrate_schema_twelve(engine)
     _migrate_schema_thirteen(engine, applied_version)
     _migrate_schema_fourteen(engine)
+    _migrate_schema_fifteen(engine)
     _ensure_lookup_indexes(engine)
     _sync_entity_sequences(engine)
     install_audit_triggers(engine)
@@ -328,6 +341,8 @@ def _migrate_legacy_owner(
             # The legacy owner lookup below reads users through the current ORM model (SPEC-079).
             if "email" not in columns:
                 connection.execute(text("ALTER TABLE users ADD COLUMN email VARCHAR(254)"))
+            if "timezone" not in columns:
+                connection.exec_driver_sql(_ADD_USER_TIMEZONE)
         demo_user = db.query(models.User).filter(models.User.username == "Demo").first()
         if demo_user is None:
             demo_user = models.User(

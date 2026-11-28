@@ -3,10 +3,11 @@
 Routers never import each other; HTTP helpers both need live here, like `errors.py`.
 """
 
+from datetime import UTC, datetime
+
 from fastapi import BackgroundTasks, Request
 from sqlalchemy.orm import Session
 
-from backend.clock import local_now
 from backend.mailer import deliver_later
 from backend.services import email_codes
 
@@ -17,4 +18,4 @@ def notify_password_changed(request: Request, background: BackgroundTasks, db: S
     mailer = request.app.state.mailer
     if mailer is not None:
         email_codes.notify_password_changed(db, identifier, how, send=deliver_later(mailer, background.add_task),
-                                            when=local_now())
+                                            when=datetime.now(UTC))

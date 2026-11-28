@@ -5,7 +5,6 @@ from collections.abc import Callable
 
 from sqlalchemy.orm import Session
 
-from backend.clock import local_today
 from backend.read_models import (
     goal_progress,
     highlights,
@@ -15,6 +14,7 @@ from backend.read_models import (
     spending,
     trends,
 )
+from backend.read_models.account_clock import account_today
 from backend.tools import legacy_calls
 from backend.tools.tool_definitions import TOOL_DEFINITIONS as TOOL_DEFINITIONS
 
@@ -83,7 +83,7 @@ SPENDING_RECENT_MONTHS = 12
 
 
 def running_goal_progress(db: Session, user_id: int, year: int | None = None) -> str:
-    today = local_today()
+    today = account_today(db, user_id)
     overview = goal_progress.year_goal_overview(db, user_id, year or today.year, as_of=today)
     return _json_result(
         "running_goal_progress",
@@ -102,7 +102,7 @@ def running_goal_progress(db: Session, user_id: int, year: int | None = None) ->
 
 
 def training_trends(db: Session, user_id: int, year: int | None = None) -> str:
-    today = local_today()
+    today = account_today(db, user_id)
     data = trends.training_trends(db, user_id, year or today.year, today)
     cumulative = data["cumulative"]
     return _json_result(
@@ -130,7 +130,7 @@ def training_trends(db: Session, user_id: int, year: int | None = None) -> str:
 
 
 def year_review(db: Session, user_id: int, year: int | None = None) -> str:
-    today = local_today()
+    today = account_today(db, user_id)
     review = highlights.year_review(db, user_id, year or today.year, today)
     names = shoes.shoe_names(db, user_id)
     for key in ("longest_run", "top_shoe"):
@@ -166,7 +166,7 @@ def spending_summary(db: Session, user_id: int) -> str:
 
 
 def race_training_plan(db: Session, user_id: int) -> str:
-    preparation = race_plan.race_preparation(db, user_id, local_today())
+    preparation = race_plan.race_preparation(db, user_id, account_today(db, user_id))
     if preparation["goal"] is None:
         return _json_result("race_training_plan", ok=True, goal=None,
                             message="尚未設定目標賽事；請到訓練分析分頁的「比賽準備」按「設定比賽」。")

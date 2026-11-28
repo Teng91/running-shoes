@@ -16,6 +16,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from backend.clock import DEFAULT_TIMEZONE, MAX_TIMEZONE_LENGTH
 from backend.database import Base
 
 
@@ -34,6 +35,10 @@ class User(Base):
     # Verified recovery address (SPEC-079); only set after the emailed code is confirmed.
     email: Mapped[str | None] = mapped_column(String(254), nullable=True)
     data_revision: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+    # SPEC-147: the IANA zone of the account's calendar ("today", months, run-date limits).
+    timezone: Mapped[str] = mapped_column(
+        String(MAX_TIMEZONE_LENGTH), default=DEFAULT_TIMEZONE, server_default=DEFAULT_TIMEZONE, nullable=False
+    )
 
     shoes: Mapped[list["Shoe"]] = relationship(back_populates="owner")
     monthly_mileages: Mapped[list["MonthlyMileage"]] = relationship(back_populates="owner")

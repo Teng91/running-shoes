@@ -1,5 +1,7 @@
 """Spreadsheet-safe row generation for shoe exports."""
 
+from datetime import tzinfo
+
 from backend import clock, models
 from backend.shoe_metrics import shoe_metrics
 
@@ -43,7 +45,7 @@ def generate_shoe_rows(
         yield row
 
 
-def export_filename(file_format: str, mode: str) -> str:
-    # Fly machines run in UTC; filenames follow the application calendar instead.
-    timestamp = clock.local_now().strftime("%Y%m%d_%H%M%S")
+def export_filename(file_format: str, mode: str, zone: tzinfo = clock.DEFAULT_ZONE) -> str:
+    # Fly machines run in UTC; filenames follow the account's calendar instead (SPEC-147).
+    timestamp = clock.local_now(zone).strftime("%Y%m%d_%H%M%S")
     return f"running_shoes_{mode}_{timestamp}.{file_format}"

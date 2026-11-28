@@ -131,7 +131,7 @@ def test_schema_ten_rollback_keeps_the_race_goal_and_reupgrades(tmp_path):
     event.listen(engine, "connect", lambda connection, _: configure_sqlite_connection(connection))
     sessions = sessionmaker(bind=engine, autoflush=False)
     run_startup_migrations(engine, sessions)
-    assert schema_version(engine) == 14
+    assert schema_version(engine) == 15
     with sessions() as db:
         user, _ = owner(db, "rollback10")
         db.add(RaceGoal(user_id=user.id, version=1, **HALF))
@@ -139,6 +139,7 @@ def test_schema_ten_rollback_keeps_the_race_goal_and_reupgrades(tmp_path):
     script = Path("scripts/rollback_schema_ten.sql").read_text(encoding="utf-8")
     connection = engine.raw_connection()
     try:
+        connection.executescript(Path("scripts/rollback_schema_fifteen.sql").read_text(encoding="utf-8"))
         connection.executescript(Path("scripts/rollback_schema_fourteen.sql").read_text(encoding="utf-8"))
         connection.executescript(Path("scripts/rollback_schema_thirteen.sql").read_text(encoding="utf-8"))
         connection.executescript(Path("scripts/rollback_schema_twelve.sql").read_text(encoding="utf-8"))
@@ -151,7 +152,7 @@ def test_schema_ten_rollback_keeps_the_race_goal_and_reupgrades(tmp_path):
         connection.close()
     assert schema_version(engine) == 9
     run_startup_migrations(engine, sessions)
-    assert schema_version(engine) == 14
+    assert schema_version(engine) == 15
     with sessions() as db:
         assert db.query(RaceGoal).one().target_seconds == 7200
     engine.dispose()

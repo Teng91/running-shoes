@@ -62,6 +62,7 @@
   "POST /api/runs/import/strava",
   "POST /api/runs/import/strava/preview",
   "POST /api/shoes",
+  "PUT /api/auth/timezone",
   "PUT /api/monthly-mileage/{entry_id}",
   "PUT /api/race-goal",
   "PUT /api/running-goal",

@@ -32,16 +32,133 @@ async function loadRegistrationMode() {
 let adminRequestId = 0;
 
 // SPEC-077: the sidebar shows「邀請碼管理」only to admins; hidden until the server says so.
+// SPEC-147: the same answer carries the account's zone.
 async function refreshAdminEntry() {
   const entry = document.getElementById('admin-entry');
   if (!entry) return;
   const requestId = ++adminRequestId;
+  const session = captureAuthSession();
   entry.hidden = true;
   let me = null;
   try { me = await apiGet('/auth/me'); } catch { me = null; }
-  if (requestId !== adminRequestId) return;
+  if (requestId !== adminRequestId || !isCurrentAuthSession(session)) return;
   entry.hidden = !me?.is_admin;
+  if (me?.timezone) applyAccountTimeZone(me.timezone);
 }
+
+// SPEC-147: the IANA zone of the account's calendar. The server owns it (GET /auth/me,
+// PUT /auth/timezone); this device remembers the last one per account ID (SPEC-134), so an
+// offline start counts "today" the same way. app-state.js and app-dates.js hear it through
+// the window event 'account-timezone'; null means the default zone.
+let accountTimeZone = null;
+let timeZoneOptions = null;
+// Shown first in the picker; the browser's own list (when it has one) follows.
+const COMMON_TIME_ZONES = ['Asia/Taipei', 'Asia/Tokyo', 'Asia/Seoul', 'Asia/Hong_Kong', 'Asia/Shanghai',
+  'Asia/Singapore', 'Asia/Bangkok', 'Australia/Sydney', 'Pacific/Auckland', 'Europe/London', 'Europe/Paris',
+  'Europe/Berlin', 'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles',
+  'Pacific/Honolulu', 'UTC'];
+
+function timeZoneKey() {
+  const account = captureAuthSession().account;
+  return account ? `timezone:aid:${account}` : null;
+}
+
+function announceTimeZone(timeZone) {
+  accountTimeZone = timeZone;
+  window.dispatchEvent(new CustomEvent('account-timezone', { detail: { timeZone } }));
+}
+
+function applyAccountTimeZone(timeZone) {
+  if (typeof timeZone !== 'string' || !timeZone) return;
+  const key = timeZoneKey();
+  if (key) writeStoredValue(key, timeZone);
+  if (timeZone !== accountTimeZone) announceTimeZone(timeZone);
+}
+
+function restoreAccountTimeZone() {
+  const key = timeZoneKey();
+  announceTimeZone((key && readStoredValue(key)) || null);
+}
+
+function deviceTimeZone() {
+  try { return Intl.DateTimeFormat().resolvedOptions().timeZone || null; } catch { return null; }
+}
+
+// "UTC+09:00" now in that zone, or '' where the browser cannot name offsets.
+function timeZoneOffsetLabel(timeZone) {
+  try {
+    const part = new Intl.DateTimeFormat('en-US', { timeZone, timeZoneName: 'longOffset' })
+      .formatToParts(new Date()).find(item => item.type === 'timeZoneName');
+    return part ? part.value.replace(/^GMT/, 'UTC').replace(/^UTC$/, 'UTC+00:00') : '';
+  } catch {
+    return '';
+  }
+}
+
+function timeZoneChoices(current) {
+  let names = [];
+  try { names = Intl.supportedValuesOf('timeZone'); } catch { names = []; }
+  const rest = [...new Set(names)].filter(name => !COMMON_TIME_ZONES.includes(name)).sort();
+  const choices = [...COMMON_TIME_ZONES, ...rest];
+  return current && !choices.includes(current) ? [current, ...choices] : choices;
+}
+
+function renderTimeZoneSection() {
+  const select = document.getElementById('timezone-select');
+  if (!select) return;
+  const current = accountTimeZone || COMMON_TIME_ZONES[0];
+  if (!timeZoneOptions || !timeZoneOptions.includes(current)) {
+    timeZoneOptions = timeZoneChoices(current);
+    select.innerHTML = timeZoneOptions.map(name => {
+      const offset = timeZoneOffsetLabel(name);
+      return `<option value="${esc(name)}">${esc(offset ? `${name}（${offset}）` : name)}</option>`;
+    }).join('');
+  }
+  select.value = current;
+  document.getElementById('timezone-current').textContent =
+    `目前：${current}，這個帳號的今天是 ${localDateISO()}。`;
+  const device = deviceTimeZone();
+  const button = document.getElementById('timezone-device');
+  button.hidden = !device || device === current;
+  button.dataset.timeZone = device || '';
+  button.textContent = `改用這台裝置的時區（${device || ''}）`;
+}
+
+function chooseDeviceTimeZone(button) {
+  const device = button.dataset.timeZone;
+  if (!device) return;
+  const select = document.getElementById('timezone-select');
+  if (!timeZoneOptions.includes(device)) {
+    timeZoneOptions = [device, ...timeZoneOptions];
+    select.insertAdjacentHTML('afterbegin', `<option value="${esc(device)}">${esc(device)}</option>`);
+  }
+  select.value = device;
+  document.getElementById('timezone-status').textContent = `已選擇 ${device}，按「儲存時區」後生效。`;
+}
+
+async function saveTimeZone() {
+  const status = document.getElementById('timezone-status');
+  const timeZone = document.getElementById('timezone-select').value;
+  if (!timeZone) return;
+  const session = captureAuthSession();
+  status.textContent = '儲存中…';
+  try {
+    const result = await apiPut('/auth/timezone', { timezone: timeZone });
+    if (!isCurrentAuthSession(session)) return;
+    applyAccountTimeZone(result.timezone);
+    renderTimeZoneSection();
+    status.textContent = `已改用 ${result.timezone}，這個帳號的今天是 ${result.today}。已記錄的跑步日期不變。`;
+  } catch (error) {
+    if (!isCurrentAuthSession(session)) return;
+    status.textContent = '儲存失敗：' + translateError(error.message);
+  }
+}
+
+// The last zone this device knew for the stored session, before any request (SPEC-147).
+// Signing out only forgets it: announcing now would redraw panels while the session ends,
+// and the next account's appShown hook announces its own zone first.
+restoreAccountTimeZone();
+registerFeatureReset('account-timezone', () => { accountTimeZone = null; timeZoneOptions = null; });
 
 function openAdminModal() {
   document.getElementById('admin-modal').classList.add('active');
@@ -252,6 +369,11 @@ async function renderEmailSection() {
   if (requestId !== emailRequestId) return;
   section.hidden = !options?.mail_enabled;
   showBoundEmail(me?.email || null);
+  // SPEC-147: another device may have changed the zone since this one last asked.
+  if (me?.timezone && me.timezone !== accountTimeZone) {
+    applyAccountTimeZone(me.timezone);
+    renderTimeZoneSection();
+  }
 }
 
 function showBoundEmail(email) {
@@ -322,11 +444,15 @@ async function changePassword() {
   signOutWithNotice('密碼已更改，請用新密碼重新登入');
 }
 
-// SPEC-107: the account settings show the email section whenever they open.
-onWorkspaceModalOpen(() => { void renderEmailSection(); });
+// SPEC-107: the account settings show the email and time zone sections whenever they open.
+onWorkspaceModalOpen(() => { renderTimeZoneSection(); void renderEmailSection(); });
 
 // SPEC-108: the admin entry follows the signed-in account; the sign-up form asks for the mode.
-onAuthView({ appShown: () => { void refreshAdminEntry(); }, registerShown: () => { void loadRegistrationMode(); } });
+// SPEC-147: a newly shown account starts from this device's last known zone for it.
+onAuthView({
+  appShown: () => { restoreAccountTimeZone(); void refreshAdminEntry(); },
+  registerShown: () => { void loadRegistrationMode(); },
+});
 
 // SPEC-135: Escape closes this dialog through the shared registry (app-lifecycle.js).
 registerDialog('admin-modal', { close: closeAdminModal });
@@ -347,6 +473,8 @@ registerUiActions({
     'confirm-email-code': () => confirmEmailCode(),
     'remove-email': () => removeEmail(),
     'change-password': () => changePassword(),
+    'use-device-timezone': element => chooseDeviceTimeZone(element),
+    'save-timezone': () => saveTimeZone(),
   },
   submit: {
     'reset-password': () => handleResetPassword(),

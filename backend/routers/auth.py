@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from backend import models, schemas
 from backend.auth import get_current_session, get_current_user
+from backend.clock import zone_for
 from backend.dependencies import get_db
 from backend.mailer import Mailer, MailError, deliver_later
 from backend.rate_limits import (
@@ -58,7 +59,16 @@ def login(request: Request, payload: schemas.UserLogin, db: Session = Depends(ge
 @router.get("/me", response_model=schemas.UserOut)
 def read_current_user(request: Request, current_user: models.User = Depends(get_current_user)):
     return {"id": current_user.id, "username": current_user.username,
-            "is_admin": request.app.state.settings.is_admin(current_user.username), "email": current_user.email}
+            "is_admin": request.app.state.settings.is_admin(current_user.username), "email": current_user.email,
+            "timezone": zone_for(current_user).key}
+
+
+@router.put("/timezone", response_model=schemas.TimezoneOut)
+def update_timezone(payload: schemas.TimezoneUpdate, current_user: models.User = Depends(get_current_user),
+                    db: Session = Depends(get_db)):
+    """SPEC-147: the zone of the account's calendar ("today", months, the run-date limit)."""
+    with service_errors():
+        return accounts.set_timezone(db, current_user, payload.timezone)
 
 
 @router.post("/refresh", response_model=schemas.Token)

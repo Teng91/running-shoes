@@ -4,6 +4,14 @@
 每版的摘要見 [CHANGELOG.md](../CHANGELOG.md)；目前的功能與操作方式以 [README](../README.md) 為準。
 這裡保留當時的文字，後續版本可能已調整其中的行為。
 
+### 帳號時區（SPEC-147，v5.5.0）
+
+- Schema 15 在 `users` 加上 `timezone VARCHAR(64) NOT NULL DEFAULT 'Asia/Taipei'`，既有帳號的「今天」與 v5.4 相同。`clock.py` 以 `zoneinfo` 計算每個帳號的日期（`user_today(user)`、`local_today(zone)`），只有 user id 的讀取模型、`services/runs.py` 與 AI 工具經 `read_models/account_clock.py` 讀時區；`tzdata` 加入 `requirements.in`，slim 映像不依賴系統時區資料庫。
+- 跑步日期上限：request schema 只擋晚於 UTC+14 今天的日期，`services/runs.reject_future_run_date()` 依帳號的今天回 422，訊息帶時區與當天日期。Strava 解析、匯出檔名與密碼變更通知改用帳號時區；舊 UTC 日期修正只對 `Asia/Taipei` 帳號進行。
+- API：`GET /api/auth/me` 多了 `timezone`，新增 `PUT /api/auth/timezone`（`{"timezone": "Asia/Tokyo"}` → `{"timezone", "today"}`，不合法的名稱回 422）。帳號備份格式維持 v6，時區不在備份內，匯入不改變接收帳號的時區。
+- 前端：`APP_UTC_OFFSET_MINUTES` 改為 `DEFAULT_ACCOUNT_TIMEZONE` 與依時間點以 `Intl.DateTimeFormat` 計算的偏移；`app-account.js` 依帳號識別碼記住時區，以 window 事件 `account-timezone` 通知 `app-state.js` 與 `app-dates.js`；「資料與同步」新增時區選單。
+- 回滾：停止寫入並驗證 schema-15 備份後執行 `scripts/rollback_schema_fifteen.sql`，再部署 v5.4 image；欄位保留，所有帳號回到台灣日曆，再升級時沿用各帳號的時區。Asset 5.5.0／shell v148。
+
 ### 執行環境升級到 Python 3.13（SPEC-146，v5.4.1）
 
 - `Dockerfile` 的基底改為 `python:3.13-slim@sha256:7249d558…`（3.13.18、Debian trixie 的多架構 index）；`verify.yml`、`offsite-backup.yml` 與 `.github/actions/browser-setup` 的 `setup-python` 改為 3.13。部署與回滾 job 不安裝 Python，沒有變動。

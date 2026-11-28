@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from backend import models
 from backend.auth import get_current_user
-from backend.clock import local_today
+from backend.clock import user_today
 from backend.dependencies import get_db
 from backend.read_models import highlights, insights, pace, personal_bests, race_plan, trends
 
@@ -21,7 +21,7 @@ def dashboard_analytics(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    return insights.dashboard_analytics(db, current_user.id, year, month)
+    return insights.dashboard_analytics(db, current_user.id, year, month, today=user_today(current_user))
 
 
 @router.get("/api/analytics/race")
@@ -29,7 +29,7 @@ def race_readiness_analytics(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    return race_plan.race_preparation(db, current_user.id, local_today())
+    return race_plan.race_preparation(db, current_user.id, user_today(current_user))
 
 
 @router.get("/api/analytics/personal-bests")
@@ -37,7 +37,7 @@ def personal_best_analytics(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    return personal_bests.personal_bests(db, current_user.id, local_today())
+    return personal_bests.personal_bests(db, current_user.id, user_today(current_user))
 
 
 @router.get("/api/analytics/trends")
@@ -47,7 +47,7 @@ def training_trends(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    return trends.training_trends(db, current_user.id, year, local_today(), weeks_end)
+    return trends.training_trends(db, current_user.id, year, user_today(current_user), weeks_end)
 
 
 @router.get("/api/analytics/shoe-timeline")
@@ -55,14 +55,14 @@ def shoe_timeline(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    return trends.shoe_timeline(db, current_user.id, local_today())
+    return trends.shoe_timeline(db, current_user.id, user_today(current_user))
 
 @router.get("/api/analytics/home")
 def home_summary(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    return highlights.home_summary(db, current_user.id, local_today())
+    return highlights.home_summary(db, current_user.id, user_today(current_user))
 
 
 @router.get("/api/analytics/year-review")
@@ -71,7 +71,7 @@ def year_review(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    return highlights.year_review(db, current_user.id, year, local_today())
+    return highlights.year_review(db, current_user.id, year, user_today(current_user))
 
 
 @router.get("/api/analytics/shoe-distance-mix")
@@ -88,7 +88,7 @@ def get_shoe_analytics(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    result = insights.shoe_analytics(db, current_user.id, shoe_id)
+    result = insights.shoe_analytics(db, current_user.id, shoe_id, today=user_today(current_user))
     if result is None:
         raise HTTPException(status_code=404, detail="Shoe not found")
     return result
@@ -99,4 +99,4 @@ def pace_analysis(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    return pace.pace_analysis(db, current_user.id, local_today())
+    return pace.pace_analysis(db, current_user.id, user_today(current_user))

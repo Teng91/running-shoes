@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+## [5.5.0] - 2026-11-28
+
+### Added
+- **帳號時區**（SPEC-147）：每個帳號有自己的時區（IANA 名稱，既有與新帳號都是 `Asia/Taipei`，行為不變）。在「資料與同步」的「時區」改成當地時區後，「今天」、跑步日期上限、本週／本月、連續天數、目標進度、退役預估、月報可選的月份、Strava 日期、匯出檔名與密碼變更通知都依這個時區計算；夏令時間依當天的規則。裝置在別的時區時會提供「改用這台裝置的時區」。已記錄的跑步日期不會改變。
+- `GET /api/auth/me` 回傳 `timezone`；新增 `PUT /api/auth/timezone`。
+
+### Changed
+- Schema 15 新增 `users.timezone`（回滾腳本 `scripts/rollback_schema_fifteen.sql` 保留欄位）；`tzdata` 加入執行依賴。帳號備份維持 v6，不包含時區。只有 `Asia/Taipei` 帳號在重新匯入 Strava 時修正 v4.7.0 以前的 UTC 日期。Asset 5.5.0／shell v148，schema 15。
+
 ## [5.4.1] - 2026-11-28
 
 ### Changed

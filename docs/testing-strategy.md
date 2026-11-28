@@ -54,6 +54,7 @@ flowchart BT
 | 退役預估一致性 | `test_forecasting.py` + DOM regression | 清單／分析使用不同公式、預估跨帳號或 N+1 查詢 |
 | 按需呈現 | Node render invalidation + browser request/chart counters | 隱藏分頁建立圖表／讀年度日誌、重複繪製或晚到回應重畫隱藏頁 |
 | 登入操作與跑鞋視窗競態 | Node + Chromium/WebKit SPEC-013 | 重複登入、舊成功／錯誤覆蓋新 session，或鞋款 mutation 關閉新草稿 |
+| 帳號時區（SPEC-147） | `test_user_timezone.py`、`test_clock.py` + Node `account-timezone.test.cjs` | 「今天」、月份或跑步日期上限又用固定偏移或裝置時區，或改時區影響其他帳號 |
 | 月報時區一致性 | Python UTC serializer / GET / history + browser local formatting | SQLite 無時區值誤作本地時間，讀取與完成時間相差 8 小時 |
 | Strava worker 隔離 | `test_strava_worker_keeps_event_loop_responsive` + 原 transaction tests | parse/service 在 event loop 執行、worker 停頓時 loop 也停頓，或交易／隔離回歸 |
 | 前端責任拆分 | Node single-responsibility / HTML / SW order + 全分頁 browser matrix | 匯出、目標或圖表函式漏載，或功能重新混合 |
@@ -300,6 +301,10 @@ SPEC-032：合成資料驗證歷史筆數上限（v4.7.3 起 10,000／10,001）�
 ## SPEC-116 排程 workflow 每天續命
 
 [規格與具名案例](specs/116-keep-scheduled-workflows-enabled.md) 以文字解析 `offsite-backup.yml`：續命 job 不依賴備份 job、只有它有 `actions: write`、只用 `GITHUB_TOKEN` 不用 secret、失敗只發警告，且 repo 裡每個有 `schedule` 的 workflow 都在它的重新啟用清單中。
+
+## SPEC-147 帳號時區
+
+[規格與具名案例](specs/147-user-timezone.md) 以凍結的時間點（台灣已是 2 月 1 日、檀香山仍是 1 月 31 日）驗證：`clock.py` 依帳號時區與夏令時間計算今天；API 回傳並只修改自己的時區、拒絕偏移字串與不認得的名稱；檀香山帳號新增、離線重送與改日期到 2 月 1 日回 422，台灣帳號可以；目標進度、首頁分析、訓練趨勢與月報的月份依帳號時區換月；AI 工具在跨年時用各自的年份；Strava 日期、舊 UTC 日期修正、匯出檔名與通知信使用帳號時區。Schema 15 以暫存 SQLite 驗證升級預設 `Asia/Taipei`、回滾守衛與再升級沿用時區。前端 Node 測試以 `Intl` 驗證檀香山跨月跨年與紐約夏令時間的日期、時區事件更新日期上限與未改動的預設跑步日期、依帳號識別碼記住時區，以及選單的選擇、裝置建議與儲存；所有資料庫都是暫存或記憶體資料庫。
 
 ## SPEC-146 執行環境升級到 Python 3.13
 

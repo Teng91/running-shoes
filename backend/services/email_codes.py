@@ -16,6 +16,7 @@ from sqlalchemy import delete, func
 from sqlalchemy.orm import Session
 
 from backend import models
+from backend.clock import zone_for, zone_label
 from backend.credentials import get_password_hash
 from backend.services.accounts import MIN_PASSWORD_LENGTH, find_user, username_key
 from backend.services.errors import Conflict, Invalid
@@ -197,14 +198,19 @@ def reset_password(db: Session, identifier: str, code: str, new_password: str, *
 
 
 def notify_password_changed(db: Session, identifier: str, how: str, *, send: Send, when: datetime) -> bool:
-    """Tell the bound email that the password changed (SPEC-083); no email, no notice."""
+    """Tell the bound email that the password changed (SPEC-083); no email, no notice.
+
+    `when` is the instant of the change; the message shows it on the account's clock (SPEC-147).
+    """
     user = _account(db, identifier)
     if user is None or not user.email:
         return False
+    zone = zone_for(user)
     send(
         user.email,
         "跑鞋追蹤：你的密碼已變更",
-        f"你的跑鞋追蹤帳號「{user.username}」的密碼在 {when:%Y-%m-%d %H:%M}（台灣時間）變更了。\n"
+        f"你的跑鞋追蹤帳號「{user.username}」的密碼在 {when.astimezone(zone):%Y-%m-%d %H:%M}"
+        f"（{zone_label(zone, when)}）變更了。\n"
         f"方式：{NOTICE_HOW[how]}。所有裝置上的登入都已登出。\n\n"
         "如果是你本人操作，不用理會這封信。\n"
         "如果不是你，請立刻在登入頁按「忘記密碼？」用這個 email 重設密碼，並通知管理員。\n",

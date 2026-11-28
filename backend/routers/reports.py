@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from backend import llm, models, schemas
 from backend.auth import get_current_user
-from backend.clock import local_today
+from backend.clock import user_today
 from backend.dependencies import get_db
 from backend.rate_limits import enforce_agent_request_limits
 from backend.read_models import report_snapshot as report_statistics
@@ -25,7 +25,7 @@ def generate_monthly_report(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    today = local_today()
+    today = user_today(current_user)
     if (payload.year, payload.month) > (today.year, today.month):
         raise HTTPException(status_code=422, detail="未來月份無法產生報告")
     try:

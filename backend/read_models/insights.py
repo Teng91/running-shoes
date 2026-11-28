@@ -9,9 +9,9 @@ from datetime import date, timedelta
 from sqlalchemy.orm import Session
 
 from backend import models
-from backend.clock import local_today
 from backend.forecasting import retirement_forecast
 from backend.read_models import goal_progress
+from backend.read_models.account_clock import account_today
 from backend.read_models.rounding import round_metric
 from backend.read_models.run_statistics import TRAINING_RUN, month_bounds, run_period
 from backend.read_models.shoe_statistics import shoe_run_statistics
@@ -40,7 +40,7 @@ def shoe_analytics(db: Session, user_id: int, shoe_id: int, *, today: date | Non
     if shoe is None:
         return None
 
-    as_of = today or local_today()
+    as_of = today or account_today(db, user_id)
     return _shoe_analytics(shoe, shoe_run_statistics(db, user_id, [shoe.id], as_of)[shoe.id], as_of)
 
 
@@ -52,7 +52,7 @@ def batch_shoe_analytics(
     scoped = [shoe for shoe in shoes if shoe.user_id == user_id and not shoe.is_deleted]
     if not scoped:
         return []
-    as_of = today or local_today()
+    as_of = today or account_today(db, user_id)
     statistics = shoe_run_statistics(
         db, user_id, [shoe.id for shoe in scoped], as_of, include_details=include_details
     )
@@ -128,7 +128,7 @@ def dashboard_analytics(
     *,
     today: date | None = None,
 ) -> dict:
-    as_of = today or local_today()
+    as_of = today or account_today(db, user_id)
     selected = (year, month)
     current = (as_of.year, as_of.month)
     period = run_period(year, month, as_of)

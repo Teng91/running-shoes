@@ -35,6 +35,16 @@ function resumeCalendarDay() {
   refreshPanels();
 }
 
+// SPEC-147: the account's zone can move "today" (app-state.js applies it first, since its
+// listener was added earlier). A run date still on the old default follows it; a date the
+// user picked stays, and the input's new limit flags it if it is now in the future.
+window.addEventListener('account-timezone', () => {
+  const previous = lastCalendarDay;
+  resumeCalendarDay();
+  const input = document.getElementById('run-date');
+  if (input && previous !== null && input.value === previous) input.value = lastCalendarDay;
+});
+
 window.addEventListener('focus', resumeCalendarDay);
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') resumeCalendarDay();

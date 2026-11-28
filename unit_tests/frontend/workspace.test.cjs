@@ -819,7 +819,7 @@ function syntheticToken(claims) {
 
 test('SPEC-129 the session takes the server spelling of the name and the permanent account ID from the token', () => {
   const stored = new Map();
-  const context = require('node:vm').createContext({ atob, TextDecoder, Uint8Array,
+  const context = require('node:vm').createContext({ atob, TextDecoder, Uint8Array, window: new EventTarget(),
     localStorage: { getItem: key => stored.get(key) ?? null, setItem: (key, value) => stored.set(key, value), removeItem: key => stored.delete(key) } });
   for (const file of ['app-lifecycle.js', 'app-state.js', 'app-session.js']) require('node:vm').runInContext(fs.readFileSync(path.join(__dirname, '../../frontend', file), 'utf8'), context);
   context.startAuthSession(syntheticToken({ sub: 'Rünner', aid: 'backup-synthetic-1' }), 'rünner');
@@ -892,7 +892,8 @@ test('SPEC-107 the goal form, shoe editor and account view register their worksp
     getSelectedCategories: () => ['Daily'],
     shoeModal: { context: { shoe: { id: 7 } }, mode: 'edit', formIds: { model: 'f-model' },
       openForEdit: shoe => calls.push(`edit ${shoe.id}`), openForCreate: () => calls.push('create') },
-    renderEmailSection: async () => { calls.push('email'); }, loadWorkspaceHistory: async () => {},
+    renderEmailSection: async () => { calls.push('email'); }, renderTimeZoneSection: () => calls.push('timezone'),
+    loadWorkspaceHistory: async () => {},
     inlineEditors: new Map(), structuredClone,
   });
   vm.runInContext(fs.readFileSync('frontend/app-workspace.js', 'utf8'), context);
@@ -913,7 +914,7 @@ test('SPEC-107 the goal form, shoe editor and account view register their worksp
   context.closeWorkspaceModal = () => {}; context.renderWorkspaceQueue = async () => {};
   context.resumeWorkspaceEditor('shoe:7');
   context.openWorkspaceModal();
-  assert.deepEqual(calls, ['prepare', 'goal-monthly-km=150', 'reset', 'prepare', 'edit 7', 'email']);
+  assert.deepEqual(calls, ['prepare', 'goal-monthly-km=150', 'reset', 'prepare', 'edit 7', 'timezone', 'email']);
   assert.equal(elements['f-model'].value, 'Rider', 'the draft values return after the editor reopens');
   const source = fs.readFileSync('frontend/app-workspace.js', 'utf8');
   assert.doesNotMatch(source, /shoeModal|goalFormValues|prepareGoalForm|setGoalField|renderEmailSection|getSelectedCategories/);
@@ -932,6 +933,7 @@ test('SPEC-108 runs and sign-in hooks reach the workspace only through registrat
     populateRunShoeSelects: id => calls.push(`shoes ${id}`), updateRunActivityHint: prefix => calls.push(`hint ${prefix}`),
     applyCoreResource() {}, inlineEditors: new Map(), activateLocalWorkspace: async () => calls.push('activate'),
     refreshAdminEntry: async () => calls.push('admin'), loadRegistrationMode: async () => calls.push('mode'),
+    restoreAccountTimeZone: () => calls.push('zone'),
     restoreAgentChat: () => calls.push('chat'), loadAgentModels: async () => calls.push('models'),
   });
   vm.runInContext(fs.readFileSync('frontend/app-workspace.js', 'utf8'), context);
@@ -955,7 +957,7 @@ test('SPEC-108 runs and sign-in hooks reach the workspace only through registrat
     ${['onAuthView', 'runAuthViewHooks'].map(extract).join('\n')}
     ${featureRegistrations(/^onAuthView\(/gm)}
     runAuthViewHooks('sessionEnding'); runAuthViewHooks('appShown'); runAuthViewHooks('registerShown');`, context);
-  assert.deepEqual(calls, ['persist', 'activate', 'admin', 'chat', 'models', 'mode']);
+  assert.deepEqual(calls, ['persist', 'activate', 'zone', 'admin', 'chat', 'models', 'mode']);
   for (const [file, names] of [['frontend/app-workspace.js', /runController|selectedRunMonth|allRunShoes|formatRunDuration|populateRunShoeSelects|updateRunActivityHint/],
     ['frontend/app-auth.js', /persistWorkspaceDrafts|activateLocalWorkspace|refreshAdminEntry|loadRegistrationMode|function captureAuthSession/],
     ['frontend/app-api.js', /clearAuth|showLoginView/]]) {
