@@ -1,8 +1,10 @@
 """FastAPI application factory and composition lifecycle."""
 
+import asyncio
+import logging
 import mimetypes
 from collections.abc import Callable
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 from threading import Lock
 from typing import cast
@@ -67,6 +69,11 @@ async def validation_exception_handler(request: Request, exc: Exception) -> Resp
     return JSONResponse({"detail": detail, "error": {"code": "validation", "message": "輸入資料格式不正確"}}, status_code=422)
 
 
+# SPEC-142: build inputs (shell templates, CSS sources, the asset manifest) stay in the
+# image for builds and checks but are never served; the generated outputs are.
+UNSERVED_FRONTEND_ENTRIES = frozenset({"templates", "css", "assets.json"})
+
+
 def _index_response(frontend_dir: Path) -> FileResponse:
     return FileResponse(
         frontend_dir / "index.html",
@@ -91,9 +98,31 @@ async def http_exception_handler(request: Request, exc: Exception) -> Response:
         candidate = (frontend_dir / path.lstrip("/")).resolve()
     except (OSError, ValueError):
         return _index_response(frontend_dir)
-    if frontend_dir.resolve() in candidate.parents and candidate.is_file():
-        return FileResponse(candidate)
+    root = frontend_dir.resolve()
+    if root in candidate.parents and candidate.is_file():
+        if candidate.relative_to(root).parts[0].casefold() not in UNSERVED_FRONTEND_ENTRIES:
+            return FileResponse(candidate)
     return _index_response(frontend_dir)
+
+
+logger = logging.getLogger("running_shoes.maintenance")
+# SPEC-142: expired restore previews (up to 64 MiB each) are swept hourly, not only at startup.
+PREVIEW_SWEEP_SECONDS = 3600.0
+
+
+def _discard_expired_previews(session_factory: SessionFactory) -> int:
+    with session_factory() as db:
+        return account_restore.discard_expired_previews(db)
+
+
+async def _sweep_expired_previews(session_factory: SessionFactory, interval: float) -> None:
+    """Drop expired previews every ``interval`` seconds; a failed sweep waits for the next one."""
+    while True:
+        await asyncio.sleep(interval)
+        try:
+            await asyncio.to_thread(_discard_expired_previews, session_factory)
+        except Exception:
+            logger.exception("Expired restore preview sweep failed")
 
 
 @asynccontextmanager
@@ -105,9 +134,15 @@ async def lifespan(app: FastAPI):
         migration_password=config.migration_password,
     )
     seed_default_data(app.state.session_factory, config)
-    with app.state.session_factory() as db:
-        account_restore.discard_expired_previews(db)
-    yield
+    _discard_expired_previews(app.state.session_factory)
+    interval = getattr(app.state, "preview_sweep_seconds", PREVIEW_SWEEP_SECONDS)
+    sweep = asyncio.create_task(_sweep_expired_previews(app.state.session_factory, interval))
+    try:
+        yield
+    finally:
+        sweep.cancel()
+        with suppress(asyncio.CancelledError):
+            await sweep
 
 
 def create_app(
@@ -149,6 +184,7 @@ def create_app(
     app.state.frontend_dir = selected_frontend
     # Memory is per process: one backup preview or restore at a time in this process.
     app.state.restore_slot = Lock()
+    app.state.preview_sweep_seconds = PREVIEW_SWEEP_SECONDS
     # SPEC-079: None when SMTP is not configured; tests replace it with a fake sender.
     app.state.mailer = smtp_mailer(selected_settings)
     # One Strava CSV parse per process as well (SPEC-074).

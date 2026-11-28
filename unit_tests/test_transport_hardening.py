@@ -104,3 +104,67 @@ def test_the_largest_valid_chat_request_fits_the_default_limit():
     assert len(request.user_message) + sum(len(item.content) for item in request.history) == 60_000
     worst_case = json.dumps(payload).encode("utf-8")  # \\uXXXX escapes: 6 bytes per character
     assert len(worst_case) < settings.max_api_body_bytes
+
+
+def test_frontend_build_inputs_are_not_served(tmp_path):
+    """SPEC-142: templates, CSS sources and the asset manifest fall back to the shell."""
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    frontend = tmp_path / "frontend"
+    for folder in ("templates", "css", "runtime", "icons"):
+        (frontend / folder).mkdir(parents=True)
+    (frontend / "index.html").write_text("<!doctype html><title>shell</title>", encoding="utf-8")
+    (frontend / "templates" / "index.html").write_text("TEMPLATE SOURCE", encoding="utf-8")
+    (frontend / "css" / "01-base.css").write_text("/* CSS SOURCE */", encoding="utf-8")
+    (frontend / "assets.json").write_text('{"MANIFEST": true}', encoding="utf-8")
+    (frontend / "runtime" / "module.mjs").write_text("export const ready = true;", encoding="utf-8")
+    (frontend / "icons" / "icon.svg").write_text("<svg/>", encoding="utf-8")
+    (frontend / "styles.css").write_text("body{}", encoding="utf-8")
+    config = replace(settings, seed_data=False, frontend_dir=frontend)
+    app = create_app(config, db_engine=engine, session_factory=sessionmaker(bind=engine))
+    with TestClient(app) as test_client:
+        for path in ("/templates/index.html", "/css/01-base.css", "/assets.json", "/TEMPLATES/../assets.json"):
+            response = test_client.get(path)
+            assert response.status_code == 200 and response.text.startswith("<!doctype html>"), path
+        assert test_client.get("/runtime/module.mjs").text == "export const ready = true;"
+        assert test_client.get("/icons/icon.svg").text == "<svg/>"
+        assert test_client.get("/styles.css").text == "body{}"
+    engine.dispose()
+
+
+def test_expired_restore_previews_are_swept_while_the_app_runs(tmp_path):
+    """SPEC-142: an abandoned preview does not wait for the next restart."""
+    import time
+    from datetime import UTC, datetime, timedelta
+
+    from backend import models
+
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    factory = sessionmaker(bind=engine)
+    frontend = tmp_path / "frontend"
+    frontend.mkdir()
+    (frontend / "index.html").write_text("<!doctype html>", encoding="utf-8")
+    app = create_app(replace(settings, seed_data=False, frontend_dir=frontend), db_engine=engine,
+                     session_factory=factory)
+    app.state.preview_sweep_seconds = 0.05
+    with TestClient(app):
+        now = datetime.now(UTC).replace(tzinfo=None)
+        with factory() as db:
+            user = models.User(username="sweeper", hashed_password="synthetic")
+            db.add(user)
+            db.flush()
+            db.add_all([
+                models.RestorePreview(user_id=user.id, token="expired", revision=0, payload_hash="0" * 64,
+                                      payload_json={}, expires_at=now - timedelta(minutes=1)),
+                models.RestorePreview(user_id=user.id, token="active", revision=0, payload_hash="0" * 64,
+                                      payload_json={}, expires_at=now + timedelta(minutes=20)),
+            ])
+            db.commit()
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            with factory() as db:
+                tokens = {row.token for row in db.query(models.RestorePreview)}
+            if tokens == {"active"}:
+                break
+            time.sleep(0.02)
+        assert tokens == {"active"}
+    engine.dispose()
